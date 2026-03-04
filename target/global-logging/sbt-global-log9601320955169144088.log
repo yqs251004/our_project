@@ -1,0 +1,11 @@
+[0m[[0m[0mdebug[0m] [0m[0m> Exec(assembly, Some(b8723f55-0e68-4af1-b032-e850e4cc3ac6), Some(CommandSource(console0)))[0m
+[0m[[0m[0mdebug[0m] [0m[0mEvaluating tasks: assembly[0m
+[0m[[0m[0mdebug[0m] [0m[0mRunning task... Cancel: Signal, check cycles: false, forcegc: true[0m
+[0m[[0m[0minfo[0m] [0m[0mcompiling 1 Scala source to D:\school\2026spring\front-back\our_project\target\scala-3.3.4\classes ...[0m
+[0m[[0m[0minfo[0m] [0m[0m2 file(s) merged using strategy 'Rename' (Run the task at debug level to see the details)[0m
+[0m[[0m[0minfo[0m] [0m[0m16 file(s) merged using strategy 'Discard' (Run the task at debug level to see the details)[0m
+[0m[[0m[0minfo[0m] [0m[0mBuilt: D:\school\2026spring\front-back\our_project\target\scala-3.3.4\our_project-assembly-0.1.0-SNAPSHOT.jar[0m
+[0m[[0m[0minfo[0m] [0m[0mJar hash: b8880e7d2138662bfe092c54369e2f8616f795eb[0m
+[0m[[0m[32msuccess[0m] [0m[0mTotal time: 2 s, completed 2026年3月4日 15:57:52[0m
+[0m[[0m[0mdebug[0m] [0m[0m> Exec(shell, None, None)[0m
+[0m[[0m[0mdebug[0m] [0m[0mForcing garbage collection...[0m
