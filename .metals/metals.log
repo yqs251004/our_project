@@ -1898,3 +1898,13 @@ org.eclipse.lsp4j.jsonrpc.ResponseErrorException: Request window/showMessageRequ
 2026.03.13 11:14:45 WARN  no build target for: D:\school\2026spring\front-back\our_project\build.sbt
 2026.03.13 11:14:45 INFO  no build target found for D:\school\2026spring\front-back\our_project\build.sbt. Using presentation compiler with project's scala-library version: 3.3.7
 2026.03.13 11:14:45 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\main.scala. Using presentation compiler with project's scala-library version: 3.3.7
+3月 13, 2026 12:02:44 下午 org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
+信息: Unsupported notification method: $/setTrace
+2026.03.13 12:02:44 INFO  no build target found for d:\school\2026spring\front-back\our_project\src\main\scala\main.scala. Using presentation compiler with project's scala-library version: 3.3.7
+2026.03.13 12:58:01 INFO  no build target found for d:\school\2026spring\front-back\our_project\src\main\scala\main.scala. Using presentation compiler with project's scala-library version: 3.3.7
+2026.03.13 12:58:01 WARN  no build target for: d:\school\2026spring\front-back\our_project\src\main\scala\main.scala
+3月 13, 2026 12:58:01 下午 org.eclipse.lsp4j.jsonrpc.RemoteEndpoint handleCancellation
+警告: Unmatched cancel notification for request id 113
+2026.03.13 12:58:01 INFO  no build target found for d:\school\2026spring\front-back\our_project\src\main\scala\main.scala. Using presentation compiler with project's scala-library version: 3.3.7
+2026.03.13 12:58:01 INFO  no build target found for d:\school\2026spring\front-back\our_project\src\main\scala\main.scala. Using presentation compiler with project's scala-library version: 3.3.7
+2026.03.13 12:58:01 INFO  no build target found for d:\school\2026spring\front-back\our_project\src\main\scala\main.scala. Using presentation compiler with project's scala-library version: 3.3.7

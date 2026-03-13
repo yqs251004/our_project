@@ -6,7 +6,7 @@ import riichinexus.bootstrap.ApplicationContext
 import riichinexus.domain.model.*
 
 @main def riichiNexusDemo(): Unit =
-  val app = ApplicationContext.inMemory()
+  val app = ApplicationContext.fromEnvironment()
   val now = Instant.parse("2026-03-13T09:00:00Z")
 
   val alice = app.playerService.registerPlayer(

@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd" xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>org.scala-lang</groupId>
+  <artifactId>toolkit-test_3</artifactId>
+  <version>0.5.0</version>
+  <url>https://github.com/scala/toolkit</url>
+  <description>toolkit-test_3</description>
+  <name>toolkit-test_3</name>
+  <organization>
+    <name>org.scala-lang</name>
+    <url>https://github.com/scala/toolkit</url>
+  </organization>
+  <licenses>
+    <license>
+      <name>Apache-2.0</name>
+      <url>https://spdx.org/licenses/Apache-2.0.html</url>
+      <distribution>repo</distribution>
+    </license>
+  </licenses>
+  <scm>
+    <url>https://github.com/scala/toolkit.git</url>
+    <connection>scm:git:github.com/scala/toolkit.git</connection>
+    <developerConnection>scm:git:git@github.com:scala/toolkit.git</developerConnection>
+  </scm>
+  <developers>
+    <developer>
+      <id>szymon-rd</id>
+      <name>Simon R</name>
+      <url>https://github.com/szymon-rd</url>
+    </developer>
+    <developer>
+      <id>adpi2</id>
+      <name>Adrien Piquerez</name>
+      <url>https://github.com/adpi2</url>
+    </developer>
+    <developer>
+      <id>szymon-rd</id>
+      <name>Simon R</name>
+      <url>https://github.com/szymon-rd</url>
+    </developer>
+    <developer>
+      <id>adpi2</id>
+      <name>Adrien Piquerez</name>
+      <url>https://github.com/adpi2</url>
+    </developer>
+  </developers>
+  <dependencies>
+    <dependency>
+      <groupId>org.scala-lang</groupId>
+      <artifactId>scala3-library_3</artifactId>
+      <version>3.3.3</version>
+    </dependency>
+    <dependency>
+      <groupId>org.scala-lang</groupId>
+      <artifactId>toolkit_3</artifactId>
+      <version>0.5.0</version>
+    </dependency>
+    <dependency>
+      <groupId>org.scalameta</groupId>
+      <artifactId>munit_3</artifactId>
+      <version>1.0.0</version>
+    </dependency>
+  </dependencies>
+</project>
