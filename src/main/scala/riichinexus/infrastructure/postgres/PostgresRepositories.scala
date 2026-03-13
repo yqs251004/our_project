@@ -3,20 +3,36 @@ package riichinexus.infrastructure.postgres
 import java.sql.Connection
 import java.sql.DriverManager
 import java.sql.PreparedStatement
-import java.sql.ResultSet
 import java.sql.SQLException
 import java.sql.Timestamp
 import java.sql.Types
 
 import scala.util.Using
 
+import org.postgresql.util.PSQLException
+
 import riichinexus.application.ports.*
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.*
 
+private object PostgresErrors:
+  private val UniqueViolation = "23505"
+
+  def isUniqueViolation(error: SQLException, constraint: String): Boolean =
+    Option(error.getSQLState).contains(UniqueViolation) &&
+      constraintName(error).contains(constraint)
+
+  private def constraintName(error: SQLException): Option[String] =
+    error match
+      case postgresError: PSQLException =>
+        Option(postgresError.getServerErrorMessage).map(_.getConstraint)
+      case _ =>
+        None
+
 final class JdbcConnectionFactory(config: DatabaseConfig):
   private val driverClass = "org.postgresql.Driver"
+  private val currentConnection = ThreadLocal[Connection]()
 
   try Class.forName(driverClass)
   catch
@@ -24,6 +40,35 @@ final class JdbcConnectionFactory(config: DatabaseConfig):
       ()
 
   def withConnection[A](f: Connection => A): A =
+    Option(currentConnection.get()) match
+      case Some(connection) =>
+        f(connection)
+      case None =>
+        openConnection(f)
+
+  def inTransaction[A](operation: => A): A =
+    Option(currentConnection.get()) match
+      case Some(_) =>
+        operation
+      case None =>
+        openConnection { connection =>
+          val previousAutoCommit = connection.getAutoCommit
+          connection.setAutoCommit(false)
+          currentConnection.set(connection)
+          try
+            val result = operation
+            connection.commit()
+            result
+          catch
+            case error: Throwable =>
+              connection.rollback()
+              throw error
+          finally
+            currentConnection.remove()
+            connection.setAutoCommit(previousAutoCommit)
+        }
+
+  private def openConnection[A](f: Connection => A): A =
     try
       Using.resource(DriverManager.getConnection(config.url, config.user, config.password)) { connection =>
         connection.setSchema(config.schema)
@@ -42,6 +87,16 @@ final class PostgresSchemaInitializer(connectionFactory: JdbcConnectionFactory):
       execute(
         connection,
         """
+          |create table if not exists schema_version (
+          |  version integer primary key,
+          |  description text not null,
+          |  applied_at timestamptz not null default now()
+          |)
+          |""".stripMargin
+      )
+      execute(
+        connection,
+        """
           |create table if not exists players (
           |  id text primary key,
           |  user_id text not null,
@@ -53,6 +108,13 @@ final class PostgresSchemaInitializer(connectionFactory: JdbcConnectionFactory):
           |)
           |""".stripMargin
       )
+      execute(connection, "alter table players add column if not exists user_id text")
+      execute(connection, "alter table players add column if not exists nickname text")
+      execute(connection, "alter table players add column if not exists club_id text")
+      execute(connection, "alter table players add column if not exists elo integer")
+      execute(connection, "alter table players add column if not exists payload jsonb")
+      execute(connection, "alter table players add column if not exists updated_at timestamptz default now()")
+      execute(connection, "create unique index if not exists idx_players_user_id on players (user_id)")
       execute(connection, "create index if not exists idx_players_club_id on players (club_id)")
 
       execute(
@@ -68,6 +130,12 @@ final class PostgresSchemaInitializer(connectionFactory: JdbcConnectionFactory):
           |)
           |""".stripMargin
       )
+      execute(connection, "alter table clubs add column if not exists name text")
+      execute(connection, "alter table clubs add column if not exists creator_id text")
+      execute(connection, "alter table clubs add column if not exists total_points integer")
+      execute(connection, "alter table clubs add column if not exists payload jsonb")
+      execute(connection, "alter table clubs add column if not exists updated_at timestamptz default now()")
+      execute(connection, "create unique index if not exists idx_clubs_name on clubs (name)")
 
       execute(
         connection,
@@ -81,6 +149,15 @@ final class PostgresSchemaInitializer(connectionFactory: JdbcConnectionFactory):
           |  updated_at timestamptz not null default now()
           |)
           |""".stripMargin
+      )
+      execute(connection, "alter table tournaments add column if not exists name text")
+      execute(connection, "alter table tournaments add column if not exists organizer text")
+      execute(connection, "alter table tournaments add column if not exists status text")
+      execute(connection, "alter table tournaments add column if not exists payload jsonb")
+      execute(connection, "alter table tournaments add column if not exists updated_at timestamptz default now()")
+      execute(
+        connection,
+        "create unique index if not exists idx_tournaments_name_start on tournaments (name, organizer)"
       )
 
       execute(
@@ -97,6 +174,16 @@ final class PostgresSchemaInitializer(connectionFactory: JdbcConnectionFactory):
           |)
           |""".stripMargin
       )
+      execute(connection, "alter table tables add column if not exists tournament_id text")
+      execute(connection, "alter table tables add column if not exists stage_id text")
+      execute(connection, "alter table tables add column if not exists table_no integer")
+      execute(connection, "alter table tables add column if not exists status text")
+      execute(connection, "alter table tables add column if not exists payload jsonb")
+      execute(connection, "alter table tables add column if not exists updated_at timestamptz default now()")
+      execute(
+        connection,
+        "create unique index if not exists idx_tables_stage_table_no on tables (tournament_id, stage_id, table_no)"
+      )
       execute(
         connection,
         "create index if not exists idx_tables_tournament_stage on tables (tournament_id, stage_id)"
@@ -111,13 +198,22 @@ final class PostgresSchemaInitializer(connectionFactory: JdbcConnectionFactory):
           |  tournament_id text not null,
           |  stage_id text not null,
           |  recorded_at timestamptz not null,
+          |  player_ids text[] not null,
           |  payload jsonb not null,
           |  updated_at timestamptz not null default now()
           |)
           |""".stripMargin
       )
+      execute(connection, "alter table paifus add column if not exists table_id text")
+      execute(connection, "alter table paifus add column if not exists tournament_id text")
+      execute(connection, "alter table paifus add column if not exists stage_id text")
+      execute(connection, "alter table paifus add column if not exists recorded_at timestamptz")
+      execute(connection, "alter table paifus add column if not exists player_ids text[]")
+      execute(connection, "alter table paifus add column if not exists payload jsonb")
+      execute(connection, "alter table paifus add column if not exists updated_at timestamptz default now()")
       execute(connection, "create index if not exists idx_paifus_table_id on paifus (table_id)")
       execute(connection, "create index if not exists idx_paifus_recorded_at on paifus (recorded_at)")
+      execute(connection, "create index if not exists idx_paifus_player_ids on paifus using gin (player_ids)")
 
       execute(
         connection,
@@ -128,6 +224,17 @@ final class PostgresSchemaInitializer(connectionFactory: JdbcConnectionFactory):
           |  payload jsonb not null,
           |  updated_at timestamptz not null default now()
           |)
+          |""".stripMargin
+      )
+      execute(connection, "alter table dashboards add column if not exists owner_type text")
+      execute(connection, "alter table dashboards add column if not exists payload jsonb")
+      execute(connection, "alter table dashboards add column if not exists updated_at timestamptz default now()")
+      execute(
+        connection,
+        """
+          |insert into schema_version(version, description)
+          |values (1, 'Initial RiichiNexus PostgreSQL schema')
+          |on conflict (version) do nothing
           |""".stripMargin
       )
     }
@@ -190,6 +297,15 @@ final class PostgresPlayerRepository(
 ) extends PlayerRepository
     with JdbcRepositorySupport:
   override def save(player: Player): Player =
+    try persist(player)
+    catch
+      case error: SQLException if PostgresErrors.isUniqueViolation(error, "idx_players_user_id") =>
+        val normalized = findByUserId(player.userId)
+          .map(existing => player.copy(id = existing.id, registeredAt = existing.registeredAt))
+          .getOrElse(throw error)
+        persist(normalized)
+
+  private def persist(player: Player): Player =
     val sql =
       """
         |insert into players (id, user_id, nickname, club_id, elo, payload, updated_at)
@@ -222,6 +338,11 @@ final class PostgresPlayerRepository(
       statement.setString(1, id.value)
     })
 
+  override def findByUserId(userId: String): Option[Player] =
+    readOne[Player]("select payload from players where user_id = ?", { statement =>
+      statement.setString(1, userId)
+    })
+
   override def findAll(): Vector[Player] =
     readAll[Player]("select payload from players order by nickname")
 
@@ -230,6 +351,15 @@ final class PostgresClubRepository(
 ) extends ClubRepository
     with JdbcRepositorySupport:
   override def save(club: Club): Club =
+    try persist(club)
+    catch
+      case error: SQLException if PostgresErrors.isUniqueViolation(error, "idx_clubs_name") =>
+        val normalized = findByName(club.name)
+          .map(existing => club.copy(id = existing.id, creator = existing.creator, createdAt = existing.createdAt))
+          .getOrElse(throw error)
+        persist(normalized)
+
+  private def persist(club: Club): Club =
     val sql =
       """
         |insert into clubs (id, name, creator_id, total_points, payload, updated_at)
@@ -260,6 +390,11 @@ final class PostgresClubRepository(
       statement.setString(1, id.value)
     })
 
+  override def findByName(name: String): Option[Club] =
+    readOne[Club]("select payload from clubs where name = ?", { statement =>
+      statement.setString(1, name)
+    })
+
   override def findAll(): Vector[Club] =
     readAll[Club]("select payload from clubs order by name")
 
@@ -268,6 +403,15 @@ final class PostgresTournamentRepository(
 ) extends TournamentRepository
     with JdbcRepositorySupport:
   override def save(tournament: Tournament): Tournament =
+    try persist(tournament)
+    catch
+      case error: SQLException if PostgresErrors.isUniqueViolation(error, "idx_tournaments_name_start") =>
+        val normalized = findByNameAndOrganizer(tournament.name, tournament.organizer)
+          .map(existing => tournament.copy(id = existing.id))
+          .getOrElse(throw error)
+        persist(normalized)
+
+  private def persist(tournament: Tournament): Tournament =
     val sql =
       """
         |insert into tournaments (id, name, organizer, status, payload, updated_at)
@@ -297,6 +441,15 @@ final class PostgresTournamentRepository(
     readOne[Tournament]("select payload from tournaments where id = ?", { statement =>
       statement.setString(1, id.value)
     })
+
+  override def findByNameAndOrganizer(name: String, organizer: String): Option[Tournament] =
+    readOne[Tournament](
+      "select payload from tournaments where name = ? and organizer = ?",
+      { statement =>
+        statement.setString(1, name)
+        statement.setString(2, organizer)
+      }
+    )
 
   override def findAll(): Vector[Tournament] =
     readAll[Tournament]("select payload from tournaments order by updated_at desc")
@@ -359,13 +512,14 @@ final class PostgresPaifuRepository(
   override def save(paifu: Paifu): Paifu =
     val sql =
       """
-        |insert into paifus (id, table_id, tournament_id, stage_id, recorded_at, payload, updated_at)
-        |values (?, ?, ?, ?, ?, cast(? as jsonb), now())
+        |insert into paifus (id, table_id, tournament_id, stage_id, recorded_at, player_ids, payload, updated_at)
+        |values (?, ?, ?, ?, ?, ?, cast(? as jsonb), now())
         |on conflict (id) do update set
         |  table_id = excluded.table_id,
         |  tournament_id = excluded.tournament_id,
         |  stage_id = excluded.stage_id,
         |  recorded_at = excluded.recorded_at,
+        |  player_ids = excluded.player_ids,
         |  payload = excluded.payload,
         |  updated_at = now()
         |""".stripMargin
@@ -377,7 +531,11 @@ final class PostgresPaifuRepository(
         statement.setString(3, paifu.metadata.tournamentId.value)
         statement.setString(4, paifu.metadata.stageId.value)
         statement.setTimestamp(5, Timestamp.from(paifu.metadata.recordedAt))
-        statement.setString(6, writeJson(paifu))
+        statement.setArray(
+          6,
+          connection.createArrayOf("text", paifu.playerIds.map(_.value).toArray)
+        )
+        statement.setString(7, writeJson(paifu))
         statement.executeUpdate()
       }
     }
@@ -391,6 +549,14 @@ final class PostgresPaifuRepository(
 
   override def findAll(): Vector[Paifu] =
     readAll[Paifu]("select payload from paifus order by recorded_at desc")
+
+  override def findByPlayer(playerId: PlayerId): Vector[Paifu] =
+    readAll[Paifu](
+      "select payload from paifus where ? = any(player_ids) order by recorded_at desc",
+      { statement =>
+        statement.setString(1, playerId.value)
+      }
+    )
 
 final class PostgresDashboardRepository(
     protected val connectionFactory: JdbcConnectionFactory
@@ -435,3 +601,60 @@ final class PostgresDashboardRepository(
     owner match
       case DashboardOwner.Player(_) => "player"
       case DashboardOwner.Club(_)   => "club"
+
+final class JdbcTransactionManager(
+    connectionFactory: JdbcConnectionFactory
+) extends TransactionManager:
+  override def inTransaction[A](operation: => A): A =
+    connectionFactory.inTransaction(operation)
+
+final class PostgresAdminService(connectionFactory: JdbcConnectionFactory):
+  private val managedTables =
+    Vector("players", "clubs", "tournaments", "tables", "paifus", "dashboards")
+
+  def ping(): Boolean =
+    connectionFactory.withConnection { connection =>
+      Using.resource(connection.prepareStatement("select 1")) { statement =>
+        Using.resource(statement.executeQuery())(_.next())
+      }
+    }
+
+  def schemaVersion(): Option[Int] =
+    connectionFactory.withConnection { connection =>
+      Using.resource(connection.prepareStatement("select max(version) as version from schema_version")) {
+        statement =>
+          Using.resource(statement.executeQuery()) { resultSet =>
+            if resultSet.next() then Option(resultSet.getObject("version")).map(_ => resultSet.getInt("version"))
+            else None
+          }
+      }
+    }
+
+  def tableCounts(): Vector[(String, Int)] =
+    managedTables.map { tableName =>
+      tableName -> countRows(tableName)
+    }
+
+  def truncateAll(): Unit =
+    connectionFactory.inTransaction {
+      connectionFactory.withConnection { connection =>
+        executeAdmin(connection, "truncate table dashboards restart identity")
+        executeAdmin(connection, "truncate table paifus restart identity")
+        executeAdmin(connection, "truncate table tables restart identity")
+        executeAdmin(connection, "truncate table tournaments restart identity")
+        executeAdmin(connection, "truncate table clubs restart identity")
+        executeAdmin(connection, "truncate table players restart identity")
+      }
+    }
+
+  private def executeAdmin(connection: Connection, sql: String): Unit =
+    Using.resource(connection.createStatement())(_.execute(sql))
+
+  private def countRows(tableName: String): Int =
+    connectionFactory.withConnection { connection =>
+      Using.resource(connection.prepareStatement(s"select count(*) as row_count from $tableName")) { statement =>
+        Using.resource(statement.executeQuery()) { resultSet =>
+          if resultSet.next() then resultSet.getInt("row_count") else 0
+        }
+      }
+    }

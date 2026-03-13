@@ -8,7 +8,8 @@ import riichinexus.domain.model.*
 import riichinexus.domain.service.*
 
 final class PlayerApplicationService(
-    playerRepository: PlayerRepository
+    playerRepository: PlayerRepository,
+    transactionManager: TransactionManager = NoOpTransactionManager
 ):
   def registerPlayer(
       userId: String,
@@ -17,54 +18,74 @@ final class PlayerApplicationService(
       registeredAt: Instant = Instant.now(),
       initialElo: Int = 1500
   ): Player =
-    val player = Player(
-      id = IdGenerator.playerId(),
-      userId = userId,
-      nickname = nickname,
-      registeredAt = registeredAt,
-      currentRank = rank,
-      elo = initialElo
-    )
+    transactionManager.inTransaction {
+      val player = playerRepository.findByUserId(userId) match
+        case Some(existing) =>
+          existing.copy(
+            nickname = nickname,
+            currentRank = rank
+          )
+        case None =>
+          Player(
+            id = IdGenerator.playerId(),
+            userId = userId,
+            nickname = nickname,
+            registeredAt = registeredAt,
+            currentRank = rank,
+            elo = initialElo
+          )
 
-    playerRepository.save(player)
+      playerRepository.save(player)
+    }
 
 final class ClubApplicationService(
     clubRepository: ClubRepository,
-    playerRepository: PlayerRepository
+    playerRepository: PlayerRepository,
+    transactionManager: TransactionManager = NoOpTransactionManager
 ):
   def createClub(
       name: String,
       creatorId: PlayerId,
       createdAt: Instant = Instant.now()
   ): Club =
-    val club = Club(
-      id = IdGenerator.clubId(),
-      name = name,
-      creator = creatorId,
-      createdAt = createdAt,
-      members = Vector(creatorId)
-    )
+    transactionManager.inTransaction {
+      val club = clubRepository.findByName(name) match
+        case Some(existing) =>
+          if existing.members.contains(creatorId) then existing
+          else existing.addMember(creatorId)
+        case None =>
+          Club(
+            id = IdGenerator.clubId(),
+            name = name,
+            creator = creatorId,
+            createdAt = createdAt,
+            members = Vector(creatorId)
+          )
 
-    playerRepository.findById(creatorId).foreach { creator =>
-      playerRepository.save(creator.joinClub(club.id))
+      playerRepository.findById(creatorId).foreach { creator =>
+        playerRepository.save(creator.joinClub(club.id))
+      }
+
+      clubRepository.save(club)
     }
 
-    clubRepository.save(club)
-
   def addMember(clubId: ClubId, playerId: PlayerId): Option[Club] =
-    for
-      club <- clubRepository.findById(clubId)
-      player <- playerRepository.findById(playerId)
-    yield
-      playerRepository.save(player.joinClub(clubId))
-      clubRepository.save(club.addMember(playerId))
+    transactionManager.inTransaction {
+      for
+        club <- clubRepository.findById(clubId)
+        player <- playerRepository.findById(playerId)
+      yield
+        playerRepository.save(player.joinClub(clubId))
+        clubRepository.save(club.addMember(playerId))
+    }
 
 final class TournamentApplicationService(
     tournamentRepository: TournamentRepository,
     playerRepository: PlayerRepository,
     clubRepository: ClubRepository,
     tableRepository: TableRepository,
-    seatingPolicy: SeatingPolicy
+    seatingPolicy: SeatingPolicy,
+    transactionManager: TransactionManager = NoOpTransactionManager
 ):
   def createTournament(
       name: String,
@@ -73,64 +94,87 @@ final class TournamentApplicationService(
       endsAt: Instant,
       stages: Vector[TournamentStage]
   ): Tournament =
-    tournamentRepository.save(
-      Tournament(
-        id = IdGenerator.tournamentId(),
-        name = name,
-        organizer = organizer,
-        startsAt = startsAt,
-        endsAt = endsAt,
-        stages = stages.sortBy(_.order)
-      )
-    )
+    transactionManager.inTransaction {
+      val tournament = tournamentRepository.findByNameAndOrganizer(name, organizer) match
+        case Some(existing) =>
+          existing.copy(
+            startsAt = startsAt,
+            endsAt = endsAt,
+            stages = stages.sortBy(_.order)
+          )
+        case None =>
+          Tournament(
+            id = IdGenerator.tournamentId(),
+            name = name,
+            organizer = organizer,
+            startsAt = startsAt,
+            endsAt = endsAt,
+            stages = stages.sortBy(_.order)
+          )
+
+      tournamentRepository.save(tournament)
+    }
 
   def registerPlayer(tournamentId: TournamentId, playerId: PlayerId): Option[Tournament] =
-    tournamentRepository.findById(tournamentId).map { tournament =>
-      tournamentRepository.save(tournament.registerPlayer(playerId))
+    transactionManager.inTransaction {
+      tournamentRepository.findById(tournamentId).map { tournament =>
+        tournamentRepository.save(tournament.registerPlayer(playerId))
+      }
     }
 
   def registerClub(tournamentId: TournamentId, clubId: ClubId): Option[Tournament] =
-    tournamentRepository.findById(tournamentId).map { tournament =>
-      tournamentRepository.save(tournament.registerClub(clubId))
+    transactionManager.inTransaction {
+      tournamentRepository.findById(tournamentId).map { tournament =>
+        tournamentRepository.save(tournament.registerClub(clubId))
+      }
     }
 
   def publishTournament(tournamentId: TournamentId): Option[Tournament] =
-    tournamentRepository.findById(tournamentId).map { tournament =>
-      tournamentRepository.save(tournament.publish)
+    transactionManager.inTransaction {
+      tournamentRepository.findById(tournamentId).map { tournament =>
+        tournamentRepository.save(tournament.publish)
+      }
     }
 
   def startTournament(tournamentId: TournamentId): Option[Tournament] =
-    tournamentRepository.findById(tournamentId).map { tournament =>
-      tournamentRepository.save(tournament.start)
+    transactionManager.inTransaction {
+      tournamentRepository.findById(tournamentId).map { tournament =>
+        tournamentRepository.save(tournament.start)
+      }
     }
 
   def scheduleStageTables(
       tournamentId: TournamentId,
       stageId: TournamentStageId
   ): Vector[Table] =
-    val tournament = tournamentRepository
-      .findById(tournamentId)
-      .getOrElse(throw IllegalArgumentException(s"Tournament ${tournamentId.value} was not found"))
+    transactionManager.inTransaction {
+      val existingTables = tableRepository.findByTournamentAndStage(tournamentId, stageId)
+      if existingTables.nonEmpty then existingTables
+      else
+        val tournament = tournamentRepository
+          .findById(tournamentId)
+          .getOrElse(throw IllegalArgumentException(s"Tournament ${tournamentId.value} was not found"))
 
-    val stage = tournament.stages
-      .find(_.id == stageId)
-      .getOrElse(throw IllegalArgumentException(s"Stage ${stageId.value} was not found"))
+        val stage = tournament.stages
+          .find(_.id == stageId)
+          .getOrElse(throw IllegalArgumentException(s"Stage ${stageId.value} was not found"))
 
-    val tournamentPlayers = resolveParticipants(tournament)
-    val plannedTables = seatingPolicy.assignTables(tournamentPlayers, stage)
+        val tournamentPlayers = resolveParticipants(tournament)
+        val plannedTables = seatingPolicy.assignTables(tournamentPlayers, stage)
 
-    tournamentRepository.save(tournament.activateStage(stageId).markScheduled)
+        tournamentRepository.save(tournament.activateStage(stageId).markScheduled)
 
-    plannedTables.map { planned =>
-      tableRepository.save(
-        Table(
-          id = IdGenerator.tableId(),
-          tableNo = planned.tableNo,
-          tournamentId = tournamentId,
-          stageId = stageId,
-          seats = planned.seats
-        )
-      )
+        plannedTables.map { planned =>
+          tableRepository.save(
+            Table(
+              id = IdGenerator.tableId(),
+              tableNo = planned.tableNo,
+              tournamentId = tournamentId,
+              stageId = stageId,
+              seats = planned.seats
+            )
+          )
+        }
     }
 
   private def resolveParticipants(tournament: Tournament): Vector[Player] =
@@ -147,33 +191,38 @@ final class TournamentApplicationService(
 final class TableLifecycleService(
     tableRepository: TableRepository,
     paifuRepository: PaifuRepository,
-    eventBus: DomainEventBus
+    eventBus: DomainEventBus,
+    transactionManager: TransactionManager = NoOpTransactionManager
 ):
   def startTable(tableId: TableId, startedAt: Instant = Instant.now()): Option[Table] =
-    tableRepository.findById(tableId).map { table =>
-      tableRepository.save(table.start(startedAt))
+    transactionManager.inTransaction {
+      tableRepository.findById(tableId).map { table =>
+        tableRepository.save(table.start(startedAt))
+      }
     }
 
   def recordCompletedTable(tableId: TableId, paifu: Paifu): Option[Table] =
-    tableRepository.findById(tableId).map { table =>
-      validatePaifu(table, paifu)
+    transactionManager.inTransaction {
+      tableRepository.findById(tableId).map { table =>
+        validatePaifu(table, paifu)
 
-      paifuRepository.save(paifu)
-      val finishedTable = tableRepository.save(
-        table.finish(paifu.id, paifu.metadata.recordedAt)
-      )
-
-      eventBus.publish(
-        TableResultRecorded(
-          tableId = table.id,
-          tournamentId = table.tournamentId,
-          stageId = table.stageId,
-          paifu = paifu,
-          occurredAt = paifu.metadata.recordedAt
+        paifuRepository.save(paifu)
+        val finishedTable = tableRepository.save(
+          table.finish(paifu.id, paifu.metadata.recordedAt)
         )
-      )
 
-      finishedTable
+        eventBus.publish(
+          TableResultRecorded(
+            tableId = table.id,
+            tournamentId = table.tournamentId,
+            stageId = table.stageId,
+            paifu = paifu,
+            occurredAt = paifu.metadata.recordedAt
+          )
+        )
+
+        finishedTable
+      }
     }
 
   private def validatePaifu(table: Table, paifu: Paifu): Unit =

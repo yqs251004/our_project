@@ -28,6 +28,7 @@ object ApplicationContext:
     else inMemory()
 
   def inMemory(): ApplicationContext =
+    val transactionManager = NoOpTransactionManager
     val playerRepository = InMemoryPlayerRepository()
     val clubRepository = InMemoryClubRepository()
     val tournamentRepository = InMemoryTournamentRepository()
@@ -50,16 +51,17 @@ object ApplicationContext:
     )
 
     ApplicationContext(
-      playerService = PlayerApplicationService(playerRepository),
-      clubService = ClubApplicationService(clubRepository, playerRepository),
+      playerService = PlayerApplicationService(playerRepository, transactionManager),
+      clubService = ClubApplicationService(clubRepository, playerRepository, transactionManager),
       tournamentService = TournamentApplicationService(
         tournamentRepository,
         playerRepository,
         clubRepository,
         tableRepository,
-        BalancedEloSeatingPolicy()
+        BalancedEloSeatingPolicy(),
+        transactionManager
       ),
-      tableService = TableLifecycleService(tableRepository, paifuRepository, eventBus),
+      tableService = TableLifecycleService(tableRepository, paifuRepository, eventBus, transactionManager),
       playerRepository = playerRepository,
       clubRepository = clubRepository,
       tournamentRepository = tournamentRepository,
@@ -72,6 +74,7 @@ object ApplicationContext:
   def postgres(config: DatabaseConfig): ApplicationContext =
     val connectionFactory = JdbcConnectionFactory(config)
     PostgresSchemaInitializer(connectionFactory).initialize()
+    val transactionManager = JdbcTransactionManager(connectionFactory)
 
     val playerRepository = PostgresPlayerRepository(connectionFactory)
     val clubRepository = PostgresClubRepository(connectionFactory)
@@ -95,16 +98,17 @@ object ApplicationContext:
     )
 
     ApplicationContext(
-      playerService = PlayerApplicationService(playerRepository),
-      clubService = ClubApplicationService(clubRepository, playerRepository),
+      playerService = PlayerApplicationService(playerRepository, transactionManager),
+      clubService = ClubApplicationService(clubRepository, playerRepository, transactionManager),
       tournamentService = TournamentApplicationService(
         tournamentRepository,
         playerRepository,
         clubRepository,
         tableRepository,
-        BalancedEloSeatingPolicy()
+        BalancedEloSeatingPolicy(),
+        transactionManager
       ),
-      tableService = TableLifecycleService(tableRepository, paifuRepository, eventBus),
+      tableService = TableLifecycleService(tableRepository, paifuRepository, eventBus, transactionManager),
       playerRepository = playerRepository,
       clubRepository = clubRepository,
       tournamentRepository = tournamentRepository,

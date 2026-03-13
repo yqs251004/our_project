@@ -5,16 +5,19 @@ import riichinexus.domain.model.*
 trait PlayerRepository:
   def save(player: Player): Player
   def findById(id: PlayerId): Option[Player]
+  def findByUserId(userId: String): Option[Player]
   def findAll(): Vector[Player]
 
 trait ClubRepository:
   def save(club: Club): Club
   def findById(id: ClubId): Option[Club]
+  def findByName(name: String): Option[Club]
   def findAll(): Vector[Club]
 
 trait TournamentRepository:
   def save(tournament: Tournament): Tournament
   def findById(id: TournamentId): Option[Tournament]
+  def findByNameAndOrganizer(name: String, organizer: String): Option[Tournament]
   def findAll(): Vector[Tournament]
 
 trait TableRepository:

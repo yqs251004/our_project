@@ -16,6 +16,9 @@ final class InMemoryPlayerRepository extends PlayerRepository:
   override def findById(id: PlayerId): Option[Player] =
     state.get(id)
 
+  override def findByUserId(userId: String): Option[Player] =
+    state.values.find(_.userId == userId)
+
   override def findAll(): Vector[Player] =
     state.values.toVector
 
@@ -29,6 +32,9 @@ final class InMemoryClubRepository extends ClubRepository:
   override def findById(id: ClubId): Option[Club] =
     state.get(id)
 
+  override def findByName(name: String): Option[Club] =
+    state.values.find(_.name == name)
+
   override def findAll(): Vector[Club] =
     state.values.toVector
 
@@ -41,6 +47,11 @@ final class InMemoryTournamentRepository extends TournamentRepository:
 
   override def findById(id: TournamentId): Option[Tournament] =
     state.get(id)
+
+  override def findByNameAndOrganizer(name: String, organizer: String): Option[Tournament] =
+    state.values.find(tournament =>
+      tournament.name == name && tournament.organizer == organizer
+    )
 
   override def findAll(): Vector[Tournament] =
     state.values.toVector
