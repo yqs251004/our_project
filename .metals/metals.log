@@ -1832,3 +1832,7 @@ org.eclipse.lsp4j.jsonrpc.ResponseErrorException: Request window/showMessageRequ
 2026.03.13 10:42:50 INFO  no build target found for D:\school\2026spring\front-back\our_project\build.sbt. Using presentation compiler with project's scala-library version: 3.3.7
 2026.03.13 10:42:50 INFO  no build target found for D:\school\2026spring\front-back\our_project\build.sbt. Using presentation compiler with project's scala-library version: 3.3.7
 2026.03.13 10:42:51 INFO  no build target found for D:\school\2026spring\front-back\our_project\build.sbt. Using presentation compiler with project's scala-library version: 3.3.7
+2026.03.13 10:43:33 WARN  no build target for: D:\school\2026spring\front-back\our_project\build.sbt
+2026.03.13 10:43:33 INFO  no build target found for D:\school\2026spring\front-back\our_project\build.sbt. Using presentation compiler with project's scala-library version: 3.3.7
+2026.03.13 10:43:33 INFO  no build target found for D:\school\2026spring\front-back\our_project\build.sbt. Using presentation compiler with project's scala-library version: 3.3.7
+2026.03.13 10:43:33 INFO  no build target found for D:\school\2026spring\front-back\our_project\build.sbt. Using presentation compiler with project's scala-library version: 3.3.7
