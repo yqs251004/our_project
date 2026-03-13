@@ -1885,3 +1885,16 @@ org.eclipse.lsp4j.jsonrpc.ResponseErrorException: Request window/showMessageRequ
 2026.03.13 10:47:30 WARN  no build target for: D:\school\2026spring\front-back\our_project\src\main\scala\main.scala
 2026.03.13 10:47:30 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\main.scala. Using presentation compiler with project's scala-library version: 3.3.7
 2026.03.13 10:47:30 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\main.scala. Using presentation compiler with project's scala-library version: 3.3.7
+2026.03.13 10:47:42 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\main.scala. Using presentation compiler with project's scala-library version: 3.3.7
+2026.03.13 10:47:42 WARN  no build target for: D:\school\2026spring\front-back\our_project\src\main\scala\main.scala
+2026.03.13 10:47:42 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\main.scala. Using presentation compiler with project's scala-library version: 3.3.7
+2026.03.13 10:47:42 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\main.scala. Using presentation compiler with project's scala-library version: 3.3.7
+2026.03.13 10:47:42 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\main.scala. Using presentation compiler with project's scala-library version: 3.3.7
+2026.03.13 10:58:46 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\main.scala. Using presentation compiler with project's scala-library version: 3.3.7
+3月 13, 2026 10:58:54 上午 org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
+信息: Unsupported notification method: $/setTrace
+2026.03.13 10:58:54 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\main.scala. Using presentation compiler with project's scala-library version: 3.3.7
+2026.03.13 11:14:45 INFO  no build target found for D:\school\2026spring\front-back\our_project\build.sbt. Using presentation compiler with project's scala-library version: 3.3.7
+2026.03.13 11:14:45 WARN  no build target for: D:\school\2026spring\front-back\our_project\build.sbt
+2026.03.13 11:14:45 INFO  no build target found for D:\school\2026spring\front-back\our_project\build.sbt. Using presentation compiler with project's scala-library version: 3.3.7
+2026.03.13 11:14:45 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\main.scala. Using presentation compiler with project's scala-library version: 3.3.7
