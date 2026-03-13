@@ -1826,3 +1826,9 @@ org.eclipse.lsp4j.jsonrpc.ResponseErrorException: Request window/showMessageRequ
 2026.03.13 10:42:48 INFO  Memory monitor started
 2026.03.13 10:42:49 WARN  Using H2 2.4.240 which is newer than the version Flyway has been verified with. The latest verified version of H2 is 2.3.232.
 2026.03.13 10:42:49 INFO  no build target found for D:\school\2026spring\front-back\our_project\build.sbt. Using presentation compiler with project's scala-library version: 3.3.7
+3月 13, 2026 10:42:50 上午 org.eclipse.lsp4j.jsonrpc.RemoteEndpoint handleCancellation
+警告: Unmatched cancel notification for request id 2
+2026.03.13 10:42:50 INFO  no build target found for D:\school\2026spring\front-back\our_project\build.sbt. Using presentation compiler with project's scala-library version: 3.3.7
+2026.03.13 10:42:50 INFO  no build target found for D:\school\2026spring\front-back\our_project\build.sbt. Using presentation compiler with project's scala-library version: 3.3.7
+2026.03.13 10:42:50 INFO  no build target found for D:\school\2026spring\front-back\our_project\build.sbt. Using presentation compiler with project's scala-library version: 3.3.7
+2026.03.13 10:42:51 INFO  no build target found for D:\school\2026spring\front-back\our_project\build.sbt. Using presentation compiler with project's scala-library version: 3.3.7
