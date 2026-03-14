@@ -280,6 +280,26 @@ private final class ApiHandler(
             TournamentStageId(stageId)
           )
         )
+      case ("GET", Vector("tournaments", tournamentId, "stages", stageId, "bracket")) =>
+        sendJson(
+          exchange,
+          200,
+          app.tournamentService.stageKnockoutBracket(
+            TournamentId(tournamentId),
+            TournamentStageId(stageId)
+          )
+        )
+      case ("POST", Vector("tournaments", tournamentId, "stages", stageId, "advance")) =>
+        val request = readJsonBody[AdvanceKnockoutStageRequest](exchange)
+        sendJson(
+          exchange,
+          200,
+          app.tournamentService.advanceKnockoutStage(
+            tournamentId = TournamentId(tournamentId),
+            stageId = TournamentStageId(stageId),
+            actor = principal(request.operator)
+          )
+        )
       case ("POST", Vector("tournaments", tournamentId, "stages", stageId, "complete")) =>
         val request = readJsonBody[CompleteStageRequest](exchange)
         sendOption(

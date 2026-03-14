@@ -187,6 +187,53 @@ final case class StageAdvancementSnapshot(
     summary: String
 ) derives CanEqual
 
+final case class KnockoutBracketSlot(
+    seed: Int,
+    playerId: Option[PlayerId],
+    bye: Boolean = false,
+    sourceMatchId: Option[String] = None,
+    sourcePlacement: Option[Int] = None
+) derives CanEqual
+
+final case class KnockoutBracketResult(
+    playerId: PlayerId,
+    placement: Int,
+    finalPoints: Int,
+    advanced: Boolean
+) derives CanEqual
+
+final case class KnockoutBracketMatch(
+    id: String,
+    roundNumber: Int,
+    position: Int,
+    slots: Vector[KnockoutBracketSlot],
+    sourceMatchIds: Vector[String] = Vector.empty,
+    advancementCount: Int,
+    nextMatchId: Option[String] = None,
+    tableId: Option[TableId] = None,
+    unlocked: Boolean = false,
+    completed: Boolean = false,
+    results: Vector[KnockoutBracketResult] = Vector.empty
+) derives CanEqual:
+  require(slots.size == 4, "Riichi knockout matches must contain exactly four slots")
+  require(advancementCount >= 0 && advancementCount <= 4, "Advancement count must be between 0 and 4")
+
+final case class KnockoutBracketRound(
+    roundNumber: Int,
+    label: String,
+    matches: Vector[KnockoutBracketMatch]
+) derives CanEqual
+
+final case class KnockoutBracketSnapshot(
+    tournamentId: TournamentId,
+    stageId: TournamentStageId,
+    generatedAt: Instant,
+    bracketSize: Int,
+    qualifiedPlayerIds: Vector[PlayerId],
+    rounds: Vector[KnockoutBracketRound],
+    summary: String
+) derives CanEqual
+
 enum TournamentParticipantKind derives CanEqual:
   case Club
   case Player
@@ -350,6 +397,9 @@ final case class Table(
     tournamentId: TournamentId,
     stageId: TournamentStageId,
     seats: Vector[TableSeat],
+    bracketMatchId: Option[String] = None,
+    bracketRoundNumber: Option[Int] = None,
+    feederMatchIds: Vector[String] = Vector.empty,
     status: TableStatus = TableStatus.WaitingPreparation,
     startedAt: Option[Instant] = None,
     scoringStartedAt: Option[Instant] = None,
@@ -362,6 +412,17 @@ final case class Table(
 ) derives CanEqual:
   require(seats.size == 4, "A riichi table must have exactly four seats")
   require(seats.map(_.seat).distinct.size == 4, "Seats must be unique")
+
+  def bindKnockoutMatch(
+      matchId: String,
+      roundNumber: Int,
+      feeders: Vector[String] = Vector.empty
+  ): Table =
+    copy(
+      bracketMatchId = Some(matchId),
+      bracketRoundNumber = Some(roundNumber),
+      feederMatchIds = feeders.distinct
+    )
 
   def start(at: Instant): Table =
     require(

@@ -87,6 +87,11 @@ object JsonCodecs:
   given ReadWriter[StageStandingEntry] = macroRW
   given ReadWriter[StageRankingSnapshot] = macroRW
   given ReadWriter[StageAdvancementSnapshot] = macroRW
+  given ReadWriter[KnockoutBracketSlot] = macroRW
+  given ReadWriter[KnockoutBracketResult] = macroRW
+  given ReadWriter[KnockoutBracketMatch] = macroRW
+  given ReadWriter[KnockoutBracketRound] = macroRW
+  given ReadWriter[KnockoutBracketSnapshot] = macroRW
   given ReadWriter[Tournament] = macroRW
   given ReadWriter[TableSeat] = macroRW
   given ReadWriter[TableStatus] =

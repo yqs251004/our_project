@@ -48,6 +48,15 @@ object ApplicationContext:
 
     val eventBus = InMemoryDomainEventBus()
     val tournamentRuleEngine = DefaultTournamentRuleEngine()
+    val knockoutStageCoordinator = KnockoutStageCoordinator(
+      tournamentRepository,
+      playerRepository,
+      clubRepository,
+      tableRepository,
+      matchRecordRepository,
+      tournamentRuleEngine,
+      transactionManager
+    )
     eventBus.register(
       RatingProjectionSubscriber(playerRepository, PairwiseEloRatingService())
     )
@@ -85,6 +94,7 @@ object ApplicationContext:
         matchRecordRepository,
         BalancedEloSeatingPolicy(),
         tournamentRuleEngine,
+        knockoutStageCoordinator,
         transactionManager,
         authorizationService
       ),
@@ -92,6 +102,7 @@ object ApplicationContext:
         tableRepository,
         paifuRepository,
         matchRecordRepository,
+        knockoutStageCoordinator,
         eventBus,
         transactionManager,
         authorizationService
@@ -141,6 +152,15 @@ object ApplicationContext:
 
     val eventBus = InMemoryDomainEventBus()
     val tournamentRuleEngine = DefaultTournamentRuleEngine()
+    val knockoutStageCoordinator = KnockoutStageCoordinator(
+      tournamentRepository,
+      playerRepository,
+      clubRepository,
+      tableRepository,
+      matchRecordRepository,
+      tournamentRuleEngine,
+      transactionManager
+    )
     eventBus.register(
       RatingProjectionSubscriber(playerRepository, PairwiseEloRatingService())
     )
@@ -178,6 +198,7 @@ object ApplicationContext:
         matchRecordRepository,
         BalancedEloSeatingPolicy(),
         tournamentRuleEngine,
+        knockoutStageCoordinator,
         transactionManager,
         authorizationService
       ),
@@ -185,6 +206,7 @@ object ApplicationContext:
         tableRepository,
         paifuRepository,
         matchRecordRepository,
+        knockoutStageCoordinator,
         eventBus,
         transactionManager,
         authorizationService

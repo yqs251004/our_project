@@ -179,9 +179,9 @@ private def demoPaifu(
     ),
     rounds = Vector(firstRound, secondRound),
     finalStandings = Vector(
-      FinalStanding(east, SeatWind.East, 32100, 1),
-      FinalStanding(south, SeatWind.South, 28700, 2),
-      FinalStanding(north, SeatWind.North, 21200, 3),
-      FinalStanding(west, SeatWind.West, 18000, 4)
+      FinalStanding(south, SeatWind.South, 31700, 1),
+      FinalStanding(east, SeatWind.East, 29000, 2),
+      FinalStanding(north, SeatWind.North, 23000, 3),
+      FinalStanding(west, SeatWind.West, 16300, 4)
     )
   )

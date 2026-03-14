@@ -399,6 +399,7 @@ final class TournamentApplicationService(
     matchRecordRepository: MatchRecordRepository,
     seatingPolicy: SeatingPolicy,
     tournamentRuleEngine: TournamentRuleEngine,
+    knockoutStageCoordinator: KnockoutStageCoordinator,
     transactionManager: TransactionManager = NoOpTransactionManager,
     authorizationService: AuthorizationService = NoOpAuthorizationService
 ):
@@ -683,33 +684,41 @@ final class TournamentApplicationService(
             s"Tournament ${tournamentId.value} must be published before scheduling tables"
           )
 
-        val tournamentPlayers = resolveParticipants(tournament, stage)
-        if tournamentPlayers.size < 4 then
-          throw IllegalArgumentException(
-            s"Stage ${stageId.value} needs at least four active players before scheduling"
-          )
-        val plannedTables = seatingPolicy.assignTables(tournamentPlayers, stage)
+        val isKnockoutStage =
+          stage.format == StageFormat.Knockout ||
+            stage.format == StageFormat.Finals ||
+            stage.advancementRule.ruleType == AdvancementRuleType.KnockoutElimination
 
-        val savedTables = plannedTables.map { planned =>
-          tableRepository.save(
-            Table(
-              id = IdGenerator.tableId(),
-              tableNo = planned.tableNo,
-              tournamentId = tournamentId,
-              stageId = stageId,
-              seats = planned.seats
+        if isKnockoutStage then
+          knockoutStageCoordinator.materializeUnlockedTables(tournamentId, stageId)
+        else
+          val tournamentPlayers = resolveParticipants(tournament, stage)
+          if tournamentPlayers.size < 4 then
+            throw IllegalArgumentException(
+              s"Stage ${stageId.value} needs at least four active players before scheduling"
             )
+          val plannedTables = seatingPolicy.assignTables(tournamentPlayers, stage)
+
+          val savedTables = plannedTables.map { planned =>
+            tableRepository.save(
+              Table(
+                id = IdGenerator.tableId(),
+                tableNo = planned.tableNo,
+                tournamentId = tournamentId,
+                stageId = stageId,
+                seats = planned.seats
+              )
+            )
+          }
+
+          tournamentRepository.save(
+            tournament
+              .activateStage(stageId)
+              .markScheduled
+              .updateStage(stageId, _.registerScheduledTables(savedTables.map(_.id)))
           )
-        }
 
-        tournamentRepository.save(
-          tournament
-            .activateStage(stageId)
-            .markScheduled
-            .updateStage(stageId, _.registerScheduledTables(savedTables.map(_.id)))
-        )
-
-        savedTables
+          savedTables
     }
 
   def stageStandings(
@@ -743,6 +752,44 @@ final class TournamentApplicationService(
       at
     )
     tournamentRuleEngine.projectAdvancement(tournament, stage, ranking, at)
+
+  def stageKnockoutBracket(
+      tournamentId: TournamentId,
+      stageId: TournamentStageId,
+      at: Instant = Instant.now()
+  ): KnockoutBracketSnapshot =
+    knockoutStageCoordinator.buildProgression(tournamentId, stageId, at)
+
+  def advanceKnockoutStage(
+      tournamentId: TournamentId,
+      stageId: TournamentStageId,
+      actor: AccessPrincipal,
+      at: Instant = Instant.now()
+  ): Vector[Table] =
+    transactionManager.inTransaction {
+      val tournament = tournamentRepository
+        .findById(tournamentId)
+        .getOrElse(throw NoSuchElementException(s"Tournament ${tournamentId.value} was not found"))
+      val stage = requireStage(tournament, stageId)
+
+      authorizationService.requirePermission(
+        actor,
+        Permission.ManageTournamentStages,
+        tournamentId = Some(tournamentId)
+      )
+
+      val isKnockoutStage =
+        stage.format == StageFormat.Knockout ||
+          stage.format == StageFormat.Finals ||
+          stage.advancementRule.ruleType == AdvancementRuleType.KnockoutElimination
+
+      if !isKnockoutStage then
+        throw IllegalArgumentException(
+          s"Stage ${stageId.value} is not configured as a knockout stage"
+        )
+
+      knockoutStageCoordinator.materializeUnlockedTables(tournamentId, stageId, at)
+    }
 
   def completeStage(
       tournamentId: TournamentId,
@@ -845,6 +892,7 @@ final class TableLifecycleService(
     tableRepository: TableRepository,
     paifuRepository: PaifuRepository,
     matchRecordRepository: MatchRecordRepository,
+    knockoutStageCoordinator: KnockoutStageCoordinator,
     eventBus: DomainEventBus,
     transactionManager: TransactionManager = NoOpTransactionManager,
     authorizationService: AuthorizationService = NoOpAuthorizationService
@@ -909,6 +957,13 @@ final class TableLifecycleService(
           )
         )
 
+        if table.bracketMatchId.nonEmpty then
+          knockoutStageCoordinator.materializeUnlockedTables(
+            table.tournamentId,
+            table.stageId,
+            paifu.metadata.recordedAt
+          )
+
         archivedTable
       }
     }
@@ -932,6 +987,9 @@ final class TableLifecycleService(
     }
 
   private def validatePaifu(table: Table, paifu: Paifu): Unit =
+    val scheduledSeatsByPlayer = table.seats.map(seat => seat.playerId -> seat).toMap
+    val seatPlayerIds = scheduledSeatsByPlayer.keySet
+
     require(paifu.metadata.tableId == table.id, "Paifu table id does not match the table")
     require(
       paifu.metadata.tournamentId == table.tournamentId,
@@ -942,10 +1000,60 @@ final class TableLifecycleService(
       paifu.metadata.seats.toSet == table.seats.toSet,
       "Paifu seat map does not match the scheduled table"
     )
+    require(paifu.rounds.nonEmpty, "Paifu must contain at least one round")
     require(paifu.finalStandings.size == 4, "Paifu must provide four final standings")
     require(
       paifu.finalStandings.map(_.placement).distinct.size == 4,
       "Paifu placements must be unique"
+    )
+    require(
+      paifu.finalStandings.forall(standing =>
+        scheduledSeatsByPlayer.get(standing.playerId).exists(_.seat == standing.seat)
+      ),
+      "Paifu final standing seats must match the scheduled table"
+    )
+    require(
+      paifu.finalStandings.map(_.finalPoints).sum == table.seats.map(_.initialPoints).sum,
+      "Paifu final points must preserve the table point total"
+    )
+
+    paifu.rounds.zipWithIndex.foreach { (round, index) =>
+      require(
+        round.initialHands.keySet == seatPlayerIds,
+        s"Round ${index + 1} must provide initial hands for all seated players"
+      )
+
+      val terminalActions = round.actions.filter(action =>
+        action.actionType == PaifuActionType.Win || action.actionType == PaifuActionType.DrawGame
+      )
+      require(
+        terminalActions.nonEmpty,
+        s"Round ${index + 1} must end with a terminal action"
+      )
+      require(
+        terminalActions.size == 1,
+        s"Round ${index + 1} must contain exactly one terminal action"
+      )
+
+      round.result.outcome match
+        case HandOutcome.Ron | HandOutcome.Tsumo =>
+          require(
+            terminalActions.head.actionType == PaifuActionType.Win,
+            s"Round ${index + 1} winning result must end with a Win action"
+          )
+        case HandOutcome.ExhaustiveDraw | HandOutcome.AbortiveDraw =>
+          require(
+            terminalActions.head.actionType == PaifuActionType.DrawGame,
+            s"Round ${index + 1} drawn result must end with a DrawGame action"
+          )
+    }
+
+    val expectedFinalPoints = paifu.expectedFinalPoints
+    require(
+      paifu.finalStandings.forall(standing =>
+        expectedFinalPoints.get(standing.playerId).contains(standing.finalPoints)
+      ),
+      "Paifu final standings must match the cumulative round score changes"
     )
 
 final class AppealApplicationService(

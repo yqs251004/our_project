@@ -20,6 +20,22 @@ trait TournamentRuleEngine:
       at: Instant = Instant.now()
   ): StageAdvancementSnapshot
 
+  def buildKnockoutBracket(
+      tournament: Tournament,
+      stage: TournamentStage,
+      advancement: StageAdvancementSnapshot,
+      at: Instant = Instant.now()
+  ): KnockoutBracketSnapshot
+
+  def buildKnockoutProgression(
+      tournament: Tournament,
+      stage: TournamentStage,
+      advancement: StageAdvancementSnapshot,
+      tables: Vector[Table],
+      records: Vector[MatchRecord],
+      at: Instant = Instant.now()
+  ): KnockoutBracketSnapshot
+
 final class DefaultTournamentRuleEngine extends TournamentRuleEngine:
   override def buildStageRanking(
       tournament: Tournament,
@@ -145,6 +161,99 @@ final class DefaultTournamentRuleEngine extends TournamentRuleEngine:
       summary = summaryFor(stage, qualifiedIds.size, ranking)
     )
 
+  override def buildKnockoutBracket(
+      tournament: Tournament,
+      stage: TournamentStage,
+      advancement: StageAdvancementSnapshot,
+      at: Instant
+  ): KnockoutBracketSnapshot =
+    buildKnockoutProgression(tournament, stage, advancement, Vector.empty, Vector.empty, at)
+
+  override def buildKnockoutProgression(
+      tournament: Tournament,
+      stage: TournamentStage,
+      advancement: StageAdvancementSnapshot,
+      tables: Vector[Table],
+      records: Vector[MatchRecord],
+      at: Instant
+  ): KnockoutBracketSnapshot =
+    val isKnockoutStage =
+      stage.format == StageFormat.Knockout ||
+        stage.format == StageFormat.Finals ||
+        stage.advancementRule.ruleType == AdvancementRuleType.KnockoutElimination
+
+    if !isKnockoutStage then
+      throw IllegalArgumentException(
+        s"Stage ${stage.id.value} is not configured as a knockout stage"
+      )
+
+    val qualified = advancement.qualifiedPlayerIds.distinct
+    if qualified.isEmpty then
+      throw IllegalArgumentException(
+        s"Stage ${stage.id.value} does not have enough qualified players to build a knockout bracket"
+      )
+    if qualified.size < 2 then
+      throw IllegalArgumentException(
+        s"Stage ${stage.id.value} needs at least two qualified players to build a knockout bracket"
+      )
+    if qualified.size != nextPowerOfTwo(qualified.size) || qualified.size % 4 != 0 then
+      throw IllegalArgumentException(
+        s"Knockout progression currently requires 4, 8, 16, 32... qualified players; got ${qualified.size}"
+      )
+
+    val bracketSize = qualified.size
+    val tableByMatchId = tables.flatMap(table => table.bracketMatchId.map(_ -> table)).toMap
+    val recordByMatchId = tables.flatMap { table =>
+      table.bracketMatchId.flatMap(matchId =>
+        records.find(_.tableId == table.id).map(matchId -> _)
+      )
+    }.toMap
+
+    val firstRoundMatches = bracketSize / 4
+    val firstRound = (0 until firstRoundMatches).toVector.map { index =>
+      val matchId = matchIdFor(1, index + 1)
+      hydrateMatch(
+        baseMatch = KnockoutBracketMatch(
+          id = matchId,
+          roundNumber = 1,
+          position = index + 1,
+          slots = firstRoundSeedIndices(bracketSize, firstRoundMatches, index).map { seed =>
+            KnockoutBracketSlot(
+              seed = seed,
+              playerId = qualified.lift(seed - 1),
+              bye = false
+            )
+          },
+          sourceMatchIds = Vector.empty,
+          advancementCount = advancementCountForRound(1, bracketSize),
+          nextMatchId = nextMatchId(1, index + 1, bracketSize),
+          unlocked = true
+        ),
+        table = tableByMatchId.get(matchId),
+        record = recordByMatchId.get(matchId)
+      )
+    }
+
+    val remainingRounds = buildRemainingRounds(
+      currentRound = 2,
+      bracketSize = bracketSize,
+      previousRound = firstRound,
+      tableByMatchId = tableByMatchId,
+      recordByMatchId = recordByMatchId
+    )
+
+    val allRounds = KnockoutBracketRound(1, roundLabel(1, bracketSize), firstRound) +: remainingRounds
+
+    KnockoutBracketSnapshot(
+      tournamentId = tournament.id,
+      stageId = stage.id,
+      generatedAt = at,
+      bracketSize = bracketSize,
+      qualifiedPlayerIds = qualified,
+      rounds = allRounds,
+      summary = s"Knockout progression seeded ${qualified.size} players and unlocked ${allRounds.flatMap(_.matches).count(_.unlocked)} matches."
+    )
+
   private def defaultSwissCut(participantCount: Int): Int =
     participantCount match
       case count if count <= 4  => count
@@ -168,3 +277,142 @@ final class DefaultTournamentRuleEngine extends TournamentRuleEngine:
 
   private def round2(value: Double): Double =
     BigDecimal(value).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble
+
+  private def nextPowerOfTwo(value: Int): Int =
+    Iterator.iterate(1)(_ * 2).dropWhile(_ < math.max(1, value)).next()
+
+  private def log2(value: Int): Int =
+    (math.log(value.toDouble) / math.log(2.0)).toInt
+
+  private def matchIdFor(roundNumber: Int, position: Int): String =
+    s"r$roundNumber-m$position"
+
+  private def nextMatchId(
+      roundNumber: Int,
+      position: Int,
+      bracketSize: Int
+  ): Option[String] =
+    val totalRounds = totalKnockoutRounds(bracketSize)
+    if roundNumber >= totalRounds then None
+    else Some(matchIdFor(roundNumber + 1, (position + 1) / 2))
+
+  private def roundLabel(roundNumber: Int, bracketSize: Int): String =
+    val playersInRound = bracketSize / math.pow(2, roundNumber - 1).toInt
+    val matches = playersInRound / 4
+    matches match
+      case 1 => "Final"
+      case 2 => "Semifinal"
+      case 4 => "Quarterfinal"
+      case _ => s"Round $roundNumber"
+
+  private def totalKnockoutRounds(bracketSize: Int): Int =
+    log2(bracketSize) - 1
+
+  private def advancementCountForRound(roundNumber: Int, bracketSize: Int): Int =
+    if roundNumber >= totalKnockoutRounds(bracketSize) then 0 else 2
+
+  private def firstRoundSeedIndices(
+      bracketSize: Int,
+      firstRoundMatches: Int,
+      index: Int
+  ): Vector[Int] =
+    Vector(
+      index + 1,
+      bracketSize - index,
+      firstRoundMatches + index + 1,
+      bracketSize - firstRoundMatches - index
+    )
+
+  private def buildRemainingRounds(
+      currentRound: Int,
+      bracketSize: Int,
+      previousRound: Vector[KnockoutBracketMatch],
+      tableByMatchId: Map[String, Table],
+      recordByMatchId: Map[String, MatchRecord]
+  ): Vector[KnockoutBracketRound] =
+    if previousRound.size <= 1 then Vector.empty
+    else
+      val currentMatches = previousRound
+        .grouped(2)
+        .zipWithIndex
+        .map { case (feederPair, index) =>
+          val matchId = matchIdFor(currentRound, index + 1)
+          val unlocked = feederPair.forall(_.completed)
+          val slots =
+            if unlocked then
+              feederPair.flatMap { feeder =>
+                feeder.results.filter(_.advanced).sortBy(_.placement).map { result =>
+                  KnockoutBracketSlot(
+                    seed = result.placement,
+                    playerId = Some(result.playerId),
+                    bye = false,
+                    sourceMatchId = Some(feeder.id),
+                    sourcePlacement = Some(result.placement)
+                  )
+                }
+              }.toVector
+            else
+              feederPair.flatMap { feeder =>
+                Vector(1, 2).map { placement =>
+                  KnockoutBracketSlot(
+                    seed = placement,
+                    playerId = None,
+                    bye = false,
+                    sourceMatchId = Some(feeder.id),
+                    sourcePlacement = Some(placement)
+                  )
+                }
+              }.toVector
+
+          hydrateMatch(
+            baseMatch = KnockoutBracketMatch(
+              id = matchId,
+              roundNumber = currentRound,
+              position = index + 1,
+              slots = slots,
+              sourceMatchIds = feederPair.map(_.id).toVector,
+              advancementCount = advancementCountForRound(currentRound, bracketSize),
+              nextMatchId = nextMatchId(currentRound, index + 1, bracketSize),
+              unlocked = unlocked
+            ),
+            table = tableByMatchId.get(matchId),
+            record = recordByMatchId.get(matchId)
+          )
+        }
+        .toVector
+
+      KnockoutBracketRound(
+        roundNumber = currentRound,
+        label = roundLabel(currentRound, bracketSize),
+        matches = currentMatches
+      ) +: buildRemainingRounds(
+        currentRound = currentRound + 1,
+        bracketSize = bracketSize,
+        previousRound = currentMatches,
+        tableByMatchId = tableByMatchId,
+        recordByMatchId = recordByMatchId
+      )
+
+  private def hydrateMatch(
+      baseMatch: KnockoutBracketMatch,
+      table: Option[Table],
+      record: Option[MatchRecord]
+  ): KnockoutBracketMatch =
+    val results = record.toVector.flatMap { matchRecord =>
+      matchRecord.seatResults
+        .sortBy(_.placement)
+        .map { result =>
+          KnockoutBracketResult(
+            playerId = result.playerId,
+            placement = result.placement,
+            finalPoints = result.finalPoints,
+            advanced = result.placement <= baseMatch.advancementCount
+          )
+        }
+    }
+
+    baseMatch.copy(
+      tableId = table.map(_.id),
+      completed = record.nonEmpty,
+      results = results
+    )

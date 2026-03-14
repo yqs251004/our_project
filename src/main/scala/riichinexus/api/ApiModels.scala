@@ -275,6 +275,12 @@ final case class CompleteStageRequest(
   def operator: PlayerId =
     PlayerId(operatorId)
 
+final case class AdvanceKnockoutStageRequest(
+    operatorId: String
+):
+  def operator: PlayerId =
+    PlayerId(operatorId)
+
 final case class ForceResetTableRequest(
     operatorId: String,
     note: String
@@ -327,6 +333,7 @@ object ApiModels:
   given ReadWriter[AdjudicateAppealRequest] = macroRW
   given ReadWriter[UploadPaifuRequest] = macroRW
   given ReadWriter[CompleteStageRequest] = macroRW
+  given ReadWriter[AdvanceKnockoutStageRequest] = macroRW
   given ReadWriter[ForceResetTableRequest] = macroRW
   given ReadWriter[UpsertDictionaryRequest] = macroRW
   given ReadWriter[BanPlayerRequest] = macroRW
