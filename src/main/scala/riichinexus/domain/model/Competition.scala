@@ -9,6 +9,7 @@ enum TournamentStatus derives CanEqual:
   case InProgress
   case Completed
   case Cancelled
+  case Archived
 
 enum StageFormat derives CanEqual:
   case Swiss
@@ -19,8 +20,76 @@ enum StageFormat derives CanEqual:
 
 enum StageStatus derives CanEqual:
   case Pending
+  case Ready
   case Active
   case Completed
+  case Archived
+
+enum AdvancementRuleType derives CanEqual:
+  case SwissCut
+  case KnockoutElimination
+  case ScoreThreshold
+  case Custom
+
+final case class AdvancementRule(
+    ruleType: AdvancementRuleType,
+    cutSize: Option[Int] = None,
+    thresholdScore: Option[Int] = None,
+    targetTableCount: Option[Int] = None,
+    note: Option[String] = None
+) derives CanEqual
+
+object AdvancementRule:
+  def defaultFor(format: StageFormat): AdvancementRule =
+    format match
+      case StageFormat.Swiss =>
+        AdvancementRule(AdvancementRuleType.SwissCut, cutSize = Some(16))
+      case StageFormat.Knockout =>
+        AdvancementRule(AdvancementRuleType.KnockoutElimination, targetTableCount = Some(1))
+      case StageFormat.RoundRobin =>
+        AdvancementRule(AdvancementRuleType.ScoreThreshold, thresholdScore = Some(0))
+      case StageFormat.Finals =>
+        AdvancementRule(AdvancementRuleType.KnockoutElimination, targetTableCount = Some(1))
+      case StageFormat.Custom =>
+        AdvancementRule(AdvancementRuleType.Custom, note = Some("custom policy"))
+
+final case class SwissRuleConfig(
+    pairingMethod: String = "balanced-elo",
+    carryOverPoints: Boolean = true,
+    maxRounds: Option[Int] = None
+) derives CanEqual
+
+final case class KnockoutRuleConfig(
+    bracketSize: Option[Int] = None,
+    thirdPlaceMatch: Boolean = false,
+    seedingPolicy: String = "rating"
+) derives CanEqual
+
+enum SeatWind derives CanEqual:
+  case East
+  case South
+  case West
+  case North
+
+object SeatWind:
+  val all: Vector[SeatWind] = Vector(East, South, West, North)
+
+final case class StageLineupSeat(
+    playerId: PlayerId,
+    preferredWind: Option[SeatWind] = None,
+    reserve: Boolean = false
+) derives CanEqual
+
+final case class StageLineupSubmission(
+    id: LineupSubmissionId,
+    clubId: ClubId,
+    submittedBy: PlayerId,
+    submittedAt: Instant,
+    seats: Vector[StageLineupSeat],
+    note: Option[String] = None
+) derives CanEqual:
+  def activePlayerIds: Vector[PlayerId] =
+    seats.filterNot(_.reserve).map(_.playerId)
 
 final case class TournamentStage(
     id: TournamentStageId,
@@ -28,8 +97,58 @@ final case class TournamentStage(
     format: StageFormat,
     order: Int,
     roundCount: Int,
-    status: StageStatus = StageStatus.Pending
-) derives CanEqual
+    status: StageStatus = StageStatus.Pending,
+    advancementRule: AdvancementRule = AdvancementRule(AdvancementRuleType.Custom, note = Some("unconfigured")),
+    swissRule: Option[SwissRuleConfig] = None,
+    knockoutRule: Option[KnockoutRuleConfig] = None,
+    schedulingPoolSize: Int = 4,
+    lineupSubmissions: Vector[StageLineupSubmission] = Vector.empty,
+    scheduledTableIds: Vector[TableId] = Vector.empty
+) derives CanEqual:
+  def withRules(
+      advancementRule: AdvancementRule,
+      swissRule: Option[SwissRuleConfig],
+      knockoutRule: Option[KnockoutRuleConfig],
+      schedulingPoolSize: Int
+  ): TournamentStage =
+    copy(
+      advancementRule = advancementRule,
+      swissRule = swissRule,
+      knockoutRule = knockoutRule,
+      schedulingPoolSize = schedulingPoolSize
+    )
+
+  def submitLineup(submission: StageLineupSubmission): TournamentStage =
+    copy(
+      status = StageStatus.Ready,
+      lineupSubmissions =
+        lineupSubmissions.filterNot(_.clubId == submission.clubId) :+ submission
+    )
+
+  def registerScheduledTables(tableIds: Vector[TableId]): TournamentStage =
+    copy(
+      status = StageStatus.Active,
+      scheduledTableIds = (scheduledTableIds ++ tableIds).distinct
+    )
+
+  def complete: TournamentStage =
+    copy(status = StageStatus.Completed)
+
+enum TournamentParticipantKind derives CanEqual:
+  case Club
+  case Player
+
+final case class TournamentWhitelistEntry(
+    participantKind: TournamentParticipantKind,
+    clubId: Option[ClubId] = None,
+    playerId: Option[PlayerId] = None
+) derives CanEqual:
+  require(
+    participantKind match
+      case TournamentParticipantKind.Club => clubId.nonEmpty && playerId.isEmpty
+      case TournamentParticipantKind.Player => playerId.nonEmpty && clubId.isEmpty,
+    s"Invalid whitelist entry for $participantKind"
+  )
 
 final case class Tournament(
     id: TournamentId,
@@ -39,16 +158,44 @@ final case class Tournament(
     endsAt: Instant,
     participatingClubs: Vector[ClubId] = Vector.empty,
     participatingPlayers: Vector[PlayerId] = Vector.empty,
+    admins: Vector[PlayerId] = Vector.empty,
+    whitelist: Vector[TournamentWhitelistEntry] = Vector.empty,
     stages: Vector[TournamentStage] = Vector.empty,
     status: TournamentStatus = TournamentStatus.Draft
 ) derives CanEqual:
   def registerClub(clubId: ClubId): Tournament =
-    if participatingClubs.contains(clubId) then this
-    else copy(participatingClubs = participatingClubs :+ clubId)
+    copy(
+      participatingClubs = (participatingClubs :+ clubId).distinct,
+      whitelist = (whitelist :+ TournamentWhitelistEntry(TournamentParticipantKind.Club, clubId = Some(clubId))).distinct
+    )
 
   def registerPlayer(playerId: PlayerId): Tournament =
-    if participatingPlayers.contains(playerId) then this
-    else copy(participatingPlayers = participatingPlayers :+ playerId)
+    copy(
+      participatingPlayers = (participatingPlayers :+ playerId).distinct,
+      whitelist = (whitelist :+ TournamentWhitelistEntry(TournamentParticipantKind.Player, playerId = Some(playerId))).distinct
+    )
+
+  def whitelistClub(clubId: ClubId): Tournament =
+    copy(
+      whitelist = (whitelist :+ TournamentWhitelistEntry(TournamentParticipantKind.Club, clubId = Some(clubId))).distinct
+    )
+
+  def whitelistPlayer(playerId: PlayerId): Tournament =
+    copy(
+      whitelist = (whitelist :+ TournamentWhitelistEntry(TournamentParticipantKind.Player, playerId = Some(playerId))).distinct
+    )
+
+  def assignAdmin(playerId: PlayerId): Tournament =
+    copy(admins = (admins :+ playerId).distinct)
+
+  def addStage(stage: TournamentStage): Tournament =
+    copy(stages = (stages.filterNot(_.id == stage.id) :+ stage).sortBy(_.order))
+
+  def updateStage(
+      stageId: TournamentStageId,
+      update: TournamentStage => TournamentStage
+  ): Tournament =
+    copy(stages = stages.map(stage => if stage.id == stageId then update(stage) else stage))
 
   def publish: Tournament =
     copy(status = TournamentStatus.RegistrationOpen)
@@ -62,41 +209,49 @@ final case class Tournament(
   def complete: Tournament =
     copy(
       status = TournamentStatus.Completed,
-      stages = stages.map(_.copy(status = StageStatus.Completed))
+      stages = stages.map(_.complete)
     )
 
   def cancel: Tournament =
     copy(status = TournamentStatus.Cancelled)
+
+  def archive: Tournament =
+    copy(status = TournamentStatus.Archived)
 
   def activateStage(stageId: TournamentStageId): Tournament =
     copy(
       status = TournamentStatus.InProgress,
       stages = stages.map { stage =>
         if stage.id == stageId then stage.copy(status = StageStatus.Active)
-        else if stage.status == StageStatus.Active then stage.copy(status = StageStatus.Pending)
+        else if stage.status == StageStatus.Active then stage.copy(status = StageStatus.Ready)
         else stage
       }
     )
 
-enum SeatWind derives CanEqual:
-  case East
-  case South
-  case West
-  case North
-
-object SeatWind:
-  val all: Vector[SeatWind] = Vector(East, South, West, North)
-
 final case class TableSeat(
     seat: SeatWind,
-    playerId: PlayerId
-) derives CanEqual
+    playerId: PlayerId,
+    initialPoints: Int = 25000,
+    disconnected: Boolean = false,
+    ready: Boolean = false,
+    clubId: Option[ClubId] = None
+) derives CanEqual:
+  def markReady: TableSeat =
+    copy(ready = true)
+
+  def markDisconnected: TableSeat =
+    copy(disconnected = true)
 
 enum TableStatus derives CanEqual:
-  case Pending
+  case WaitingPreparation
   case InProgress
-  case Finished
-  case Aborted
+  case Scoring
+  case Archived
+  case AppealInProgress
+
+object TableStatus:
+  val Pending: TableStatus = WaitingPreparation
+  val Finished: TableStatus = Archived
 
 final case class Table(
     id: TableId,
@@ -104,11 +259,15 @@ final case class Table(
     tournamentId: TournamentId,
     stageId: TournamentStageId,
     seats: Vector[TableSeat],
-    status: TableStatus = TableStatus.Pending,
+    status: TableStatus = TableStatus.WaitingPreparation,
     startedAt: Option[Instant] = None,
+    scoringStartedAt: Option[Instant] = None,
     endedAt: Option[Instant] = None,
     paifuId: Option[PaifuId] = None,
-    abortReason: Option[String] = None
+    matchRecordId: Option[MatchRecordId] = None,
+    appealTicketIds: Vector[AppealTicketId] = Vector.empty,
+    resetCount: Int = 0,
+    operatorNotes: Vector[String] = Vector.empty
 ) derives CanEqual:
   require(seats.size == 4, "A riichi table must have exactly four seats")
   require(seats.map(_.seat).distinct.size == 4, "Seats must be unique")
@@ -116,8 +275,158 @@ final case class Table(
   def start(at: Instant): Table =
     copy(status = TableStatus.InProgress, startedAt = Some(at))
 
-  def finish(paifuId: PaifuId, at: Instant): Table =
-    copy(status = TableStatus.Finished, endedAt = Some(at), paifuId = Some(paifuId))
+  def enterScoring(at: Instant): Table =
+    copy(status = TableStatus.Scoring, scoringStartedAt = Some(at))
 
-  def abort(reason: String, at: Instant): Table =
-    copy(status = TableStatus.Aborted, endedAt = Some(at), abortReason = Some(reason))
+  def archive(
+      recordId: MatchRecordId,
+      paifuId: PaifuId,
+      at: Instant,
+      note: Option[String] = None
+  ): Table =
+    copy(
+      status = TableStatus.Archived,
+      scoringStartedAt = Some(scoringStartedAt.getOrElse(at)),
+      endedAt = Some(at),
+      paifuId = Some(paifuId),
+      matchRecordId = Some(recordId),
+      operatorNotes = operatorNotes ++ note.toVector
+    )
+
+  def flagAppeal(ticketId: AppealTicketId, note: Option[String] = None): Table =
+    copy(
+      status = TableStatus.AppealInProgress,
+      appealTicketIds = (appealTicketIds :+ ticketId).distinct,
+      operatorNotes = operatorNotes ++ note.toVector
+    )
+
+  def resolveAppeal(note: Option[String] = None): Table =
+    copy(
+      status = TableStatus.Archived,
+      operatorNotes = operatorNotes ++ note.toVector
+    )
+
+  def forceReset(note: String, at: Instant): Table =
+    copy(
+      status = TableStatus.WaitingPreparation,
+      startedAt = None,
+      scoringStartedAt = None,
+      endedAt = None,
+      paifuId = None,
+      matchRecordId = None,
+      resetCount = resetCount + 1,
+      operatorNotes = operatorNotes :+ s"${at.toString}: $note"
+    )
+
+final case class MatchRecordSeatResult(
+    playerId: PlayerId,
+    seat: SeatWind,
+    finalPoints: Int,
+    placement: Int,
+    scoreDelta: Int,
+    uma: Double = 0.0,
+    oka: Double = 0.0
+) derives CanEqual:
+  require(placement >= 1 && placement <= 4, "Placement must be between 1 and 4")
+
+final case class MatchRecord(
+    id: MatchRecordId,
+    tableId: TableId,
+    tournamentId: TournamentId,
+    stageId: TournamentStageId,
+    generatedAt: Instant,
+    seatResults: Vector[MatchRecordSeatResult],
+    paifuId: Option[PaifuId] = None,
+    finalizedBy: Option[PlayerId] = None,
+    sourceEvent: String = "table-state-machine",
+    notes: Vector[String] = Vector.empty
+) derives CanEqual:
+  require(seatResults.size == 4, "Match record must contain four seat results")
+
+  def playerIds: Vector[PlayerId] =
+    seatResults.map(_.playerId)
+
+object MatchRecord:
+  def fromTableAndPaifu(
+      table: Table,
+      paifu: Paifu,
+      generatedAt: Instant,
+      finalizedBy: Option[PlayerId] = None
+  ): MatchRecord =
+    val seatMap = table.seats.map(seat => seat.playerId -> seat).toMap
+
+    MatchRecord(
+      id = IdGenerator.matchRecordId(),
+      tableId = table.id,
+      tournamentId = table.tournamentId,
+      stageId = table.stageId,
+      generatedAt = generatedAt,
+      seatResults = paifu.finalStandings.map { standing =>
+        val scheduledSeat = seatMap(standing.playerId)
+        MatchRecordSeatResult(
+          playerId = standing.playerId,
+          seat = standing.seat,
+          finalPoints = standing.finalPoints,
+          placement = standing.placement,
+          scoreDelta = standing.finalPoints - scheduledSeat.initialPoints,
+          uma = standing.uma,
+          oka = standing.oka
+        )
+      },
+      paifuId = Some(paifu.id),
+      finalizedBy = finalizedBy
+    )
+
+final case class AppealAttachment(
+    name: String,
+    uri: String,
+    contentType: Option[String] = None
+) derives CanEqual
+
+final case class AppealDecisionLog(
+    operatorId: PlayerId,
+    decision: String,
+    decidedAt: Instant,
+    note: Option[String] = None
+) derives CanEqual
+
+enum AppealStatus derives CanEqual:
+  case Open
+  case UnderReview
+  case Resolved
+  case Rejected
+  case Escalated
+
+final case class AppealTicket(
+    id: AppealTicketId,
+    tableId: TableId,
+    tournamentId: TournamentId,
+    stageId: TournamentStageId,
+    openedBy: PlayerId,
+    description: String,
+    attachments: Vector[AppealAttachment] = Vector.empty,
+    status: AppealStatus = AppealStatus.Open,
+    logs: Vector[AppealDecisionLog] = Vector.empty,
+    createdAt: Instant,
+    updatedAt: Instant,
+    resolution: Option[String] = None
+) derives CanEqual:
+  def markUnderReview(operatorId: PlayerId, at: Instant, note: Option[String] = None): AppealTicket =
+    copy(
+      status = AppealStatus.UnderReview,
+      logs = logs :+ AppealDecisionLog(operatorId, "under-review", at, note),
+      updatedAt = at
+    )
+
+  def resolve(
+      operatorId: PlayerId,
+      verdict: String,
+      at: Instant,
+      note: Option[String] = None
+  ): AppealTicket =
+    copy(
+      status = AppealStatus.Resolved,
+      logs = logs :+ AppealDecisionLog(operatorId, verdict, at, note),
+      updatedAt = at,
+      resolution = Some(verdict)
+    )

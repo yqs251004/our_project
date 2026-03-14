@@ -218,6 +218,57 @@ final class PostgresSchemaInitializer(connectionFactory: JdbcConnectionFactory):
       execute(
         connection,
         """
+          |create table if not exists match_records (
+          |  id text primary key,
+          |  table_id text not null,
+          |  tournament_id text not null,
+          |  stage_id text not null,
+          |  generated_at timestamptz not null,
+          |  player_ids text[] not null,
+          |  payload jsonb not null,
+          |  updated_at timestamptz not null default now()
+          |)
+          |""".stripMargin
+      )
+      execute(connection, "alter table match_records add column if not exists table_id text")
+      execute(connection, "alter table match_records add column if not exists tournament_id text")
+      execute(connection, "alter table match_records add column if not exists stage_id text")
+      execute(connection, "alter table match_records add column if not exists generated_at timestamptz")
+      execute(connection, "alter table match_records add column if not exists player_ids text[]")
+      execute(connection, "alter table match_records add column if not exists payload jsonb")
+      execute(connection, "alter table match_records add column if not exists updated_at timestamptz default now()")
+      execute(connection, "create unique index if not exists idx_match_records_table_id on match_records (table_id)")
+      execute(connection, "create index if not exists idx_match_records_tournament_id on match_records (tournament_id)")
+      execute(connection, "create index if not exists idx_match_records_player_ids on match_records using gin (player_ids)")
+
+      execute(
+        connection,
+        """
+          |create table if not exists appeal_tickets (
+          |  id text primary key,
+          |  table_id text not null,
+          |  tournament_id text not null,
+          |  stage_id text not null,
+          |  status text not null,
+          |  opened_by text not null,
+          |  payload jsonb not null,
+          |  updated_at timestamptz not null default now()
+          |)
+          |""".stripMargin
+      )
+      execute(connection, "alter table appeal_tickets add column if not exists table_id text")
+      execute(connection, "alter table appeal_tickets add column if not exists tournament_id text")
+      execute(connection, "alter table appeal_tickets add column if not exists stage_id text")
+      execute(connection, "alter table appeal_tickets add column if not exists status text")
+      execute(connection, "alter table appeal_tickets add column if not exists opened_by text")
+      execute(connection, "alter table appeal_tickets add column if not exists payload jsonb")
+      execute(connection, "alter table appeal_tickets add column if not exists updated_at timestamptz default now()")
+      execute(connection, "create index if not exists idx_appeals_tournament_id on appeal_tickets (tournament_id)")
+      execute(connection, "create index if not exists idx_appeals_table_id on appeal_tickets (table_id)")
+
+      execute(
+        connection,
+        """
           |create table if not exists dashboards (
           |  owner_key text primary key,
           |  owner_type text not null,
@@ -232,8 +283,28 @@ final class PostgresSchemaInitializer(connectionFactory: JdbcConnectionFactory):
       execute(
         connection,
         """
+          |create table if not exists global_dictionary (
+          |  key text primary key,
+          |  updated_at timestamptz not null,
+          |  payload jsonb not null
+          |)
+          |""".stripMargin
+      )
+      execute(connection, "alter table global_dictionary add column if not exists updated_at timestamptz")
+      execute(connection, "alter table global_dictionary add column if not exists payload jsonb")
+      execute(
+        connection,
+        """
           |insert into schema_version(version, description)
           |values (1, 'Initial RiichiNexus PostgreSQL schema')
+          |on conflict (version) do nothing
+          |""".stripMargin
+      )
+      execute(
+        connection,
+        """
+          |insert into schema_version(version, description)
+          |values (2, 'Extended RiichiNexus competition workflow schema')
           |on conflict (version) do nothing
           |""".stripMargin
       )
@@ -498,12 +569,63 @@ final class PostgresTableRepository(
     readAll[Table](
       "select payload from tables where tournament_id = ? and stage_id = ? order by table_no",
       { statement =>
-      statement.setString(1, tournamentId.value)
-      statement.setString(2, stageId.value)
-    })
+        statement.setString(1, tournamentId.value)
+        statement.setString(2, stageId.value)
+      }
+    )
 
   override def findAll(): Vector[Table] =
     readAll[Table]("select payload from tables order by updated_at desc")
+
+final class PostgresMatchRecordRepository(
+    protected val connectionFactory: JdbcConnectionFactory
+) extends MatchRecordRepository
+    with JdbcRepositorySupport:
+  override def save(record: MatchRecord): MatchRecord =
+    val sql =
+      """
+        |insert into match_records (id, table_id, tournament_id, stage_id, generated_at, player_ids, payload, updated_at)
+        |values (?, ?, ?, ?, ?, ?, cast(? as jsonb), now())
+        |on conflict (id) do update set
+        |  table_id = excluded.table_id,
+        |  tournament_id = excluded.tournament_id,
+        |  stage_id = excluded.stage_id,
+        |  generated_at = excluded.generated_at,
+        |  player_ids = excluded.player_ids,
+        |  payload = excluded.payload,
+        |  updated_at = now()
+        |""".stripMargin
+
+    withConnection { connection =>
+      Using.resource(connection.prepareStatement(sql)) { statement =>
+        statement.setString(1, record.id.value)
+        statement.setString(2, record.tableId.value)
+        statement.setString(3, record.tournamentId.value)
+        statement.setString(4, record.stageId.value)
+        statement.setTimestamp(5, Timestamp.from(record.generatedAt))
+        statement.setArray(
+          6,
+          connection.createArrayOf("text", record.playerIds.map(_.value).toArray)
+        )
+        statement.setString(7, writeJson(record))
+        statement.executeUpdate()
+      }
+    }
+
+    record
+
+  override def findById(id: MatchRecordId): Option[MatchRecord] =
+    readOne[MatchRecord]("select payload from match_records where id = ?", { statement =>
+      statement.setString(1, id.value)
+    })
+
+  override def findByTable(tableId: TableId): Option[MatchRecord] =
+    readOne[MatchRecord]("select payload from match_records where table_id = ?", { statement =>
+      statement.setString(1, tableId.value)
+    })
+
+  override def findAll(): Vector[MatchRecord] =
+    readAll[MatchRecord]("select payload from match_records order by generated_at desc")
 
 final class PostgresPaifuRepository(
     protected val connectionFactory: JdbcConnectionFactory
@@ -558,6 +680,48 @@ final class PostgresPaifuRepository(
       }
     )
 
+final class PostgresAppealTicketRepository(
+    protected val connectionFactory: JdbcConnectionFactory
+) extends AppealTicketRepository
+    with JdbcRepositorySupport:
+  override def save(ticket: AppealTicket): AppealTicket =
+    val sql =
+      """
+        |insert into appeal_tickets (id, table_id, tournament_id, stage_id, status, opened_by, payload, updated_at)
+        |values (?, ?, ?, ?, ?, ?, cast(? as jsonb), now())
+        |on conflict (id) do update set
+        |  table_id = excluded.table_id,
+        |  tournament_id = excluded.tournament_id,
+        |  stage_id = excluded.stage_id,
+        |  status = excluded.status,
+        |  opened_by = excluded.opened_by,
+        |  payload = excluded.payload,
+        |  updated_at = now()
+        |""".stripMargin
+
+    withConnection { connection =>
+      Using.resource(connection.prepareStatement(sql)) { statement =>
+        statement.setString(1, ticket.id.value)
+        statement.setString(2, ticket.tableId.value)
+        statement.setString(3, ticket.tournamentId.value)
+        statement.setString(4, ticket.stageId.value)
+        statement.setString(5, ticket.status.toString)
+        statement.setString(6, ticket.openedBy.value)
+        statement.setString(7, writeJson(ticket))
+        statement.executeUpdate()
+      }
+    }
+
+    ticket
+
+  override def findById(id: AppealTicketId): Option[AppealTicket] =
+    readOne[AppealTicket]("select payload from appeal_tickets where id = ?", { statement =>
+      statement.setString(1, id.value)
+    })
+
+  override def findAll(): Vector[AppealTicket] =
+    readAll[AppealTicket]("select payload from appeal_tickets order by updated_at desc")
+
 final class PostgresDashboardRepository(
     protected val connectionFactory: JdbcConnectionFactory
 ) extends DashboardRepository
@@ -602,6 +766,42 @@ final class PostgresDashboardRepository(
       case DashboardOwner.Player(_) => "player"
       case DashboardOwner.Club(_)   => "club"
 
+final class PostgresGlobalDictionaryRepository(
+    protected val connectionFactory: JdbcConnectionFactory
+) extends GlobalDictionaryRepository
+    with JdbcRepositorySupport:
+  override def save(entry: GlobalDictionaryEntry): GlobalDictionaryEntry =
+    val sql =
+      """
+        |insert into global_dictionary (key, updated_at, payload)
+        |values (?, ?, cast(? as jsonb))
+        |on conflict (key) do update set
+        |  updated_at = excluded.updated_at,
+        |  payload = excluded.payload
+        |""".stripMargin
+
+    withConnection { connection =>
+      Using.resource(connection.prepareStatement(sql)) { statement =>
+        statement.setString(1, entry.key)
+        statement.setTimestamp(2, Timestamp.from(entry.updatedAt))
+        statement.setString(3, writeJson(entry))
+        statement.executeUpdate()
+      }
+    }
+
+    entry
+
+  override def findByKey(key: String): Option[GlobalDictionaryEntry] =
+    readOne[GlobalDictionaryEntry](
+      "select payload from global_dictionary where key = ?",
+      { statement =>
+        statement.setString(1, key)
+      }
+    )
+
+  override def findAll(): Vector[GlobalDictionaryEntry] =
+    readAll[GlobalDictionaryEntry]("select payload from global_dictionary order by key")
+
 final class JdbcTransactionManager(
     connectionFactory: JdbcConnectionFactory
 ) extends TransactionManager:
@@ -610,7 +810,17 @@ final class JdbcTransactionManager(
 
 final class PostgresAdminService(connectionFactory: JdbcConnectionFactory):
   private val managedTables =
-    Vector("players", "clubs", "tournaments", "tables", "paifus", "dashboards")
+    Vector(
+      "players",
+      "clubs",
+      "tournaments",
+      "tables",
+      "match_records",
+      "paifus",
+      "appeal_tickets",
+      "dashboards",
+      "global_dictionary"
+    )
 
   def ping(): Boolean =
     connectionFactory.withConnection { connection =>
@@ -638,8 +848,11 @@ final class PostgresAdminService(connectionFactory: JdbcConnectionFactory):
   def truncateAll(): Unit =
     connectionFactory.inTransaction {
       connectionFactory.withConnection { connection =>
+        executeAdmin(connection, "truncate table global_dictionary restart identity")
         executeAdmin(connection, "truncate table dashboards restart identity")
+        executeAdmin(connection, "truncate table appeal_tickets restart identity")
         executeAdmin(connection, "truncate table paifus restart identity")
+        executeAdmin(connection, "truncate table match_records restart identity")
         executeAdmin(connection, "truncate table tables restart identity")
         executeAdmin(connection, "truncate table tournaments restart identity")
         executeAdmin(connection, "truncate table clubs restart identity")

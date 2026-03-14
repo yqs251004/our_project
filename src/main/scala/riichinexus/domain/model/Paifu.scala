@@ -18,6 +18,12 @@ final case class ScoreChange(
     delta: Int
 ) derives CanEqual
 
+final case class RoundSettlement(
+    riichiSticksDelta: Int = 0,
+    honbaPayment: Int = 0,
+    notes: Vector[String] = Vector.empty
+) derives CanEqual
+
 final case class AgariResult(
     outcome: HandOutcome,
     winner: Option[PlayerId],
@@ -26,7 +32,8 @@ final case class AgariResult(
     fu: Option[Int],
     yaku: Vector[Yaku],
     points: Int,
-    scoreChanges: Vector[ScoreChange]
+    scoreChanges: Vector[ScoreChange],
+    settlement: Option[RoundSettlement] = None
 ) derives CanEqual
 
 enum PaifuActionType derives CanEqual:
@@ -39,6 +46,9 @@ enum PaifuActionType derives CanEqual:
   case DoraReveal
   case Win
   case DrawGame
+  case AddedKan
+  case ClosedKan
+  case OpenKan
 
 final case class PaifuAction(
     sequenceNo: Int,
@@ -68,7 +78,9 @@ final case class FinalStanding(
     playerId: PlayerId,
     seat: SeatWind,
     finalPoints: Int,
-    placement: Int
+    placement: Int,
+    uma: Double = 0.0,
+    oka: Double = 0.0
 ) derives CanEqual:
   require(placement >= 1 && placement <= 4, "Placement must be between 1 and 4")
 
@@ -78,7 +90,8 @@ final case class PaifuMetadata(
     tableId: TableId,
     tournamentId: TournamentId,
     stageId: TournamentStageId,
-    seats: Vector[TableSeat]
+    seats: Vector[TableSeat],
+    matchRecordId: Option[MatchRecordId] = None
 ) derives CanEqual
 
 final case class Paifu(

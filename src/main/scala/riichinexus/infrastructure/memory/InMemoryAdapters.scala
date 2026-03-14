@@ -77,6 +77,22 @@ final class InMemoryTableRepository extends TableRepository:
   override def findAll(): Vector[Table] =
     state.values.toVector
 
+final class InMemoryMatchRecordRepository extends MatchRecordRepository:
+  private val state = mutable.LinkedHashMap.empty[MatchRecordId, MatchRecord]
+
+  override def save(record: MatchRecord): MatchRecord =
+    state.update(record.id, record)
+    record
+
+  override def findById(id: MatchRecordId): Option[MatchRecord] =
+    state.get(id)
+
+  override def findByTable(tableId: TableId): Option[MatchRecord] =
+    state.values.find(_.tableId == tableId)
+
+  override def findAll(): Vector[MatchRecord] =
+    state.values.toVector
+
 final class InMemoryPaifuRepository extends PaifuRepository:
   private val state = mutable.LinkedHashMap.empty[PaifuId, Paifu]
 
@@ -88,6 +104,19 @@ final class InMemoryPaifuRepository extends PaifuRepository:
     state.get(id)
 
   override def findAll(): Vector[Paifu] =
+    state.values.toVector
+
+final class InMemoryAppealTicketRepository extends AppealTicketRepository:
+  private val state = mutable.LinkedHashMap.empty[AppealTicketId, AppealTicket]
+
+  override def save(ticket: AppealTicket): AppealTicket =
+    state.update(ticket.id, ticket)
+    ticket
+
+  override def findById(id: AppealTicketId): Option[AppealTicket] =
+    state.get(id)
+
+  override def findAll(): Vector[AppealTicket] =
     state.values.toVector
 
 final class InMemoryDashboardRepository extends DashboardRepository:
@@ -107,6 +136,19 @@ final class InMemoryDashboardRepository extends DashboardRepository:
     owner match
       case DashboardOwner.Player(playerId) => s"player:${playerId.value}"
       case DashboardOwner.Club(clubId)     => s"club:${clubId.value}"
+
+final class InMemoryGlobalDictionaryRepository extends GlobalDictionaryRepository:
+  private val state = mutable.LinkedHashMap.empty[String, GlobalDictionaryEntry]
+
+  override def save(entry: GlobalDictionaryEntry): GlobalDictionaryEntry =
+    state.update(entry.key, entry)
+    entry
+
+  override def findByKey(key: String): Option[GlobalDictionaryEntry] =
+    state.get(key)
+
+  override def findAll(): Vector[GlobalDictionaryEntry] =
+    state.values.toVector
 
 final class InMemoryDomainEventBus(
     initialSubscribers: Vector[DomainEventSubscriber] = Vector.empty

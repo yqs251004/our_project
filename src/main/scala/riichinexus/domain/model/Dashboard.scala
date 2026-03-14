@@ -13,6 +13,10 @@ final case class Dashboard(
     winRate: Double,
     averageWinPoints: Double,
     riichiRate: Double,
+    averagePlacement: Double,
+    topFinishRate: Double,
+    defenseStability: Double,
+    ukeireExpectation: Double,
     shantenTrajectory: Vector[Double],
     lastUpdatedAt: Instant
 ) derives CanEqual
@@ -26,6 +30,48 @@ object Dashboard:
       winRate = 0.0,
       averageWinPoints = 0.0,
       riichiRate = 0.0,
+      averagePlacement = 0.0,
+      topFinishRate = 0.0,
+      defenseStability = 0.0,
+      ukeireExpectation = 0.0,
       shantenTrajectory = Vector.empty,
       lastUpdatedAt = at
     )
+
+final case class PublicScheduleView(
+    tournamentId: TournamentId,
+    tournamentName: String,
+    tournamentStatus: TournamentStatus,
+    stageId: TournamentStageId,
+    stageName: String,
+    stageStatus: StageStatus,
+    startsAt: Instant,
+    endsAt: Instant,
+    tableCount: Int
+) derives CanEqual
+
+final case class PublicClubDirectoryEntry(
+    clubId: ClubId,
+    name: String,
+    memberCount: Int,
+    adminCount: Int,
+    powerRating: Double,
+    totalPoints: Int,
+    relations: Vector[ClubRelation]
+) derives CanEqual
+
+final case class PlayerLeaderboardEntry(
+    playerId: PlayerId,
+    nickname: String,
+    elo: Int,
+    clubIds: Vector[ClubId],
+    status: PlayerStatus
+) derives CanEqual
+
+final case class ClubLeaderboardEntry(
+    clubId: ClubId,
+    name: String,
+    powerRating: Double,
+    totalPoints: Int,
+    memberCount: Int
+) derives CanEqual

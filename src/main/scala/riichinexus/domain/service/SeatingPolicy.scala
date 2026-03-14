@@ -30,7 +30,7 @@ final class BalancedEloSeatingPolicy extends SeatingPolicy:
         PlannedTable(
           tableNo = index + 1,
           seats = SeatWind.all.zip(rotatedGroup).map { case (seat, player) =>
-            TableSeat(seat, player.id)
+            TableSeat(seat, player.id, clubId = player.clubId)
           }
         )
       }

@@ -8,15 +8,21 @@ import riichinexus.infrastructure.postgres.*
 
 final case class ApplicationContext(
     playerService: PlayerApplicationService,
+    publicQueryService: PublicQueryService,
     clubService: ClubApplicationService,
     tournamentService: TournamentApplicationService,
     tableService: TableLifecycleService,
+    appealService: AppealApplicationService,
+    superAdminService: SuperAdminService,
     playerRepository: PlayerRepository,
     clubRepository: ClubRepository,
     tournamentRepository: TournamentRepository,
     tableRepository: TableRepository,
+    matchRecordRepository: MatchRecordRepository,
     paifuRepository: PaifuRepository,
+    appealTicketRepository: AppealTicketRepository,
     dashboardRepository: DashboardRepository,
+    globalDictionaryRepository: GlobalDictionaryRepository,
     eventBus: DomainEventBus
 )
 
@@ -29,12 +35,16 @@ object ApplicationContext:
 
   def inMemory(): ApplicationContext =
     val transactionManager = NoOpTransactionManager
+    val authorizationService = StrictRbacAuthorizationService()
     val playerRepository = InMemoryPlayerRepository()
     val clubRepository = InMemoryClubRepository()
     val tournamentRepository = InMemoryTournamentRepository()
     val tableRepository = InMemoryTableRepository()
+    val matchRecordRepository = InMemoryMatchRecordRepository()
     val paifuRepository = InMemoryPaifuRepository()
+    val appealTicketRepository = InMemoryAppealTicketRepository()
     val dashboardRepository = InMemoryDashboardRepository()
+    val globalDictionaryRepository = InMemoryGlobalDictionaryRepository()
 
     val eventBus = InMemoryDomainEventBus()
     eventBus.register(
@@ -43,6 +53,7 @@ object ApplicationContext:
     eventBus.register(ClubProjectionSubscriber(clubRepository, playerRepository))
     eventBus.register(
       DashboardProjectionSubscriber(
+        matchRecordRepository,
         paifuRepository,
         playerRepository,
         clubRepository,
@@ -52,22 +63,60 @@ object ApplicationContext:
 
     ApplicationContext(
       playerService = PlayerApplicationService(playerRepository, transactionManager),
-      clubService = ClubApplicationService(clubRepository, playerRepository, transactionManager),
+      publicQueryService = PublicQueryService(
+        tournamentRepository,
+        tableRepository,
+        playerRepository,
+        clubRepository,
+        authorizationService
+      ),
+      clubService = ClubApplicationService(
+        clubRepository,
+        playerRepository,
+        transactionManager,
+        authorizationService
+      ),
       tournamentService = TournamentApplicationService(
         tournamentRepository,
         playerRepository,
         clubRepository,
         tableRepository,
         BalancedEloSeatingPolicy(),
-        transactionManager
+        transactionManager,
+        authorizationService
       ),
-      tableService = TableLifecycleService(tableRepository, paifuRepository, eventBus, transactionManager),
+      tableService = TableLifecycleService(
+        tableRepository,
+        paifuRepository,
+        matchRecordRepository,
+        eventBus,
+        transactionManager,
+        authorizationService
+      ),
+      appealService = AppealApplicationService(
+        appealTicketRepository,
+        tableRepository,
+        eventBus,
+        transactionManager,
+        authorizationService
+      ),
+      superAdminService = SuperAdminService(
+        playerRepository,
+        clubRepository,
+        globalDictionaryRepository,
+        eventBus,
+        transactionManager,
+        authorizationService
+      ),
       playerRepository = playerRepository,
       clubRepository = clubRepository,
       tournamentRepository = tournamentRepository,
       tableRepository = tableRepository,
+      matchRecordRepository = matchRecordRepository,
       paifuRepository = paifuRepository,
+      appealTicketRepository = appealTicketRepository,
       dashboardRepository = dashboardRepository,
+      globalDictionaryRepository = globalDictionaryRepository,
       eventBus = eventBus
     )
 
@@ -75,13 +124,17 @@ object ApplicationContext:
     val connectionFactory = JdbcConnectionFactory(config)
     PostgresSchemaInitializer(connectionFactory).initialize()
     val transactionManager = JdbcTransactionManager(connectionFactory)
+    val authorizationService = StrictRbacAuthorizationService()
 
     val playerRepository = PostgresPlayerRepository(connectionFactory)
     val clubRepository = PostgresClubRepository(connectionFactory)
     val tournamentRepository = PostgresTournamentRepository(connectionFactory)
     val tableRepository = PostgresTableRepository(connectionFactory)
+    val matchRecordRepository = PostgresMatchRecordRepository(connectionFactory)
     val paifuRepository = PostgresPaifuRepository(connectionFactory)
+    val appealTicketRepository = PostgresAppealTicketRepository(connectionFactory)
     val dashboardRepository = PostgresDashboardRepository(connectionFactory)
+    val globalDictionaryRepository = PostgresGlobalDictionaryRepository(connectionFactory)
 
     val eventBus = InMemoryDomainEventBus()
     eventBus.register(
@@ -90,6 +143,7 @@ object ApplicationContext:
     eventBus.register(ClubProjectionSubscriber(clubRepository, playerRepository))
     eventBus.register(
       DashboardProjectionSubscriber(
+        matchRecordRepository,
         paifuRepository,
         playerRepository,
         clubRepository,
@@ -99,21 +153,59 @@ object ApplicationContext:
 
     ApplicationContext(
       playerService = PlayerApplicationService(playerRepository, transactionManager),
-      clubService = ClubApplicationService(clubRepository, playerRepository, transactionManager),
+      publicQueryService = PublicQueryService(
+        tournamentRepository,
+        tableRepository,
+        playerRepository,
+        clubRepository,
+        authorizationService
+      ),
+      clubService = ClubApplicationService(
+        clubRepository,
+        playerRepository,
+        transactionManager,
+        authorizationService
+      ),
       tournamentService = TournamentApplicationService(
         tournamentRepository,
         playerRepository,
         clubRepository,
         tableRepository,
         BalancedEloSeatingPolicy(),
-        transactionManager
+        transactionManager,
+        authorizationService
       ),
-      tableService = TableLifecycleService(tableRepository, paifuRepository, eventBus, transactionManager),
+      tableService = TableLifecycleService(
+        tableRepository,
+        paifuRepository,
+        matchRecordRepository,
+        eventBus,
+        transactionManager,
+        authorizationService
+      ),
+      appealService = AppealApplicationService(
+        appealTicketRepository,
+        tableRepository,
+        eventBus,
+        transactionManager,
+        authorizationService
+      ),
+      superAdminService = SuperAdminService(
+        playerRepository,
+        clubRepository,
+        globalDictionaryRepository,
+        eventBus,
+        transactionManager,
+        authorizationService
+      ),
       playerRepository = playerRepository,
       clubRepository = clubRepository,
       tournamentRepository = tournamentRepository,
       tableRepository = tableRepository,
+      matchRecordRepository = matchRecordRepository,
       paifuRepository = paifuRepository,
+      appealTicketRepository = appealTicketRepository,
       dashboardRepository = dashboardRepository,
+      globalDictionaryRepository = globalDictionaryRepository,
       eventBus = eventBus
     )
