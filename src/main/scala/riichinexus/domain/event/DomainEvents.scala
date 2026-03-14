@@ -26,6 +26,13 @@ final case class AppealTicketResolved(
     occurredAt: Instant
 ) extends DomainEvent
 
+final case class AppealTicketAdjudicated(
+    ticket: AppealTicket,
+    decision: AppealDecisionType,
+    tableResolution: Option[AppealTableResolution],
+    occurredAt: Instant
+) extends DomainEvent
+
 final case class GlobalDictionaryUpdated(
     entry: GlobalDictionaryEntry,
     occurredAt: Instant

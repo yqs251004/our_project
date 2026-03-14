@@ -3,6 +3,7 @@ package riichinexus.api
 import java.time.Instant
 
 import riichinexus.domain.model.*
+import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.*
 
 final case class ApiError(
@@ -245,6 +246,35 @@ final case class ResolveAppealRequest(
   def operator: PlayerId =
     PlayerId(operatorId)
 
+final case class AdjudicateAppealRequest(
+    operatorId: String,
+    decision: String,
+    verdict: String,
+    tableResolution: Option[String] = None,
+    note: Option[String] = None
+):
+  def operator: PlayerId =
+    PlayerId(operatorId)
+
+  def decisionType: AppealDecisionType =
+    AppealDecisionType.valueOf(decision)
+
+  def resolution: Option[AppealTableResolution] =
+    tableResolution.map(AppealTableResolution.valueOf)
+
+final case class UploadPaifuRequest(
+    operatorId: String,
+    paifu: Paifu
+):
+  def operator: PlayerId =
+    PlayerId(operatorId)
+
+final case class CompleteStageRequest(
+    operatorId: String
+):
+  def operator: PlayerId =
+    PlayerId(operatorId)
+
 final case class ForceResetTableRequest(
     operatorId: String,
     note: String
@@ -275,9 +305,6 @@ final case class DissolveClubRequest(
     PlayerId(operatorId)
 
 object ApiModels:
-  given ReadWriter[Instant] =
-    readwriter[String].bimap[Instant](_.toString, Instant.parse)
-
   given ReadWriter[ApiError] = macroRW
   given ReadWriter[ApiMessage] = macroRW
   given ReadWriter[HealthResponse] = macroRW
@@ -297,6 +324,9 @@ object ApiModels:
   given ReadWriter[AppealAttachmentRequest] = macroRW
   given ReadWriter[FileAppealRequest] = macroRW
   given ReadWriter[ResolveAppealRequest] = macroRW
+  given ReadWriter[AdjudicateAppealRequest] = macroRW
+  given ReadWriter[UploadPaifuRequest] = macroRW
+  given ReadWriter[CompleteStageRequest] = macroRW
   given ReadWriter[ForceResetTableRequest] = macroRW
   given ReadWriter[UpsertDictionaryRequest] = macroRW
   given ReadWriter[BanPlayerRequest] = macroRW

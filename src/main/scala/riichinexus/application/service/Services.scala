@@ -131,22 +131,27 @@ final class ClubApplicationService(
       actor: AccessPrincipal = AccessPrincipal.system
   ): Club =
     transactionManager.inTransaction {
+      val normalizedName = name.trim
+      require(normalizedName.nonEmpty, "Club name cannot be empty")
+
       val creator = playerRepository
         .findById(creatorId)
         .getOrElse(throw NoSuchElementException(s"Player ${creatorId.value} was not found"))
+      requireActivePlayer(creator, s"Player ${creatorId.value} cannot create a club")
 
       if !actor.isSuperAdmin && actor.playerId.exists(_ != creatorId) then
         throw AuthorizationFailure("Only the creator or a super admin can create the club")
 
-      val club = clubRepository.findByName(name) match
+      val club = clubRepository.findByName(normalizedName) match
         case Some(existing) =>
+          ensureClubActive(existing)
           existing
             .addMember(creatorId)
             .grantAdmin(creatorId)
         case None =>
           Club(
             id = IdGenerator.clubId(),
-            name = name,
+            name = normalizedName,
             creator = creatorId,
             createdAt = createdAt,
             members = Vector(creatorId),
@@ -171,6 +176,8 @@ final class ClubApplicationService(
         club <- clubRepository.findById(clubId)
         player <- playerRepository.findById(playerId)
       yield
+        ensureClubActive(club)
+        requireActivePlayer(player, s"Player ${playerId.value} cannot join club ${clubId.value}")
         authorizationService.requirePermission(
           actor,
           Permission.ManageClubMembership,
@@ -193,6 +200,25 @@ final class ClubApplicationService(
       authorizationService.requirePermission(actor, Permission.SubmitClubApplication)
 
       clubRepository.findById(clubId).map { club =>
+        ensureClubActive(club)
+
+        applicantUserId.foreach { userId =>
+          if club.membershipApplications.exists(application =>
+              application.applicantUserId.contains(userId) && application.isPending
+            )
+          then
+            throw IllegalArgumentException(
+              s"User $userId already has a pending application for club ${clubId.value}"
+            )
+
+          playerRepository.findByUserId(userId).foreach { existingPlayer =>
+            if existingPlayer.boundClubIds.contains(clubId) then
+              throw IllegalArgumentException(
+                s"Player ${existingPlayer.id.value} is already a member of club ${clubId.value}"
+              )
+          }
+        }
+
         val application = ClubMembershipApplication(
           id = IdGenerator.membershipApplicationId(),
           applicantUserId = applicantUserId,
@@ -219,11 +245,36 @@ final class ClubApplicationService(
         club <- clubRepository.findById(clubId)
         player <- playerRepository.findById(playerId)
       yield
+        ensureClubActive(club)
+        requireActivePlayer(player, s"Player ${playerId.value} cannot be approved into a club")
         authorizationService.requirePermission(
           actor,
           Permission.ManageClubMembership,
           clubId = Some(clubId)
         )
+
+        val application = club
+          .findApplication(applicationId)
+          .getOrElse(
+            throw NoSuchElementException(
+              s"Membership application ${applicationId.value} was not found in club ${clubId.value}"
+            )
+          )
+
+        if !application.isPending then
+          throw IllegalArgumentException(
+            s"Membership application ${applicationId.value} has already been reviewed"
+          )
+
+        if club.members.contains(playerId) then
+          throw IllegalArgumentException(
+            s"Player ${playerId.value} is already a member of club ${clubId.value}"
+          )
+
+        if application.applicantUserId.exists(_ != player.userId) then
+          throw IllegalArgumentException(
+            s"Membership application ${applicationId.value} does not belong to player ${playerId.value}"
+          )
 
         val reviewer = actor.playerId.getOrElse(club.creator)
         val updatedClub = club
@@ -245,6 +296,9 @@ final class ClubApplicationService(
         club <- clubRepository.findById(clubId)
         player <- playerRepository.findById(playerId)
       yield
+        ensureClubActive(club)
+        requireActivePlayer(player, s"Player ${playerId.value} cannot be granted club admin")
+        requireClubMember(club, playerId, "assign club admin")
         authorizationService.requirePermission(
           actor,
           Permission.AssignClubAdmin,
@@ -266,7 +320,13 @@ final class ClubApplicationService(
       note: Option[String] = None
   ): Option[Club] =
     transactionManager.inTransaction {
-      clubRepository.findById(clubId).map { club =>
+      for
+        club <- clubRepository.findById(clubId)
+        player <- playerRepository.findById(playerId)
+      yield
+        ensureClubActive(club)
+        requireActivePlayer(player, s"Player ${playerId.value} cannot receive club title")
+        requireClubMember(club, playerId, "set internal title")
         authorizationService.requirePermission(
           actor,
           Permission.SetClubTitle,
@@ -285,7 +345,6 @@ final class ClubApplicationService(
             )
           )
         )
-      }
     }
 
   def updateRelation(
@@ -295,22 +354,51 @@ final class ClubApplicationService(
   ): Option[Club] =
     transactionManager.inTransaction {
       clubRepository.findById(clubId).map { club =>
+        ensureClubActive(club)
         authorizationService.requirePermission(
           actor,
           Permission.SetClubTitle,
           clubId = Some(clubId)
         )
 
-        clubRepository.save(club.upsertRelation(relation))
+        if relation.targetClubId == clubId then
+          throw IllegalArgumentException("A club cannot define a relation to itself")
+
+        clubRepository
+          .findById(relation.targetClubId)
+          .map(ensureClubActive)
+          .getOrElse(
+            throw NoSuchElementException(s"Club ${relation.targetClubId.value} was not found")
+          )
+
+        if relation.relation == ClubRelationKind.Neutral then
+          clubRepository.save(club.removeRelation(relation.targetClubId))
+        else clubRepository.save(club.upsertRelation(relation))
       }
     }
+
+  private def ensureClubActive(club: Club): Unit =
+    if club.dissolvedAt.nonEmpty then
+      throw IllegalArgumentException(s"Club ${club.id.value} has already been dissolved")
+
+  private def requireActivePlayer(player: Player, context: String): Unit =
+    if player.status != PlayerStatus.Active then
+      throw IllegalArgumentException(context)
+
+  private def requireClubMember(club: Club, playerId: PlayerId, action: String): Unit =
+    if !club.members.contains(playerId) then
+      throw IllegalArgumentException(
+        s"Player ${playerId.value} must be a club member to $action in club ${club.id.value}"
+      )
 
 final class TournamentApplicationService(
     tournamentRepository: TournamentRepository,
     playerRepository: PlayerRepository,
     clubRepository: ClubRepository,
     tableRepository: TableRepository,
+    matchRecordRepository: MatchRecordRepository,
     seatingPolicy: SeatingPolicy,
+    tournamentRuleEngine: TournamentRuleEngine,
     transactionManager: TransactionManager = NoOpTransactionManager,
     authorizationService: AuthorizationService = NoOpAuthorizationService
 ):
@@ -324,7 +412,19 @@ final class TournamentApplicationService(
       actor: AccessPrincipal = AccessPrincipal.system
   ): Tournament =
     transactionManager.inTransaction {
+      require(name.trim.nonEmpty, "Tournament name cannot be empty")
+      require(organizer.trim.nonEmpty, "Tournament organizer cannot be empty")
+      require(startsAt.isBefore(endsAt), "Tournament start time must be earlier than end time")
+
       val normalizedStages = stages.map(normalizeStage).sortBy(_.order)
+      requireUniqueStageConfiguration(normalizedStages)
+
+      adminId.foreach { targetAdminId =>
+        val adminPlayer = playerRepository
+          .findById(targetAdminId)
+          .getOrElse(throw NoSuchElementException(s"Player ${targetAdminId.value} was not found"))
+        requireActivePlayer(adminPlayer, s"Player ${targetAdminId.value} cannot administer tournaments")
+      }
 
       val tournament = tournamentRepository.findByNameAndOrganizer(name, organizer) match
         case Some(existing) =>
@@ -361,6 +461,13 @@ final class TournamentApplicationService(
 
   def registerPlayer(tournamentId: TournamentId, playerId: PlayerId): Option[Tournament] =
     transactionManager.inTransaction {
+      playerRepository
+        .findById(playerId)
+        .map { player =>
+          requireActivePlayer(player, s"Player ${playerId.value} cannot enter tournament ${tournamentId.value}")
+        }
+        .getOrElse(throw NoSuchElementException(s"Player ${playerId.value} was not found"))
+
       tournamentRepository.findById(tournamentId).map { tournament =>
         tournamentRepository.save(tournament.registerPlayer(playerId))
       }
@@ -368,6 +475,11 @@ final class TournamentApplicationService(
 
   def registerClub(tournamentId: TournamentId, clubId: ClubId): Option[Tournament] =
     transactionManager.inTransaction {
+      clubRepository
+        .findById(clubId)
+        .map(ensureClubActive)
+        .getOrElse(throw NoSuchElementException(s"Club ${clubId.value} was not found"))
+
       tournamentRepository.findById(tournamentId).map { tournament =>
         tournamentRepository.save(tournament.registerClub(clubId))
       }
@@ -375,6 +487,13 @@ final class TournamentApplicationService(
 
   def whitelistPlayer(tournamentId: TournamentId, playerId: PlayerId): Option[Tournament] =
     transactionManager.inTransaction {
+      playerRepository
+        .findById(playerId)
+        .map { player =>
+          requireActivePlayer(player, s"Player ${playerId.value} cannot be whitelisted")
+        }
+        .getOrElse(throw NoSuchElementException(s"Player ${playerId.value} was not found"))
+
       tournamentRepository.findById(tournamentId).map { tournament =>
         tournamentRepository.save(tournament.whitelistPlayer(playerId))
       }
@@ -382,6 +501,11 @@ final class TournamentApplicationService(
 
   def whitelistClub(tournamentId: TournamentId, clubId: ClubId): Option[Tournament] =
     transactionManager.inTransaction {
+      clubRepository
+        .findById(clubId)
+        .map(ensureClubActive)
+        .getOrElse(throw NoSuchElementException(s"Club ${clubId.value} was not found"))
+
       tournamentRepository.findById(tournamentId).map { tournament =>
         tournamentRepository.save(tournament.whitelistClub(clubId))
       }
@@ -390,6 +514,10 @@ final class TournamentApplicationService(
   def publishTournament(tournamentId: TournamentId): Option[Tournament] =
     transactionManager.inTransaction {
       tournamentRepository.findById(tournamentId).map { tournament =>
+        if tournament.stages.isEmpty then
+          throw IllegalArgumentException(
+            s"Tournament ${tournamentId.value} cannot be published without stages"
+          )
         tournamentRepository.save(tournament.publish)
       }
     }
@@ -397,6 +525,10 @@ final class TournamentApplicationService(
   def startTournament(tournamentId: TournamentId): Option[Tournament] =
     transactionManager.inTransaction {
       tournamentRepository.findById(tournamentId).map { tournament =>
+        if tournament.participatingPlayers.isEmpty && tournament.participatingClubs.isEmpty then
+          throw IllegalArgumentException(
+            s"Tournament ${tournamentId.value} cannot start without participants"
+          )
         tournamentRepository.save(tournament.start)
       }
     }
@@ -412,6 +544,7 @@ final class TournamentApplicationService(
         tournament <- tournamentRepository.findById(tournamentId)
         player <- playerRepository.findById(playerId)
       yield
+        requireActivePlayer(player, s"Player ${playerId.value} cannot be granted tournament admin")
         authorizationService.requirePermission(
           actor,
           Permission.AssignTournamentAdmin,
@@ -433,6 +566,11 @@ final class TournamentApplicationService(
   ): Option[Tournament] =
     transactionManager.inTransaction {
       tournamentRepository.findById(tournamentId).map { tournament =>
+        if tournament.status == TournamentStatus.Completed || tournament.status == TournamentStatus.Archived then
+          throw IllegalArgumentException(
+            s"Cannot add stages to tournament ${tournamentId.value} in status ${tournament.status}"
+          )
+
         authorizationService.requirePermission(
           actor,
           Permission.ManageTournamentStages,
@@ -454,6 +592,7 @@ final class TournamentApplicationService(
   ): Option[Tournament] =
     transactionManager.inTransaction {
       tournamentRepository.findById(tournamentId).map { tournament =>
+        requireStage(tournament, stageId)
         authorizationService.requirePermission(
           actor,
           Permission.ConfigureTournamentRules,
@@ -474,11 +613,15 @@ final class TournamentApplicationService(
   ): Option[Tournament] =
     transactionManager.inTransaction {
       tournamentRepository.findById(tournamentId).map { tournament =>
+        requireStage(tournament, stageId)
         authorizationService.requirePermission(
           actor,
           Permission.SubmitTournamentLineup,
           clubId = Some(submission.clubId)
         )
+
+        if !actor.isSuperAdmin && actor.playerId.exists(_ != submission.submittedBy) then
+          throw AuthorizationFailure("Lineup submitter must match the acting principal")
 
         val isClubRegistered =
           tournament.participatingClubs.contains(submission.clubId) ||
@@ -488,6 +631,23 @@ final class TournamentApplicationService(
           throw IllegalArgumentException(
             s"Club ${submission.clubId.value} is not whitelisted for tournament ${tournamentId.value}"
           )
+
+        val club = clubRepository
+          .findById(submission.clubId)
+          .getOrElse(throw NoSuchElementException(s"Club ${submission.clubId.value} was not found"))
+        ensureClubActive(club)
+
+        submission.activePlayerIds.foreach { playerId =>
+          if !club.members.contains(playerId) then
+            throw IllegalArgumentException(
+              s"Player ${playerId.value} is not a member of club ${submission.clubId.value}"
+            )
+
+          val player = playerRepository
+            .findById(playerId)
+            .getOrElse(throw NoSuchElementException(s"Player ${playerId.value} was not found"))
+          requireActivePlayer(player, s"Player ${playerId.value} cannot be submitted to tournament lineups")
+        }
 
         tournamentRepository.save(
           tournament.updateStage(stageId, _.submitLineup(submission))
@@ -518,7 +678,16 @@ final class TournamentApplicationService(
           .find(_.id == stageId)
           .getOrElse(throw IllegalArgumentException(s"Stage ${stageId.value} was not found"))
 
+        if tournament.status == TournamentStatus.Draft then
+          throw IllegalArgumentException(
+            s"Tournament ${tournamentId.value} must be published before scheduling tables"
+          )
+
         val tournamentPlayers = resolveParticipants(tournament, stage)
+        if tournamentPlayers.size < 4 then
+          throw IllegalArgumentException(
+            s"Stage ${stageId.value} needs at least four active players before scheduling"
+          )
         val plannedTables = seatingPolicy.assignTables(tournamentPlayers, stage)
 
         val savedTables = plannedTables.map { planned =>
@@ -541,6 +710,80 @@ final class TournamentApplicationService(
         )
 
         savedTables
+    }
+
+  def stageStandings(
+      tournamentId: TournamentId,
+      stageId: TournamentStageId,
+      at: Instant = Instant.now()
+  ): StageRankingSnapshot =
+    val tournament = tournamentRepository
+      .findById(tournamentId)
+      .getOrElse(throw NoSuchElementException(s"Tournament ${tournamentId.value} was not found"))
+    val stage = requireStage(tournament, stageId)
+    val records = stageRecords(tournamentId, stageId)
+    val participants = resolveParticipants(tournament, stage).map(_.id)
+    tournamentRuleEngine.buildStageRanking(tournament, stage, participants, records, at)
+
+  def stageAdvancementPreview(
+      tournamentId: TournamentId,
+      stageId: TournamentStageId,
+      at: Instant = Instant.now()
+  ): StageAdvancementSnapshot =
+    val tournament = tournamentRepository
+      .findById(tournamentId)
+      .getOrElse(throw NoSuchElementException(s"Tournament ${tournamentId.value} was not found"))
+    val stage = requireStage(tournament, stageId)
+    val participants = resolveParticipants(tournament, stage).map(_.id)
+    val ranking = tournamentRuleEngine.buildStageRanking(
+      tournament,
+      stage,
+      participants,
+      stageRecords(tournamentId, stageId),
+      at
+    )
+    tournamentRuleEngine.projectAdvancement(tournament, stage, ranking, at)
+
+  def completeStage(
+      tournamentId: TournamentId,
+      stageId: TournamentStageId,
+      actor: AccessPrincipal,
+      completedAt: Instant = Instant.now()
+  ): Option[StageAdvancementSnapshot] =
+    transactionManager.inTransaction {
+      tournamentRepository.findById(tournamentId).map { tournament =>
+        authorizationService.requirePermission(
+          actor,
+          Permission.ManageTournamentStages,
+          tournamentId = Some(tournamentId)
+        )
+
+        val stage = requireStage(tournament, stageId)
+        val stageTables = tableRepository.findByTournamentAndStage(tournamentId, stageId)
+
+        if stageTables.size != stage.scheduledTableIds.size then
+          throw IllegalArgumentException(
+            s"Stage ${stageId.value} cannot complete before every scheduled table is materialized"
+          )
+
+        if stageTables.exists(_.status != TableStatus.Archived) then
+          throw IllegalArgumentException(
+            s"Stage ${stageId.value} cannot complete while tables are still active or under appeal"
+          )
+
+        val ranking =
+          tournamentRuleEngine.buildStageRanking(
+            tournament,
+            stage,
+            resolveParticipants(tournament, stage).map(_.id),
+            stageRecords(tournamentId, stageId),
+            completedAt
+          )
+        val advancement = tournamentRuleEngine.projectAdvancement(tournament, stage, ranking, completedAt)
+
+        tournamentRepository.save(tournament.updateStage(stageId, _.complete))
+        advancement
+      }
     }
 
   private def resolveParticipants(
@@ -569,6 +812,35 @@ final class TournamentApplicationService(
     then stage.copy(advancementRule = AdvancementRule.defaultFor(stage.format))
     else stage
 
+  private def stageRecords(
+      tournamentId: TournamentId,
+      stageId: TournamentStageId
+  ): Vector[MatchRecord] =
+    matchRecordRepository.findAll()
+      .filter(record => record.tournamentId == tournamentId && record.stageId == stageId)
+
+  private def requireUniqueStageConfiguration(stages: Vector[TournamentStage]): Unit =
+    if stages.map(_.id).distinct.size != stages.size then
+      throw IllegalArgumentException("Tournament stages must have unique ids")
+    if stages.map(_.order).distinct.size != stages.size then
+      throw IllegalArgumentException("Tournament stages must have unique ordering")
+
+  private def requireStage(
+      tournament: Tournament,
+      stageId: TournamentStageId
+  ): TournamentStage =
+    tournament.stages
+      .find(_.id == stageId)
+      .getOrElse(throw NoSuchElementException(s"Stage ${stageId.value} was not found"))
+
+  private def ensureClubActive(club: Club): Unit =
+    if club.dissolvedAt.nonEmpty then
+      throw IllegalArgumentException(s"Club ${club.id.value} has already been dissolved")
+
+  private def requireActivePlayer(player: Player, context: String): Unit =
+    if player.status != PlayerStatus.Active then
+      throw IllegalArgumentException(context)
+
 final class TableLifecycleService(
     tableRepository: TableRepository,
     paifuRepository: PaifuRepository,
@@ -584,6 +856,12 @@ final class TableLifecycleService(
   ): Option[Table] =
     transactionManager.inTransaction {
       tableRepository.findById(tableId).map { table =>
+        authorizationService.requirePermission(
+          actor,
+          Permission.ManageTournamentStages,
+          tournamentId = Some(table.tournamentId)
+        )
+
         tableRepository.save(table.start(startedAt))
       }
     }
@@ -595,7 +873,15 @@ final class TableLifecycleService(
   ): Option[Table] =
     transactionManager.inTransaction {
       tableRepository.findById(tableId).map { table =>
+        authorizationService.requirePermission(
+          actor,
+          Permission.ManageTournamentStages,
+          tournamentId = Some(table.tournamentId)
+        )
         validatePaifu(table, paifu)
+
+        if matchRecordRepository.findByTable(tableId).nonEmpty then
+          throw IllegalArgumentException(s"Table ${tableId.value} has already been archived")
 
         val provisionalRecord =
           MatchRecord.fromTableAndPaifu(table, paifu, paifu.metadata.recordedAt, actor.playerId)
@@ -656,6 +942,11 @@ final class TableLifecycleService(
       paifu.metadata.seats.toSet == table.seats.toSet,
       "Paifu seat map does not match the scheduled table"
     )
+    require(paifu.finalStandings.size == 4, "Paifu must provide four final standings")
+    require(
+      paifu.finalStandings.map(_.placement).distinct.size == 4,
+      "Paifu placements must be unique"
+    )
 
 final class AppealApplicationService(
     appealTicketRepository: AppealTicketRepository,
@@ -674,6 +965,7 @@ final class AppealApplicationService(
   ): Option[AppealTicket] =
     transactionManager.inTransaction {
       tableRepository.findById(tableId).map { table =>
+        require(description.trim.nonEmpty, "Appeal description cannot be empty")
         authorizationService.requirePermission(
           actor,
           Permission.FileAppealTicket,
@@ -682,6 +974,18 @@ final class AppealApplicationService(
 
         if !table.seats.exists(_.playerId == openedBy) then
           throw IllegalArgumentException(s"Player ${openedBy.value} is not seated at table ${tableId.value}")
+        if table.status == TableStatus.Archived then
+          throw IllegalArgumentException(s"Archived table ${tableId.value} cannot accept new appeals")
+        if appealTicketRepository.findAll().exists(ticket =>
+            ticket.tableId == tableId &&
+              (ticket.status == AppealStatus.Open ||
+                ticket.status == AppealStatus.UnderReview ||
+                ticket.status == AppealStatus.Escalated)
+          )
+        then
+          throw IllegalArgumentException(
+            s"Table ${tableId.value} already has an active appeal ticket"
+          )
 
         val ticket = AppealTicket(
           id = IdGenerator.appealTicketId(),
@@ -709,6 +1013,25 @@ final class AppealApplicationService(
       resolvedAt: Instant = Instant.now(),
       note: Option[String] = None
   ): Option[AppealTicket] =
+    adjudicateAppeal(
+      ticketId = ticketId,
+      decision = AppealDecisionType.Resolve,
+      verdict = verdict,
+      actor = actor,
+      adjudicatedAt = resolvedAt,
+      tableResolution = Some(AppealTableResolution.RestorePriorState),
+      note = note
+    )
+
+  def adjudicateAppeal(
+      ticketId: AppealTicketId,
+      decision: AppealDecisionType,
+      verdict: String,
+      actor: AccessPrincipal,
+      adjudicatedAt: Instant = Instant.now(),
+      tableResolution: Option[AppealTableResolution] = None,
+      note: Option[String] = None
+  ): Option[AppealTicket] =
     transactionManager.inTransaction {
       appealTicketRepository.findById(ticketId).map { ticket =>
         authorizationService.requirePermission(
@@ -718,14 +1041,53 @@ final class AppealApplicationService(
         )
 
         val operatorId = actor.playerId.getOrElse(ticket.openedBy)
-        val resolvedTicket = ticket.resolve(operatorId, verdict, resolvedAt, note)
+        val reviewedTicket =
+          if ticket.status == AppealStatus.UnderReview then ticket
+          else ticket.markUnderReview(operatorId, adjudicatedAt, note)
 
-        appealTicketRepository.save(resolvedTicket)
-        tableRepository.findById(ticket.tableId).foreach { table =>
-          tableRepository.save(table.resolveAppeal(note))
-        }
-        eventBus.publish(AppealTicketResolved(resolvedTicket, resolvedAt))
-        resolvedTicket
+        val adjudicatedTicket =
+          decision match
+            case AppealDecisionType.Resolve =>
+              reviewedTicket.resolve(operatorId, verdict, adjudicatedAt, note)
+            case AppealDecisionType.Reject =>
+              reviewedTicket.reject(operatorId, verdict, adjudicatedAt, note)
+            case AppealDecisionType.Escalate =>
+              reviewedTicket.escalate(operatorId, verdict, adjudicatedAt, note)
+
+        appealTicketRepository.save(adjudicatedTicket)
+
+        if decision != AppealDecisionType.Escalate then
+          tableRepository.findById(ticket.tableId).foreach { table =>
+            val updatedTable =
+              tableResolution.getOrElse(AppealTableResolution.RestorePriorState) match
+                case AppealTableResolution.ForceReset =>
+                  table.forceReset(
+                    note.getOrElse(s"Appeal ${ticketId.value} adjudication requested reset"),
+                    adjudicatedAt
+                  )
+                case resolution =>
+                  table.resolveAppeal(resolution, note)
+
+            tableRepository.save(updatedTable)
+          }
+
+        decision match
+          case AppealDecisionType.Resolve =>
+            eventBus.publish(AppealTicketResolved(adjudicatedTicket, adjudicatedAt))
+          case _ =>
+            ()
+
+        eventBus.publish(
+          AppealTicketAdjudicated(
+            ticket = adjudicatedTicket,
+            decision = decision,
+            tableResolution =
+              if decision == AppealDecisionType.Escalate then None
+              else tableResolution.orElse(Some(AppealTableResolution.RestorePriorState)),
+            occurredAt = adjudicatedAt
+          )
+        )
+        adjudicatedTicket
       }
     }
 
@@ -782,6 +1144,7 @@ final class SuperAdminService(
   ): Option[Player] =
     transactionManager.inTransaction {
       authorizationService.requirePermission(actor, Permission.BanRegisteredPlayer)
+      require(reason.trim.nonEmpty, "Ban reason cannot be empty")
 
       playerRepository.findById(playerId).map { player =>
         val banned = playerRepository.save(player.ban(reason))
@@ -799,6 +1162,9 @@ final class SuperAdminService(
       authorizationService.requirePermission(actor, Permission.DissolveClub)
 
       clubRepository.findById(clubId).map { club =>
+        if club.dissolvedAt.nonEmpty then
+          throw IllegalArgumentException(s"Club ${clubId.value} has already been dissolved")
+
         club.members.foreach { memberId =>
           playerRepository.findById(memberId).foreach { player =>
             playerRepository.save(
@@ -808,6 +1174,13 @@ final class SuperAdminService(
             )
           }
         }
+
+        clubRepository.findActive()
+          .filterNot(_.id == clubId)
+          .filter(_.relations.exists(_.targetClubId == clubId))
+          .foreach { relatedClub =>
+            clubRepository.save(relatedClub.removeRelation(clubId))
+          }
 
         val dissolved = clubRepository.save(
           club.dissolve(actor.playerId.getOrElse(club.creator), at)

@@ -47,6 +47,7 @@ object ApplicationContext:
     val globalDictionaryRepository = InMemoryGlobalDictionaryRepository()
 
     val eventBus = InMemoryDomainEventBus()
+    val tournamentRuleEngine = DefaultTournamentRuleEngine()
     eventBus.register(
       RatingProjectionSubscriber(playerRepository, PairwiseEloRatingService())
     )
@@ -81,7 +82,9 @@ object ApplicationContext:
         playerRepository,
         clubRepository,
         tableRepository,
+        matchRecordRepository,
         BalancedEloSeatingPolicy(),
+        tournamentRuleEngine,
         transactionManager,
         authorizationService
       ),
@@ -137,6 +140,7 @@ object ApplicationContext:
     val globalDictionaryRepository = PostgresGlobalDictionaryRepository(connectionFactory)
 
     val eventBus = InMemoryDomainEventBus()
+    val tournamentRuleEngine = DefaultTournamentRuleEngine()
     eventBus.register(
       RatingProjectionSubscriber(playerRepository, PairwiseEloRatingService())
     )
@@ -171,7 +175,9 @@ object ApplicationContext:
         playerRepository,
         clubRepository,
         tableRepository,
+        matchRecordRepository,
         BalancedEloSeatingPolicy(),
+        tournamentRuleEngine,
         transactionManager,
         authorizationService
       ),

@@ -84,10 +84,15 @@ object JsonCodecs:
     stringEnumReadWriter(TournamentParticipantKind.valueOf, _.toString)
   given ReadWriter[TournamentWhitelistEntry] = macroRW
   given ReadWriter[TournamentStage] = macroRW
+  given ReadWriter[StageStandingEntry] = macroRW
+  given ReadWriter[StageRankingSnapshot] = macroRW
+  given ReadWriter[StageAdvancementSnapshot] = macroRW
   given ReadWriter[Tournament] = macroRW
   given ReadWriter[TableSeat] = macroRW
   given ReadWriter[TableStatus] =
     stringEnumReadWriter(TableStatus.valueOf, _.toString)
+  given ReadWriter[AppealTableResolution] =
+    stringEnumReadWriter(AppealTableResolution.valueOf, _.toString)
   given ReadWriter[Table] = macroRW
   given ReadWriter[MatchRecordSeatResult] = macroRW
   given ReadWriter[MatchRecord] = macroRW
@@ -95,6 +100,8 @@ object JsonCodecs:
   given ReadWriter[AppealDecisionLog] = macroRW
   given ReadWriter[AppealStatus] =
     stringEnumReadWriter(AppealStatus.valueOf, _.toString)
+  given ReadWriter[AppealDecisionType] =
+    stringEnumReadWriter(AppealDecisionType.valueOf, _.toString)
   given ReadWriter[AppealTicket] = macroRW
 
   given ReadWriter[HandOutcome] =

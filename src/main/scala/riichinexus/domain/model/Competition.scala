@@ -88,6 +88,16 @@ final case class StageLineupSubmission(
     seats: Vector[StageLineupSeat],
     note: Option[String] = None
 ) derives CanEqual:
+  require(seats.nonEmpty, "Lineup submission must contain at least one seat")
+  require(
+    seats.map(_.playerId).distinct.size == seats.size,
+    "Lineup submission cannot contain duplicate players"
+  )
+  require(
+    seats.exists(seat => !seat.reserve),
+    "Lineup submission must contain at least one active player"
+  )
+
   def activePlayerIds: Vector[PlayerId] =
     seats.filterNot(_.reserve).map(_.playerId)
 
@@ -105,12 +115,17 @@ final case class TournamentStage(
     lineupSubmissions: Vector[StageLineupSubmission] = Vector.empty,
     scheduledTableIds: Vector[TableId] = Vector.empty
 ) derives CanEqual:
+  require(order >= 1, "Stage order must be positive")
+  require(roundCount >= 1, "Stage round count must be positive")
+  require(schedulingPoolSize >= 1, "Scheduling pool size must be positive")
+
   def withRules(
       advancementRule: AdvancementRule,
       swissRule: Option[SwissRuleConfig],
       knockoutRule: Option[KnockoutRuleConfig],
       schedulingPoolSize: Int
   ): TournamentStage =
+    require(schedulingPoolSize >= 1, "Scheduling pool size must be positive")
     copy(
       advancementRule = advancementRule,
       swissRule = swissRule,
@@ -119,6 +134,10 @@ final case class TournamentStage(
     )
 
   def submitLineup(submission: StageLineupSubmission): TournamentStage =
+    require(
+      status != StageStatus.Completed && status != StageStatus.Archived,
+      "Cannot submit lineups to a completed stage"
+    )
     copy(
       status = StageStatus.Ready,
       lineupSubmissions =
@@ -126,6 +145,7 @@ final case class TournamentStage(
     )
 
   def registerScheduledTables(tableIds: Vector[TableId]): TournamentStage =
+    require(tableIds.nonEmpty, "Scheduled tables cannot be empty")
     copy(
       status = StageStatus.Active,
       scheduledTableIds = (scheduledTableIds ++ tableIds).distinct
@@ -133,6 +153,39 @@ final case class TournamentStage(
 
   def complete: TournamentStage =
     copy(status = StageStatus.Completed)
+
+final case class StageStandingEntry(
+    playerId: PlayerId,
+    matchesPlayed: Int,
+    placementPoints: Int,
+    totalScoreDelta: Int,
+    totalFinalPoints: Int,
+    averagePlacement: Double,
+    qualified: Boolean = false,
+    seed: Option[Int] = None
+) derives CanEqual
+
+final case class StageRankingSnapshot(
+    tournamentId: TournamentId,
+    stageId: TournamentStageId,
+    generatedAt: Instant,
+    entries: Vector[StageStandingEntry],
+    archivedTableCount: Int,
+    scheduledTableCount: Int
+) derives CanEqual:
+  def qualifiedPlayerIds: Vector[PlayerId] =
+    entries.filter(_.qualified).map(_.playerId)
+
+final case class StageAdvancementSnapshot(
+    tournamentId: TournamentId,
+    stageId: TournamentStageId,
+    generatedAt: Instant,
+    rule: AdvancementRule,
+    standings: Vector[StageStandingEntry],
+    qualifiedPlayerIds: Vector[PlayerId],
+    reservePlayerIds: Vector[PlayerId] = Vector.empty,
+    summary: String
+) derives CanEqual
 
 enum TournamentParticipantKind derives CanEqual:
   case Club
@@ -163,6 +216,13 @@ final case class Tournament(
     stages: Vector[TournamentStage] = Vector.empty,
     status: TournamentStatus = TournamentStatus.Draft
 ) derives CanEqual:
+  require(startsAt.isBefore(endsAt), "Tournament start time must be earlier than end time")
+  require(stages.map(_.id).distinct.size == stages.size, "Tournament stages must have unique ids")
+  require(
+    stages.map(_.order).distinct.size == stages.size,
+    "Tournament stages must have unique ordering"
+  )
+
   def registerClub(clubId: ClubId): Tournament =
     copy(
       participatingClubs = (participatingClubs :+ clubId).distinct,
@@ -189,21 +249,40 @@ final case class Tournament(
     copy(admins = (admins :+ playerId).distinct)
 
   def addStage(stage: TournamentStage): Tournament =
-    copy(stages = (stages.filterNot(_.id == stage.id) :+ stage).sortBy(_.order))
+    val updatedStages = (stages.filterNot(_.id == stage.id) :+ stage).sortBy(_.order)
+    require(
+      updatedStages.map(_.order).distinct.size == updatedStages.size,
+      "Tournament stages must have unique ordering"
+    )
+    copy(stages = updatedStages)
 
   def updateStage(
       stageId: TournamentStageId,
       update: TournamentStage => TournamentStage
   ): Tournament =
-    copy(stages = stages.map(stage => if stage.id == stageId then update(stage) else stage))
+    val updatedStages = stages.map(stage => if stage.id == stageId then update(stage) else stage)
+    require(
+      updatedStages.map(_.order).distinct.size == updatedStages.size,
+      "Tournament stages must have unique ordering"
+    )
+    copy(stages = updatedStages)
 
   def publish: Tournament =
+    require(status == TournamentStatus.Draft, "Only draft tournaments can be published")
     copy(status = TournamentStatus.RegistrationOpen)
 
   def markScheduled: Tournament =
+    require(
+      status == TournamentStatus.RegistrationOpen || status == TournamentStatus.InProgress,
+      "Only published or active tournaments can be marked as scheduled"
+    )
     copy(status = TournamentStatus.Scheduled)
 
   def start: Tournament =
+    require(
+      status == TournamentStatus.RegistrationOpen || status == TournamentStatus.Scheduled,
+      "Only published or scheduled tournaments can start"
+    )
     copy(status = TournamentStatus.InProgress)
 
   def complete: Tournament =
@@ -213,12 +292,15 @@ final case class Tournament(
     )
 
   def cancel: Tournament =
+    require(status != TournamentStatus.Archived, "Archived tournaments cannot be cancelled")
     copy(status = TournamentStatus.Cancelled)
 
   def archive: Tournament =
+    require(status == TournamentStatus.Completed, "Only completed tournaments can be archived")
     copy(status = TournamentStatus.Archived)
 
   def activateStage(stageId: TournamentStageId): Tournament =
+    require(stages.exists(_.id == stageId), s"Stage ${stageId.value} was not found")
     copy(
       status = TournamentStatus.InProgress,
       stages = stages.map { stage =>
@@ -236,6 +318,8 @@ final case class TableSeat(
     ready: Boolean = false,
     clubId: Option[ClubId] = None
 ) derives CanEqual:
+  require(initialPoints > 0, "Seat initial points must be positive")
+
   def markReady: TableSeat =
     copy(ready = true)
 
@@ -252,6 +336,13 @@ enum TableStatus derives CanEqual:
 object TableStatus:
   val Pending: TableStatus = WaitingPreparation
   val Finished: TableStatus = Archived
+
+enum AppealTableResolution derives CanEqual:
+  case RestorePriorState
+  case ArchiveTable
+  case ResumeScoring
+  case ResumePlay
+  case ForceReset
 
 final case class Table(
     id: TableId,
@@ -273,9 +364,14 @@ final case class Table(
   require(seats.map(_.seat).distinct.size == 4, "Seats must be unique")
 
   def start(at: Instant): Table =
+    require(
+      status == TableStatus.WaitingPreparation,
+      "Only waiting tables can be started"
+    )
     copy(status = TableStatus.InProgress, startedAt = Some(at))
 
   def enterScoring(at: Instant): Table =
+    require(status == TableStatus.InProgress, "Only running tables can enter scoring")
     copy(status = TableStatus.Scoring, scoringStartedAt = Some(at))
 
   def archive(
@@ -284,6 +380,7 @@ final case class Table(
       at: Instant,
       note: Option[String] = None
   ): Table =
+    require(status == TableStatus.Scoring, "Only scoring tables can be archived")
     copy(
       status = TableStatus.Archived,
       scoringStartedAt = Some(scoringStartedAt.getOrElse(at)),
@@ -294,21 +391,42 @@ final case class Table(
     )
 
   def flagAppeal(ticketId: AppealTicketId, note: Option[String] = None): Table =
+    require(status != TableStatus.Archived, "Archived tables cannot enter appeal flow")
     copy(
       status = TableStatus.AppealInProgress,
       appealTicketIds = (appealTicketIds :+ ticketId).distinct,
       operatorNotes = operatorNotes ++ note.toVector
     )
 
-  def resolveAppeal(note: Option[String] = None): Table =
-    copy(
-      status = TableStatus.Archived,
-      operatorNotes = operatorNotes ++ note.toVector
-    )
+  def resolveAppeal(
+      resolution: AppealTableResolution = AppealTableResolution.RestorePriorState,
+      note: Option[String] = None
+  ): Table =
+    require(status == TableStatus.AppealInProgress, "Only appealed tables can resolve appeals")
+    resolution match
+      case AppealTableResolution.ForceReset =>
+        forceReset(note.getOrElse("appeal adjudication requested a table reset"), Instant.now())
+      case _ =>
+        copy(
+          status =
+            resolution match
+              case AppealTableResolution.RestorePriorState =>
+                if endedAt.nonEmpty || matchRecordId.nonEmpty || paifuId.nonEmpty then TableStatus.Archived
+                else if scoringStartedAt.nonEmpty then TableStatus.Scoring
+                else if startedAt.nonEmpty then TableStatus.InProgress
+                else TableStatus.WaitingPreparation
+              case AppealTableResolution.ArchiveTable => TableStatus.Archived
+              case AppealTableResolution.ResumeScoring => TableStatus.Scoring
+              case AppealTableResolution.ResumePlay    => TableStatus.InProgress
+              case AppealTableResolution.ForceReset    => TableStatus.WaitingPreparation
+          ,
+          operatorNotes = operatorNotes ++ note.toVector
+        )
 
   def forceReset(note: String, at: Instant): Table =
     copy(
       status = TableStatus.WaitingPreparation,
+      seats = seats.map(_.copy(disconnected = false, ready = false)),
       startedAt = None,
       scoringStartedAt = None,
       endedAt = None,
@@ -342,6 +460,9 @@ final case class MatchRecord(
     notes: Vector[String] = Vector.empty
 ) derives CanEqual:
   require(seatResults.size == 4, "Match record must contain four seat results")
+  require(seatResults.map(_.playerId).distinct.size == 4, "Match record players must be unique")
+  require(seatResults.map(_.seat).distinct.size == 4, "Match record seats must be unique")
+  require(seatResults.map(_.placement).distinct.size == 4, "Match record placements must be unique")
 
   def playerIds: Vector[PlayerId] =
     seatResults.map(_.playerId)
@@ -354,6 +475,10 @@ object MatchRecord:
       finalizedBy: Option[PlayerId] = None
   ): MatchRecord =
     val seatMap = table.seats.map(seat => seat.playerId -> seat).toMap
+    require(
+      paifu.finalStandings.map(_.playerId).toSet == seatMap.keySet,
+      "Paifu final standings must match scheduled table players"
+    )
 
     MatchRecord(
       id = IdGenerator.matchRecordId(),
@@ -397,6 +522,11 @@ enum AppealStatus derives CanEqual:
   case Rejected
   case Escalated
 
+enum AppealDecisionType derives CanEqual:
+  case Resolve
+  case Reject
+  case Escalate
+
 final case class AppealTicket(
     id: AppealTicketId,
     tableId: TableId,
@@ -412,6 +542,10 @@ final case class AppealTicket(
     resolution: Option[String] = None
 ) derives CanEqual:
   def markUnderReview(operatorId: PlayerId, at: Instant, note: Option[String] = None): AppealTicket =
+    require(
+      status == AppealStatus.Open || status == AppealStatus.Escalated,
+      "Only open or escalated appeals can enter review"
+    )
     copy(
       status = AppealStatus.UnderReview,
       logs = logs :+ AppealDecisionLog(operatorId, "under-review", at, note),
@@ -424,9 +558,50 @@ final case class AppealTicket(
       at: Instant,
       note: Option[String] = None
   ): AppealTicket =
+    require(verdict.trim.nonEmpty, "Appeal verdict cannot be empty")
+    require(
+      status == AppealStatus.Open || status == AppealStatus.UnderReview || status == AppealStatus.Escalated,
+      "Only active appeals can be resolved"
+    )
     copy(
       status = AppealStatus.Resolved,
       logs = logs :+ AppealDecisionLog(operatorId, verdict, at, note),
       updatedAt = at,
       resolution = Some(verdict)
+    )
+
+  def reject(
+      operatorId: PlayerId,
+      verdict: String,
+      at: Instant,
+      note: Option[String] = None
+  ): AppealTicket =
+    require(verdict.trim.nonEmpty, "Appeal rejection reason cannot be empty")
+    require(
+      status == AppealStatus.Open || status == AppealStatus.UnderReview || status == AppealStatus.Escalated,
+      "Only active appeals can be rejected"
+    )
+    copy(
+      status = AppealStatus.Rejected,
+      logs = logs :+ AppealDecisionLog(operatorId, s"rejected:$verdict", at, note),
+      updatedAt = at,
+      resolution = Some(verdict)
+    )
+
+  def escalate(
+      operatorId: PlayerId,
+      reason: String,
+      at: Instant,
+      note: Option[String] = None
+  ): AppealTicket =
+    require(reason.trim.nonEmpty, "Appeal escalation reason cannot be empty")
+    require(
+      status == AppealStatus.Open || status == AppealStatus.UnderReview,
+      "Only open or under-review appeals can be escalated"
+    )
+    copy(
+      status = AppealStatus.Escalated,
+      logs = logs :+ AppealDecisionLog(operatorId, s"escalated:$reason", at, note),
+      updatedAt = at,
+      resolution = Some(reason)
     )

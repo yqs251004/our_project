@@ -287,7 +287,11 @@ final case class ClubMembershipApplication(
     reviewedAt: Option[Instant] = None,
     reviewNote: Option[String] = None
 ) derives CanEqual:
+  def isPending: Boolean =
+    status == ClubMembershipApplicationStatus.Pending
+
   def approve(by: PlayerId, at: Instant, note: Option[String] = None): ClubMembershipApplication =
+    require(isPending, "Only pending applications can be approved")
     copy(
       status = ClubMembershipApplicationStatus.Approved,
       reviewedBy = Some(by),
@@ -296,6 +300,7 @@ final case class ClubMembershipApplication(
     )
 
   def reject(by: PlayerId, at: Instant, note: Option[String] = None): ClubMembershipApplication =
+    require(isPending, "Only pending applications can be rejected")
     copy(
       status = ClubMembershipApplicationStatus.Rejected,
       reviewedBy = Some(by),
@@ -408,6 +413,9 @@ final case class Club(
       }
     )
 
+  def findApplication(applicationId: MembershipApplicationId): Option[ClubMembershipApplication] =
+    membershipApplications.find(_.id == applicationId)
+
   def updatePowerRating(rating: Double): Club =
     copy(powerRating = rating)
 
@@ -415,6 +423,9 @@ final case class Club(
     copy(
       relations = relations.filterNot(_.targetClubId == relation.targetClubId) :+ relation
     )
+
+  def removeRelation(targetClubId: ClubId): Club =
+    copy(relations = relations.filterNot(_.targetClubId == targetClubId))
 
   def dissolve(by: PlayerId, at: Instant): Club =
     copy(

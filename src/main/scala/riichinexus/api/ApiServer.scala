@@ -262,6 +262,34 @@ private final class ApiHandler(
             TournamentStageId(stageId)
           )
         )
+      case ("GET", Vector("tournaments", tournamentId, "stages", stageId, "standings")) =>
+        sendJson(
+          exchange,
+          200,
+          app.tournamentService.stageStandings(
+            TournamentId(tournamentId),
+            TournamentStageId(stageId)
+          )
+        )
+      case ("GET", Vector("tournaments", tournamentId, "stages", stageId, "advancement")) =>
+        sendJson(
+          exchange,
+          200,
+          app.tournamentService.stageAdvancementPreview(
+            TournamentId(tournamentId),
+            TournamentStageId(stageId)
+          )
+        )
+      case ("POST", Vector("tournaments", tournamentId, "stages", stageId, "complete")) =>
+        val request = readJsonBody[CompleteStageRequest](exchange)
+        sendOption(
+          exchange,
+          app.tournamentService.completeStage(
+            tournamentId = TournamentId(tournamentId),
+            stageId = TournamentStageId(stageId),
+            actor = principal(request.operator)
+          )
+        )
 
       case ("GET", Vector("tables")) =>
         sendJson(exchange, 200, app.tableRepository.findAll())
@@ -269,6 +297,16 @@ private final class ApiHandler(
         sendOption(exchange, app.tableRepository.findById(TableId(tableId)))
       case ("POST", Vector("tables", tableId, "start")) =>
         sendOption(exchange, app.tableService.startTable(TableId(tableId)))
+      case ("POST", Vector("tables", tableId, "paifu")) =>
+        val request = readJsonBody[UploadPaifuRequest](exchange)
+        sendOption(
+          exchange,
+          app.tableService.recordCompletedTable(
+            tableId = TableId(tableId),
+            paifu = request.paifu,
+            actor = principal(request.operator)
+          )
+        )
       case ("POST", Vector("tables", tableId, "reset")) =>
         val request = readJsonBody[ForceResetTableRequest](exchange)
         sendOption(
@@ -294,6 +332,10 @@ private final class ApiHandler(
 
       case ("GET", Vector("records")) =>
         sendJson(exchange, 200, app.matchRecordRepository.findAll())
+      case ("GET", Vector("paifus")) =>
+        sendJson(exchange, 200, app.paifuRepository.findAll())
+      case ("GET", Vector("paifus", paifuId)) =>
+        sendOption(exchange, app.paifuRepository.findById(PaifuId(paifuId)))
       case ("GET", Vector("appeals")) =>
         sendJson(exchange, 200, app.appealTicketRepository.findAll())
       case ("POST", Vector("appeals", appealId, "resolve")) =>
@@ -304,6 +346,19 @@ private final class ApiHandler(
             ticketId = AppealTicketId(appealId),
             verdict = request.verdict,
             actor = principal(request.operator),
+            note = request.note
+          )
+        )
+      case ("POST", Vector("appeals", appealId, "adjudicate")) =>
+        val request = readJsonBody[AdjudicateAppealRequest](exchange)
+        sendOption(
+          exchange,
+          app.appealService.adjudicateAppeal(
+            ticketId = AppealTicketId(appealId),
+            decision = request.decisionType,
+            verdict = request.verdict,
+            actor = principal(request.operator),
+            tableResolution = request.resolution,
             note = request.note
           )
         )
