@@ -63,6 +63,9 @@ final class InMemoryTableRepository extends TableRepository:
     state.update(table.id, table)
     table
 
+  override def delete(id: TableId): Unit =
+    state.remove(id)
+
   override def findById(id: TableId): Option[Table] =
     state.get(id)
 

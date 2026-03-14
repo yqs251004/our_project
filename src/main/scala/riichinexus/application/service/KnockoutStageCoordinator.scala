@@ -102,6 +102,17 @@ final class KnockoutStageCoordinator(
       savedTables
     }
 
+  def reconcileAfterMatchMutation(
+      tournamentId: TournamentId,
+      stageId: TournamentStageId,
+      mutatedMatchId: String,
+      at: Instant = Instant.now()
+  ): Vector[Table] =
+    transactionManager.inTransaction {
+      pruneDependentTables(tournamentId, stageId, mutatedMatchId)
+      materializeUnlockedTables(tournamentId, stageId, at)
+    }
+
   private def requireStage(
       tournament: Tournament,
       stageId: TournamentStageId
@@ -135,4 +146,25 @@ final class KnockoutStageCoordinator(
 
     targetPlayerIds.flatMap { playerId =>
       playerRepository.findById(playerId).filter(_.status == PlayerStatus.Active)
+    }
+
+  private def pruneDependentTables(
+      tournamentId: TournamentId,
+      stageId: TournamentStageId,
+      sourceMatchId: String
+  ): Unit =
+    val dependentTables = tableRepository.findByTournamentAndStage(tournamentId, stageId)
+      .filter(_.feederMatchIds.contains(sourceMatchId))
+
+    dependentTables.foreach { table =>
+      if table.matchRecordId.nonEmpty || table.status != TableStatus.WaitingPreparation then
+        throw IllegalArgumentException(
+          s"Cannot reflow knockout bracket because dependent table ${table.id.value} has already started"
+        )
+
+      table.bracketMatchId.foreach { downstreamMatchId =>
+        pruneDependentTables(tournamentId, stageId, downstreamMatchId)
+      }
+
+      tableRepository.delete(table.id)
     }

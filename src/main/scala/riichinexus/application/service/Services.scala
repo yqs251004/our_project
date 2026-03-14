@@ -833,6 +833,83 @@ final class TournamentApplicationService(
       }
     }
 
+  def settleTournament(
+      tournamentId: TournamentId,
+      finalStageId: TournamentStageId,
+      prizePool: Long,
+      payoutRatios: Vector[Double] = Vector(0.5, 0.3, 0.2),
+      actor: AccessPrincipal,
+      settledAt: Instant = Instant.now()
+  ): TournamentSettlementSnapshot =
+    transactionManager.inTransaction {
+      require(prizePool >= 0L, "Prize pool must be non-negative")
+
+      val tournament = tournamentRepository
+        .findById(tournamentId)
+        .getOrElse(throw NoSuchElementException(s"Tournament ${tournamentId.value} was not found"))
+      val finalStage = requireStage(tournament, finalStageId)
+
+      authorizationService.requirePermission(
+        actor,
+        Permission.ManageTournamentStages,
+        tournamentId = Some(tournamentId)
+      )
+
+      val ranking = stageStandings(tournamentId, finalStageId, settledAt)
+      val isKnockoutStage =
+        finalStage.format == StageFormat.Knockout ||
+          finalStage.format == StageFormat.Finals ||
+          finalStage.advancementRule.ruleType == AdvancementRuleType.KnockoutElimination
+
+      val resolvedPlayers =
+        if isKnockoutStage then
+          val bracket = stageKnockoutBracket(tournamentId, finalStageId, settledAt)
+          val finalMatch = bracket.rounds.lastOption.flatMap(_.matches.headOption).getOrElse {
+            throw IllegalArgumentException(s"Stage ${finalStageId.value} does not contain a final match")
+          }
+          if !finalMatch.completed then
+            throw IllegalArgumentException(
+              s"Final knockout match ${finalMatch.id} must be completed before settlement"
+            )
+
+          finalMatch.results.sortBy(_.placement).map(_.playerId) ++
+            ranking.entries.map(_.playerId).filterNot(playerId =>
+              finalMatch.results.exists(_.playerId == playerId)
+            )
+        else ranking.entries.map(_.playerId)
+
+      val awards = allocatePrizePool(prizePool, payoutRatios, resolvedPlayers.size)
+      val rankingByPlayer = ranking.entries.map(entry => entry.playerId -> entry).toMap
+      val championId = resolvedPlayers.headOption.getOrElse {
+        throw IllegalArgumentException(s"Stage ${finalStageId.value} does not contain any ranked players")
+      }
+
+      if tournament.stages.forall(_.status == StageStatus.Completed) && tournament.status != TournamentStatus.Completed then
+        tournamentRepository.save(tournament.complete)
+
+      TournamentSettlementSnapshot(
+        tournamentId = tournamentId,
+        stageId = finalStageId,
+        generatedAt = settledAt,
+        championId = championId,
+        prizePool = prizePool,
+        entries = resolvedPlayers.zipWithIndex.map { case (playerId, index) =>
+          val standing = rankingByPlayer.getOrElse(
+            playerId,
+            StageStandingEntry(playerId, 0, 0, 0, 0, 99.0)
+          )
+          TournamentSettlementEntry(
+            playerId = playerId,
+            rank = index + 1,
+            awardAmount = awards.lift(index).getOrElse(0L),
+            finalPoints = standing.totalFinalPoints,
+            champion = index == 0
+          )
+        },
+        summary = s"Champion ${championId.value} settled from stage ${finalStageId.value} with prize pool $prizePool."
+      )
+    }
+
   private def resolveParticipants(
       tournament: Tournament,
       stage: TournamentStage
@@ -887,6 +964,31 @@ final class TournamentApplicationService(
   private def requireActivePlayer(player: Player, context: String): Unit =
     if player.status != PlayerStatus.Active then
       throw IllegalArgumentException(context)
+
+  private def allocatePrizePool(
+      prizePool: Long,
+      payoutRatios: Vector[Double],
+      participantCount: Int
+  ): Vector[Long] =
+    if prizePool <= 0L || participantCount <= 0 then Vector.fill(participantCount)(0L)
+    else
+      val normalizedRatios =
+        if payoutRatios.isEmpty then Vector(1.0)
+        else payoutRatios.map(ratio => math.max(0.0, ratio))
+
+      val ratioSum = normalizedRatios.sum
+      val effectiveRatios =
+        if ratioSum <= 0.0 then Vector(1.0)
+        else normalizedRatios.map(_ / ratioSum)
+
+      val paidSlots = math.min(participantCount, effectiveRatios.size)
+      val baseAwards = effectiveRatios.take(paidSlots).map(ratio => math.floor(prizePool.toDouble * ratio).toLong)
+      val remainder = prizePool - baseAwards.sum
+      val adjustedAwards =
+        if baseAwards.isEmpty then Vector.empty
+        else baseAwards.updated(0, baseAwards.head + remainder)
+
+      adjustedAwards ++ Vector.fill(participantCount - paidSlots)(0L)
 
 final class TableLifecycleService(
     tableRepository: TableRepository,
@@ -1059,6 +1161,7 @@ final class TableLifecycleService(
 final class AppealApplicationService(
     appealTicketRepository: AppealTicketRepository,
     tableRepository: TableRepository,
+    knockoutStageCoordinator: KnockoutStageCoordinator,
     eventBus: DomainEventBus,
     transactionManager: TransactionManager = NoOpTransactionManager,
     authorizationService: AuthorizationService = NoOpAuthorizationService
@@ -1177,6 +1280,14 @@ final class AppealApplicationService(
                   table.resolveAppeal(resolution, note)
 
             tableRepository.save(updatedTable)
+
+            if updatedTable.bracketMatchId.nonEmpty && updatedTable.status != TableStatus.Archived then
+              knockoutStageCoordinator.reconcileAfterMatchMutation(
+                updatedTable.tournamentId,
+                updatedTable.stageId,
+                updatedTable.bracketMatchId.get,
+                adjudicatedAt
+              )
           }
 
         decision match

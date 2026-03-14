@@ -92,6 +92,8 @@ object JsonCodecs:
   given ReadWriter[KnockoutBracketMatch] = macroRW
   given ReadWriter[KnockoutBracketRound] = macroRW
   given ReadWriter[KnockoutBracketSnapshot] = macroRW
+  given ReadWriter[TournamentSettlementEntry] = macroRW
+  given ReadWriter[TournamentSettlementSnapshot] = macroRW
   given ReadWriter[Tournament] = macroRW
   given ReadWriter[TableSeat] = macroRW
   given ReadWriter[TableStatus] =

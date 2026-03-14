@@ -281,6 +281,18 @@ final case class AdvanceKnockoutStageRequest(
   def operator: PlayerId =
     PlayerId(operatorId)
 
+final case class SettleTournamentRequest(
+    operatorId: String,
+    finalStageId: String,
+    prizePool: Long = 0L,
+    payoutRatios: Vector[Double] = Vector(0.5, 0.3, 0.2)
+):
+  def operator: PlayerId =
+    PlayerId(operatorId)
+
+  def stageId: TournamentStageId =
+    TournamentStageId(finalStageId)
+
 final case class ForceResetTableRequest(
     operatorId: String,
     note: String
@@ -334,6 +346,7 @@ object ApiModels:
   given ReadWriter[UploadPaifuRequest] = macroRW
   given ReadWriter[CompleteStageRequest] = macroRW
   given ReadWriter[AdvanceKnockoutStageRequest] = macroRW
+  given ReadWriter[SettleTournamentRequest] = macroRW
   given ReadWriter[ForceResetTableRequest] = macroRW
   given ReadWriter[UpsertDictionaryRequest] = macroRW
   given ReadWriter[BanPlayerRequest] = macroRW

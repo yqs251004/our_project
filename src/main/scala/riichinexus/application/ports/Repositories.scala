@@ -31,6 +31,7 @@ trait TournamentRepository:
 
 trait TableRepository:
   def save(table: Table): Table
+  def delete(id: TableId): Unit
   def findById(id: TableId): Option[Table]
   def findByTournamentAndStage(
       tournamentId: TournamentId,

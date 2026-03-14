@@ -557,6 +557,14 @@ final class PostgresTableRepository(
 
     table
 
+  override def delete(id: TableId): Unit =
+    withConnection { connection =>
+      Using.resource(connection.prepareStatement("delete from tables where id = ?")) { statement =>
+        statement.setString(1, id.value)
+        statement.executeUpdate()
+      }
+    }
+
   override def findById(id: TableId): Option[Table] =
     readOne[Table]("select payload from tables where id = ?", { statement =>
       statement.setString(1, id.value)

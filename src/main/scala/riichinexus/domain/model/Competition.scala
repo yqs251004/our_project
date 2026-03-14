@@ -234,6 +234,24 @@ final case class KnockoutBracketSnapshot(
     summary: String
 ) derives CanEqual
 
+final case class TournamentSettlementEntry(
+    playerId: PlayerId,
+    rank: Int,
+    awardAmount: Long,
+    finalPoints: Int,
+    champion: Boolean = false
+) derives CanEqual
+
+final case class TournamentSettlementSnapshot(
+    tournamentId: TournamentId,
+    stageId: TournamentStageId,
+    generatedAt: Instant,
+    championId: PlayerId,
+    prizePool: Long,
+    entries: Vector[TournamentSettlementEntry],
+    summary: String
+) derives CanEqual
+
 enum TournamentParticipantKind derives CanEqual:
   case Club
   case Player

@@ -198,6 +198,19 @@ private final class ApiHandler(
         sendOption(exchange, app.tournamentService.publishTournament(TournamentId(tournamentId)))
       case ("POST", Vector("tournaments", tournamentId, "start")) =>
         sendOption(exchange, app.tournamentService.startTournament(TournamentId(tournamentId)))
+      case ("POST", Vector("tournaments", tournamentId, "settle")) =>
+        val request = readJsonBody[SettleTournamentRequest](exchange)
+        sendJson(
+          exchange,
+          200,
+          app.tournamentService.settleTournament(
+            tournamentId = TournamentId(tournamentId),
+            finalStageId = request.stageId,
+            prizePool = request.prizePool,
+            payoutRatios = request.payoutRatios,
+            actor = principal(request.operator)
+          )
+        )
       case ("POST", Vector("tournaments", tournamentId, "players", playerId)) =>
         sendOption(
           exchange,

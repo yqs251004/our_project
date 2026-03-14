@@ -204,9 +204,13 @@ final class DefaultTournamentRuleEngine extends TournamentRuleEngine:
     val bracketSize = qualified.size
     val tableByMatchId = tables.flatMap(table => table.bracketMatchId.map(_ -> table)).toMap
     val recordByMatchId = tables.flatMap { table =>
-      table.bracketMatchId.flatMap(matchId =>
-        records.find(_.tableId == table.id).map(matchId -> _)
-      )
+      if table.status == TableStatus.Archived then
+        table.bracketMatchId.flatMap { matchId =>
+          table.matchRecordId.flatMap { recordId =>
+            records.find(record => record.id == recordId && record.tableId == table.id).map(matchId -> _)
+          }
+        }
+      else None
     }.toMap
 
     val firstRoundMatches = bracketSize / 4

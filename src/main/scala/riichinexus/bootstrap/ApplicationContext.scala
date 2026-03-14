@@ -110,6 +110,7 @@ object ApplicationContext:
       appealService = AppealApplicationService(
         appealTicketRepository,
         tableRepository,
+        knockoutStageCoordinator,
         eventBus,
         transactionManager,
         authorizationService
@@ -214,6 +215,7 @@ object ApplicationContext:
       appealService = AppealApplicationService(
         appealTicketRepository,
         tableRepository,
+        knockoutStageCoordinator,
         eventBus,
         transactionManager,
         authorizationService
