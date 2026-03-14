@@ -76,3 +76,17 @@ trait GlobalDictionaryRepository:
   def save(entry: GlobalDictionaryEntry): GlobalDictionaryEntry
   def findByKey(key: String): Option[GlobalDictionaryEntry]
   def findAll(): Vector[GlobalDictionaryEntry]
+
+trait TournamentSettlementRepository:
+  def save(snapshot: TournamentSettlementSnapshot): TournamentSettlementSnapshot
+  def findByTournamentAndStage(
+      tournamentId: TournamentId,
+      stageId: TournamentStageId
+  ): Option[TournamentSettlementSnapshot]
+  def findByTournament(tournamentId: TournamentId): Vector[TournamentSettlementSnapshot]
+  def findAll(): Vector[TournamentSettlementSnapshot]
+
+trait AuditEventRepository:
+  def save(entry: AuditEventEntry): AuditEventEntry
+  def findByAggregate(aggregateType: String, aggregateId: String): Vector[AuditEventEntry]
+  def findAll(): Vector[AuditEventEntry]

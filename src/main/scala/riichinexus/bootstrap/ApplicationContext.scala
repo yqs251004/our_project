@@ -23,6 +23,8 @@ final case class ApplicationContext(
     appealTicketRepository: AppealTicketRepository,
     dashboardRepository: DashboardRepository,
     globalDictionaryRepository: GlobalDictionaryRepository,
+    tournamentSettlementRepository: TournamentSettlementRepository,
+    auditEventRepository: AuditEventRepository,
     eventBus: DomainEventBus
 )
 
@@ -45,6 +47,8 @@ object ApplicationContext:
     val appealTicketRepository = InMemoryAppealTicketRepository()
     val dashboardRepository = InMemoryDashboardRepository()
     val globalDictionaryRepository = InMemoryGlobalDictionaryRepository()
+    val tournamentSettlementRepository = InMemoryTournamentSettlementRepository()
+    val auditEventRepository = InMemoryAuditEventRepository()
 
     val eventBus = InMemoryDomainEventBus()
     val tournamentRuleEngine = DefaultTournamentRuleEngine()
@@ -92,9 +96,12 @@ object ApplicationContext:
         clubRepository,
         tableRepository,
         matchRecordRepository,
+        tournamentSettlementRepository,
+        auditEventRepository,
         BalancedEloSeatingPolicy(),
         tournamentRuleEngine,
         knockoutStageCoordinator,
+        eventBus,
         transactionManager,
         authorizationService
       ),
@@ -111,6 +118,7 @@ object ApplicationContext:
         appealTicketRepository,
         tableRepository,
         knockoutStageCoordinator,
+        auditEventRepository,
         eventBus,
         transactionManager,
         authorizationService
@@ -132,6 +140,8 @@ object ApplicationContext:
       appealTicketRepository = appealTicketRepository,
       dashboardRepository = dashboardRepository,
       globalDictionaryRepository = globalDictionaryRepository,
+      tournamentSettlementRepository = tournamentSettlementRepository,
+      auditEventRepository = auditEventRepository,
       eventBus = eventBus
     )
 
@@ -150,6 +160,8 @@ object ApplicationContext:
     val appealTicketRepository = PostgresAppealTicketRepository(connectionFactory)
     val dashboardRepository = PostgresDashboardRepository(connectionFactory)
     val globalDictionaryRepository = PostgresGlobalDictionaryRepository(connectionFactory)
+    val tournamentSettlementRepository = PostgresTournamentSettlementRepository(connectionFactory)
+    val auditEventRepository = PostgresAuditEventRepository(connectionFactory)
 
     val eventBus = InMemoryDomainEventBus()
     val tournamentRuleEngine = DefaultTournamentRuleEngine()
@@ -197,9 +209,12 @@ object ApplicationContext:
         clubRepository,
         tableRepository,
         matchRecordRepository,
+        tournamentSettlementRepository,
+        auditEventRepository,
         BalancedEloSeatingPolicy(),
         tournamentRuleEngine,
         knockoutStageCoordinator,
+        eventBus,
         transactionManager,
         authorizationService
       ),
@@ -216,6 +231,7 @@ object ApplicationContext:
         appealTicketRepository,
         tableRepository,
         knockoutStageCoordinator,
+        auditEventRepository,
         eventBus,
         transactionManager,
         authorizationService
@@ -237,5 +253,7 @@ object ApplicationContext:
       appealTicketRepository = appealTicketRepository,
       dashboardRepository = dashboardRepository,
       globalDictionaryRepository = globalDictionaryRepository,
+      tournamentSettlementRepository = tournamentSettlementRepository,
+      auditEventRepository = auditEventRepository,
       eventBus = eventBus
     )

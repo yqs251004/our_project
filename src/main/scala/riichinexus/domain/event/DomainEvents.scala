@@ -33,6 +33,11 @@ final case class AppealTicketAdjudicated(
     occurredAt: Instant
 ) extends DomainEvent
 
+final case class TournamentSettlementRecorded(
+    settlement: TournamentSettlementSnapshot,
+    occurredAt: Instant
+) extends DomainEvent
+
 final case class GlobalDictionaryUpdated(
     entry: GlobalDictionaryEntry,
     occurredAt: Instant

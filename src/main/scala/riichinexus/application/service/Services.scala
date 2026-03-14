@@ -397,9 +397,12 @@ final class TournamentApplicationService(
     clubRepository: ClubRepository,
     tableRepository: TableRepository,
     matchRecordRepository: MatchRecordRepository,
+    tournamentSettlementRepository: TournamentSettlementRepository,
+    auditEventRepository: AuditEventRepository,
     seatingPolicy: SeatingPolicy,
     tournamentRuleEngine: TournamentRuleEngine,
     knockoutStageCoordinator: KnockoutStageCoordinator,
+    eventBus: DomainEventBus,
     transactionManager: TransactionManager = NoOpTransactionManager,
     authorizationService: AuthorizationService = NoOpAuthorizationService
 ):
@@ -864,17 +867,46 @@ final class TournamentApplicationService(
       val resolvedPlayers =
         if isKnockoutStage then
           val bracket = stageKnockoutBracket(tournamentId, finalStageId, settledAt)
-          val finalMatch = bracket.rounds.lastOption.flatMap(_.matches.headOption).getOrElse {
-            throw IllegalArgumentException(s"Stage ${finalStageId.value} does not contain a final match")
-          }
-          if !finalMatch.completed then
+          val championshipFinal = bracket.rounds
+            .flatMap(_.matches)
+            .find(matchNode => matchNode.lane == KnockoutLane.Championship && matchNode.nextMatchId.isEmpty)
+            .getOrElse {
+              throw IllegalArgumentException(s"Stage ${finalStageId.value} does not contain a championship final")
+            }
+          if !championshipFinal.completed then
             throw IllegalArgumentException(
-              s"Final knockout match ${finalMatch.id} must be completed before settlement"
+              s"Final knockout match ${championshipFinal.id} must be completed before settlement"
             )
 
-          finalMatch.results.sortBy(_.placement).map(_.playerId) ++
+          val bronzeMatch = bracket.rounds
+            .flatMap(_.matches)
+            .find(_.lane == KnockoutLane.Bronze)
+          val repechageFinal = bracket.rounds
+            .flatMap(_.matches)
+            .filter(_.lane == KnockoutLane.Repechage)
+            .find(_.nextMatchId.isEmpty)
+
+          if finalStage.knockoutRule.exists(_.thirdPlaceMatch) && bronzeMatch.exists(!_.completed) then
+            throw IllegalArgumentException(
+              s"Bronze match must be completed before settlement for stage ${finalStageId.value}"
+            )
+          if finalStage.knockoutRule.exists(_.repechageEnabled) && repechageFinal.exists(!_.completed) then
+            throw IllegalArgumentException(
+              s"Repechage final must be completed before settlement for stage ${finalStageId.value}"
+            )
+
+          val championshipPlayers = championshipFinal.results.sortBy(_.placement).map(_.playerId)
+          val bronzePlayers = bronzeMatch.toVector.flatMap { matchNode =>
+            if !matchNode.completed then Vector.empty
+            else matchNode.results.sortBy(_.placement).map(_.playerId)
+          }
+          val repechagePlayers = repechageFinal.toVector.flatMap { matchNode =>
+            if !matchNode.completed then Vector.empty
+            else matchNode.results.sortBy(_.placement).map(_.playerId)
+          }
+          championshipPlayers ++ bronzePlayers ++ repechagePlayers ++
             ranking.entries.map(_.playerId).filterNot(playerId =>
-              finalMatch.results.exists(_.playerId == playerId)
+              (championshipPlayers ++ bronzePlayers ++ repechagePlayers).contains(playerId)
             )
         else ranking.entries.map(_.playerId)
 
@@ -887,7 +919,8 @@ final class TournamentApplicationService(
       if tournament.stages.forall(_.status == StageStatus.Completed) && tournament.status != TournamentStatus.Completed then
         tournamentRepository.save(tournament.complete)
 
-      TournamentSettlementSnapshot(
+      val snapshot = TournamentSettlementSnapshot(
+        id = IdGenerator.settlementSnapshotId(),
         tournamentId = tournamentId,
         stageId = finalStageId,
         generatedAt = settledAt,
@@ -908,6 +941,26 @@ final class TournamentApplicationService(
         },
         summary = s"Champion ${championId.value} settled from stage ${finalStageId.value} with prize pool $prizePool."
       )
+
+      val savedSnapshot = tournamentSettlementRepository.save(snapshot)
+      auditEventRepository.save(
+        AuditEventEntry(
+          id = IdGenerator.auditEventId(),
+          aggregateType = "tournament",
+          aggregateId = tournamentId.value,
+          eventType = "TournamentSettlementRecorded",
+          occurredAt = settledAt,
+          actorId = actor.playerId,
+          details = Map(
+            "stageId" -> finalStageId.value,
+            "championId" -> championId.value,
+            "prizePool" -> prizePool.toString
+          ),
+          note = Some(savedSnapshot.summary)
+        )
+      )
+      eventBus.publish(TournamentSettlementRecorded(savedSnapshot, settledAt))
+      savedSnapshot
     }
 
   private def resolveParticipants(
@@ -1162,6 +1215,7 @@ final class AppealApplicationService(
     appealTicketRepository: AppealTicketRepository,
     tableRepository: TableRepository,
     knockoutStageCoordinator: KnockoutStageCoordinator,
+    auditEventRepository: AuditEventRepository,
     eventBus: DomainEventBus,
     transactionManager: TransactionManager = NoOpTransactionManager,
     authorizationService: AuthorizationService = NoOpAuthorizationService
@@ -1304,6 +1358,23 @@ final class AppealApplicationService(
               if decision == AppealDecisionType.Escalate then None
               else tableResolution.orElse(Some(AppealTableResolution.RestorePriorState)),
             occurredAt = adjudicatedAt
+          )
+        )
+        auditEventRepository.save(
+          AuditEventEntry(
+            id = IdGenerator.auditEventId(),
+            aggregateType = "appeal",
+            aggregateId = ticketId.value,
+            eventType = "AppealTicketAdjudicated",
+            occurredAt = adjudicatedAt,
+            actorId = actor.playerId,
+            details = Map(
+              "decision" -> decision.toString,
+              "tournamentId" -> ticket.tournamentId.value,
+              "tableId" -> ticket.tableId.value,
+              "tableResolution" -> tableResolution.map(_.toString).getOrElse("none")
+            ),
+            note = note.orElse(Some(verdict))
           )
         )
         adjudicatedTicket

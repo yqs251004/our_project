@@ -37,6 +37,10 @@ object JsonCodecs:
     readwriter[String].bimap[LineupSubmissionId](_.value, LineupSubmissionId(_))
   given ReadWriter[GuestSessionId] =
     readwriter[String].bimap[GuestSessionId](_.value, GuestSessionId(_))
+  given ReadWriter[SettlementSnapshotId] =
+    readwriter[String].bimap[SettlementSnapshotId](_.value, SettlementSnapshotId(_))
+  given ReadWriter[AuditEventId] =
+    readwriter[String].bimap[AuditEventId](_.value, AuditEventId(_))
 
   given ReadWriter[RoleKind] =
     stringEnumReadWriter(RoleKind.valueOf, _.toString)
@@ -63,6 +67,7 @@ object JsonCodecs:
   given ReadWriter[ClubRelation] = macroRW
   given ReadWriter[ClubHonor] = macroRW
   given ReadWriter[GlobalDictionaryEntry] = macroRW
+  given ReadWriter[AuditEventEntry] = macroRW
   given ReadWriter[Club] = macroRW
 
   given ReadWriter[TournamentStatus] =
@@ -76,6 +81,8 @@ object JsonCodecs:
   given ReadWriter[AdvancementRule] = macroRW
   given ReadWriter[SwissRuleConfig] = macroRW
   given ReadWriter[KnockoutRuleConfig] = macroRW
+  given ReadWriter[KnockoutLane] =
+    stringEnumReadWriter(KnockoutLane.valueOf, _.toString)
   given ReadWriter[SeatWind] =
     stringEnumReadWriter(SeatWind.valueOf, _.toString)
   given ReadWriter[StageLineupSeat] = macroRW

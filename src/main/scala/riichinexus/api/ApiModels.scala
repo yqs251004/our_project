@@ -145,6 +145,7 @@ final case class ConfigureStageRulesRequest(
     maxRounds: Option[Int] = None,
     bracketSize: Option[Int] = None,
     thirdPlaceMatch: Option[Boolean] = None,
+    repechageEnabled: Option[Boolean] = None,
     seedingPolicy: Option[String] = None,
     note: Option[String] = None
 ):
@@ -176,7 +177,8 @@ final case class ConfigureStageRulesRequest(
         KnockoutRuleConfig(
           bracketSize = bracketSize,
           thirdPlaceMatch = thirdPlaceMatch.getOrElse(false),
-          seedingPolicy = seedingPolicy.getOrElse("rating")
+          seedingPolicy = seedingPolicy.getOrElse("rating"),
+          repechageEnabled = repechageEnabled.getOrElse(false)
         )
       )
     else None

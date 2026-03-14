@@ -295,6 +295,48 @@ final class PostgresSchemaInitializer(connectionFactory: JdbcConnectionFactory):
       execute(
         connection,
         """
+          |create table if not exists tournament_settlements (
+          |  id text primary key,
+          |  tournament_id text not null,
+          |  stage_id text not null,
+          |  generated_at timestamptz not null,
+          |  payload jsonb not null,
+          |  updated_at timestamptz not null default now()
+          |)
+          |""".stripMargin
+      )
+      execute(connection, "alter table tournament_settlements add column if not exists tournament_id text")
+      execute(connection, "alter table tournament_settlements add column if not exists stage_id text")
+      execute(connection, "alter table tournament_settlements add column if not exists generated_at timestamptz")
+      execute(connection, "alter table tournament_settlements add column if not exists payload jsonb")
+      execute(connection, "alter table tournament_settlements add column if not exists updated_at timestamptz default now()")
+      execute(connection, "create unique index if not exists idx_tournament_settlements_scope on tournament_settlements (tournament_id, stage_id)")
+      execute(connection, "create index if not exists idx_tournament_settlements_generated_at on tournament_settlements (generated_at)")
+      execute(
+        connection,
+        """
+          |create table if not exists audit_events (
+          |  id text primary key,
+          |  aggregate_type text not null,
+          |  aggregate_id text not null,
+          |  event_type text not null,
+          |  occurred_at timestamptz not null,
+          |  actor_id text null,
+          |  payload jsonb not null
+          |)
+          |""".stripMargin
+      )
+      execute(connection, "alter table audit_events add column if not exists aggregate_type text")
+      execute(connection, "alter table audit_events add column if not exists aggregate_id text")
+      execute(connection, "alter table audit_events add column if not exists event_type text")
+      execute(connection, "alter table audit_events add column if not exists occurred_at timestamptz")
+      execute(connection, "alter table audit_events add column if not exists actor_id text")
+      execute(connection, "alter table audit_events add column if not exists payload jsonb")
+      execute(connection, "create index if not exists idx_audit_events_aggregate on audit_events (aggregate_type, aggregate_id)")
+      execute(connection, "create index if not exists idx_audit_events_occurred_at on audit_events (occurred_at)")
+      execute(
+        connection,
+        """
           |insert into schema_version(version, description)
           |values (1, 'Initial RiichiNexus PostgreSQL schema')
           |on conflict (version) do nothing
@@ -305,6 +347,14 @@ final class PostgresSchemaInitializer(connectionFactory: JdbcConnectionFactory):
         """
           |insert into schema_version(version, description)
           |values (2, 'Extended RiichiNexus competition workflow schema')
+          |on conflict (version) do nothing
+          |""".stripMargin
+      )
+      execute(
+        connection,
+        """
+          |insert into schema_version(version, description)
+          |values (3, 'Added settlement persistence and audit event schema')
           |on conflict (version) do nothing
           |""".stripMargin
       )
@@ -810,6 +860,106 @@ final class PostgresGlobalDictionaryRepository(
   override def findAll(): Vector[GlobalDictionaryEntry] =
     readAll[GlobalDictionaryEntry]("select payload from global_dictionary order by key")
 
+final class PostgresTournamentSettlementRepository(
+    protected val connectionFactory: JdbcConnectionFactory
+) extends TournamentSettlementRepository
+    with JdbcRepositorySupport:
+  override def save(snapshot: TournamentSettlementSnapshot): TournamentSettlementSnapshot =
+    val sql =
+      """
+        |insert into tournament_settlements (id, tournament_id, stage_id, generated_at, payload, updated_at)
+        |values (?, ?, ?, ?, cast(? as jsonb), now())
+        |on conflict (id) do update set
+        |  tournament_id = excluded.tournament_id,
+        |  stage_id = excluded.stage_id,
+        |  generated_at = excluded.generated_at,
+        |  payload = excluded.payload,
+        |  updated_at = now()
+        |""".stripMargin
+
+    withConnection { connection =>
+      Using.resource(connection.prepareStatement(sql)) { statement =>
+        statement.setString(1, snapshot.id.value)
+        statement.setString(2, snapshot.tournamentId.value)
+        statement.setString(3, snapshot.stageId.value)
+        statement.setTimestamp(4, Timestamp.from(snapshot.generatedAt))
+        statement.setString(5, writeJson(snapshot))
+        statement.executeUpdate()
+      }
+    }
+
+    snapshot
+
+  override def findByTournamentAndStage(
+      tournamentId: TournamentId,
+      stageId: TournamentStageId
+  ): Option[TournamentSettlementSnapshot] =
+    readOne[TournamentSettlementSnapshot](
+      "select payload from tournament_settlements where tournament_id = ? and stage_id = ?",
+      { statement =>
+        statement.setString(1, tournamentId.value)
+        statement.setString(2, stageId.value)
+      }
+    )
+
+  override def findByTournament(tournamentId: TournamentId): Vector[TournamentSettlementSnapshot] =
+    readAll[TournamentSettlementSnapshot](
+      "select payload from tournament_settlements where tournament_id = ? order by generated_at desc",
+      { statement =>
+        statement.setString(1, tournamentId.value)
+      }
+    )
+
+  override def findAll(): Vector[TournamentSettlementSnapshot] =
+    readAll[TournamentSettlementSnapshot](
+      "select payload from tournament_settlements order by generated_at desc"
+    )
+
+final class PostgresAuditEventRepository(
+    protected val connectionFactory: JdbcConnectionFactory
+) extends AuditEventRepository
+    with JdbcRepositorySupport:
+  override def save(entry: AuditEventEntry): AuditEventEntry =
+    val sql =
+      """
+        |insert into audit_events (id, aggregate_type, aggregate_id, event_type, occurred_at, actor_id, payload)
+        |values (?, ?, ?, ?, ?, ?, cast(? as jsonb))
+        |on conflict (id) do update set
+        |  aggregate_type = excluded.aggregate_type,
+        |  aggregate_id = excluded.aggregate_id,
+        |  event_type = excluded.event_type,
+        |  occurred_at = excluded.occurred_at,
+        |  actor_id = excluded.actor_id,
+        |  payload = excluded.payload
+        |""".stripMargin
+
+    withConnection { connection =>
+      Using.resource(connection.prepareStatement(sql)) { statement =>
+        statement.setString(1, entry.id.value)
+        statement.setString(2, entry.aggregateType)
+        statement.setString(3, entry.aggregateId)
+        statement.setString(4, entry.eventType)
+        statement.setTimestamp(5, Timestamp.from(entry.occurredAt))
+        setNullableString(statement, 6, entry.actorId.map(_.value))
+        statement.setString(7, writeJson(entry))
+        statement.executeUpdate()
+      }
+    }
+
+    entry
+
+  override def findByAggregate(aggregateType: String, aggregateId: String): Vector[AuditEventEntry] =
+    readAll[AuditEventEntry](
+      "select payload from audit_events where aggregate_type = ? and aggregate_id = ? order by occurred_at desc",
+      { statement =>
+        statement.setString(1, aggregateType)
+        statement.setString(2, aggregateId)
+      }
+    )
+
+  override def findAll(): Vector[AuditEventEntry] =
+    readAll[AuditEventEntry]("select payload from audit_events order by occurred_at desc")
+
 final class JdbcTransactionManager(
     connectionFactory: JdbcConnectionFactory
 ) extends TransactionManager:
@@ -827,7 +977,9 @@ final class PostgresAdminService(connectionFactory: JdbcConnectionFactory):
       "paifus",
       "appeal_tickets",
       "dashboards",
-      "global_dictionary"
+      "global_dictionary",
+      "tournament_settlements",
+      "audit_events"
     )
 
   def ping(): Boolean =
@@ -856,6 +1008,8 @@ final class PostgresAdminService(connectionFactory: JdbcConnectionFactory):
   def truncateAll(): Unit =
     connectionFactory.inTransaction {
       connectionFactory.withConnection { connection =>
+        executeAdmin(connection, "truncate table audit_events restart identity")
+        executeAdmin(connection, "truncate table tournament_settlements restart identity")
         executeAdmin(connection, "truncate table global_dictionary restart identity")
         executeAdmin(connection, "truncate table dashboards restart identity")
         executeAdmin(connection, "truncate table appeal_tickets restart identity")

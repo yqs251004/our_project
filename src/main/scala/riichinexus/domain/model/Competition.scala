@@ -62,8 +62,14 @@ final case class SwissRuleConfig(
 final case class KnockoutRuleConfig(
     bracketSize: Option[Int] = None,
     thirdPlaceMatch: Boolean = false,
-    seedingPolicy: String = "rating"
+    seedingPolicy: String = "rating",
+    repechageEnabled: Boolean = false
 ) derives CanEqual
+
+enum KnockoutLane derives CanEqual:
+  case Championship
+  case Bronze
+  case Repechage
 
 enum SeatWind derives CanEqual:
   case East
@@ -206,6 +212,7 @@ final case class KnockoutBracketMatch(
     id: String,
     roundNumber: Int,
     position: Int,
+    lane: KnockoutLane = KnockoutLane.Championship,
     slots: Vector[KnockoutBracketSlot],
     sourceMatchIds: Vector[String] = Vector.empty,
     advancementCount: Int,
@@ -243,6 +250,7 @@ final case class TournamentSettlementEntry(
 ) derives CanEqual
 
 final case class TournamentSettlementSnapshot(
+    id: SettlementSnapshotId,
     tournamentId: TournamentId,
     stageId: TournamentStageId,
     generatedAt: Instant,

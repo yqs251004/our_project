@@ -221,6 +221,7 @@ final class DefaultTournamentRuleEngine extends TournamentRuleEngine:
           id = matchId,
           roundNumber = 1,
           position = index + 1,
+          lane = KnockoutLane.Championship,
           slots = firstRoundSeedIndices(bracketSize, firstRoundMatches, index).map { seed =>
             KnockoutBracketSlot(
               seed = seed,
@@ -241,12 +242,19 @@ final class DefaultTournamentRuleEngine extends TournamentRuleEngine:
     val remainingRounds = buildRemainingRounds(
       currentRound = 2,
       bracketSize = bracketSize,
+      lane = KnockoutLane.Championship,
+      placementResolver = feeder => feeder.results.filter(_.advanced).sortBy(_.placement),
+      sourcePlacements = Vector(1, 2),
       previousRound = firstRound,
       tableByMatchId = tableByMatchId,
       recordByMatchId = recordByMatchId
     )
 
-    val allRounds = KnockoutBracketRound(1, roundLabel(1, bracketSize), firstRound) +: remainingRounds
+    val championshipRounds =
+      KnockoutBracketRound(1, roundLabel(1, bracketSize), firstRound) +: remainingRounds
+    val bronzeRounds = buildBronzeRounds(stage, championshipRounds, tableByMatchId, recordByMatchId)
+    val repechageRounds = buildRepechageRounds(stage, firstRound, tableByMatchId, recordByMatchId)
+    val allRounds = championshipRounds ++ bronzeRounds ++ repechageRounds
 
     KnockoutBracketSnapshot(
       tournamentId = tournament.id,
@@ -330,6 +338,9 @@ final class DefaultTournamentRuleEngine extends TournamentRuleEngine:
   private def buildRemainingRounds(
       currentRound: Int,
       bracketSize: Int,
+      lane: KnockoutLane,
+      placementResolver: KnockoutBracketMatch => Vector[KnockoutBracketResult],
+      sourcePlacements: Vector[Int],
       previousRound: Vector[KnockoutBracketMatch],
       tableByMatchId: Map[String, Table],
       recordByMatchId: Map[String, MatchRecord]
@@ -345,7 +356,7 @@ final class DefaultTournamentRuleEngine extends TournamentRuleEngine:
           val slots =
             if unlocked then
               feederPair.flatMap { feeder =>
-                feeder.results.filter(_.advanced).sortBy(_.placement).map { result =>
+                placementResolver(feeder).map { result =>
                   KnockoutBracketSlot(
                     seed = result.placement,
                     playerId = Some(result.playerId),
@@ -357,7 +368,7 @@ final class DefaultTournamentRuleEngine extends TournamentRuleEngine:
               }.toVector
             else
               feederPair.flatMap { feeder =>
-                Vector(1, 2).map { placement =>
+                sourcePlacements.map { placement =>
                   KnockoutBracketSlot(
                     seed = placement,
                     playerId = None,
@@ -373,6 +384,7 @@ final class DefaultTournamentRuleEngine extends TournamentRuleEngine:
               id = matchId,
               roundNumber = currentRound,
               position = index + 1,
+              lane = lane,
               slots = slots,
               sourceMatchIds = feederPair.map(_.id).toVector,
               advancementCount = advancementCountForRound(currentRound, bracketSize),
@@ -392,10 +404,149 @@ final class DefaultTournamentRuleEngine extends TournamentRuleEngine:
       ) +: buildRemainingRounds(
         currentRound = currentRound + 1,
         bracketSize = bracketSize,
+        lane = lane,
+        placementResolver = placementResolver,
+        sourcePlacements = sourcePlacements,
         previousRound = currentMatches,
         tableByMatchId = tableByMatchId,
         recordByMatchId = recordByMatchId
       )
+
+  private def buildBronzeRounds(
+      stage: TournamentStage,
+      championshipRounds: Vector[KnockoutBracketRound],
+      tableByMatchId: Map[String, Table],
+      recordByMatchId: Map[String, MatchRecord]
+  ): Vector[KnockoutBracketRound] =
+    if !stage.knockoutRule.exists(_.thirdPlaceMatch) then Vector.empty
+    else
+      championshipRounds.lastOption.flatMap(_.matches.headOption) match
+        case Some(_) if championshipRounds.size >= 2 =>
+          val semifinalRound = championshipRounds(championshipRounds.size - 2)
+          if semifinalRound.matches.size != 2 then Vector.empty
+          else
+            val matchId = "bronze-r1-m1"
+            val unlocked = semifinalRound.matches.forall(_.completed)
+            val slots =
+              if unlocked then
+                semifinalRound.matches.flatMap { feeder =>
+                  feeder.results.filterNot(_.advanced).sortBy(_.placement).map { result =>
+                    KnockoutBracketSlot(
+                      seed = result.placement,
+                      playerId = Some(result.playerId),
+                      sourceMatchId = Some(feeder.id),
+                      sourcePlacement = Some(result.placement)
+                    )
+                  }
+                }
+              else
+                semifinalRound.matches.flatMap { feeder =>
+                  Vector(3, 4).map { placement =>
+                    KnockoutBracketSlot(
+                      seed = placement,
+                      playerId = None,
+                      sourceMatchId = Some(feeder.id),
+                      sourcePlacement = Some(placement)
+                    )
+                  }
+                }
+
+            Vector(
+              KnockoutBracketRound(
+                roundNumber = semifinalRound.roundNumber,
+                label = "Bronze Final",
+                matches = Vector(
+                  hydrateMatch(
+                    baseMatch = KnockoutBracketMatch(
+                      id = matchId,
+                      roundNumber = semifinalRound.roundNumber,
+                      position = 1,
+                      lane = KnockoutLane.Bronze,
+                      slots = slots.toVector,
+                      sourceMatchIds = semifinalRound.matches.map(_.id),
+                      advancementCount = 0,
+                      unlocked = unlocked
+                    ),
+                    table = tableByMatchId.get(matchId),
+                    record = recordByMatchId.get(matchId)
+                  )
+                )
+              )
+            )
+        case _ => Vector.empty
+
+  private def buildRepechageRounds(
+      stage: TournamentStage,
+      firstRound: Vector[KnockoutBracketMatch],
+      tableByMatchId: Map[String, Table],
+      recordByMatchId: Map[String, MatchRecord]
+  ): Vector[KnockoutBracketRound] =
+    if !stage.knockoutRule.exists(_.repechageEnabled) then Vector.empty
+    else
+      val initialRepechageMatches = firstRound
+        .grouped(2)
+        .zipWithIndex
+        .map { case (feederPair, index) =>
+          val matchId = s"repechage-r1-m${index + 1}"
+          val unlocked = feederPair.forall(_.completed)
+          val slots =
+            if unlocked then
+              feederPair.flatMap { feeder =>
+                feeder.results.filterNot(_.advanced).sortBy(_.placement).map { result =>
+                  KnockoutBracketSlot(
+                    seed = result.placement,
+                    playerId = Some(result.playerId),
+                    sourceMatchId = Some(feeder.id),
+                    sourcePlacement = Some(result.placement)
+                  )
+                }
+              }
+            else
+              feederPair.flatMap { feeder =>
+                Vector(3, 4).map { placement =>
+                  KnockoutBracketSlot(
+                    seed = placement,
+                    playerId = None,
+                    sourceMatchId = Some(feeder.id),
+                    sourcePlacement = Some(placement)
+                  )
+                }
+              }
+
+          hydrateMatch(
+            baseMatch = KnockoutBracketMatch(
+              id = matchId,
+              roundNumber = 1,
+              position = index + 1,
+              lane = KnockoutLane.Repechage,
+              slots = slots.toVector,
+              sourceMatchIds = feederPair.map(_.id).toVector,
+              advancementCount = if feederPair.size > 1 || firstRound.size > 2 then 2 else 0,
+              nextMatchId = if firstRound.size > 2 then Some(s"repechage-r2-m${(index + 2) / 2}") else None,
+              unlocked = unlocked
+            ),
+            table = tableByMatchId.get(matchId),
+            record = recordByMatchId.get(matchId)
+          )
+        }
+        .toVector
+
+      if initialRepechageMatches.isEmpty then Vector.empty
+      else
+        KnockoutBracketRound(
+          roundNumber = 1,
+          label = "Repechage Round 1",
+          matches = initialRepechageMatches
+        ) +: buildRemainingRounds(
+          currentRound = 2,
+          bracketSize = initialRepechageMatches.size * 4,
+          lane = KnockoutLane.Repechage,
+          placementResolver = feeder => feeder.results.filter(_.advanced).sortBy(_.placement),
+          sourcePlacements = Vector(1, 2),
+          previousRound = initialRepechageMatches,
+          tableByMatchId = tableByMatchId,
+          recordByMatchId = recordByMatchId
+        )
 
   private def hydrateMatch(
       baseMatch: KnockoutBracketMatch,

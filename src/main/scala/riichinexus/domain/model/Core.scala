@@ -14,6 +14,8 @@ final case class AppealTicketId(value: String) derives CanEqual
 final case class MembershipApplicationId(value: String) derives CanEqual
 final case class LineupSubmissionId(value: String) derives CanEqual
 final case class GuestSessionId(value: String) derives CanEqual
+final case class SettlementSnapshotId(value: String) derives CanEqual
+final case class AuditEventId(value: String) derives CanEqual
 
 object IdGenerator:
   private def nextId(prefix: String): String =
@@ -31,6 +33,8 @@ object IdGenerator:
     MembershipApplicationId(nextId("membership"))
   def lineupSubmissionId(): LineupSubmissionId = LineupSubmissionId(nextId("lineup"))
   def guestSessionId(): GuestSessionId = GuestSessionId(nextId("guest"))
+  def settlementSnapshotId(): SettlementSnapshotId = SettlementSnapshotId(nextId("settlement"))
+  def auditEventId(): AuditEventId = AuditEventId(nextId("audit"))
 
 enum RoleKind derives CanEqual:
   case Guest
@@ -340,6 +344,17 @@ final case class GlobalDictionaryEntry(
     value: String,
     updatedAt: Instant,
     updatedBy: PlayerId,
+    note: Option[String] = None
+) derives CanEqual
+
+final case class AuditEventEntry(
+    id: AuditEventId,
+    aggregateType: String,
+    aggregateId: String,
+    eventType: String,
+    occurredAt: Instant,
+    actorId: Option[PlayerId] = None,
+    details: Map[String, String] = Map.empty,
     note: Option[String] = None
 ) derives CanEqual
 

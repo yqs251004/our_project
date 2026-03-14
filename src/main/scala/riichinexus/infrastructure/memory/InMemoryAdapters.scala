@@ -153,6 +153,38 @@ final class InMemoryGlobalDictionaryRepository extends GlobalDictionaryRepositor
   override def findAll(): Vector[GlobalDictionaryEntry] =
     state.values.toVector
 
+final class InMemoryTournamentSettlementRepository extends TournamentSettlementRepository:
+  private val state = mutable.LinkedHashMap.empty[(TournamentId, TournamentStageId), TournamentSettlementSnapshot]
+
+  override def save(snapshot: TournamentSettlementSnapshot): TournamentSettlementSnapshot =
+    state.update((snapshot.tournamentId, snapshot.stageId), snapshot)
+    snapshot
+
+  override def findByTournamentAndStage(
+      tournamentId: TournamentId,
+      stageId: TournamentStageId
+  ): Option[TournamentSettlementSnapshot] =
+    state.get((tournamentId, stageId))
+
+  override def findByTournament(tournamentId: TournamentId): Vector[TournamentSettlementSnapshot] =
+    state.values.filter(_.tournamentId == tournamentId).toVector
+
+  override def findAll(): Vector[TournamentSettlementSnapshot] =
+    state.values.toVector
+
+final class InMemoryAuditEventRepository extends AuditEventRepository:
+  private val state = mutable.ArrayBuffer.empty[AuditEventEntry]
+
+  override def save(entry: AuditEventEntry): AuditEventEntry =
+    state += entry
+    entry
+
+  override def findByAggregate(aggregateType: String, aggregateId: String): Vector[AuditEventEntry] =
+    state.filter(entry => entry.aggregateType == aggregateType && entry.aggregateId == aggregateId).toVector
+
+  override def findAll(): Vector[AuditEventEntry] =
+    state.toVector
+
 final class InMemoryDomainEventBus(
     initialSubscribers: Vector[DomainEventSubscriber] = Vector.empty
 ) extends DomainEventBus:

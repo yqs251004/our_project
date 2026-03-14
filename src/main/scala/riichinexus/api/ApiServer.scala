@@ -183,6 +183,8 @@ private final class ApiHandler(
         sendJson(exchange, 200, app.tournamentRepository.findAll())
       case ("GET", Vector("tournaments", tournamentId)) =>
         sendOption(exchange, app.tournamentRepository.findById(TournamentId(tournamentId)))
+      case ("GET", Vector("tournaments", tournamentId, "settlements")) =>
+        sendJson(exchange, 200, app.tournamentSettlementRepository.findByTournament(TournamentId(tournamentId)))
       case ("POST", Vector("tournaments")) =>
         val request = readJsonBody[CreateTournamentRequest](exchange)
         val tournament = app.tournamentService.createTournament(
@@ -371,6 +373,8 @@ private final class ApiHandler(
         sendOption(exchange, app.paifuRepository.findById(PaifuId(paifuId)))
       case ("GET", Vector("appeals")) =>
         sendJson(exchange, 200, app.appealTicketRepository.findAll())
+      case ("GET", Vector("audits")) =>
+        sendJson(exchange, 200, app.auditEventRepository.findAll())
       case ("POST", Vector("appeals", appealId, "resolve")) =>
         val request = readJsonBody[ResolveAppealRequest](exchange)
         sendOption(
