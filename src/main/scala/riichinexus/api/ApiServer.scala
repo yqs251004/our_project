@@ -159,6 +159,23 @@ private final class ApiHandler(
         )
         sendJson(exchange, 201, player)
 
+      case ("GET", Vector("guest-sessions")) =>
+        val sessions = app.guestSessionRepository.findAll().sortBy(session =>
+          (session.createdAt, session.id.value)
+        )
+        sendPagedJson(exchange, sessions, activeFilters(exchange))
+      case ("POST", Vector("guest-sessions")) =>
+        val request = readOptionalJsonBody[CreateGuestSessionRequest](exchange)
+        sendJson(
+          exchange,
+          201,
+          app.guestSessionService.createSession(
+            displayName = request.flatMap(_.displayName).getOrElse("guest")
+          )
+        )
+      case ("GET", Vector("guest-sessions", sessionId)) =>
+        sendOption(exchange, app.guestSessionService.findSession(GuestSessionId(sessionId)))
+
       case ("GET", Vector("clubs")) =>
         val activeOnly = queryBooleanParam(exchange, "activeOnly")
         val memberIdFilter = queryParam(exchange, "memberId").filter(_.nonEmpty).map(PlayerId(_))
@@ -241,13 +258,16 @@ private final class ApiHandler(
         )
       case ("POST", Vector("clubs", clubId, "applications")) =>
         val request = readJsonBody[ClubMembershipApplicationRequest](exchange)
+        val guestActor = request.session.map(guestPrincipal)
         sendOption(
           exchange,
           app.clubService.applyForMembership(
             clubId = ClubId(clubId),
-            applicantUserId = request.applicantUserId,
-            displayName = request.displayName,
-            message = request.message
+            applicantUserId =
+              request.applicantUserId.orElse(request.session.map(session => s"guest:${session.value}")),
+            displayName = guestActor.map(_.displayName).getOrElse(request.displayName),
+            message = request.message,
+            actor = guestActor.getOrElse(AccessPrincipal.guest())
           )
         )
       case ("POST", Vector("clubs", clubId, "applications", applicationId, "approve")) =>
@@ -928,6 +948,12 @@ private final class ApiHandler(
       .findById(playerId)
       .map(_.asPrincipal)
       .getOrElse(throw NoSuchElementException(s"Player ${playerId.value} was not found"))
+
+  private def guestPrincipal(sessionId: GuestSessionId): AccessPrincipal =
+    app.guestSessionRepository
+      .findById(sessionId)
+      .map(AccessPrincipal.guest)
+      .getOrElse(throw NoSuchElementException(s"Guest session ${sessionId.value} was not found"))
 
   private def queryPrincipal(exchange: HttpExchange): AccessPrincipal =
     val operatorId = queryParam(exchange, "operatorId")

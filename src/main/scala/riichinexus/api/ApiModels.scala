@@ -47,6 +47,10 @@ final case class CreateClubRequest(
   def creator: PlayerId =
     PlayerId(creatorId)
 
+final case class CreateGuestSessionRequest(
+    displayName: Option[String] = None
+)
+
 final case class AddClubMemberRequest(
     playerId: String,
     operatorId: Option[String] = None
@@ -60,8 +64,11 @@ final case class AddClubMemberRequest(
 final case class ClubMembershipApplicationRequest(
     applicantUserId: Option[String],
     displayName: String,
-    message: Option[String] = None
-)
+    message: Option[String] = None,
+    guestSessionId: Option[String] = None
+):
+  def session: Option[GuestSessionId] =
+    guestSessionId.map(GuestSessionId(_))
 
 final case class ApproveClubApplicationRequest(
     playerId: String,
@@ -457,6 +464,7 @@ object ApiModels:
   given [T: Writer]: Writer[PagedResponse[T]] = macroW
   given ReadWriter[CreatePlayerRequest] = macroRW
   given ReadWriter[CreateClubRequest] = macroRW
+  given ReadWriter[CreateGuestSessionRequest] = macroRW
   given ReadWriter[AddClubMemberRequest] = macroRW
   given ReadWriter[ClubMembershipApplicationRequest] = macroRW
   given ReadWriter[ApproveClubApplicationRequest] = macroRW

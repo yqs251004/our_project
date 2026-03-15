@@ -269,6 +269,24 @@ final class PostgresSchemaInitializer(connectionFactory: JdbcConnectionFactory):
       execute(
         connection,
         """
+          |create table if not exists guest_sessions (
+          |  id text primary key,
+          |  created_at timestamptz not null,
+          |  display_name text not null,
+          |  payload jsonb not null,
+          |  updated_at timestamptz not null default now()
+          |)
+          |""".stripMargin
+      )
+      execute(connection, "alter table guest_sessions add column if not exists created_at timestamptz")
+      execute(connection, "alter table guest_sessions add column if not exists display_name text")
+      execute(connection, "alter table guest_sessions add column if not exists payload jsonb")
+      execute(connection, "alter table guest_sessions add column if not exists updated_at timestamptz default now()")
+      execute(connection, "create index if not exists idx_guest_sessions_created_at on guest_sessions (created_at desc)")
+
+      execute(
+        connection,
+        """
           |create table if not exists dashboards (
           |  owner_key text primary key,
           |  owner_type text not null,
@@ -355,6 +373,14 @@ final class PostgresSchemaInitializer(connectionFactory: JdbcConnectionFactory):
         """
           |insert into schema_version(version, description)
           |values (3, 'Added settlement persistence and audit event schema')
+          |on conflict (version) do nothing
+          |""".stripMargin
+      )
+      execute(
+        connection,
+        """
+          |insert into schema_version(version, description)
+          |values (4, 'Added guest session persistence schema')
           |on conflict (version) do nothing
           |""".stripMargin
       )
@@ -466,6 +492,42 @@ final class PostgresPlayerRepository(
 
   override def findAll(): Vector[Player] =
     readAll[Player]("select payload from players order by nickname")
+
+final class PostgresGuestSessionRepository(
+    protected val connectionFactory: JdbcConnectionFactory
+) extends GuestSessionRepository
+    with JdbcRepositorySupport:
+  override def save(session: GuestAccessSession): GuestAccessSession =
+    val sql =
+      """
+        |insert into guest_sessions (id, created_at, display_name, payload, updated_at)
+        |values (?, ?, ?, cast(? as jsonb), now())
+        |on conflict (id) do update set
+        |  created_at = excluded.created_at,
+        |  display_name = excluded.display_name,
+        |  payload = excluded.payload,
+        |  updated_at = now()
+        |""".stripMargin
+
+    withConnection { connection =>
+      Using.resource(connection.prepareStatement(sql)) { statement =>
+        statement.setString(1, session.id.value)
+        statement.setTimestamp(2, Timestamp.from(session.createdAt))
+        statement.setString(3, session.displayName)
+        statement.setString(4, writeJson(session))
+        statement.executeUpdate()
+      }
+    }
+
+    session
+
+  override def findById(id: GuestSessionId): Option[GuestAccessSession] =
+    readOne[GuestAccessSession]("select payload from guest_sessions where id = ?", { statement =>
+      statement.setString(1, id.value)
+    })
+
+  override def findAll(): Vector[GuestAccessSession] =
+    readAll[GuestAccessSession]("select payload from guest_sessions order by created_at desc")
 
 final class PostgresClubRepository(
     protected val connectionFactory: JdbcConnectionFactory
@@ -970,6 +1032,7 @@ final class PostgresAdminService(connectionFactory: JdbcConnectionFactory):
   private val managedTables =
     Vector(
       "players",
+      "guest_sessions",
       "clubs",
       "tournaments",
       "tables",
@@ -1012,6 +1075,7 @@ final class PostgresAdminService(connectionFactory: JdbcConnectionFactory):
         executeAdmin(connection, "truncate table tournament_settlements restart identity")
         executeAdmin(connection, "truncate table global_dictionary restart identity")
         executeAdmin(connection, "truncate table dashboards restart identity")
+        executeAdmin(connection, "truncate table guest_sessions restart identity")
         executeAdmin(connection, "truncate table appeal_tickets restart identity")
         executeAdmin(connection, "truncate table paifus restart identity")
         executeAdmin(connection, "truncate table match_records restart identity")

@@ -11,6 +11,11 @@ trait PlayerRepository:
   def findByClub(clubId: ClubId): Vector[Player] =
     findAll().filter(_.boundClubIds.contains(clubId))
 
+trait GuestSessionRepository:
+  def save(session: GuestAccessSession): GuestAccessSession
+  def findById(id: GuestSessionId): Option[GuestAccessSession]
+  def findAll(): Vector[GuestAccessSession]
+
 trait ClubRepository:
   def save(club: Club): Club
   def findById(id: ClubId): Option[Club]

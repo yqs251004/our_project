@@ -18,6 +18,50 @@ import upickle.default.*
 class ApiServerSuite extends FunSuite:
   private val client = HttpClient.newHttpClient()
 
+  test("guest session endpoints support anonymous club applications") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-15T08:30:00Z")
+
+    val owner = app.playerService.registerPlayer("guest-api-owner", "GuestApiOwner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
+    val club = app.clubService.createClub("Guest API Club", owner.id, now, owner.asPrincipal)
+
+    withServer(app) { baseUrl =>
+      val createResponse = postJson(
+        s"$baseUrl/guest-sessions",
+        write(CreateGuestSessionRequest(Some("AnonymousFan")))
+      )
+      assertEquals(createResponse.statusCode(), 201)
+      val session = read[GuestAccessSession](createResponse.body())
+      assertEquals(session.displayName, "AnonymousFan")
+
+      val detailResponse = get(s"$baseUrl/guest-sessions/${session.id.value}")
+      assertEquals(detailResponse.statusCode(), 200)
+      assertEquals(read[GuestAccessSession](detailResponse.body()).id, session.id)
+
+      val applicationResponse = postJson(
+        s"$baseUrl/clubs/${club.id.value}/applications",
+        write(
+          ClubMembershipApplicationRequest(
+            applicantUserId = None,
+            displayName = "ignored-by-session",
+            message = Some("guest route test"),
+            guestSessionId = Some(session.id.value)
+          )
+        )
+      )
+      assertEquals(applicationResponse.statusCode(), 200)
+      val application = read[ClubMembershipApplication](applicationResponse.body())
+      assertEquals(application.displayName, "AnonymousFan")
+      assertEquals(application.applicantUserId, Some(s"guest:${session.id.value}"))
+
+      val listResponse = get(s"$baseUrl/clubs/${club.id.value}/applications")
+      assertEquals(listResponse.statusCode(), 200)
+      val applications = readPage[ClubMembershipApplication](listResponse.body())
+      assertEquals(applications.total, 1)
+      assertEquals(applications.items.head.id, application.id)
+    }
+  }
+
   test("club applications endpoint returns submitted applications") {
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-15T08:00:00Z")

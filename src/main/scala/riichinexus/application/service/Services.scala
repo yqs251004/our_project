@@ -173,6 +173,30 @@ final class PlayerApplicationService(
       savedPlayer
     }
 
+final class GuestSessionApplicationService(
+    guestSessionRepository: GuestSessionRepository,
+    transactionManager: TransactionManager = NoOpTransactionManager
+):
+  def createSession(
+      displayName: String = "guest",
+      createdAt: Instant = Instant.now()
+  ): GuestAccessSession =
+    transactionManager.inTransaction {
+      val normalizedDisplayName =
+        Option(displayName).map(_.trim).filter(_.nonEmpty).getOrElse("guest")
+
+      guestSessionRepository.save(
+        GuestAccessSession(
+          id = IdGenerator.guestSessionId(),
+          createdAt = createdAt,
+          displayName = normalizedDisplayName
+        )
+      )
+    }
+
+  def findSession(sessionId: GuestSessionId): Option[GuestAccessSession] =
+    guestSessionRepository.findById(sessionId)
+
 final class PublicQueryService(
     tournamentRepository: TournamentRepository,
     tableRepository: TableRepository,

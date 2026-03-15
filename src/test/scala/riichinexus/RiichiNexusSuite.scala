@@ -8,6 +8,32 @@ import riichinexus.bootstrap.ApplicationContext
 import riichinexus.domain.model.*
 
 class RiichiNexusSuite extends FunSuite:
+  test("guest access sessions can submit club applications with anonymous identity") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-15T17:00:00Z")
+
+    val owner = app.playerService.registerPlayer("guest-owner", "GuestOwner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
+    val club = app.clubService.createClub("Guest Friendly Club", owner.id, now, owner.asPrincipal)
+    val session = app.guestSessionService.createSession("LobbyVisitor", now.plusSeconds(30))
+
+    val application = app.clubService.applyForMembership(
+      clubId = club.id,
+      applicantUserId = Some(s"guest:${session.id.value}"),
+      displayName = session.displayName,
+      message = Some("watching first, joining soon"),
+      submittedAt = now.plusSeconds(60),
+      actor = AccessPrincipal.guest(session)
+    ).getOrElse(fail("guest application missing"))
+
+    assertEquals(app.guestSessionService.findSession(session.id), Some(session))
+    assertEquals(application.displayName, "LobbyVisitor")
+    assertEquals(application.applicantUserId, Some(s"guest:${session.id.value}"))
+    assertEquals(
+      app.clubRepository.findById(club.id).flatMap(_.membershipApplications.headOption).map(_.id),
+      Some(application.id)
+    )
+  }
+
   test("scheduling a stage creates one four-player table") {
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-13T09:00:00Z")

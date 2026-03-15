@@ -22,6 +22,19 @@ final class InMemoryPlayerRepository extends PlayerRepository:
   override def findAll(): Vector[Player] =
     state.values.toVector
 
+final class InMemoryGuestSessionRepository extends GuestSessionRepository:
+  private val state = mutable.LinkedHashMap.empty[GuestSessionId, GuestAccessSession]
+
+  override def save(session: GuestAccessSession): GuestAccessSession =
+    state.update(session.id, session)
+    session
+
+  override def findById(id: GuestSessionId): Option[GuestAccessSession] =
+    state.get(id)
+
+  override def findAll(): Vector[GuestAccessSession] =
+    state.values.toVector
+
 final class InMemoryClubRepository extends ClubRepository:
   private val state = mutable.LinkedHashMap.empty[ClubId, Club]
 

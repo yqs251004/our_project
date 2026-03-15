@@ -44,7 +44,33 @@ curl "http://localhost:8080/players?clubId=club-123&status=Active&nickname=alice
 curl "http://localhost:8080/clubs?activeOnly=true&memberId=player-123&limit=10"
 ```
 
-## 4. Query tournament tables, records and appeals
+## 4. Create a guest session and submit a club application anonymously
+
+Create a reusable guest session for an unauthenticated visitor:
+
+```bash
+curl -X POST http://localhost:8080/guest-sessions   -H "Content-Type: application/json"   -d '{
+    "displayName": "AnonymousFan"
+  }'
+```
+
+Use that session as the anonymous identity when submitting a club application:
+
+```bash
+curl -X POST http://localhost:8080/clubs/club-123/applications   -H "Content-Type: application/json"   -d '{
+    "guestSessionId": "guest-123",
+    "displayName": "ignored-when-session-exists",
+    "message": "I would like to join as a visitor first"
+  }'
+```
+
+Query the created guest session later:
+
+```bash
+curl http://localhost:8080/guest-sessions/guest-123
+```
+
+## 5. Query tournament tables, records and appeals
 
 ```bash
 curl "http://localhost:8080/tournaments/tournament-123/stages/stage-swiss-1/tables?status=WaitingPreparation&playerId=player-123&limit=8"
@@ -132,7 +158,7 @@ curl "http://localhost:8080/records?tournamentId=tournament-123&stageId=stage-sw
 curl "http://localhost:8080/appeals?tournamentId=tournament-123&status=Open&tableId=table-123&limit=20"
 ```
 
-## 5. Club treasury, point pool and rank tree operations
+## 6. Club treasury, point pool and rank tree operations
 
 Adjust a club treasury balance:
 
@@ -199,7 +225,7 @@ curl -X POST http://localhost:8080/clubs/club-123/relations   -H "Content-Type: 
   }'
 ```
 
-## 6. Query dictionary and audit trail
+## 7. Query dictionary and audit trail
 
 Single dictionary key lookup:
 
