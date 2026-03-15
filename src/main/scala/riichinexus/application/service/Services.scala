@@ -8,8 +8,89 @@ import riichinexus.domain.event.*
 import riichinexus.domain.model.*
 import riichinexus.domain.service.*
 
+private object ProjectionSupport:
+  def ensurePlayerDashboard(
+      playerId: PlayerId,
+      dashboardRepository: DashboardRepository,
+      at: Instant
+  ): Unit =
+    val owner = DashboardOwner.Player(playerId)
+    if dashboardRepository.findByOwner(owner).isEmpty then
+      dashboardRepository.save(Dashboard.empty(owner, at))
+
+  def refreshClubProjection(
+      club: Club,
+      playerRepository: PlayerRepository,
+      dashboardRepository: DashboardRepository,
+      at: Instant
+  ): Club =
+    val refreshedClub = recalculateClubPowerRating(club, playerRepository)
+    dashboardRepository.save(buildClubDashboard(refreshedClub, dashboardRepository, at))
+    refreshedClub
+
+  private def recalculateClubPowerRating(
+      club: Club,
+      playerRepository: PlayerRepository
+  ): Club =
+    val memberElos = club.members.flatMap(memberId => playerRepository.findById(memberId).map(_.elo))
+    val averageElo =
+      if memberElos.isEmpty then 0.0 else memberElos.sum.toDouble / memberElos.size.toDouble
+    val powerRating = averageElo + club.totalPoints.toDouble / 1000.0
+    club.updatePowerRating(round2(powerRating))
+
+  private def buildClubDashboard(
+      club: Club,
+      dashboardRepository: DashboardRepository,
+      at: Instant
+  ): Dashboard =
+    val memberDashboards = club.members.flatMap { playerId =>
+      dashboardRepository.findByOwner(DashboardOwner.Player(playerId))
+    }
+
+    if memberDashboards.isEmpty then Dashboard.empty(DashboardOwner.Club(club.id), at)
+    else
+      Dashboard(
+        owner = DashboardOwner.Club(club.id),
+        sampleSize = memberDashboards.map(_.sampleSize).sum,
+        dealInRate = weightedAverage(memberDashboards, _.dealInRate),
+        winRate = weightedAverage(memberDashboards, _.winRate),
+        averageWinPoints = weightedAverage(memberDashboards, _.averageWinPoints),
+        riichiRate = weightedAverage(memberDashboards, _.riichiRate),
+        averagePlacement = weightedAverage(memberDashboards, _.averagePlacement),
+        topFinishRate = weightedAverage(memberDashboards, _.topFinishRate),
+        defenseStability = weightedAverage(memberDashboards, _.defenseStability),
+        ukeireExpectation = weightedAverage(memberDashboards, _.ukeireExpectation),
+        shantenTrajectory = averageTrajectory(memberDashboards.map(_.shantenTrajectory)),
+        lastUpdatedAt = at
+      )
+
+  private def weightedAverage(
+      dashboards: Vector[Dashboard],
+      selector: Dashboard => Double
+  ): Double =
+    val totalWeight = dashboards.map(_.sampleSize).sum
+    if totalWeight <= 0 then 0.0
+    else
+      round2(
+        dashboards.map(dashboard => selector(dashboard) * dashboard.sampleSize).sum /
+          totalWeight.toDouble
+      )
+
+  private def averageTrajectory(trajectories: Vector[Vector[Double]]): Vector[Double] =
+    val maxLength = trajectories.map(_.size).foldLeft(0)(math.max)
+
+    (0 until maxLength).toVector.flatMap { index =>
+      val samples = trajectories.flatMap(_.lift(index))
+      if samples.isEmpty then None
+      else Some(round2(samples.sum / samples.size.toDouble))
+    }
+
+  private def round2(value: Double): Double =
+    BigDecimal(value).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble
+
 final class PlayerApplicationService(
     playerRepository: PlayerRepository,
+    dashboardRepository: DashboardRepository,
     transactionManager: TransactionManager = NoOpTransactionManager
 ):
   def registerPlayer(
@@ -37,7 +118,9 @@ final class PlayerApplicationService(
             roleGrants = Vector(RoleGrant.registered(registeredAt))
           )
 
-      playerRepository.save(player)
+      val savedPlayer = playerRepository.save(player)
+      ProjectionSupport.ensurePlayerDashboard(savedPlayer.id, dashboardRepository, registeredAt)
+      savedPlayer
     }
 
 final class PublicQueryService(
@@ -121,6 +204,7 @@ final class PublicQueryService(
 final class ClubApplicationService(
     clubRepository: ClubRepository,
     playerRepository: PlayerRepository,
+    dashboardRepository: DashboardRepository,
     transactionManager: TransactionManager = NoOpTransactionManager,
     authorizationService: AuthorizationService = NoOpAuthorizationService
 ):
@@ -162,8 +246,11 @@ final class ClubApplicationService(
         .joinClub(club.id)
         .grantRole(RoleGrant.clubAdmin(club.id, createdAt, actor.playerId))
 
-      playerRepository.save(updatedCreator)
-      clubRepository.save(club)
+      val savedCreator = playerRepository.save(updatedCreator)
+      ProjectionSupport.ensurePlayerDashboard(savedCreator.id, dashboardRepository, createdAt)
+      clubRepository.save(
+        ProjectionSupport.refreshClubProjection(club, playerRepository, dashboardRepository, createdAt)
+      )
     }
 
   def addMember(
@@ -184,8 +271,16 @@ final class ClubApplicationService(
           clubId = Some(clubId)
         )
 
-        playerRepository.save(player.joinClub(clubId))
-        clubRepository.save(club.addMember(playerId))
+        val savedPlayer = playerRepository.save(player.joinClub(clubId))
+        ProjectionSupport.ensurePlayerDashboard(savedPlayer.id, dashboardRepository, Instant.now())
+        clubRepository.save(
+          ProjectionSupport.refreshClubProjection(
+            club.addMember(playerId),
+            playerRepository,
+            dashboardRepository,
+            Instant.now()
+          )
+        )
     }
 
   def applyForMembership(
@@ -281,8 +376,16 @@ final class ClubApplicationService(
           .reviewApplication(applicationId, _.approve(reviewer, approvedAt, note))
           .addMember(playerId)
 
-        playerRepository.save(player.joinClub(clubId))
-        clubRepository.save(updatedClub)
+        val savedPlayer = playerRepository.save(player.joinClub(clubId))
+        ProjectionSupport.ensurePlayerDashboard(savedPlayer.id, dashboardRepository, approvedAt)
+        clubRepository.save(
+          ProjectionSupport.refreshClubProjection(
+            updatedClub,
+            playerRepository,
+            dashboardRepository,
+            approvedAt
+          )
+        )
     }
 
   def rejectMembershipApplication(
@@ -412,7 +515,14 @@ final class ClubApplicationService(
             .leaveClub(clubId)
             .revokeClubAdmin(clubId)
         )
-        clubRepository.save(club.removeMember(playerId))
+        clubRepository.save(
+          ProjectionSupport.refreshClubProjection(
+            club.removeMember(playerId),
+            playerRepository,
+            dashboardRepository,
+            Instant.now()
+          )
+        )
     }
 
   def setInternalTitle(
@@ -722,7 +832,20 @@ final class TournamentApplicationService(
             RoleGrant.tournamentAdmin(tournamentId, grantedAt, actor.playerId)
           )
         )
-        tournamentRepository.save(tournament.assignAdmin(playerId))
+        val updatedTournament = tournamentRepository.save(tournament.assignAdmin(playerId))
+        auditEventRepository.save(
+          AuditEventEntry(
+            id = IdGenerator.auditEventId(),
+            aggregateType = "tournament",
+            aggregateId = tournamentId.value,
+            eventType = "TournamentAdminAssigned",
+            occurredAt = grantedAt,
+            actorId = actor.playerId,
+            details = Map("playerId" -> playerId.value),
+            note = Some(s"Granted tournament admin to ${playerId.value}")
+          )
+        )
+        updatedTournament
     }
 
   def revokeTournamentAdmin(
@@ -752,9 +875,22 @@ final class TournamentApplicationService(
           )
 
         playerRepository.save(player.revokeTournamentAdmin(tournamentId))
-        tournamentRepository.save(
+        val updatedTournament = tournamentRepository.save(
           tournament.copy(admins = tournament.admins.filterNot(_ == playerId))
         )
+        auditEventRepository.save(
+          AuditEventEntry(
+            id = IdGenerator.auditEventId(),
+            aggregateType = "tournament",
+            aggregateId = tournamentId.value,
+            eventType = "TournamentAdminRevoked",
+            occurredAt = Instant.now(),
+            actorId = actor.playerId,
+            details = Map("playerId" -> playerId.value),
+            note = Some(s"Revoked tournament admin from ${playerId.value}")
+          )
+        )
+        updatedTournament
     }
 
   def addStage(
@@ -1183,11 +1319,15 @@ final class TournamentApplicationService(
     val stagePlayerIds = stage.lineupSubmissions.flatMap(_.activePlayerIds).distinct
 
     val fallbackPlayerIds =
-      val clubMembers = tournament.participatingClubs.flatMap { clubId =>
+      val registeredClubMembers = tournament.participatingClubs.flatMap { clubId =>
         clubRepository.findById(clubId).toVector.flatMap(_.members)
       }
+      val whitelistedPlayers = tournament.whitelist.flatMap(_.playerId)
+      val whitelistedClubMembers = tournament.whitelist.flatMap { entry =>
+        entry.clubId.toVector.flatMap(clubId => clubRepository.findById(clubId).toVector.flatMap(_.members))
+      }
 
-      (tournament.participatingPlayers ++ clubMembers).distinct
+      (tournament.participatingPlayers ++ whitelistedPlayers ++ registeredClubMembers ++ whitelistedClubMembers).distinct
 
     val targetPlayerIds =
       if stagePlayerIds.nonEmpty then stagePlayerIds else fallbackPlayerIds
@@ -1598,6 +1738,7 @@ final class SuperAdminService(
     playerRepository: PlayerRepository,
     clubRepository: ClubRepository,
     globalDictionaryRepository: GlobalDictionaryRepository,
+    auditEventRepository: AuditEventRepository,
     eventBus: DomainEventBus,
     transactionManager: TransactionManager = NoOpTransactionManager,
     authorizationService: AuthorizationService = NoOpAuthorizationService
@@ -1612,7 +1753,21 @@ final class SuperAdminService(
         throw AuthorizationFailure("Only an existing super admin can grant super admin access")
 
       playerRepository.findById(playerId).map { player =>
-        playerRepository.save(player.grantRole(RoleGrant.superAdmin(grantedAt, actor.playerId)))
+        val updatedPlayer =
+          playerRepository.save(player.grantRole(RoleGrant.superAdmin(grantedAt, actor.playerId)))
+        auditEventRepository.save(
+          AuditEventEntry(
+            id = IdGenerator.auditEventId(),
+            aggregateType = "player",
+            aggregateId = playerId.value,
+            eventType = "SuperAdminGranted",
+            occurredAt = grantedAt,
+            actorId = actor.playerId,
+            details = Map("playerId" -> playerId.value),
+            note = Some(s"Granted super admin access to ${playerId.value}")
+          )
+        )
+        updatedPlayer
       }
     }
 
@@ -1635,6 +1790,18 @@ final class SuperAdminService(
       )
 
       val saved = globalDictionaryRepository.save(entry)
+      auditEventRepository.save(
+        AuditEventEntry(
+          id = IdGenerator.auditEventId(),
+          aggregateType = "dictionary",
+          aggregateId = key,
+          eventType = "GlobalDictionaryUpserted",
+          occurredAt = updatedAt,
+          actorId = Some(entry.updatedBy),
+          details = Map("key" -> key, "value" -> value),
+          note = note
+        )
+      )
       eventBus.publish(GlobalDictionaryUpdated(saved, updatedAt))
       saved
     }
@@ -1651,6 +1818,18 @@ final class SuperAdminService(
 
       playerRepository.findById(playerId).map { player =>
         val banned = playerRepository.save(player.ban(reason))
+        auditEventRepository.save(
+          AuditEventEntry(
+            id = IdGenerator.auditEventId(),
+            aggregateType = "player",
+            aggregateId = playerId.value,
+            eventType = "PlayerBanned",
+            occurredAt = at,
+            actorId = actor.playerId,
+            details = Map("reason" -> reason),
+            note = Some(reason)
+          )
+        )
         eventBus.publish(PlayerBanned(playerId, reason, at))
         banned
       }
@@ -1687,6 +1866,18 @@ final class SuperAdminService(
 
         val dissolved = clubRepository.save(
           club.dissolve(actor.playerId.getOrElse(club.creator), at)
+        )
+        auditEventRepository.save(
+          AuditEventEntry(
+            id = IdGenerator.auditEventId(),
+            aggregateType = "club",
+            aggregateId = clubId.value,
+            eventType = "ClubDissolved",
+            occurredAt = at,
+            actorId = actor.playerId,
+            details = Map("memberCount" -> club.members.size.toString),
+            note = Some(s"Club ${clubId.value} dissolved")
+          )
         )
         eventBus.publish(ClubDissolved(clubId, at))
         dissolved

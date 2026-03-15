@@ -23,6 +23,7 @@ final class BalancedEloSeatingPolicy extends SeatingPolicy:
     require(players.nonEmpty, s"Stage ${stage.name} needs players before scheduling")
     require(players.size % 4 == 0, "Player count must be divisible by 4 to schedule riichi tables")
     val representedClubByPlayer = representativeClubMap(stage)
+    val preferredWindByPlayer = preferredWindMap(stage)
 
     val sortedPlayers = players
       .sortBy(player =>
@@ -45,13 +46,7 @@ final class BalancedEloSeatingPolicy extends SeatingPolicy:
         val rotatedGroup = rotate(orderSeatsWithinTable(group, opponentCounts), index % group.size)
         PlannedTable(
           tableNo = index + 1,
-          seats = SeatWind.all.zip(rotatedGroup).map { case (seat, player) =>
-            TableSeat(
-              seat,
-              player.id,
-              clubId = representedClubByPlayer.get(player.id).orElse(player.clubId)
-            )
-          }
+          seats = assignSeats(rotatedGroup, preferredWindByPlayer, representedClubByPlayer)
         )
       }
       .toVector
@@ -188,6 +183,46 @@ final class BalancedEloSeatingPolicy extends SeatingPolicy:
     )
 
     pairings.toMap
+
+  private def preferredWindMap(stage: TournamentStage): Map[PlayerId, SeatWind] =
+    stage.lineupSubmissions
+      .flatMap(_.seats)
+      .flatMap(seat => seat.preferredWind.map(_ -> seat.playerId))
+      .groupBy(_._2)
+      .map { case (playerId, preferences) =>
+        val preferredWinds = preferences.map(_._1).distinct
+        require(
+          preferredWinds.size <= 1,
+          s"Player ${playerId.value} cannot declare multiple preferred winds in the same stage"
+        )
+        playerId -> preferredWinds.head
+      }
+
+  private def assignSeats(
+      players: Vector[Player],
+      preferredWindByPlayer: Map[PlayerId, SeatWind],
+      representedClubByPlayer: Map[PlayerId, ClubId]
+  ): Vector[TableSeat] =
+    val baselineOrder = players.zipWithIndex.map { case (player, index) => player.id -> index }.toMap
+    val chosenPlayers =
+      players.permutations.minBy { candidate =>
+        val preferencePenalty = SeatWind.all.zip(candidate).count { case (seat, player) =>
+          preferredWindByPlayer.get(player.id).exists(_ != seat)
+        }
+        val displacementPenalty = candidate.zipWithIndex.map { case (player, index) =>
+          math.abs(index - baselineOrder(player.id))
+        }.sum
+        val tieBreaker = candidate.map(_.nickname).mkString("|")
+        (preferencePenalty, displacementPenalty, tieBreaker)
+      }.toVector
+
+    SeatWind.all.zip(chosenPlayers).map { case (seat, player) =>
+      TableSeat(
+        seat,
+        player.id,
+        clubId = representedClubByPlayer.get(player.id).orElse(player.clubId)
+      )
+    }
 
   private def rotate[A](values: Vector[A], shift: Int): Vector[A] =
     if values.isEmpty then values

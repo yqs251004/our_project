@@ -140,11 +140,15 @@ final class KnockoutStageCoordinator(
     val stagePlayerIds = stage.lineupSubmissions.flatMap(_.activePlayerIds).distinct
 
     val fallbackPlayerIds =
-      val clubMembers = tournament.participatingClubs.flatMap { clubId =>
+      val registeredClubMembers = tournament.participatingClubs.flatMap { clubId =>
         clubRepository.findById(clubId).toVector.flatMap(_.members)
       }
+      val whitelistedPlayers = tournament.whitelist.flatMap(_.playerId)
+      val whitelistedClubMembers = tournament.whitelist.flatMap { entry =>
+        entry.clubId.toVector.flatMap(clubId => clubRepository.findById(clubId).toVector.flatMap(_.members))
+      }
 
-      (tournament.participatingPlayers ++ clubMembers).distinct
+      (tournament.participatingPlayers ++ whitelistedPlayers ++ registeredClubMembers ++ whitelistedClubMembers).distinct
 
     val targetPlayerIds =
       if stagePlayerIds.nonEmpty then stagePlayerIds else fallbackPlayerIds

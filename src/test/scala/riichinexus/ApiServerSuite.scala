@@ -193,8 +193,6 @@ class ApiServerSuite extends FunSuite:
 
     val club = app.clubService.createClub("Dashboard Club", owner.id, now, owner.asPrincipal)
     app.clubService.addMember(club.id, member.id, principalFor(app, owner.id))
-    app.dashboardRepository.save(Dashboard.empty(DashboardOwner.Player(owner.id), now))
-    app.dashboardRepository.save(Dashboard.empty(DashboardOwner.Club(club.id), now))
 
     withServer(app) { baseUrl =>
       val forbiddenPlayer = get(
@@ -232,18 +230,8 @@ class ApiServerSuite extends FunSuite:
       key = "rank.formula",
       value = "uma+oka-v2",
       actor = adminPrincipal,
-      note = Some("season 2")
-    )
-    val auditEntry = app.auditEventRepository.save(
-      AuditEventEntry(
-        id = IdGenerator.auditEventId(),
-        aggregateType = "dictionary",
-        aggregateId = dictionaryEntry.key,
-        eventType = "ManualReview",
-        occurredAt = now,
-        actorId = Some(admin.id),
-        details = Map("source" -> "test")
-      )
+      note = Some("season 2"),
+      updatedAt = now
     )
 
     withServer(app) { baseUrl =>
@@ -258,11 +246,13 @@ class ApiServerSuite extends FunSuite:
       assertEquals(forbiddenAudit.statusCode(), 403)
 
       val auditResponse = get(
-        s"$baseUrl/audits/dictionary/${dictionaryEntry.key}?operatorId=${admin.id.value}"
+        s"$baseUrl/audits/dictionary/${dictionaryEntry.key}?operatorId=${admin.id.value}&eventType=GlobalDictionaryUpserted"
       )
       assertEquals(auditResponse.statusCode(), 200)
       val auditEntries = readPage[AuditEventEntry](auditResponse.body())
-      assertEquals(auditEntries.items.map(_.id), Vector(auditEntry.id))
+      assertEquals(auditEntries.total, 1)
+      assertEquals(auditEntries.items.head.aggregateId, dictionaryEntry.key)
+      assertEquals(auditEntries.items.head.eventType, "GlobalDictionaryUpserted")
     }
   }
 
@@ -412,38 +402,20 @@ class ApiServerSuite extends FunSuite:
     val rankFormula = app.superAdminService.upsertDictionary(
       key = "rank.formula",
       value = "uma+oka-v3",
-      actor = adminPrincipal
+      actor = adminPrincipal,
+      updatedAt = now
     )
     app.superAdminService.upsertDictionary(
       key = "rank.scale",
       value = "aggressive",
-      actor = adminPrincipal
+      actor = adminPrincipal,
+      updatedAt = now.plusSeconds(60)
     )
     app.superAdminService.upsertDictionary(
       key = "stage.pool",
       value = "4",
-      actor = adminPrincipal
-    )
-
-    val auditOne = app.auditEventRepository.save(
-      AuditEventEntry(
-        id = IdGenerator.auditEventId(),
-        aggregateType = "dictionary",
-        aggregateId = rankFormula.key,
-        eventType = "FormulaUpdated",
-        occurredAt = now,
-        actorId = Some(admin.id)
-      )
-    )
-    app.auditEventRepository.save(
-      AuditEventEntry(
-        id = IdGenerator.auditEventId(),
-        aggregateType = "club",
-        aggregateId = "club-x",
-        eventType = "MembershipReviewed",
-        occurredAt = now.plusSeconds(60),
-        actorId = Some(admin.id)
-      )
+      actor = adminPrincipal,
+      updatedAt = now.plusSeconds(120)
     )
 
     withServer(app) { baseUrl =>
@@ -459,8 +431,9 @@ class ApiServerSuite extends FunSuite:
       )
       assertEquals(auditResponse.statusCode(), 200)
       val auditPage = readPage[AuditEventEntry](auditResponse.body())
-      assertEquals(auditPage.total, 1)
-      assertEquals(auditPage.items.map(_.id), Vector(auditOne.id))
+      assertEquals(auditPage.total, 3)
+      assertEquals(auditPage.items.head.aggregateId, rankFormula.key)
+      assertEquals(auditPage.items.head.eventType, "GlobalDictionaryUpserted")
       assertEquals(auditPage.appliedFilters("aggregateType"), "dictionary")
     }
   }

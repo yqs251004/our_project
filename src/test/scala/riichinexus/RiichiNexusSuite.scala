@@ -215,6 +215,82 @@ class RiichiNexusSuite extends FunSuite:
     assertEquals(dashboard.map(_.sampleSize), Some(1))
   }
 
+  test("registering players and managing club rosters initializes dashboards and power rating") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-13T12:00:00Z")
+
+    val owner = app.playerService.registerPlayer("proj-owner", "Owner", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1800)
+    val member = app.playerService.registerPlayer("proj-member", "Member", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
+
+    assertEquals(app.dashboardRepository.findByOwner(DashboardOwner.Player(owner.id)).map(_.sampleSize), Some(0))
+    assertEquals(app.dashboardRepository.findByOwner(DashboardOwner.Player(member.id)).map(_.sampleSize), Some(0))
+
+    val club = app.clubService.createClub("Projection Club", owner.id, now, owner.asPrincipal)
+    val createdClub = app.clubRepository.findById(club.id).getOrElse(fail("club missing after creation"))
+    assertEquals(createdClub.powerRating, 1800.0)
+    assertEquals(app.dashboardRepository.findByOwner(DashboardOwner.Club(club.id)).map(_.sampleSize), Some(0))
+
+    app.clubService.addMember(club.id, member.id, principalFor(app, owner.id))
+    val expandedClub = app.clubRepository.findById(club.id).getOrElse(fail("club missing after add member"))
+    assertEquals(expandedClub.powerRating, 1700.0)
+
+    app.clubService.removeMember(club.id, member.id, principalFor(app, owner.id))
+    val reducedClub = app.clubRepository.findById(club.id).getOrElse(fail("club missing after remove member"))
+    assertEquals(reducedClub.powerRating, 1800.0)
+  }
+
+  test("stage lineup preferred winds influence scheduled seats") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-13T13:00:00Z")
+
+    val owner = app.playerService.registerPlayer("wind-owner", "Owner", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1800)
+    val south = app.playerService.registerPlayer("wind-south", "South", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1700)
+    val west = app.playerService.registerPlayer("wind-west", "West", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
+    val north = app.playerService.registerPlayer("wind-north", "North", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1500)
+
+    val club = app.clubService.createClub("Preferred Wind Club", owner.id, now, owner.asPrincipal)
+    Vector(south, west, north).foreach(player =>
+      app.clubService.addMember(club.id, player.id, principalFor(app, owner.id))
+    )
+
+    val stage = TournamentStage(IdGenerator.stageId(), "Preferred Wind Stage", StageFormat.Swiss, 1, 1)
+    val tournament = app.tournamentService.createTournament(
+      "Preferred Wind Cup",
+      "QA",
+      now,
+      now.plusSeconds(7200),
+      Vector(stage)
+    )
+
+    app.tournamentService.registerClub(tournament.id, club.id)
+    app.tournamentService.publishTournament(tournament.id)
+    app.tournamentService.submitLineup(
+      tournament.id,
+      stage.id,
+      StageLineupSubmission(
+        id = IdGenerator.lineupSubmissionId(),
+        clubId = club.id,
+        submittedBy = owner.id,
+        submittedAt = now,
+        seats = Vector(
+          StageLineupSeat(owner.id, preferredWind = Some(SeatWind.East)),
+          StageLineupSeat(south.id, preferredWind = Some(SeatWind.South)),
+          StageLineupSeat(west.id, preferredWind = Some(SeatWind.West)),
+          StageLineupSeat(north.id, preferredWind = Some(SeatWind.North))
+        )
+      ),
+      principalFor(app, owner.id)
+    )
+
+    val table = app.tournamentService.scheduleStageTables(tournament.id, stage.id).head
+    val seatByPlayer = table.seats.map(seat => seat.playerId -> seat.seat).toMap
+
+    assertEquals(seatByPlayer(owner.id), SeatWind.East)
+    assertEquals(seatByPlayer(south.id), SeatWind.South)
+    assertEquals(seatByPlayer(west.id), SeatWind.West)
+    assertEquals(seatByPlayer(north.id), SeatWind.North)
+  }
+
 private def principalFor(app: ApplicationContext, playerId: PlayerId): AccessPrincipal =
   app.playerRepository.findById(playerId).get.asPrincipal
 

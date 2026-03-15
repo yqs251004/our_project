@@ -77,7 +77,11 @@ object ApplicationContext:
     )
 
     ApplicationContext(
-      playerService = PlayerApplicationService(playerRepository, transactionManager),
+      playerService = PlayerApplicationService(
+        playerRepository,
+        dashboardRepository,
+        transactionManager
+      ),
       publicQueryService = PublicQueryService(
         tournamentRepository,
         tableRepository,
@@ -88,6 +92,7 @@ object ApplicationContext:
       clubService = ClubApplicationService(
         clubRepository,
         playerRepository,
+        dashboardRepository,
         transactionManager,
         authorizationService
       ),
@@ -128,6 +133,7 @@ object ApplicationContext:
         playerRepository,
         clubRepository,
         globalDictionaryRepository,
+        auditEventRepository,
         eventBus,
         transactionManager,
         authorizationService
@@ -191,7 +197,11 @@ object ApplicationContext:
     )
 
     ApplicationContext(
-      playerService = PlayerApplicationService(playerRepository, transactionManager),
+      playerService = PlayerApplicationService(
+        playerRepository,
+        dashboardRepository,
+        transactionManager
+      ),
       publicQueryService = PublicQueryService(
         tournamentRepository,
         tableRepository,
@@ -202,6 +212,7 @@ object ApplicationContext:
       clubService = ClubApplicationService(
         clubRepository,
         playerRepository,
+        dashboardRepository,
         transactionManager,
         authorizationService
       ),
@@ -242,6 +253,7 @@ object ApplicationContext:
         playerRepository,
         clubRepository,
         globalDictionaryRepository,
+        auditEventRepository,
         eventBus,
         transactionManager,
         authorizationService

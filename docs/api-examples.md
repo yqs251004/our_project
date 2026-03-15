@@ -75,7 +75,7 @@ curl "http://localhost:8080/dictionary?prefix=rank.&limit=20"
 Audit aggregate lookup with RBAC-scoped operator:
 
 ```bash
-curl "http://localhost:8080/audits/dictionary/rank.formula?operatorId=player-super-admin&eventType=FormulaUpdated&limit=20"
+curl "http://localhost:8080/audits/dictionary/rank.formula?operatorId=player-super-admin&eventType=GlobalDictionaryUpserted&limit=20"
 ```
 
 Audit collection lookup:
