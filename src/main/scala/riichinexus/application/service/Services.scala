@@ -347,6 +347,74 @@ final class ClubApplicationService(
         clubRepository.save(club.grantAdmin(playerId))
     }
 
+  def revokeAdmin(
+      clubId: ClubId,
+      playerId: PlayerId,
+      actor: AccessPrincipal
+  ): Option[Club] =
+    transactionManager.inTransaction {
+      for
+        club <- clubRepository.findById(clubId)
+        player <- playerRepository.findById(playerId)
+      yield
+        ensureClubActive(club)
+        requireClubMember(club, playerId, "revoke club admin")
+        authorizationService.requirePermission(
+          actor,
+          Permission.AssignClubAdmin,
+          clubId = Some(clubId)
+        )
+
+        if !club.admins.contains(playerId) then
+          throw IllegalArgumentException(
+            s"Player ${playerId.value} is not a club admin of club ${clubId.value}"
+          )
+
+        if club.admins.size <= 1 then
+          throw IllegalArgumentException(
+            s"Club ${clubId.value} must retain at least one club admin"
+          )
+
+        playerRepository.save(player.revokeClubAdmin(clubId))
+        clubRepository.save(club.revokeAdmin(playerId))
+    }
+
+  def removeMember(
+      clubId: ClubId,
+      playerId: PlayerId,
+      actor: AccessPrincipal
+  ): Option[Club] =
+    transactionManager.inTransaction {
+      for
+        club <- clubRepository.findById(clubId)
+        player <- playerRepository.findById(playerId)
+      yield
+        ensureClubActive(club)
+        requireClubMember(club, playerId, "remove member")
+        authorizationService.requirePermission(
+          actor,
+          Permission.ManageClubMembership,
+          clubId = Some(clubId)
+        )
+
+        if club.creator == playerId then
+          throw IllegalArgumentException(
+            s"Club creator ${playerId.value} cannot be removed from active club ${clubId.value}"
+          )
+
+        if club.admins.contains(playerId) && club.admins.size <= 1 then
+          throw IllegalArgumentException(
+            s"Club ${clubId.value} must retain at least one club admin before removing ${playerId.value}"
+          )
+
+        playerRepository.save(
+          player
+            .leaveClub(clubId)
+            .revokeClubAdmin(clubId)
+        )
+        clubRepository.save(club.removeMember(playerId))
+    }
+
   def setInternalTitle(
       clubId: ClubId,
       playerId: PlayerId,
@@ -655,6 +723,38 @@ final class TournamentApplicationService(
           )
         )
         tournamentRepository.save(tournament.assignAdmin(playerId))
+    }
+
+  def revokeTournamentAdmin(
+      tournamentId: TournamentId,
+      playerId: PlayerId,
+      actor: AccessPrincipal
+  ): Option[Tournament] =
+    transactionManager.inTransaction {
+      for
+        tournament <- tournamentRepository.findById(tournamentId)
+        player <- playerRepository.findById(playerId)
+      yield
+        authorizationService.requirePermission(
+          actor,
+          Permission.AssignTournamentAdmin,
+          tournamentId = Some(tournamentId)
+        )
+
+        if !tournament.admins.contains(playerId) then
+          throw IllegalArgumentException(
+            s"Player ${playerId.value} is not a tournament admin of tournament ${tournamentId.value}"
+          )
+
+        if tournament.admins.size <= 1 then
+          throw IllegalArgumentException(
+            s"Tournament ${tournamentId.value} must retain at least one tournament admin"
+          )
+
+        playerRepository.save(player.revokeTournamentAdmin(tournamentId))
+        tournamentRepository.save(
+          tournament.copy(admins = tournament.admins.filterNot(_ == playerId))
+        )
     }
 
   def addStage(

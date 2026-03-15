@@ -146,6 +146,16 @@ private final class ApiHandler(
             request.operator.map(principal).getOrElse(AccessPrincipal.system)
           )
         )
+      case ("POST", Vector("clubs", clubId, "members", playerId, "remove")) =>
+        val request = readJsonBody[OperatorRequest](exchange)
+        sendOption(
+          exchange,
+          app.clubService.removeMember(
+            ClubId(clubId),
+            PlayerId(playerId),
+            request.operator.map(principal).getOrElse(AccessPrincipal.system)
+          )
+        )
       case ("POST", Vector("clubs", clubId, "applications")) =>
         val request = readJsonBody[ClubMembershipApplicationRequest](exchange)
         sendOption(
@@ -188,6 +198,16 @@ private final class ApiHandler(
             clubId = ClubId(clubId),
             playerId = request.player,
             actor = principal(request.operator)
+          )
+        )
+      case ("POST", Vector("clubs", clubId, "admins", playerId, "revoke")) =>
+        val request = readJsonBody[OperatorRequest](exchange)
+        sendOption(
+          exchange,
+          app.clubService.revokeAdmin(
+            clubId = ClubId(clubId),
+            playerId = PlayerId(playerId),
+            actor = request.operator.map(principal).getOrElse(AccessPrincipal.system)
           )
         )
       case ("POST", Vector("clubs", clubId, "titles")) =>
@@ -323,6 +343,16 @@ private final class ApiHandler(
             tournamentId = TournamentId(tournamentId),
             playerId = request.player,
             actor = principal(request.operator)
+          )
+        )
+      case ("POST", Vector("tournaments", tournamentId, "admins", playerId, "revoke")) =>
+        val request = readJsonBody[OperatorRequest](exchange)
+        sendOption(
+          exchange,
+          app.tournamentService.revokeTournamentAdmin(
+            tournamentId = TournamentId(tournamentId),
+            playerId = PlayerId(playerId),
+            actor = request.operator.map(principal).getOrElse(AccessPrincipal.system)
           )
         )
       case ("POST", Vector("tournaments", tournamentId, "stages")) =>

@@ -9,6 +9,7 @@ import java.time.Instant
 import munit.FunSuite
 
 import riichinexus.api.*
+import riichinexus.api.ApiModels.given
 import riichinexus.bootstrap.ApplicationContext
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
@@ -261,6 +262,78 @@ class ApiServerSuite extends FunSuite:
       assertEquals(auditEntries.map(_.id), Vector(auditEntry.id))
     }
   }
+
+  test("club management endpoints revoke admin and remove member") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-15T13:00:00Z")
+
+    val owner = app.playerService.registerPlayer("club-owner", "ClubOwner", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1700)
+    val vice = app.playerService.registerPlayer("club-vice", "ClubVice", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
+    val member = app.playerService.registerPlayer("club-member", "ClubMember", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1500)
+
+    val club = app.clubService.createClub("Managed Club", owner.id, now, owner.asPrincipal)
+    app.clubService.addMember(club.id, vice.id, principalFor(app, owner.id))
+    app.clubService.addMember(club.id, member.id, principalFor(app, owner.id))
+    app.clubService.assignAdmin(club.id, vice.id, principalFor(app, owner.id))
+
+    withServer(app) { baseUrl =>
+      val revokeResponse = postJson(
+        s"$baseUrl/clubs/${club.id.value}/admins/${vice.id.value}/revoke",
+        write(OperatorRequest(Some(owner.id.value)))
+      )
+      assertEquals(revokeResponse.statusCode(), 200)
+      val updatedClub = read[Club](revokeResponse.body())
+      assertEquals(updatedClub.admins, Vector(owner.id))
+
+      val removeResponse = postJson(
+        s"$baseUrl/clubs/${club.id.value}/members/${member.id.value}/remove",
+        write(OperatorRequest(Some(owner.id.value)))
+      )
+      assertEquals(removeResponse.statusCode(), 200)
+      val removedClub = read[Club](removeResponse.body())
+      assertEquals(removedClub.members.toSet, Set(owner.id, vice.id))
+      assertEquals(app.playerRepository.findById(member.id).map(_.boundClubIds), Some(Vector.empty))
+    }
+  }
+
+  test("tournament admin revoke endpoint removes scoped admin role") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-15T14:00:00Z")
+
+    val root = app.playerService.registerPlayer("tour-root", "TournamentRoot", RankSnapshot(RankPlatform.Custom, "S"), now, 2000)
+    val adminA = app.playerRepository.save(root.grantRole(RoleGrant.superAdmin(now)))
+    val adminB = app.playerService.registerPlayer("tour-admin-b", "TournamentB", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1750)
+    val stage = TournamentStage(IdGenerator.stageId(), "Admin Stage", StageFormat.Swiss, 1, 1)
+    val tournament = app.tournamentService.createTournament(
+      "Admin Cup",
+      "QA",
+      now,
+      now.plusSeconds(3600),
+      Vector(stage),
+      adminId = Some(adminA.id)
+    )
+    app.tournamentService.assignTournamentAdmin(
+      tournament.id,
+      adminB.id,
+      principalFor(app, adminA.id)
+    )
+
+    withServer(app) { baseUrl =>
+      val revokeResponse = postJson(
+        s"$baseUrl/tournaments/${tournament.id.value}/admins/${adminB.id.value}/revoke",
+        write(OperatorRequest(Some(adminA.id.value)))
+      )
+      assertEquals(revokeResponse.statusCode(), 200)
+
+      val updatedTournament = read[Tournament](revokeResponse.body())
+      assertEquals(updatedTournament.admins, Vector(adminA.id))
+      val updatedAdmin = app.playerRepository.findById(adminB.id).getOrElse(fail("missing adminB"))
+      assert(!updatedAdmin.roleGrants.exists(grant =>
+        grant.role == RoleKind.TournamentAdmin && grant.tournamentId.contains(tournament.id)
+      ))
+    }
+  }
+
   private def withServer[A](app: ApplicationContext)(f: String => A): A =
     val server = RiichiNexusApiServer(
       app,
@@ -276,6 +349,16 @@ class ApiServerSuite extends FunSuite:
       HttpRequest
         .newBuilder(URI.create(url))
         .GET()
+        .build(),
+      HttpResponse.BodyHandlers.ofString()
+    )
+
+  private def postJson(url: String, body: String): HttpResponse[String] =
+    client.send(
+      HttpRequest
+        .newBuilder(URI.create(url))
+        .header("Content-Type", "application/json")
+        .POST(HttpRequest.BodyPublishers.ofString(body))
         .build(),
       HttpResponse.BodyHandlers.ofString()
     )
@@ -355,5 +438,3 @@ class ApiServerSuite extends FunSuite:
         )
       }
     )
-
-
