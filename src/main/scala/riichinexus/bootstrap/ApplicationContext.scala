@@ -25,7 +25,8 @@ final case class ApplicationContext(
     globalDictionaryRepository: GlobalDictionaryRepository,
     tournamentSettlementRepository: TournamentSettlementRepository,
     auditEventRepository: AuditEventRepository,
-    eventBus: DomainEventBus
+    eventBus: DomainEventBus,
+    authorizationService: AuthorizationService
 )
 
 object ApplicationContext:
@@ -142,7 +143,8 @@ object ApplicationContext:
       globalDictionaryRepository = globalDictionaryRepository,
       tournamentSettlementRepository = tournamentSettlementRepository,
       auditEventRepository = auditEventRepository,
-      eventBus = eventBus
+      eventBus = eventBus,
+      authorizationService = authorizationService
     )
 
   def postgres(config: DatabaseConfig): ApplicationContext =
@@ -255,5 +257,6 @@ object ApplicationContext:
       globalDictionaryRepository = globalDictionaryRepository,
       tournamentSettlementRepository = tournamentSettlementRepository,
       auditEventRepository = auditEventRepository,
-      eventBus = eventBus
+      eventBus = eventBus,
+      authorizationService = authorizationService
     )

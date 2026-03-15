@@ -48,6 +48,7 @@ enum Permission derives CanEqual:
   case ViewClubDirectory
   case ViewPublicLeaderboard
   case ViewOwnDashboard
+  case ViewClubDashboard
   case SubmitClubApplication
   case ManageClubMembership
   case SetClubTitle
@@ -62,6 +63,7 @@ enum Permission derives CanEqual:
   case BanRegisteredPlayer
   case DissolveClub
   case AssignTournamentAdmin
+  case ViewAuditTrail
 
 final case class RoleGrant(
     role: RoleKind,

@@ -1,6 +1,7 @@
 package riichinexus.api
 
 import java.net.InetSocketAddress
+import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.time.Instant
 import java.util.NoSuchElementException
@@ -489,7 +490,23 @@ private final class ApiHandler(
       case ("GET", Vector("appeals", appealId)) =>
         sendOption(exchange, app.appealTicketRepository.findById(AppealTicketId(appealId)))
       case ("GET", Vector("audits")) =>
+        val operator = queryPrincipal(exchange)
+        app.authorizationService.requirePermission(
+          operator,
+          Permission.ViewAuditTrail
+        )
         sendJson(exchange, 200, app.auditEventRepository.findAll())
+      case ("GET", Vector("audits", aggregateType, aggregateId)) =>
+        val operator = queryPrincipal(exchange)
+        app.authorizationService.requirePermission(
+          operator,
+          Permission.ViewAuditTrail
+        )
+        sendJson(
+          exchange,
+          200,
+          app.auditEventRepository.findByAggregate(aggregateType, aggregateId)
+        )
       case ("POST", Vector("appeals", appealId, "resolve")) =>
         val request = readJsonBody[ResolveAppealRequest](exchange)
         sendOption(
@@ -516,12 +533,28 @@ private final class ApiHandler(
         )
 
       case ("GET", Vector("dashboards", "players", playerId)) =>
-        sendOption(exchange, app.dashboardRepository.findByOwner(DashboardOwner.Player(PlayerId(playerId))))
+        val targetPlayerId = PlayerId(playerId)
+        val operator = queryPrincipal(exchange)
+        app.authorizationService.requirePermission(
+          operator,
+          Permission.ViewOwnDashboard,
+          subjectPlayerId = Some(targetPlayerId)
+        )
+        sendOption(exchange, app.dashboardRepository.findByOwner(DashboardOwner.Player(targetPlayerId)))
       case ("GET", Vector("dashboards", "clubs", clubId)) =>
-        sendOption(exchange, app.dashboardRepository.findByOwner(DashboardOwner.Club(ClubId(clubId))))
+        val targetClubId = ClubId(clubId)
+        val operator = queryPrincipal(exchange)
+        app.authorizationService.requirePermission(
+          operator,
+          Permission.ViewClubDashboard,
+          clubId = Some(targetClubId)
+        )
+        sendOption(exchange, app.dashboardRepository.findByOwner(DashboardOwner.Club(targetClubId)))
 
       case ("GET", Vector("dictionary")) =>
         sendJson(exchange, 200, app.globalDictionaryRepository.findAll())
+      case ("GET", Vector("dictionary", key)) =>
+        sendOption(exchange, app.globalDictionaryRepository.findByKey(key))
       case ("POST", Vector("admin", "dictionary")) =>
         val request = readJsonBody[UpsertDictionaryRequest](exchange)
         sendJson(
@@ -571,6 +604,32 @@ private final class ApiHandler(
       .findById(playerId)
       .map(_.asPrincipal)
       .getOrElse(throw NoSuchElementException(s"Player ${playerId.value} was not found"))
+
+  private def queryPrincipal(exchange: HttpExchange): AccessPrincipal =
+    val operatorId = queryParam(exchange, "operatorId")
+      .map(PlayerId(_))
+      .getOrElse(throw IllegalArgumentException("Query parameter operatorId is required"))
+    principal(operatorId)
+
+  private def queryParam(exchange: HttpExchange, key: String): Option[String] =
+    val rawQuery = Option(exchange.getRequestURI.getRawQuery).getOrElse("")
+    rawQuery
+      .split("&")
+      .toVector
+      .filter(_.nonEmpty)
+      .flatMap { entry =>
+        entry.split("=", 2).toList match
+          case rawKey :: rawValue :: Nil =>
+            Some(
+              URLDecoder.decode(rawKey, StandardCharsets.UTF_8) ->
+                URLDecoder.decode(rawValue, StandardCharsets.UTF_8)
+            )
+          case rawKey :: Nil =>
+            Some(URLDecoder.decode(rawKey, StandardCharsets.UTF_8) -> "")
+          case _ =>
+            None
+      }
+      .collectFirst { case (`key`, value) => value }
 
   private def readJsonBody[T: Reader](exchange: HttpExchange): T =
     val body = Using.resource(exchange.getRequestBody) { inputStream =>

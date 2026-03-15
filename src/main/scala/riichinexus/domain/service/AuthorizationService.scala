@@ -52,6 +52,9 @@ final class StrictRbacAuthorizationService extends AuthorizationService:
       case Permission.ViewOwnDashboard =>
         principal.isSuperAdmin || principal.playerId.exists(subjectPlayerId.contains)
 
+      case Permission.ViewClubDashboard =>
+        clubId.exists(id => principal.hasClubRole(RoleKind.ClubAdmin, id))
+
       case Permission.SubmitClubApplication =>
         principal.isGuest || principal.hasRole(RoleKind.RegisteredPlayer)
 
@@ -77,4 +80,7 @@ final class StrictRbacAuthorizationService extends AuthorizationService:
           Permission.BanRegisteredPlayer |
           Permission.DissolveClub |
           Permission.AssignTournamentAdmin =>
+        principal.isSuperAdmin
+
+      case Permission.ViewAuditTrail =>
         principal.isSuperAdmin

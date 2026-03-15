@@ -179,6 +179,88 @@ class ApiServerSuite extends FunSuite:
     }
   }
 
+  test("dashboard endpoints enforce RBAC and allow scoped access") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-15T11:00:00Z")
+
+    val owner = app.playerService.registerPlayer("dash-1", "Owner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
+    val intruder = app.playerService.registerPlayer("dash-2", "Intruder", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1500)
+    val member = app.playerService.registerPlayer("dash-3", "Member", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1520)
+
+    val club = app.clubService.createClub("Dashboard Club", owner.id, now, owner.asPrincipal)
+    app.clubService.addMember(club.id, member.id, principalFor(app, owner.id))
+    app.dashboardRepository.save(Dashboard.empty(DashboardOwner.Player(owner.id), now))
+    app.dashboardRepository.save(Dashboard.empty(DashboardOwner.Club(club.id), now))
+
+    withServer(app) { baseUrl =>
+      val forbiddenPlayer = get(
+        s"$baseUrl/dashboards/players/${owner.id.value}?operatorId=${intruder.id.value}"
+      )
+      assertEquals(forbiddenPlayer.statusCode(), 403)
+
+      val ownPlayer = get(
+        s"$baseUrl/dashboards/players/${owner.id.value}?operatorId=${owner.id.value}"
+      )
+      assertEquals(ownPlayer.statusCode(), 200)
+
+      val ownClub = get(
+        s"$baseUrl/dashboards/clubs/${club.id.value}?operatorId=${owner.id.value}"
+      )
+      assertEquals(ownClub.statusCode(), 200)
+
+      val forbiddenClub = get(
+        s"$baseUrl/dashboards/clubs/${club.id.value}?operatorId=${member.id.value}"
+      )
+      assertEquals(forbiddenClub.statusCode(), 403)
+    }
+  }
+
+  test("dictionary key and audit aggregate endpoints return targeted admin data") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-15T12:00:00Z")
+
+    val root = app.playerService.registerPlayer("root-1", "Root", RankSnapshot(RankPlatform.Custom, "S"), now, 2000)
+    val viewer = app.playerService.registerPlayer("root-2", "Viewer", RankSnapshot(RankPlatform.Custom, "A"), now, 1700)
+    val admin = app.playerRepository.save(root.grantRole(RoleGrant.superAdmin(now)))
+    val adminPrincipal = principalFor(app, admin.id)
+
+    val dictionaryEntry = app.superAdminService.upsertDictionary(
+      key = "rank.formula",
+      value = "uma+oka-v2",
+      actor = adminPrincipal,
+      note = Some("season 2")
+    )
+    val auditEntry = app.auditEventRepository.save(
+      AuditEventEntry(
+        id = IdGenerator.auditEventId(),
+        aggregateType = "dictionary",
+        aggregateId = dictionaryEntry.key,
+        eventType = "ManualReview",
+        occurredAt = now,
+        actorId = Some(admin.id),
+        details = Map("source" -> "test")
+      )
+    )
+
+    withServer(app) { baseUrl =>
+      val dictionaryResponse = get(s"$baseUrl/dictionary/${dictionaryEntry.key}")
+      assertEquals(dictionaryResponse.statusCode(), 200)
+      val storedEntry = read[GlobalDictionaryEntry](dictionaryResponse.body())
+      assertEquals(storedEntry.value, dictionaryEntry.value)
+
+      val forbiddenAudit = get(
+        s"$baseUrl/audits/dictionary/${dictionaryEntry.key}?operatorId=${viewer.id.value}"
+      )
+      assertEquals(forbiddenAudit.statusCode(), 403)
+
+      val auditResponse = get(
+        s"$baseUrl/audits/dictionary/${dictionaryEntry.key}?operatorId=${admin.id.value}"
+      )
+      assertEquals(auditResponse.statusCode(), 200)
+      val auditEntries = read[Vector[AuditEventEntry]](auditResponse.body())
+      assertEquals(auditEntries.map(_.id), Vector(auditEntry.id))
+    }
+  }
   private def withServer[A](app: ApplicationContext)(f: String => A): A =
     val server = RiichiNexusApiServer(
       app,
@@ -273,4 +355,5 @@ class ApiServerSuite extends FunSuite:
         )
       }
     )
+
 
