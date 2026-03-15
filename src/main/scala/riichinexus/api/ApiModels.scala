@@ -20,6 +20,15 @@ final case class HealthResponse(
     timestamp: Instant
 )
 
+final case class PagedResponse[T](
+    items: Vector[T],
+    total: Int,
+    limit: Int,
+    offset: Int,
+    hasMore: Boolean,
+    appliedFilters: Map[String, String] = Map.empty
+)
+
 final case class CreatePlayerRequest(
     userId: String,
     nickname: String,
@@ -368,6 +377,8 @@ object ApiModels:
   given ReadWriter[ApiError] = macroRW
   given ReadWriter[ApiMessage] = macroRW
   given ReadWriter[HealthResponse] = macroRW
+  given [T: Reader]: Reader[PagedResponse[T]] = macroR
+  given [T: Writer]: Writer[PagedResponse[T]] = macroW
   given ReadWriter[CreatePlayerRequest] = macroRW
   given ReadWriter[CreateClubRequest] = macroRW
   given ReadWriter[AddClubMemberRequest] = macroRW

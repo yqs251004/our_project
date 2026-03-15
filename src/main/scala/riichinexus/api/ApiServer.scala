@@ -60,6 +60,8 @@ private final class ApiHandler(
     app: ApplicationContext,
     config: ApiServerConfig
 ) extends HttpHandler:
+  private final case class PageQuery(limit: Int, offset: Int)
+
   override def handle(exchange: HttpExchange): Unit =
     try
       route(exchange)
@@ -93,16 +95,58 @@ private final class ApiHandler(
         )
 
       case ("GET", Vector("public", "schedules")) =>
-        sendJson(exchange, 200, app.publicQueryService.publicSchedules())
+        val tournamentStatusFilter = queryParam(exchange, "tournamentStatus").filter(_.nonEmpty).map(
+          parseEnum("tournamentStatus", _)(TournamentStatus.valueOf)
+        )
+        val stageStatusFilter = queryParam(exchange, "stageStatus").filter(_.nonEmpty).map(
+          parseEnum("stageStatus", _)(StageStatus.valueOf)
+        )
+        val schedules = app.publicQueryService.publicSchedules()
+          .filter(schedule => tournamentStatusFilter.forall(_ == schedule.tournamentStatus))
+          .filter(schedule => stageStatusFilter.forall(_ == schedule.stageStatus))
+          .sortBy(schedule => (schedule.startsAt, schedule.tournamentName, schedule.stageName))
+        sendPagedJson(
+          exchange,
+          schedules,
+          activeFilters(exchange, "tournamentStatus", "stageStatus")
+        )
       case ("GET", Vector("public", "clubs")) =>
-        sendJson(exchange, 200, app.publicQueryService.publicClubDirectory())
+        val nameFilter = queryParam(exchange, "name").filter(_.nonEmpty)
+        val relationFilter = queryParam(exchange, "relation").filter(_.nonEmpty).map(
+          parseEnum("relation", _)(ClubRelationKind.valueOf)
+        )
+        val clubs = app.publicQueryService.publicClubDirectory()
+          .filter(club => nameFilter.forall(containsIgnoreCase(club.name, _)))
+          .filter(club => relationFilter.forall(relation => club.relations.exists(_.relation == relation)))
+          .sortBy(_.name)
+        sendPagedJson(exchange, clubs, activeFilters(exchange, "name", "relation"))
       case ("GET", Vector("public", "leaderboards", "players")) =>
-        sendJson(exchange, 200, app.publicQueryService.publicPlayerLeaderboard())
+        val clubIdFilter = queryParam(exchange, "clubId").filter(_.nonEmpty).map(ClubId(_))
+        val statusFilter = queryParam(exchange, "status").filter(_.nonEmpty).map(
+          parseEnum("status", _)(PlayerStatus.valueOf)
+        )
+        val leaderboard = app.publicQueryService.publicPlayerLeaderboard(app.playerRepository.findAll().size)
+          .filter(entry => clubIdFilter.forall(entry.clubIds.contains))
+          .filter(entry => statusFilter.forall(_ == entry.status))
+        sendPagedJson(exchange, leaderboard, activeFilters(exchange, "clubId", "status"))
       case ("GET", Vector("public", "leaderboards", "clubs")) =>
-        sendJson(exchange, 200, app.publicQueryService.publicClubLeaderboard())
+        val nameFilter = queryParam(exchange, "name").filter(_.nonEmpty)
+        val leaderboard = app.publicQueryService.publicClubLeaderboard(app.clubRepository.findAll().size)
+          .filter(entry => nameFilter.forall(containsIgnoreCase(entry.name, _)))
+        sendPagedJson(exchange, leaderboard, activeFilters(exchange, "name"))
 
       case ("GET", Vector("players")) =>
-        sendJson(exchange, 200, app.playerRepository.findAll())
+        val clubIdFilter = queryParam(exchange, "clubId").filter(_.nonEmpty).map(ClubId(_))
+        val statusFilter = queryParam(exchange, "status").filter(_.nonEmpty).map(
+          parseEnum("status", _)(PlayerStatus.valueOf)
+        )
+        val nicknameFilter = queryParam(exchange, "nickname").filter(_.nonEmpty)
+        val players = app.playerRepository.findAll()
+          .filter(player => clubIdFilter.forall(player.boundClubIds.contains))
+          .filter(player => statusFilter.forall(_ == player.status))
+          .filter(player => nicknameFilter.forall(containsIgnoreCase(player.nickname, _)))
+          .sortBy(player => (player.nickname, player.id.value))
+        sendPagedJson(exchange, players, activeFilters(exchange, "clubId", "status", "nickname"))
       case ("GET", Vector("players", playerId)) =>
         sendOption(exchange, app.playerRepository.findById(PlayerId(playerId)))
       case ("POST", Vector("players")) =>
@@ -116,18 +160,57 @@ private final class ApiHandler(
         sendJson(exchange, 201, player)
 
       case ("GET", Vector("clubs")) =>
-        sendJson(exchange, 200, app.clubRepository.findAll())
+        val activeOnly = queryBooleanParam(exchange, "activeOnly")
+        val memberIdFilter = queryParam(exchange, "memberId").filter(_.nonEmpty).map(PlayerId(_))
+        val adminIdFilter = queryParam(exchange, "adminId").filter(_.nonEmpty).map(PlayerId(_))
+        val nameFilter = queryParam(exchange, "name").filter(_.nonEmpty)
+        val clubs = app.clubRepository.findAll()
+          .filter(club => activeOnly.forall(flag => !flag || club.dissolvedAt.isEmpty))
+          .filter(club => memberIdFilter.forall(club.members.contains))
+          .filter(club => adminIdFilter.forall(club.admins.contains))
+          .filter(club => nameFilter.forall(containsIgnoreCase(club.name, _)))
+          .sortBy(club => (club.dissolvedAt.nonEmpty, club.name, club.id.value))
+        sendPagedJson(exchange, clubs, activeFilters(exchange, "activeOnly", "memberId", "adminId", "name"))
       case ("GET", Vector("clubs", clubId)) =>
         sendOption(exchange, app.clubRepository.findById(ClubId(clubId)))
       case ("GET", Vector("clubs", clubId, "members")) =>
+        val statusFilter = queryParam(exchange, "status").filter(_.nonEmpty).map(
+          parseEnum("status", _)(PlayerStatus.valueOf)
+        )
+        val nicknameFilter = queryParam(exchange, "nickname").filter(_.nonEmpty)
         val members = app.playerRepository.findByClub(ClubId(clubId))
-        sendJson(exchange, 200, members)
+          .filter(player => statusFilter.forall(_ == player.status))
+          .filter(player => nicknameFilter.forall(containsIgnoreCase(player.nickname, _)))
+          .sortBy(player => (player.nickname, player.id.value))
+        sendPagedJson(exchange, members, activeFilters(exchange, "status", "nickname"))
       case ("GET", Vector("clubs", clubId, "applications")) =>
         val applications = app.clubRepository
           .findById(ClubId(clubId))
-          .map(_.membershipApplications.sortBy(_.submittedAt))
+          .map(_.membershipApplications
+            .filter(application =>
+              queryParam(exchange, "status")
+                .filter(_.nonEmpty)
+                .map(parseEnum("status", _)(ClubMembershipApplicationStatus.valueOf))
+                .forall(_ == application.status)
+            )
+            .filter(application =>
+              queryParam(exchange, "applicantUserId")
+                .filter(_.nonEmpty)
+                .forall(value => application.applicantUserId.contains(value))
+            )
+            .filter(application =>
+              queryParam(exchange, "displayName")
+                .filter(_.nonEmpty)
+                .forall(containsIgnoreCase(application.displayName, _))
+            )
+            .sortBy(_.submittedAt)
+          )
           .getOrElse(throw NoSuchElementException(s"Club $clubId was not found"))
-        sendJson(exchange, 200, applications)
+        sendPagedJson(
+          exchange,
+          applications,
+          activeFilters(exchange, "status", "applicantUserId", "displayName")
+        )
       case ("POST", Vector("clubs")) =>
         val request = readJsonBody[CreateClubRequest](exchange)
         val club = app.clubService.createClub(
@@ -234,17 +317,64 @@ private final class ApiHandler(
         )
 
       case ("GET", Vector("tournaments")) =>
-        sendJson(exchange, 200, app.tournamentRepository.findAll())
+        val statusFilter = queryParam(exchange, "status").filter(_.nonEmpty).map(
+          parseEnum("status", _)(TournamentStatus.valueOf)
+        )
+        val adminIdFilter = queryParam(exchange, "adminId").filter(_.nonEmpty).map(PlayerId(_))
+        val organizerFilter = queryParam(exchange, "organizer").filter(_.nonEmpty)
+        val tournaments = app.tournamentRepository.findAll()
+          .filter(tournament => statusFilter.forall(_ == tournament.status))
+          .filter(tournament => adminIdFilter.forall(tournament.admins.contains))
+          .filter(tournament => organizerFilter.forall(containsIgnoreCase(tournament.organizer, _)))
+          .sortBy(tournament => (tournament.startsAt, tournament.name, tournament.id.value))
+        sendPagedJson(exchange, tournaments, activeFilters(exchange, "status", "adminId", "organizer"))
       case ("GET", Vector("tournaments", tournamentId)) =>
         sendOption(exchange, app.tournamentRepository.findById(TournamentId(tournamentId)))
       case ("GET", Vector("tournaments", tournamentId, "whitelist")) =>
         val whitelist = app.tournamentRepository
           .findById(TournamentId(tournamentId))
-          .map(_.whitelist)
+          .map(_.whitelist
+            .filter(entry =>
+              queryParam(exchange, "participantKind")
+                .filter(_.nonEmpty)
+                .map(parseEnum("participantKind", _)(TournamentParticipantKind.valueOf))
+                .forall(_ == entry.participantKind)
+            )
+            .filter(entry =>
+              queryParam(exchange, "playerId")
+                .filter(_.nonEmpty)
+                .forall(value => entry.playerId.contains(PlayerId(value)))
+            )
+            .filter(entry =>
+              queryParam(exchange, "clubId")
+                .filter(_.nonEmpty)
+                .forall(value => entry.clubId.contains(ClubId(value)))
+            )
+          )
           .getOrElse(throw NoSuchElementException(s"Tournament $tournamentId was not found"))
-        sendJson(exchange, 200, whitelist)
+        sendPagedJson(
+          exchange,
+          whitelist,
+          activeFilters(exchange, "participantKind", "playerId", "clubId")
+        )
       case ("GET", Vector("tournaments", tournamentId, "settlements")) =>
-        sendJson(exchange, 200, app.tournamentSettlementRepository.findByTournament(TournamentId(tournamentId)))
+        val settlements = app.tournamentSettlementRepository.findByTournament(TournamentId(tournamentId))
+          .filter(snapshot =>
+            queryParam(exchange, "stageId")
+              .filter(_.nonEmpty)
+              .forall(value => snapshot.stageId == TournamentStageId(value))
+          )
+          .filter(snapshot =>
+            queryParam(exchange, "championId")
+              .filter(_.nonEmpty)
+              .forall(value => snapshot.championId == PlayerId(value))
+          )
+          .sortBy(_.generatedAt)
+        sendPagedJson(
+          exchange,
+          settlements,
+          activeFilters(exchange, "stageId", "championId")
+        )
       case ("GET", Vector("tournaments", tournamentId, "settlements", stageId)) =>
         sendOption(
           exchange,
@@ -411,14 +541,18 @@ private final class ApiHandler(
           )
         )
       case ("GET", Vector("tournaments", tournamentId, "stages", stageId, "tables")) =>
-        sendJson(
-          exchange,
-          200,
-          app.tableRepository.findByTournamentAndStage(
-            TournamentId(tournamentId),
-            TournamentStageId(stageId)
-          )
+        val statusFilter = queryParam(exchange, "status").filter(_.nonEmpty).map(
+          parseEnum("status", _)(TableStatus.valueOf)
         )
+        val playerIdFilter = queryParam(exchange, "playerId").filter(_.nonEmpty).map(PlayerId(_))
+        val tables = app.tableRepository.findByTournamentAndStage(
+          TournamentId(tournamentId),
+          TournamentStageId(stageId)
+        )
+          .filter(table => statusFilter.forall(_ == table.status))
+          .filter(table => playerIdFilter.forall(playerId => table.seats.exists(_.playerId == playerId)))
+          .sortBy(table => (table.tableNo, table.id.value))
+        sendPagedJson(exchange, tables, activeFilters(exchange, "status", "playerId"))
       case ("GET", Vector("tournaments", tournamentId, "stages", stageId, "advancement")) =>
         sendJson(
           exchange,
@@ -460,7 +594,23 @@ private final class ApiHandler(
         )
 
       case ("GET", Vector("tables")) =>
-        sendJson(exchange, 200, app.tableRepository.findAll())
+        val statusFilter = queryParam(exchange, "status").filter(_.nonEmpty).map(
+          parseEnum("status", _)(TableStatus.valueOf)
+        )
+        val tournamentIdFilter = queryParam(exchange, "tournamentId").filter(_.nonEmpty).map(TournamentId(_))
+        val stageIdFilter = queryParam(exchange, "stageId").filter(_.nonEmpty).map(TournamentStageId(_))
+        val playerIdFilter = queryParam(exchange, "playerId").filter(_.nonEmpty).map(PlayerId(_))
+        val tables = app.tableRepository.findAll()
+          .filter(table => statusFilter.forall(_ == table.status))
+          .filter(table => tournamentIdFilter.forall(_ == table.tournamentId))
+          .filter(table => stageIdFilter.forall(_ == table.stageId))
+          .filter(table => playerIdFilter.forall(playerId => table.seats.exists(_.playerId == playerId)))
+          .sortBy(table => (table.tournamentId.value, table.stageId.value, table.tableNo, table.id.value))
+        sendPagedJson(
+          exchange,
+          tables,
+          activeFilters(exchange, "status", "tournamentId", "stageId", "playerId")
+        )
       case ("GET", Vector("tables", tableId)) =>
         sendOption(exchange, app.tableRepository.findById(TableId(tableId)))
       case ("POST", Vector("tables", tableId, "start")) =>
@@ -506,17 +656,63 @@ private final class ApiHandler(
         )
 
       case ("GET", Vector("records")) =>
-        sendJson(exchange, 200, app.matchRecordRepository.findAll())
+        val playerIdFilter = queryParam(exchange, "playerId").filter(_.nonEmpty).map(PlayerId(_))
+        val tournamentIdFilter = queryParam(exchange, "tournamentId").filter(_.nonEmpty).map(TournamentId(_))
+        val stageIdFilter = queryParam(exchange, "stageId").filter(_.nonEmpty).map(TournamentStageId(_))
+        val tableIdFilter = queryParam(exchange, "tableId").filter(_.nonEmpty).map(TableId(_))
+        val records = app.matchRecordRepository.findAll()
+          .filter(record => playerIdFilter.forall(record.playerIds.contains))
+          .filter(record => tournamentIdFilter.forall(_ == record.tournamentId))
+          .filter(record => stageIdFilter.forall(_ == record.stageId))
+          .filter(record => tableIdFilter.forall(_ == record.tableId))
+          .sortBy(record => (record.generatedAt, record.id.value))
+        sendPagedJson(
+          exchange,
+          records,
+          activeFilters(exchange, "playerId", "tournamentId", "stageId", "tableId")
+        )
       case ("GET", Vector("records", recordId)) =>
         sendOption(exchange, app.matchRecordRepository.findById(MatchRecordId(recordId)))
       case ("GET", Vector("records", "table", tableId)) =>
         sendOption(exchange, app.matchRecordRepository.findByTable(TableId(tableId)))
       case ("GET", Vector("paifus")) =>
-        sendJson(exchange, 200, app.paifuRepository.findAll())
+        val playerIdFilter = queryParam(exchange, "playerId").filter(_.nonEmpty).map(PlayerId(_))
+        val tournamentIdFilter = queryParam(exchange, "tournamentId").filter(_.nonEmpty).map(TournamentId(_))
+        val stageIdFilter = queryParam(exchange, "stageId").filter(_.nonEmpty).map(TournamentStageId(_))
+        val tableIdFilter = queryParam(exchange, "tableId").filter(_.nonEmpty).map(TableId(_))
+        val paifus = app.paifuRepository.findAll()
+          .filter(paifu => playerIdFilter.forall(paifu.playerIds.contains))
+          .filter(paifu => tournamentIdFilter.forall(_ == paifu.metadata.tournamentId))
+          .filter(paifu => stageIdFilter.forall(_ == paifu.metadata.stageId))
+          .filter(paifu => tableIdFilter.forall(_ == paifu.metadata.tableId))
+          .sortBy(paifu => (paifu.metadata.recordedAt, paifu.id.value))
+        sendPagedJson(
+          exchange,
+          paifus,
+          activeFilters(exchange, "playerId", "tournamentId", "stageId", "tableId")
+        )
       case ("GET", Vector("paifus", paifuId)) =>
         sendOption(exchange, app.paifuRepository.findById(PaifuId(paifuId)))
       case ("GET", Vector("appeals")) =>
-        sendJson(exchange, 200, app.appealTicketRepository.findAll())
+        val statusFilter = queryParam(exchange, "status").filter(_.nonEmpty).map(
+          parseEnum("status", _)(AppealStatus.valueOf)
+        )
+        val tournamentIdFilter = queryParam(exchange, "tournamentId").filter(_.nonEmpty).map(TournamentId(_))
+        val stageIdFilter = queryParam(exchange, "stageId").filter(_.nonEmpty).map(TournamentStageId(_))
+        val tableIdFilter = queryParam(exchange, "tableId").filter(_.nonEmpty).map(TableId(_))
+        val openedByFilter = queryParam(exchange, "openedBy").filter(_.nonEmpty).map(PlayerId(_))
+        val appeals = app.appealTicketRepository.findAll()
+          .filter(ticket => statusFilter.forall(_ == ticket.status))
+          .filter(ticket => tournamentIdFilter.forall(_ == ticket.tournamentId))
+          .filter(ticket => stageIdFilter.forall(_ == ticket.stageId))
+          .filter(ticket => tableIdFilter.forall(_ == ticket.tableId))
+          .filter(ticket => openedByFilter.forall(_ == ticket.openedBy))
+          .sortBy(ticket => (ticket.updatedAt, ticket.id.value))
+        sendPagedJson(
+          exchange,
+          appeals,
+          activeFilters(exchange, "status", "tournamentId", "stageId", "tableId", "openedBy")
+        )
       case ("GET", Vector("appeals", appealId)) =>
         sendOption(exchange, app.appealTicketRepository.findById(AppealTicketId(appealId)))
       case ("GET", Vector("audits")) =>
@@ -525,17 +721,38 @@ private final class ApiHandler(
           operator,
           Permission.ViewAuditTrail
         )
-        sendJson(exchange, 200, app.auditEventRepository.findAll())
+        val aggregateTypeFilter = queryParam(exchange, "aggregateType").filter(_.nonEmpty)
+        val aggregateIdFilter = queryParam(exchange, "aggregateId").filter(_.nonEmpty)
+        val actorIdFilter = queryParam(exchange, "actorId").filter(_.nonEmpty).map(PlayerId(_))
+        val eventTypeFilter = queryParam(exchange, "eventType").filter(_.nonEmpty)
+        val audits = app.auditEventRepository.findAll()
+          .filter(entry => aggregateTypeFilter.forall(_ == entry.aggregateType))
+          .filter(entry => aggregateIdFilter.forall(_ == entry.aggregateId))
+          .filter(entry => actorIdFilter.forall(entry.actorId.contains))
+          .filter(entry => eventTypeFilter.forall(_ == entry.eventType))
+          .sortBy(entry => (entry.occurredAt, entry.id.value))
+        sendPagedJson(
+          exchange,
+          audits,
+          activeFilters(exchange, "aggregateType", "aggregateId", "actorId", "eventType", "operatorId")
+        )
       case ("GET", Vector("audits", aggregateType, aggregateId)) =>
         val operator = queryPrincipal(exchange)
         app.authorizationService.requirePermission(
           operator,
           Permission.ViewAuditTrail
         )
-        sendJson(
+        val actorIdFilter = queryParam(exchange, "actorId").filter(_.nonEmpty).map(PlayerId(_))
+        val eventTypeFilter = queryParam(exchange, "eventType").filter(_.nonEmpty)
+        val audits = app.auditEventRepository.findByAggregate(aggregateType, aggregateId)
+          .filter(entry => actorIdFilter.forall(entry.actorId.contains))
+          .filter(entry => eventTypeFilter.forall(_ == entry.eventType))
+          .sortBy(entry => (entry.occurredAt, entry.id.value))
+        sendPagedJson(
           exchange,
-          200,
-          app.auditEventRepository.findByAggregate(aggregateType, aggregateId)
+          audits,
+          activeFilters(exchange, "actorId", "eventType", "operatorId") ++
+            Map("aggregateType" -> aggregateType, "aggregateId" -> aggregateId)
         )
       case ("POST", Vector("appeals", appealId, "resolve")) =>
         val request = readJsonBody[ResolveAppealRequest](exchange)
@@ -582,7 +799,13 @@ private final class ApiHandler(
         sendOption(exchange, app.dashboardRepository.findByOwner(DashboardOwner.Club(targetClubId)))
 
       case ("GET", Vector("dictionary")) =>
-        sendJson(exchange, 200, app.globalDictionaryRepository.findAll())
+        val prefixFilter = queryParam(exchange, "prefix").filter(_.nonEmpty)
+        val updatedByFilter = queryParam(exchange, "updatedBy").filter(_.nonEmpty).map(PlayerId(_))
+        val entries = app.globalDictionaryRepository.findAll()
+          .filter(entry => prefixFilter.forall(prefix => entry.key.startsWith(prefix)))
+          .filter(entry => updatedByFilter.forall(_ == entry.updatedBy))
+          .sortBy(_.key)
+        sendPagedJson(exchange, entries, activeFilters(exchange, "prefix", "updatedBy"))
       case ("GET", Vector("dictionary", key)) =>
         sendOption(exchange, app.globalDictionaryRepository.findByKey(key))
       case ("POST", Vector("admin", "dictionary")) =>
@@ -660,6 +883,61 @@ private final class ApiHandler(
             None
       }
       .collectFirst { case (`key`, value) => value }
+
+  private def queryIntParam(exchange: HttpExchange, key: String): Option[Int] =
+    queryParam(exchange, key).filter(_.nonEmpty).map { value =>
+      Try(value.toInt).getOrElse(throw IllegalArgumentException(s"Query parameter $key must be an integer"))
+    }
+
+  private def queryBooleanParam(exchange: HttpExchange, key: String): Option[Boolean] =
+    queryParam(exchange, key).filter(_.nonEmpty).map {
+      case value if value.equalsIgnoreCase("true")  => true
+      case value if value.equalsIgnoreCase("false") => false
+      case _ =>
+        throw IllegalArgumentException(s"Query parameter $key must be true or false")
+    }
+
+  private def pageQuery(
+      exchange: HttpExchange,
+      defaultLimit: Int = 20,
+      maxLimit: Int = 100
+  ): PageQuery =
+    val limit = queryIntParam(exchange, "limit").getOrElse(defaultLimit)
+    val offset = queryIntParam(exchange, "offset").getOrElse(0)
+    require(limit > 0, "Query parameter limit must be positive")
+    require(offset >= 0, "Query parameter offset must be non-negative")
+    PageQuery(limit = math.min(limit, maxLimit), offset = offset)
+
+  private def activeFilters(exchange: HttpExchange, keys: String*): Map[String, String] =
+    keys.flatMap(key => queryParam(exchange, key).filter(_.nonEmpty).map(key -> _)).toMap
+
+  private def sendPagedJson[T: Writer](
+      exchange: HttpExchange,
+      items: Vector[T],
+      appliedFilters: Map[String, String] = Map.empty,
+      defaultLimit: Int = 20,
+      maxLimit: Int = 100
+  ): Unit =
+    val query = pageQuery(exchange, defaultLimit, maxLimit)
+    val pagedItems = items.slice(query.offset, query.offset + query.limit)
+    sendJson(
+      exchange,
+      200,
+      PagedResponse(
+        items = pagedItems,
+        total = items.size,
+        limit = query.limit,
+        offset = query.offset,
+        hasMore = query.offset + pagedItems.size < items.size,
+        appliedFilters = appliedFilters
+      )
+    )
+
+  private def parseEnum[E](label: String, value: String)(parse: String => E): E =
+    Try(parse(value)).getOrElse(throw IllegalArgumentException(s"Invalid $label: $value"))
+
+  private def containsIgnoreCase(value: String, fragment: String): Boolean =
+    value.toLowerCase.contains(fragment.toLowerCase)
 
   private def readJsonBody[T: Reader](exchange: HttpExchange): T =
     val body = Using.resource(exchange.getRequestBody) { inputStream =>

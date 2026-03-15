@@ -36,10 +36,10 @@ class ApiServerSuite extends FunSuite:
       val response = get(s"$baseUrl/clubs/${club.id.value}/applications")
       assertEquals(response.statusCode(), 200)
 
-      val applications = read[Vector[ClubMembershipApplication]](response.body())
-      assertEquals(applications.size, 1)
-      assertEquals(applications.head.displayName, "Guest Applicant")
-      assertEquals(applications.head.message, Some("let me in"))
+      val applications = readPage[ClubMembershipApplication](response.body())
+      assertEquals(applications.total, 1)
+      assertEquals(applications.items.head.displayName, "Guest Applicant")
+      assertEquals(applications.items.head.message, Some("let me in"))
     }
   }
 
@@ -80,15 +80,18 @@ class ApiServerSuite extends FunSuite:
     withServer(app) { baseUrl =>
       val whitelistResponse = get(s"$baseUrl/tournaments/${tournament.id.value}/whitelist")
       assertEquals(whitelistResponse.statusCode(), 200)
-      val whitelist = read[Vector[TournamentWhitelistEntry]](whitelistResponse.body())
-      assert(whitelist.exists(_.clubId.contains(club.id)))
-      assertEquals(whitelist.count(_.participantKind == TournamentParticipantKind.Player), players.size)
+      val whitelist = readPage[TournamentWhitelistEntry](whitelistResponse.body())
+      assert(whitelist.items.exists(_.clubId.contains(club.id)))
+      assertEquals(
+        whitelist.items.count(_.participantKind == TournamentParticipantKind.Player),
+        players.size
+      )
 
       val tablesResponse = get(s"$baseUrl/tournaments/${tournament.id.value}/stages/${stage.id.value}/tables")
       assertEquals(tablesResponse.statusCode(), 200)
-      val tables = read[Vector[Table]](tablesResponse.body())
-      assertEquals(tables.size, 1)
-      assertEquals(tables.head.seats.map(_.playerId).toSet, players.map(_.id).toSet)
+      val tables = readPage[Table](tablesResponse.body())
+      assertEquals(tables.total, 1)
+      assertEquals(tables.items.head.seats.map(_.playerId).toSet, players.map(_.id).toSet)
     }
   }
 
@@ -258,8 +261,207 @@ class ApiServerSuite extends FunSuite:
         s"$baseUrl/audits/dictionary/${dictionaryEntry.key}?operatorId=${admin.id.value}"
       )
       assertEquals(auditResponse.statusCode(), 200)
-      val auditEntries = read[Vector[AuditEventEntry]](auditResponse.body())
-      assertEquals(auditEntries.map(_.id), Vector(auditEntry.id))
+      val auditEntries = readPage[AuditEventEntry](auditResponse.body())
+      assertEquals(auditEntries.items.map(_.id), Vector(auditEntry.id))
+    }
+  }
+
+  test("players and clubs list endpoints support shared pagination and filters") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-15T12:30:00Z")
+
+    val owner = app.playerService.registerPlayer("page-owner", "Owner", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1800)
+    val alpha = app.playerService.registerPlayer("page-alpha", "Alpha", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
+    val bravo = app.playerService.registerPlayer("page-bravo", "Bravo", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1500)
+    val suspended = app.playerService.registerPlayer("page-suspended", "Suspended", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1400)
+
+    val club = app.clubService.createClub("Paged Club", owner.id, now, owner.asPrincipal)
+    app.clubService.addMember(club.id, alpha.id, principalFor(app, owner.id))
+    app.clubService.addMember(club.id, bravo.id, principalFor(app, owner.id))
+    app.clubService.addMember(club.id, suspended.id, principalFor(app, owner.id))
+    app.playerRepository.save(suspended.copy(status = PlayerStatus.Suspended))
+
+    val retiredClub = app.clubRepository.save(
+      Club(
+        id = IdGenerator.clubId(),
+        name = "Retired Club",
+        creator = owner.id,
+        createdAt = now.minusSeconds(3600),
+        members = Vector(owner.id),
+        admins = Vector(owner.id),
+        dissolvedAt = Some(now),
+        dissolvedBy = Some(owner.id)
+      )
+    )
+
+    withServer(app) { baseUrl =>
+      val playersResponse = get(
+        s"$baseUrl/players?clubId=${club.id.value}&status=Active&limit=1&offset=1"
+      )
+      assertEquals(playersResponse.statusCode(), 200)
+      val playersPage = readPage[Player](playersResponse.body())
+      assertEquals(playersPage.total, 3)
+      assertEquals(playersPage.limit, 1)
+      assertEquals(playersPage.offset, 1)
+      assertEquals(playersPage.items.map(_.nickname), Vector("Bravo"))
+      assertEquals(playersPage.appliedFilters("clubId"), club.id.value)
+      assertEquals(playersPage.appliedFilters("status"), "Active")
+
+      val clubsResponse = get(
+        s"$baseUrl/clubs?memberId=${owner.id.value}&activeOnly=true&limit=10"
+      )
+      assertEquals(clubsResponse.statusCode(), 200)
+      val clubsPage = readPage[Club](clubsResponse.body())
+      assertEquals(clubsPage.total, 1)
+      assertEquals(clubsPage.items.map(_.id), Vector(club.id))
+      assert(!clubsPage.items.exists(_.id == retiredClub.id))
+      assertEquals(clubsPage.appliedFilters("activeOnly"), "true")
+    }
+  }
+
+  test("tables records and appeals endpoints support filtering and pagination") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-15T12:45:00Z")
+
+    val admin = app.playerService.registerPlayer("filter-admin", "FilterAdmin", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1750)
+    val players = (1 to 8).toVector.map { index =>
+      if index == 1 then admin
+      else app.playerService.registerPlayer(
+        s"filter-p$index",
+        s"Player$index",
+        RankSnapshot(RankPlatform.Tenhou, "4-dan"),
+        now,
+        1500 + index
+      )
+    }
+    val stage = TournamentStage(IdGenerator.stageId(), "Filter Stage", StageFormat.Swiss, 1, 1)
+    val tournament = app.tournamentService.createTournament(
+      "Filter Cup",
+      "QA",
+      now,
+      now.plusSeconds(7200),
+      Vector(stage),
+      adminId = Some(admin.id)
+    )
+
+    players.foreach(player =>
+      app.tournamentService.registerPlayer(tournament.id, player.id, principalFor(app, admin.id))
+    )
+    app.tournamentService.publishTournament(tournament.id, principalFor(app, admin.id))
+    val tables = app.tournamentService.scheduleStageTables(
+      tournament.id,
+      stage.id,
+      principalFor(app, admin.id)
+    )
+
+    val firstTable = tables.head
+    val secondTable = tables.last
+    app.tableService.startTable(firstTable.id, now.plusSeconds(60), principalFor(app, admin.id))
+    val winner = firstTable.seats.head.playerId
+    val target = firstTable.seats(1).playerId
+    app.tableService.recordCompletedTable(
+      firstTable.id,
+      demoPaifuForResult(firstTable, tournament.id, stage.id, now.plusSeconds(120), winner, target),
+      principalFor(app, admin.id)
+    )
+
+    app.appealService.fileAppeal(
+      tableId = secondTable.id,
+      openedBy = secondTable.seats.head.playerId,
+      description = "waiting for adjudication",
+      actor = principalFor(app, secondTable.seats.head.playerId),
+      createdAt = now.plusSeconds(180)
+    )
+
+    withServer(app) { baseUrl =>
+      val tablesResponse = get(
+        s"$baseUrl/tables?tournamentId=${tournament.id.value}&status=AppealInProgress&limit=5"
+      )
+      assertEquals(tablesResponse.statusCode(), 200)
+      val tablesPage = readPage[Table](tablesResponse.body())
+      assertEquals(tablesPage.total, 1)
+      assertEquals(tablesPage.items.map(_.id), Vector(secondTable.id))
+
+      val recordsResponse = get(
+        s"$baseUrl/records?tournamentId=${tournament.id.value}&playerId=${winner.value}&limit=1"
+      )
+      assertEquals(recordsResponse.statusCode(), 200)
+      val recordsPage = readPage[MatchRecord](recordsResponse.body())
+      assertEquals(recordsPage.total, 1)
+      assertEquals(recordsPage.items.head.tableId, firstTable.id)
+
+      val appealsResponse = get(
+        s"$baseUrl/appeals?tournamentId=${tournament.id.value}&status=Open&limit=1"
+      )
+      assertEquals(appealsResponse.statusCode(), 200)
+      val appealsPage = readPage[AppealTicket](appealsResponse.body())
+      assertEquals(appealsPage.total, 1)
+      assertEquals(appealsPage.items.head.tableId, secondTable.id)
+      assertEquals(appealsPage.appliedFilters("status"), "Open")
+    }
+  }
+
+  test("dictionary and audit collection endpoints support filters and pagination") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-15T12:55:00Z")
+
+    val root = app.playerService.registerPlayer("page-root", "Root", RankSnapshot(RankPlatform.Custom, "S"), now, 2100)
+    val admin = app.playerRepository.save(root.grantRole(RoleGrant.superAdmin(now)))
+    val adminPrincipal = principalFor(app, admin.id)
+
+    val rankFormula = app.superAdminService.upsertDictionary(
+      key = "rank.formula",
+      value = "uma+oka-v3",
+      actor = adminPrincipal
+    )
+    app.superAdminService.upsertDictionary(
+      key = "rank.scale",
+      value = "aggressive",
+      actor = adminPrincipal
+    )
+    app.superAdminService.upsertDictionary(
+      key = "stage.pool",
+      value = "4",
+      actor = adminPrincipal
+    )
+
+    val auditOne = app.auditEventRepository.save(
+      AuditEventEntry(
+        id = IdGenerator.auditEventId(),
+        aggregateType = "dictionary",
+        aggregateId = rankFormula.key,
+        eventType = "FormulaUpdated",
+        occurredAt = now,
+        actorId = Some(admin.id)
+      )
+    )
+    app.auditEventRepository.save(
+      AuditEventEntry(
+        id = IdGenerator.auditEventId(),
+        aggregateType = "club",
+        aggregateId = "club-x",
+        eventType = "MembershipReviewed",
+        occurredAt = now.plusSeconds(60),
+        actorId = Some(admin.id)
+      )
+    )
+
+    withServer(app) { baseUrl =>
+      val dictionaryResponse = get(s"$baseUrl/dictionary?prefix=rank.&limit=1")
+      assertEquals(dictionaryResponse.statusCode(), 200)
+      val dictionaryPage = readPage[GlobalDictionaryEntry](dictionaryResponse.body())
+      assertEquals(dictionaryPage.total, 2)
+      assertEquals(dictionaryPage.items.size, 1)
+      assertEquals(dictionaryPage.items.head.key, "rank.formula")
+
+      val auditResponse = get(
+        s"$baseUrl/audits?operatorId=${admin.id.value}&aggregateType=dictionary&actorId=${admin.id.value}&limit=1"
+      )
+      assertEquals(auditResponse.statusCode(), 200)
+      val auditPage = readPage[AuditEventEntry](auditResponse.body())
+      assertEquals(auditPage.total, 1)
+      assertEquals(auditPage.items.map(_.id), Vector(auditOne.id))
+      assertEquals(auditPage.appliedFilters("aggregateType"), "dictionary")
     }
   }
 
@@ -366,6 +568,9 @@ class ApiServerSuite extends FunSuite:
   private def principalFor(app: ApplicationContext, playerId: PlayerId): AccessPrincipal =
     app.playerRepository.findById(playerId).getOrElse(fail(s"player ${playerId.value} missing")).asPrincipal
 
+  private def readPage[T: Reader](body: String): PagedResponse[T] =
+    read[PagedResponse[T]](body)
+
   private def demoPaifuForResult(
       table: Table,
       tournamentId: TournamentId,
@@ -438,3 +643,4 @@ class ApiServerSuite extends FunSuite:
         )
       }
     )
+

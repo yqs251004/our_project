@@ -2,23 +2,99 @@
 
 These examples assume the local server is running at `http://localhost:8080`.
 
-## 1. Preview a knockout bracket
+## List Query Convention
 
-```bash
-curl http://localhost:8080/tournaments/tournament-123/stages/stage-finals/bracket
+All collection endpoints now return a shared envelope:
+
+```json
+{
+  "items": [],
+  "total": 0,
+  "limit": 20,
+  "offset": 0,
+  "hasMore": false,
+  "appliedFilters": {}
+}
 ```
 
-## 2. Preview stage standings and advancement
+Shared query parameters:
+- `limit`: positive integer, default `20`, capped at `100`
+- `offset`: zero-based starting index, default `0`
+- endpoint-specific filters appear in `appliedFilters`
+
+## 1. Public schedules with status filters and pagination
 
 ```bash
-curl http://localhost:8080/tournaments/tournament-123/stages/stage-swiss-1/standings
+curl "http://localhost:8080/public/schedules?tournamentStatus=InProgress&stageStatus=Active&limit=10&offset=0"
+```
+
+## 2. Public player leaderboard filtered by club
+
+```bash
+curl "http://localhost:8080/public/leaderboards/players?clubId=club-123&status=Active&limit=20"
+```
+
+## 3. Query players and clubs with shared pagination
+
+```bash
+curl "http://localhost:8080/players?clubId=club-123&status=Active&nickname=alice&limit=10&offset=0"
 ```
 
 ```bash
-curl http://localhost:8080/tournaments/tournament-123/stages/stage-swiss-1/advancement
+curl "http://localhost:8080/clubs?activeOnly=true&memberId=player-123&limit=10"
 ```
 
-## 3. Upload a paifu for a completed table
+## 4. Query tournament tables, records and appeals
+
+```bash
+curl "http://localhost:8080/tournaments/tournament-123/stages/stage-swiss-1/tables?status=WaitingPreparation&playerId=player-123&limit=8"
+```
+
+```bash
+curl "http://localhost:8080/records?tournamentId=tournament-123&stageId=stage-swiss-1&playerId=player-123&limit=20"
+```
+
+```bash
+curl "http://localhost:8080/appeals?tournamentId=tournament-123&status=Open&tableId=table-123&limit=20"
+```
+
+## 5. Query dictionary and audit trail
+
+Single dictionary key lookup:
+
+```bash
+curl http://localhost:8080/dictionary/rank.formula
+```
+
+Paginated dictionary listing:
+
+```bash
+curl "http://localhost:8080/dictionary?prefix=rank.&limit=20"
+```
+
+Audit aggregate lookup with RBAC-scoped operator:
+
+```bash
+curl "http://localhost:8080/audits/dictionary/rank.formula?operatorId=player-super-admin&eventType=FormulaUpdated&limit=20"
+```
+
+Audit collection lookup:
+
+```bash
+curl "http://localhost:8080/audits?operatorId=player-super-admin&aggregateType=dictionary&actorId=player-super-admin&limit=20"
+```
+
+## 6. Dashboard reads now require `operatorId`
+
+```bash
+curl "http://localhost:8080/dashboards/players/player-123?operatorId=player-123"
+```
+
+```bash
+curl "http://localhost:8080/dashboards/clubs/club-123?operatorId=player-club-admin"
+```
+
+## 7. Upload a paifu for a completed table
 
 ```bash
 curl -X POST http://localhost:8080/tables/table-123/paifu \
@@ -93,7 +169,7 @@ Validation notes for uploads:
 - `rounds[*].actions` must be sorted by `sequenceNo` and contain exactly one terminal action.
 - `finalStandings[*].finalPoints` must equal initial points plus the cumulative deltas from all rounds.
 
-## 4. Adjudicate an appeal
+## 8. Adjudicate an appeal
 
 ```bash
 curl -X POST http://localhost:8080/appeals/appeal-123/adjudicate \
@@ -111,7 +187,7 @@ Possible values:
 - `decision`: `Resolve`, `Reject`, `Escalate`
 - `tableResolution`: `RestorePriorState`, `ArchiveTable`, `ResumeScoring`, `ResumePlay`, `ForceReset`
 
-## 5. Complete a stage after all tables are archived
+## 9. Complete a stage after all tables are archived
 
 ```bash
 curl -X POST http://localhost:8080/tournaments/tournament-123/stages/stage-finals/complete \
