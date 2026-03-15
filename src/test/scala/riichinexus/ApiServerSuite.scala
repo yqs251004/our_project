@@ -821,6 +821,59 @@ class ApiServerSuite extends FunSuite:
     }
   }
 
+  test("custom stage rules can limit scheduled tables through targetTableCount") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-15T15:55:00Z")
+
+    val admin = app.playerService.registerPlayer("custom-api-admin", "CustomApiAdmin", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1800)
+    val players = (1 to 8).toVector.map { index =>
+      if index == 1 then admin
+      else app.playerService.registerPlayer(
+        s"custom-api-$index",
+        s"CustomApi$index",
+        RankSnapshot(RankPlatform.Tenhou, "4-dan"),
+        now,
+        1800 - index * 30
+      )
+    }
+
+    val stage = TournamentStage(IdGenerator.stageId(), "Custom API Stage", StageFormat.Custom, 1, 1)
+    val tournament = app.tournamentService.createTournament(
+      "Custom API Cup",
+      "QA",
+      now,
+      now.plusSeconds(7200),
+      Vector(stage),
+      adminId = Some(admin.id)
+    )
+    players.foreach(player => app.tournamentService.registerPlayer(tournament.id, player.id, principalFor(app, admin.id)))
+    app.tournamentService.publishTournament(tournament.id, principalFor(app, admin.id))
+
+    withServer(app) { baseUrl =>
+      val rulesResponse = postJson(
+        s"$baseUrl/tournaments/${tournament.id.value}/stages/${stage.id.value}/rules",
+        write(
+          ConfigureStageRulesRequest(
+            operatorId = admin.id.value,
+            advancementRuleType = "Custom",
+            targetTableCount = Some(1),
+            note = Some("top=4")
+          )
+        )
+      )
+      assertEquals(rulesResponse.statusCode(), 200)
+
+      val scheduleResponse = postJson(
+        s"$baseUrl/tournaments/${tournament.id.value}/stages/${stage.id.value}/schedule",
+        write(OperatorRequest(Some(admin.id.value)))
+      )
+      assertEquals(scheduleResponse.statusCode(), 200)
+      val tables = read[Vector[Table]](scheduleResponse.body())
+      assertEquals(tables.size, 1)
+      assertEquals(tables.head.seats.map(_.playerId).toSet, players.take(4).map(_.id).toSet)
+    }
+  }
+
   test("stage standings endpoint honors swiss carryOverPoints flag") {
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-15T16:00:00Z")

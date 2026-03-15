@@ -139,6 +139,26 @@ curl -X POST http://localhost:8080/tournaments/tournament-123/stages/stage-swiss
 curl "http://localhost:8080/tournaments/tournament-123/stages/stage-swiss-1/standings"
 ```
 
+Round-robin stages now use dedicated pod rotation across rounds instead of reusing Swiss scheduling semantics, and custom stages can cap each round to a featured subset of tables with `targetTableCount`:
+
+```bash
+curl -X POST http://localhost:8080/tournaments/tournament-123/stages/stage-roundrobin-1/rules   -H "Content-Type: application/json"   -d '{
+    "operatorId": "player-tournament-admin",
+    "advancementRuleType": "ScoreThreshold",
+    "thresholdScore": 0,
+    "schedulingPoolSize": 2
+  }'
+```
+
+```bash
+curl -X POST http://localhost:8080/tournaments/tournament-123/stages/stage-custom-1/rules   -H "Content-Type: application/json"   -d '{
+    "operatorId": "player-tournament-admin",
+    "advancementRuleType": "Custom",
+    "targetTableCount": 1,
+    "note": "top=4"
+  }'
+```
+
 Knockout stages now consume `seedingPolicy` for visible bracket ordering. `ranking` keeps qualified players in standings order, while `rating` reorders them by ELO before the bracket is seeded:
 
 ```bash

@@ -358,7 +358,9 @@ final class DefaultTournamentRuleEngine extends TournamentRuleEngine:
     if directives.isEmpty then
       throw IllegalArgumentException("Custom advancement rules require at least one directive")
 
-    val policy = directives.foldLeft(CustomAdvancementPolicy()) { (acc, directive) =>
+    val basePolicy = CustomAdvancementPolicy(targetTableCount = rule.targetTableCount)
+
+    val policy = directives.foldLeft(basePolicy) { (acc, directive) =>
       parseDirective(acc, directive, totalEntries)
     }
 

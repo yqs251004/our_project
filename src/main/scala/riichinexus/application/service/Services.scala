@@ -1448,14 +1448,14 @@ final class TournamentApplicationService(
           throw IllegalArgumentException(
             s"Stage ${stageId.value} needs at least four active players before scheduling"
           )
-        if tournamentPlayers.size % 4 != 0 then
+        if stage.format != StageFormat.Custom && tournamentPlayers.size % 4 != 0 then
           throw IllegalArgumentException(
             s"Stage ${stageId.value} requires player counts divisible by four; got ${tournamentPlayers.size}"
           )
 
         val existingTables = tableRepository.findByTournamentAndStage(tournamentId, stageId)
         val preparedTournament =
-          prepareSwissRoundIfNeeded(
+          prepareNonKnockoutRoundIfNeeded(
             tournament = tournament,
             stage = stage,
             participants = tournamentPlayers,
@@ -1603,10 +1603,17 @@ final class TournamentApplicationService(
         if !isKnockoutStage then
           val participants = resolveParticipants(tournament, stage)
           val effectiveRoundLimit = StageLineupSupport.effectiveRoundLimit(stage)
-          val expectedTablesPerRound = participants.size / 4
+          val requiredTablesPerRound =
+            expectedTablesPerRound(
+              tournament = tournament,
+              stage = stage,
+              participants = participants,
+              records = stageRecords(tournamentId, stageId),
+              at = completedAt
+            )
           val roundCounts = stageTables.groupBy(_.stageRoundNumber).view.mapValues(_.size).toMap
           val missingRounds = (1 to effectiveRoundLimit).filter(roundNumber =>
-            roundCounts.getOrElse(roundNumber, 0) != expectedTablesPerRound
+            roundCounts.getOrElse(roundNumber, 0) != requiredTablesPerRound
           )
 
           if stage.pendingTablePlans.nonEmpty || stage.currentRound < effectiveRoundLimit || missingRounds.nonEmpty then
@@ -1780,7 +1787,7 @@ final class TournamentApplicationService(
       playerRepository.findById(playerId).filter(_.status == PlayerStatus.Active)
     }
 
-  private def prepareSwissRoundIfNeeded(
+  private def prepareNonKnockoutRoundIfNeeded(
       tournament: Tournament,
       stage: TournamentStage,
       participants: Vector[Player],
@@ -1813,7 +1820,13 @@ final class TournamentApplicationService(
             if roundNumber == stage.currentRound then stage
             else stage.advanceRound(roundNumber)
           val startingTableNo = existingTables.map(_.tableNo).foldLeft(0)(math.max)
-          val plans = seatingPolicy.assignTables(participants, planningStage, tournamentHistory)
+          val plans = plannedTablesForStage(
+            tournament = tournament,
+            stage = planningStage,
+            participants = participants,
+            history = tournamentHistory,
+            roundNumber = roundNumber
+          )
             .zipWithIndex
             .map { case (planned, index) =>
               StageTablePlan(
@@ -1828,6 +1841,184 @@ final class TournamentApplicationService(
             if updatedTournament.status == TournamentStatus.RegistrationOpen then updatedTournament.markScheduled
             else updatedTournament
           )
+
+  private def plannedTablesForStage(
+      tournament: Tournament,
+      stage: TournamentStage,
+      participants: Vector[Player],
+      history: Vector[MatchRecord],
+      roundNumber: Int
+  ): Vector[PlannedTable] =
+    stage.format match
+      case StageFormat.RoundRobin =>
+        buildRoundRobinTables(participants, stage, roundNumber)
+      case StageFormat.Custom =>
+        val selectedPlayers = selectCustomStageParticipants(tournament, stage, participants, history, roundNumber)
+        seatingPolicy.assignTables(selectedPlayers, stage, history)
+      case _ =>
+        seatingPolicy.assignTables(participants, stage, history)
+
+  private def expectedTablesPerRound(
+      tournament: Tournament,
+      stage: TournamentStage,
+      participants: Vector[Player],
+      records: Vector[MatchRecord],
+      at: Instant
+  ): Int =
+    stage.format match
+      case StageFormat.Custom =>
+        val selectedPlayers = selectCustomStageParticipants(
+          tournament = tournament,
+          stage = stage,
+          participants = participants,
+          history = records,
+          roundNumber = math.max(1, stage.currentRound)
+        )
+        selectedPlayers.size / 4
+      case _ =>
+        participants.size / 4
+
+  private def selectCustomStageParticipants(
+      tournament: Tournament,
+      stage: TournamentStage,
+      participants: Vector[Player],
+      history: Vector[MatchRecord],
+      roundNumber: Int
+  ): Vector[Player] =
+    val maxTables = math.max(1, math.min(participants.size / 4, customStageTableCount(stage, participants.size)))
+    val targetParticipants = maxTables * 4
+    val rankingOrder =
+      if history.nonEmpty then
+        val ranking = tournamentRuleEngine.buildStageRanking(
+          tournament,
+          stage,
+          participants.map(_.id),
+          history,
+          Instant.now()
+        )
+        ranking.entries.flatMap(entry => participants.find(_.id == entry.playerId))
+      else Vector.empty
+
+    val seededOrder =
+      if rankingOrder.nonEmpty then rankingOrder
+      else
+        participants.sortBy(player => (-player.elo, player.nickname, player.id.value))
+
+    val rotatedOrder =
+      if seededOrder.isEmpty then seededOrder
+      else rotateVector(seededOrder, (roundNumber - 1) % seededOrder.size)
+
+    rotatedOrder.take(targetParticipants)
+
+  private def customStageTableCount(
+      stage: TournamentStage,
+      participantCount: Int
+  ): Int =
+    val availableTables = participantCount / 4
+    require(availableTables >= 1, s"Stage ${stage.id.value} needs at least one full table")
+    stage.advancementRule.targetTableCount match
+      case Some(value) =>
+        require(value >= 1, s"Stage ${stage.id.value} targetTableCount must be positive")
+        require(value <= availableTables, s"Stage ${stage.id.value} targetTableCount exceeds available tables")
+        value
+      case None =>
+        availableTables
+
+  private def buildRoundRobinTables(
+      participants: Vector[Player],
+      stage: TournamentStage,
+      roundNumber: Int
+  ): Vector[PlannedTable] =
+    require(participants.size % 4 == 0, s"Stage ${stage.id.value} requires full four-player round robin pods")
+    val seededPlayers = participants.sortBy(player => (-player.elo, player.nickname, player.id.value))
+    val tableCount = participants.size / 4
+    val rows = seededPlayers.grouped(tableCount).toVector
+    val representedClubByPlayer = representedClubMap(stage)
+    val preferredWindByPlayer = preferredWindMap(stage)
+
+    val rotatedRows = rows.zipWithIndex.map { case (row, rowIndex) =>
+      if row.isEmpty then row
+      else rotateVector(row, ((roundNumber - 1) * rowIndex) % row.size)
+    }
+
+    (0 until tableCount).toVector.map { tableIndex =>
+      val group = rotatedRows.map(_(tableIndex))
+      PlannedTable(
+        tableNo = tableIndex + 1,
+        seats =
+          assignSeatsForGroup(
+            group,
+            representedClubByPlayer,
+            preferredWindByPlayer,
+            roundNumber + tableIndex
+          )
+      )
+    }
+
+  private def representedClubMap(stage: TournamentStage): Map[PlayerId, ClubId] =
+    val pairings = StageLineupSupport.submittedPlayersWithClub(stage)
+    val duplicatedAssignments = pairings
+      .groupBy(_._1)
+      .collect {
+        case (playerId, assignments)
+            if assignments.map(_._2).distinct.size > 1 =>
+          playerId.value
+      }
+      .toVector
+
+    require(
+      duplicatedAssignments.isEmpty,
+      s"Players cannot represent multiple clubs in the same stage: ${duplicatedAssignments.mkString(", ")}"
+    )
+
+    pairings.toMap
+
+  private def preferredWindMap(stage: TournamentStage): Map[PlayerId, SeatWind] =
+    stage.lineupSubmissions
+      .flatMap(_.seats)
+      .flatMap(seat => seat.preferredWind.map(_ -> seat.playerId))
+      .groupBy(_._2)
+      .map { case (playerId, preferences) =>
+        val preferredWinds = preferences.map(_._1).distinct
+        require(
+          preferredWinds.size <= 1,
+          s"Player ${playerId.value} cannot declare multiple preferred winds in the same stage"
+        )
+        playerId -> preferredWinds.head
+      }
+
+  private def assignSeatsForGroup(
+      players: Vector[Player],
+      representedClubByPlayer: Map[PlayerId, ClubId],
+      preferredWindByPlayer: Map[PlayerId, SeatWind],
+      shift: Int
+  ): Vector[TableSeat] =
+    val baselineOrder = players.zipWithIndex.map { case (player, index) => player.id -> index }.toMap
+    val chosenPlayers =
+      players.permutations.minBy { candidate =>
+        val preferencePenalty = SeatWind.all.zip(candidate).count { case (seat, player) =>
+          preferredWindByPlayer.get(player.id).exists(_ != seat)
+        }
+        val displacementPenalty = candidate.zipWithIndex.map { case (player, index) =>
+          math.abs(index - baselineOrder(player.id))
+        }.sum
+        val tieBreaker = candidate.map(_.nickname).mkString("|")
+        (preferencePenalty, displacementPenalty, tieBreaker)
+      }.toVector
+
+    SeatWind.all.zip(rotateVector(chosenPlayers, shift % players.size)).map { case (seat, player) =>
+      TableSeat(
+        seat = seat,
+        playerId = player.id,
+        clubId = representedClubByPlayer.get(player.id).orElse(player.clubId)
+      )
+    }
+
+  private def rotateVector[A](values: Vector[A], shift: Int): Vector[A] =
+    if values.isEmpty then values
+    else
+      val normalized = math.floorMod(shift, values.size)
+      values.drop(normalized) ++ values.take(normalized)
 
   private def normalizeStage(stage: TournamentStage): TournamentStage =
     if stage.advancementRule.ruleType == AdvancementRuleType.Custom &&
