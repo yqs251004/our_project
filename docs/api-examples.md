@@ -121,13 +121,14 @@ curl -X POST http://localhost:8080/tournaments/tournament-123/stages/stage-swiss
 ```
 
 
-Disable Swiss carry-over so each new round ranking only reflects the latest archived round:
+Swiss stages now also consume `pairingMethod`; for example, `snake` produces serpentine groupings instead of the default `balanced-elo`:
 
 ```bash
 curl -X POST http://localhost:8080/tournaments/tournament-123/stages/stage-swiss-1/rules   -H "Content-Type: application/json"   -d '{
     "operatorId": "player-tournament-admin",
     "advancementRuleType": "SwissCut",
     "cutSize": 8,
+    "pairingMethod": "snake",
     "carryOverPoints": false,
     "maxRounds": 2,
     "schedulingPoolSize": 2

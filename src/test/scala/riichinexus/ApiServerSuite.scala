@@ -760,6 +760,67 @@ class ApiServerSuite extends FunSuite:
   }
 
 
+  test("stage rules API can switch swiss pairingMethod to snake") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-15T15:45:00Z")
+
+    val admin = app.playerService.registerPlayer("pair-api-admin", "PairApiAdmin", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1800)
+    val players = (1 to 8).toVector.map { index =>
+      if index == 1 then admin
+      else app.playerService.registerPlayer(
+        s"pair-api-$index",
+        s"PairApi$index",
+        RankSnapshot(RankPlatform.Tenhou, "4-dan"),
+        now,
+        1800 - index * 40
+      )
+    }
+
+    val stage = TournamentStage(IdGenerator.stageId(), "Pair API Stage", StageFormat.Swiss, 1, 1)
+    val tournament = app.tournamentService.createTournament(
+      "Pair API Cup",
+      "QA",
+      now,
+      now.plusSeconds(7200),
+      Vector(stage),
+      adminId = Some(admin.id)
+    )
+    players.foreach(player => app.tournamentService.registerPlayer(tournament.id, player.id, principalFor(app, admin.id)))
+    app.tournamentService.publishTournament(tournament.id, principalFor(app, admin.id))
+
+    withServer(app) { baseUrl =>
+      val rulesResponse = postJson(
+        s"$baseUrl/tournaments/${tournament.id.value}/stages/${stage.id.value}/rules",
+        write(
+          ConfigureStageRulesRequest(
+            operatorId = admin.id.value,
+            advancementRuleType = "SwissCut",
+            cutSize = Some(8),
+            pairingMethod = Some("snake")
+          )
+        )
+      )
+      assertEquals(rulesResponse.statusCode(), 200)
+      assertEquals(read[Tournament](rulesResponse.body()).stages.head.swissRule.map(_.pairingMethod), Some("snake"))
+
+      val scheduleResponse = postJson(
+        s"$baseUrl/tournaments/${tournament.id.value}/stages/${stage.id.value}/schedule",
+        write(OperatorRequest(Some(admin.id.value)))
+      )
+      assertEquals(scheduleResponse.statusCode(), 200)
+      val tables = read[Vector[Table]](scheduleResponse.body()).sortBy(_.tableNo)
+      val nicknameById = players.map(player => player.id -> player.nickname).toMap
+      val groupedNicknames = tables.map(table => table.seats.map(seat => nicknameById(seat.playerId)).toSet)
+      assertEquals(
+        groupedNicknames,
+        Vector(
+          Set(players(0).nickname, players(3).nickname, players(4).nickname, players(7).nickname),
+          Set(players(1).nickname, players(2).nickname, players(5).nickname, players(6).nickname)
+        )
+      )
+    }
+  }
+
   test("stage standings endpoint honors swiss carryOverPoints flag") {
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-15T16:00:00Z")

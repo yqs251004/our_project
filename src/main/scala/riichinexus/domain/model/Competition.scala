@@ -58,7 +58,12 @@ final case class SwissRuleConfig(
     pairingMethod: String = "balanced-elo",
     carryOverPoints: Boolean = true,
     maxRounds: Option[Int] = None
-) derives CanEqual
+) derives CanEqual:
+  private val supportedPairingMethods = Set("balanced-elo", "snake")
+  require(
+    supportedPairingMethods.contains(pairingMethod.trim.toLowerCase),
+    s"Unsupported swiss pairing method: $pairingMethod"
+  )
 
 final case class KnockoutRuleConfig(
     bracketSize: Option[Int] = None,

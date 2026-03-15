@@ -237,6 +237,7 @@ final case class ConfigureStageRulesRequest(
     thresholdScore: Option[Int] = None,
     targetTableCount: Option[Int] = None,
     schedulingPoolSize: Int = 4,
+    pairingMethod: Option[String] = None,
     carryOverPoints: Option[Boolean] = None,
     maxRounds: Option[Int] = None,
     bracketSize: Option[Int] = None,
@@ -258,9 +259,10 @@ final case class ConfigureStageRulesRequest(
     )
 
   def swissRule: Option[SwissRuleConfig] =
-    if carryOverPoints.isDefined || maxRounds.isDefined then
+    if pairingMethod.isDefined || carryOverPoints.isDefined || maxRounds.isDefined then
       Some(
         SwissRuleConfig(
+          pairingMethod = pairingMethod.map(_.trim.toLowerCase).getOrElse("balanced-elo"),
           carryOverPoints = carryOverPoints.getOrElse(true),
           maxRounds = maxRounds
         )

@@ -556,6 +556,64 @@ class RiichiNexusSuite extends FunSuite:
     assert(table.seats.forall(_.clubId.contains(club.id)))
   }
 
+  test("swiss pairingMethod can switch from balanced elo to snake grouping") {
+    val now = Instant.parse("2026-03-16T08:00:00Z")
+
+    def scheduleWith(pairingMethod: String): (Vector[String], Vector[Set[String]]) =
+      val app = ApplicationContext.inMemory()
+      val players = (1 to 8).toVector.map { index =>
+        app.playerService.registerPlayer(
+          s"pairing-$pairingMethod-$index",
+          s"Pairing${pairingMethod.capitalize}$index",
+          RankSnapshot(RankPlatform.Tenhou, "4-dan"),
+          now,
+          2000 - index * 50
+        )
+      }
+
+      val stage = TournamentStage(
+        IdGenerator.stageId(),
+        s"Swiss $pairingMethod",
+        StageFormat.Swiss,
+        order = 1,
+        roundCount = 1,
+        swissRule = Some(SwissRuleConfig(pairingMethod = pairingMethod))
+      )
+      val tournament = app.tournamentService.createTournament(
+        s"Swiss ${pairingMethod} Cup",
+        "QA",
+        now,
+        now.plusSeconds(7200),
+        Vector(stage)
+      )
+
+      players.foreach(player => app.tournamentService.registerPlayer(tournament.id, player.id))
+      app.tournamentService.publishTournament(tournament.id)
+      val groupedNicknames = app.tournamentService.scheduleStageTables(tournament.id, stage.id)
+        .sortBy(_.tableNo)
+        .map(table => table.seats.flatMap(seat => players.find(_.id == seat.playerId).map(_.nickname)).toSet)
+
+      (players.map(_.nickname), groupedNicknames)
+
+    val (balancedNames, balancedTables) = scheduleWith("balanced-elo")
+    val (snakeNames, snakeTables) = scheduleWith("snake")
+
+    assertEquals(
+      balancedTables,
+      Vector(
+        balancedNames.take(4).toSet,
+        balancedNames.drop(4).toSet
+      )
+    )
+    assertEquals(
+      snakeTables,
+      Vector(
+        Set(snakeNames(0), snakeNames(3), snakeNames(4), snakeNames(7)),
+        Set(snakeNames(1), snakeNames(2), snakeNames(5), snakeNames(6))
+      )
+    )
+  }
+
   test("swiss maxRounds limits scheduling horizon and completion requirements") {
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-13T17:00:00Z")

@@ -39,7 +39,11 @@ final class BalancedEloSeatingPolicy extends SeatingPolicy:
       )
 
     val opponentCounts = buildOpponentCounts(historicalRecords)
-    val groupedPlayers = buildOptimalGroups(sortedPlayers, opponentCounts)
+    val groupedPlayers = normalizedPairingMethod(stage) match
+      case "balanced-elo" => buildOptimalGroups(sortedPlayers, opponentCounts)
+      case "snake"        => buildSnakeGroups(sortedPlayers)
+      case method =>
+        throw IllegalArgumentException(s"Unsupported swiss pairing method: $method")
 
     groupedPlayers.zipWithIndex
       .map { case (group, index) =>
@@ -50,6 +54,25 @@ final class BalancedEloSeatingPolicy extends SeatingPolicy:
         )
       }
       .toVector
+
+  private def normalizedPairingMethod(stage: TournamentStage): String =
+    stage.swissRule.map(_.pairingMethod.trim.toLowerCase).getOrElse("balanced-elo")
+
+  private def buildSnakeGroups(players: Vector[Player]): Vector[Vector[Player]] =
+    val tableCount = players.size / 4
+    val grouped = Array.fill(tableCount)(Vector.empty[Player])
+
+    players.grouped(tableCount).zipWithIndex.foreach { case (row, rowIndex) =>
+      val tableIndices =
+        if rowIndex % 2 == 0 then row.indices
+        else row.indices.reverse
+
+      tableIndices.zip(row).foreach { case (tableIndex, player) =>
+        grouped(tableIndex) = grouped(tableIndex) :+ player
+      }
+    }
+
+    grouped.toVector
 
   private def buildOptimalGroups(
       players: Vector[Player],
