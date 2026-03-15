@@ -34,6 +34,39 @@ class RiichiNexusSuite extends FunSuite:
     )
   }
 
+  test("pending club applications can be withdrawn by their original actor") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-15T17:10:00Z")
+
+    val owner = app.playerService.registerPlayer("withdraw-owner", "WithdrawOwner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
+    val applicant = app.playerService.registerPlayer("withdraw-player", "WithdrawPlayer", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1500)
+    val club = app.clubService.createClub("Withdraw Club", owner.id, now, owner.asPrincipal)
+
+    val application = app.clubService.applyForMembership(
+      clubId = club.id,
+      applicantUserId = Some(applicant.userId),
+      displayName = applicant.nickname,
+      actor = applicant.asPrincipal,
+      submittedAt = now.plusSeconds(30)
+    ).getOrElse(fail("application missing"))
+
+    val withdrawn = app.clubService.withdrawMembershipApplication(
+      clubId = club.id,
+      applicationId = application.id,
+      actor = applicant.asPrincipal,
+      withdrawnAt = now.plusSeconds(60),
+      note = Some("changed my mind")
+    ).getOrElse(fail("withdrawal missing"))
+
+    assertEquals(withdrawn.status, ClubMembershipApplicationStatus.Withdrawn)
+    assertEquals(withdrawn.withdrawnByPrincipalId, Some(applicant.id.value))
+    assertEquals(withdrawn.reviewNote, Some("changed my mind"))
+    assertEquals(
+      app.clubRepository.findById(club.id).flatMap(_.findApplication(application.id)).map(_.status),
+      Some(ClubMembershipApplicationStatus.Withdrawn)
+    )
+  }
+
   test("scheduling a stage creates one four-player table") {
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-13T09:00:00Z")

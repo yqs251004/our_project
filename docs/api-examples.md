@@ -70,6 +70,25 @@ Query the created guest session later:
 curl http://localhost:8080/guest-sessions/guest-123
 ```
 
+Registered players can also submit an application under their own identity by providing `operatorId`; the backend will derive `applicantUserId` and display name automatically:
+
+```bash
+curl -X POST http://localhost:8080/clubs/club-123/applications   -H "Content-Type: application/json"   -d '{
+    "operatorId": "player-registered-1",
+    "displayName": "ignored-when-operator-exists",
+    "message": "I'd like to join next split"
+  }'
+```
+
+Withdraw a still-pending club application as the original guest session or registered player:
+
+```bash
+curl -X POST http://localhost:8080/clubs/club-123/applications/membership-123/withdraw   -H "Content-Type: application/json"   -d '{
+    "operatorId": "player-registered-1",
+    "note": "schedule changed"
+  }'
+```
+
 ## 5. Query tournament tables, records and appeals
 
 ```bash

@@ -50,6 +50,7 @@ enum Permission derives CanEqual:
   case ViewOwnDashboard
   case ViewClubDashboard
   case SubmitClubApplication
+  case WithdrawClubApplication
   case ManageClubMembership
   case ManageClubOperations
   case SetClubTitle
@@ -294,7 +295,8 @@ final case class ClubMembershipApplication(
     status: ClubMembershipApplicationStatus = ClubMembershipApplicationStatus.Pending,
     reviewedBy: Option[PlayerId] = None,
     reviewedAt: Option[Instant] = None,
-    reviewNote: Option[String] = None
+    reviewNote: Option[String] = None,
+    withdrawnByPrincipalId: Option[String] = None
 ) derives CanEqual:
   def isPending: Boolean =
     status == ClubMembershipApplicationStatus.Pending
@@ -315,6 +317,19 @@ final case class ClubMembershipApplication(
       reviewedBy = Some(by),
       reviewedAt = Some(at),
       reviewNote = note
+    )
+
+  def withdraw(
+      byPrincipalId: String,
+      at: Instant,
+      note: Option[String] = None
+  ): ClubMembershipApplication =
+    require(isPending, "Only pending applications can be withdrawn")
+    copy(
+      status = ClubMembershipApplicationStatus.Withdrawn,
+      reviewedAt = Some(at),
+      reviewNote = note,
+      withdrawnByPrincipalId = Some(byPrincipalId)
     )
 
 final case class ClubRankNode(

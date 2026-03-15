@@ -62,6 +62,51 @@ class ApiServerSuite extends FunSuite:
     }
   }
 
+  test("registered players can submit and withdraw club applications over the API") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-15T08:45:00Z")
+
+    val owner = app.playerService.registerPlayer("api-withdraw-owner", "ApiWithdrawOwner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
+    val applicant = app.playerService.registerPlayer("api-withdraw-player", "ApiWithdrawPlayer", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1500)
+    val club = app.clubService.createClub("Withdraw API Club", owner.id, now, owner.asPrincipal)
+
+    withServer(app) { baseUrl =>
+      val createResponse = postJson(
+        s"$baseUrl/clubs/${club.id.value}/applications",
+        write(
+          ClubMembershipApplicationRequest(
+            applicantUserId = None,
+            displayName = "fallback-name",
+            message = Some("registered path"),
+            guestSessionId = None,
+            operatorId = Some(applicant.id.value)
+          )
+        )
+      )
+      assertEquals(createResponse.statusCode(), 200)
+      val created = read[ClubMembershipApplication](createResponse.body())
+      assertEquals(created.applicantUserId, Some(applicant.userId))
+      assertEquals(created.displayName, applicant.nickname)
+
+      val withdrawResponse = postJson(
+        s"$baseUrl/clubs/${club.id.value}/applications/${created.id.value}/withdraw",
+        write(WithdrawClubApplicationRequest(operatorId = Some(applicant.id.value), note = Some("not this season")))
+      )
+      assertEquals(withdrawResponse.statusCode(), 200)
+      val withdrawn = read[ClubMembershipApplication](withdrawResponse.body())
+      assertEquals(withdrawn.status, ClubMembershipApplicationStatus.Withdrawn)
+      assertEquals(withdrawn.withdrawnByPrincipalId, Some(applicant.id.value))
+
+      val filteredResponse = get(
+        s"$baseUrl/clubs/${club.id.value}/applications?status=Withdrawn&applicantUserId=${applicant.userId}"
+      )
+      assertEquals(filteredResponse.statusCode(), 200)
+      val applications = readPage[ClubMembershipApplication](filteredResponse.body())
+      assertEquals(applications.total, 1)
+      assertEquals(applications.items.head.id, created.id)
+    }
+  }
+
   test("club applications endpoint returns submitted applications") {
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-15T08:00:00Z")

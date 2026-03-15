@@ -58,6 +58,9 @@ final class StrictRbacAuthorizationService extends AuthorizationService:
       case Permission.SubmitClubApplication =>
         principal.isGuest || principal.hasRole(RoleKind.RegisteredPlayer)
 
+      case Permission.WithdrawClubApplication =>
+        principal.isGuest || principal.hasRole(RoleKind.RegisteredPlayer)
+
       case Permission.ManageClubMembership |
           Permission.ManageClubOperations |
           Permission.SetClubTitle |

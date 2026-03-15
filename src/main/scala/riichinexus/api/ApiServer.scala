@@ -258,16 +258,34 @@ private final class ApiHandler(
         )
       case ("POST", Vector("clubs", clubId, "applications")) =>
         val request = readJsonBody[ClubMembershipApplicationRequest](exchange)
-        val guestActor = request.session.map(guestPrincipal)
+        val actor = requestActor(request.session, request.operator)
+        val applicantUserId =
+          request.applicantUserId
+            .orElse(request.session.map(session => s"guest:${session.value}"))
+            .orElse(request.operator.flatMap(playerId => app.playerRepository.findById(playerId).map(_.userId)))
+        val displayName =
+          request.session.map(_ => actor.displayName)
+            .orElse(request.operator.flatMap(playerId => app.playerRepository.findById(playerId).map(_.nickname)))
+            .getOrElse(request.displayName)
         sendOption(
           exchange,
           app.clubService.applyForMembership(
             clubId = ClubId(clubId),
-            applicantUserId =
-              request.applicantUserId.orElse(request.session.map(session => s"guest:${session.value}")),
-            displayName = guestActor.map(_.displayName).getOrElse(request.displayName),
+            applicantUserId = applicantUserId,
+            displayName = displayName,
             message = request.message,
-            actor = guestActor.getOrElse(AccessPrincipal.guest())
+            actor = actor
+          )
+        )
+      case ("POST", Vector("clubs", clubId, "applications", applicationId, "withdraw")) =>
+        val request = readJsonBody[WithdrawClubApplicationRequest](exchange)
+        sendOption(
+          exchange,
+          app.clubService.withdrawMembershipApplication(
+            clubId = ClubId(clubId),
+            applicationId = MembershipApplicationId(applicationId),
+            actor = requestActor(request.session, request.operator),
+            note = request.note
           )
         )
       case ("POST", Vector("clubs", clubId, "applications", applicationId, "approve")) =>
@@ -954,6 +972,17 @@ private final class ApiHandler(
       .findById(sessionId)
       .map(AccessPrincipal.guest)
       .getOrElse(throw NoSuchElementException(s"Guest session ${sessionId.value} was not found"))
+
+  private def requestActor(
+      guestSessionId: Option[GuestSessionId],
+      operatorId: Option[PlayerId]
+  ): AccessPrincipal =
+    if guestSessionId.nonEmpty && operatorId.nonEmpty then
+      throw IllegalArgumentException("guestSessionId and operatorId cannot be provided together")
+
+    guestSessionId.map(guestPrincipal)
+      .orElse(operatorId.map(principal))
+      .getOrElse(AccessPrincipal.guest())
 
   private def queryPrincipal(exchange: HttpExchange): AccessPrincipal =
     val operatorId = queryParam(exchange, "operatorId")

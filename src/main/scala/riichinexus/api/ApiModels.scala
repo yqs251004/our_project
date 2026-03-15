@@ -65,10 +65,14 @@ final case class ClubMembershipApplicationRequest(
     applicantUserId: Option[String],
     displayName: String,
     message: Option[String] = None,
-    guestSessionId: Option[String] = None
+    guestSessionId: Option[String] = None,
+    operatorId: Option[String] = None
 ):
   def session: Option[GuestSessionId] =
     guestSessionId.map(GuestSessionId(_))
+
+  def operator: Option[PlayerId] =
+    operatorId.map(PlayerId(_))
 
 final case class ApproveClubApplicationRequest(
     playerId: String,
@@ -322,6 +326,17 @@ final case class RejectClubApplicationRequest(
   def operator: PlayerId =
     PlayerId(operatorId)
 
+final case class WithdrawClubApplicationRequest(
+    guestSessionId: Option[String] = None,
+    operatorId: Option[String] = None,
+    note: Option[String] = None
+):
+  def session: Option[GuestSessionId] =
+    guestSessionId.map(GuestSessionId(_))
+
+  def operator: Option[PlayerId] =
+    operatorId.map(PlayerId(_))
+
 final case class UpdateClubRelationRequest(
     operatorId: String,
     targetClubId: String,
@@ -484,6 +499,7 @@ object ApiModels:
   given ReadWriter[AssignTournamentAdminRequest] = macroRW
   given ReadWriter[OperatorRequest] = macroRW
   given ReadWriter[RejectClubApplicationRequest] = macroRW
+  given ReadWriter[WithdrawClubApplicationRequest] = macroRW
   given ReadWriter[UpdateClubRelationRequest] = macroRW
   given ReadWriter[AppealAttachmentRequest] = macroRW
   given ReadWriter[FileAppealRequest] = macroRW

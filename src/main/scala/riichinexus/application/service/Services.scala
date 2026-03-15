@@ -371,6 +371,7 @@ final class ClubApplicationService(
 
       clubRepository.findById(clubId).map { club =>
         ensureClubActive(club)
+        require(displayName.trim.nonEmpty, "Membership application display name cannot be empty")
 
         applicantUserId.foreach { userId =>
           if club.membershipApplications.exists(application =>
@@ -399,6 +400,39 @@ final class ClubApplicationService(
 
         clubRepository.save(club.submitApplication(application))
         application
+      }
+    }
+
+  def withdrawMembershipApplication(
+      clubId: ClubId,
+      applicationId: MembershipApplicationId,
+      actor: AccessPrincipal,
+      withdrawnAt: Instant = Instant.now(),
+      note: Option[String] = None
+  ): Option[ClubMembershipApplication] =
+    transactionManager.inTransaction {
+      authorizationService.requirePermission(actor, Permission.WithdrawClubApplication)
+
+      clubRepository.findById(clubId).map { club =>
+        ensureClubActive(club)
+
+        val application = club
+          .findApplication(applicationId)
+          .getOrElse(
+            throw NoSuchElementException(
+              s"Membership application ${applicationId.value} was not found in club ${clubId.value}"
+            )
+          )
+
+        if !application.isPending then
+          throw IllegalArgumentException(
+            s"Membership application ${applicationId.value} has already been reviewed"
+          )
+
+        requireApplicationOwnership(application, actor)
+        val updatedApplication = application.withdraw(actor.principalId, withdrawnAt, note)
+        clubRepository.save(club.reviewApplication(applicationId, _ => updatedApplication))
+        updatedApplication
       }
     }
 
@@ -498,6 +532,23 @@ final class ClubApplicationService(
         )
       }
     }
+
+  private def requireApplicationOwnership(
+      application: ClubMembershipApplication,
+      actor: AccessPrincipal
+  ): Unit =
+    val ownedByGuest =
+      actor.isGuest && application.applicantUserId.contains(s"guest:${actor.principalId}")
+
+    val ownedByRegisteredPlayer =
+      actor.playerId.flatMap(playerRepository.findById).exists(player =>
+        application.applicantUserId.contains(player.userId)
+      )
+
+    if !ownedByGuest && !ownedByRegisteredPlayer && !actor.isSuperAdmin then
+      throw AuthorizationFailure(
+        s"${actor.displayName} cannot withdraw membership application ${application.id.value}"
+      )
 
   def assignAdmin(
       clubId: ClubId,
