@@ -52,6 +52,9 @@ final class RiichiNexusApiServer(
   def stop(delaySeconds: Int = 0): Unit =
     server.stop(delaySeconds)
 
+  def port: Int =
+    server.getAddress.getPort
+
 private final class ApiHandler(
     app: ApplicationContext,
     config: ApiServerConfig
@@ -115,6 +118,15 @@ private final class ApiHandler(
         sendJson(exchange, 200, app.clubRepository.findAll())
       case ("GET", Vector("clubs", clubId)) =>
         sendOption(exchange, app.clubRepository.findById(ClubId(clubId)))
+      case ("GET", Vector("clubs", clubId, "members")) =>
+        val members = app.playerRepository.findByClub(ClubId(clubId))
+        sendJson(exchange, 200, members)
+      case ("GET", Vector("clubs", clubId, "applications")) =>
+        val applications = app.clubRepository
+          .findById(ClubId(clubId))
+          .map(_.membershipApplications.sortBy(_.submittedAt))
+          .getOrElse(throw NoSuchElementException(s"Club $clubId was not found"))
+        sendJson(exchange, 200, applications)
       case ("POST", Vector("clubs")) =>
         val request = readJsonBody[CreateClubRequest](exchange)
         val club = app.clubService.createClub(
@@ -204,8 +216,22 @@ private final class ApiHandler(
         sendJson(exchange, 200, app.tournamentRepository.findAll())
       case ("GET", Vector("tournaments", tournamentId)) =>
         sendOption(exchange, app.tournamentRepository.findById(TournamentId(tournamentId)))
+      case ("GET", Vector("tournaments", tournamentId, "whitelist")) =>
+        val whitelist = app.tournamentRepository
+          .findById(TournamentId(tournamentId))
+          .map(_.whitelist)
+          .getOrElse(throw NoSuchElementException(s"Tournament $tournamentId was not found"))
+        sendJson(exchange, 200, whitelist)
       case ("GET", Vector("tournaments", tournamentId, "settlements")) =>
         sendJson(exchange, 200, app.tournamentSettlementRepository.findByTournament(TournamentId(tournamentId)))
+      case ("GET", Vector("tournaments", tournamentId, "settlements", stageId)) =>
+        sendOption(
+          exchange,
+          app.tournamentSettlementRepository.findByTournamentAndStage(
+            TournamentId(tournamentId),
+            TournamentStageId(stageId)
+          )
+        )
       case ("POST", Vector("tournaments")) =>
         val request = readJsonBody[CreateTournamentRequest](exchange)
         val tournament = app.tournamentService.createTournament(
@@ -353,6 +379,15 @@ private final class ApiHandler(
             TournamentStageId(stageId)
           )
         )
+      case ("GET", Vector("tournaments", tournamentId, "stages", stageId, "tables")) =>
+        sendJson(
+          exchange,
+          200,
+          app.tableRepository.findByTournamentAndStage(
+            TournamentId(tournamentId),
+            TournamentStageId(stageId)
+          )
+        )
       case ("GET", Vector("tournaments", tournamentId, "stages", stageId, "advancement")) =>
         sendJson(
           exchange,
@@ -441,12 +476,18 @@ private final class ApiHandler(
 
       case ("GET", Vector("records")) =>
         sendJson(exchange, 200, app.matchRecordRepository.findAll())
+      case ("GET", Vector("records", recordId)) =>
+        sendOption(exchange, app.matchRecordRepository.findById(MatchRecordId(recordId)))
+      case ("GET", Vector("records", "table", tableId)) =>
+        sendOption(exchange, app.matchRecordRepository.findByTable(TableId(tableId)))
       case ("GET", Vector("paifus")) =>
         sendJson(exchange, 200, app.paifuRepository.findAll())
       case ("GET", Vector("paifus", paifuId)) =>
         sendOption(exchange, app.paifuRepository.findById(PaifuId(paifuId)))
       case ("GET", Vector("appeals")) =>
         sendJson(exchange, 200, app.appealTicketRepository.findAll())
+      case ("GET", Vector("appeals", appealId)) =>
+        sendOption(exchange, app.appealTicketRepository.findById(AppealTicketId(appealId)))
       case ("GET", Vector("audits")) =>
         sendJson(exchange, 200, app.auditEventRepository.findAll())
       case ("POST", Vector("appeals", appealId, "resolve")) =>
