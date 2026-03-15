@@ -717,6 +717,75 @@ final class ClubApplicationService(
       }
     }
 
+  def awardHonor(
+      clubId: ClubId,
+      honor: ClubHonor,
+      actor: AccessPrincipal,
+      occurredAt: Instant = Instant.now()
+  ): Option[Club] =
+    transactionManager.inTransaction {
+      clubRepository.findById(clubId).map { club =>
+        ensureClubActive(club)
+        authorizationService.requirePermission(
+          actor,
+          Permission.ManageClubOperations,
+          clubId = Some(clubId)
+        )
+
+        val updatedClub = clubRepository.save(club.addHonor(honor))
+        auditEventRepository.save(
+          AuditEventEntry(
+            id = IdGenerator.auditEventId(),
+            aggregateType = "club",
+            aggregateId = clubId.value,
+            eventType = "ClubHonorAwarded",
+            occurredAt = occurredAt,
+            actorId = actor.playerId,
+            details = Map("title" -> honor.title),
+            note = honor.note
+          )
+        )
+        updatedClub
+      }
+    }
+
+  def revokeHonor(
+      clubId: ClubId,
+      title: String,
+      actor: AccessPrincipal,
+      occurredAt: Instant = Instant.now(),
+      note: Option[String] = None
+  ): Option[Club] =
+    transactionManager.inTransaction {
+      clubRepository.findById(clubId).map { club =>
+        ensureClubActive(club)
+        authorizationService.requirePermission(
+          actor,
+          Permission.ManageClubOperations,
+          clubId = Some(clubId)
+        )
+
+        val normalizedTitle = title.trim.toLowerCase
+        if !club.honors.exists(_.title.trim.toLowerCase == normalizedTitle) then
+          throw NoSuchElementException(s"Club ${clubId.value} does not have honor '$title'")
+
+        val updatedClub = clubRepository.save(club.removeHonor(title))
+        auditEventRepository.save(
+          AuditEventEntry(
+            id = IdGenerator.auditEventId(),
+            aggregateType = "club",
+            aggregateId = clubId.value,
+            eventType = "ClubHonorRevoked",
+            occurredAt = occurredAt,
+            actorId = actor.playerId,
+            details = Map("title" -> title),
+            note = note
+          )
+        )
+        updatedClub
+      }
+    }
+
   def updateRelation(
       clubId: ClubId,
       relation: ClubRelation,
@@ -1876,6 +1945,18 @@ final class TableLifecycleService(
             terminalActions.head.actionType == PaifuActionType.DrawGame,
             s"Round ${index + 1} drawn result must end with a DrawGame action"
           )
+
+      round.result.settlement.foreach { settlement =>
+        val riichiDeclarations = round.actions.count(_.actionType == PaifuActionType.Riichi)
+        require(
+          riichiDeclarations > 0 || settlement.riichiSticksDelta == 0,
+          s"Round ${index + 1} cannot carry riichi sticks without a riichi declaration"
+        )
+        require(
+          round.descriptor.honba > 0 || settlement.honbaPayment == 0,
+          s"Round ${index + 1} cannot carry honba payment when honba is zero"
+        )
+      }
     }
 
     val expectedFinalPoints = paifu.expectedFinalPoints

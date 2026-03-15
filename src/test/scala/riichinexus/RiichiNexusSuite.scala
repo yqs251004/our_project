@@ -749,6 +749,127 @@ class RiichiNexusSuite extends FunSuite:
     assert(!started.seats.exists(_.disconnected))
   }
 
+
+  test("club honors can be awarded and revoked with audit trail") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-13T14:30:00Z")
+
+    val owner = app.playerService.registerPlayer("club-honor-owner", "HonorOwner", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1800)
+    val club = app.clubService.createClub("Honor Club", owner.id, now, owner.asPrincipal)
+
+    val afterAward = app.clubService.awardHonor(
+      club.id,
+      ClubHonor("Spring Split Champion", now.plusSeconds(60), Some("won grand finals")),
+      principalFor(app, owner.id),
+      now.plusSeconds(60)
+    ).getOrElse(fail("honor award failed"))
+    assertEquals(afterAward.honors.map(_.title), Vector("Spring Split Champion"))
+
+    val afterUpdate = app.clubService.awardHonor(
+      club.id,
+      ClubHonor("Spring Split Champion", now.plusSeconds(120), Some("updated note")),
+      principalFor(app, owner.id),
+      now.plusSeconds(120)
+    ).getOrElse(fail("honor update failed"))
+    assertEquals(afterUpdate.honors.size, 1)
+    assertEquals(afterUpdate.honors.head.note, Some("updated note"))
+
+    val afterRevoke = app.clubService.revokeHonor(
+      club.id,
+      "Spring Split Champion",
+      principalFor(app, owner.id),
+      now.plusSeconds(180),
+      Some("season rollover")
+    ).getOrElse(fail("honor revoke failed"))
+    assertEquals(afterRevoke.honors, Vector.empty)
+
+    val auditTypes = app.auditEventRepository.findByAggregate("club", club.id.value).map(_.eventType)
+    assert(auditTypes.contains("ClubHonorAwarded"))
+    assert(auditTypes.contains("ClubHonorRevoked"))
+  }
+
+  test("round settlement validation and match record notes are populated from paifu") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-13T19:30:00Z")
+
+    val players = Vector(
+      app.playerService.registerPlayer("settle-a", "SettleA", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1650),
+      app.playerService.registerPlayer("settle-b", "SettleB", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1640),
+      app.playerService.registerPlayer("settle-c", "SettleC", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1630),
+      app.playerService.registerPlayer("settle-d", "SettleD", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1620)
+    )
+
+    def prepareTable(label: String, offset: Long): (Tournament, TournamentStage, Table) =
+      val stage = TournamentStage(IdGenerator.stageId(), s"$label Stage", StageFormat.Swiss, 1, 1)
+      val tournament = app.tournamentService.createTournament(
+        s"$label Cup",
+        "QA",
+        now.plusSeconds(offset),
+        now.plusSeconds(offset + 7200),
+        Vector(stage)
+      )
+      players.foreach(player => app.tournamentService.registerPlayer(tournament.id, player.id))
+      app.tournamentService.publishTournament(tournament.id)
+      val table = app.tournamentService.scheduleStageTables(tournament.id, stage.id).head
+      app.tableService.startTable(table.id, now.plusSeconds(offset + 60))
+      (tournament, stage, table)
+
+    val (validTournament, validStage, validTable) = prepareTable("Settlement Valid", 0)
+    val basePaifu = demoPaifuForResult(
+      validTable,
+      validTournament.id,
+      validStage.id,
+      now.plusSeconds(120),
+      winner = validTable.seats.head.playerId,
+      target = validTable.seats(1).playerId
+    )
+    val validPaifu = basePaifu.copy(
+      rounds = Vector(
+        basePaifu.rounds.head.copy(
+          descriptor = KyokuDescriptor(SeatWind.East, 1, honba = 1),
+          result = basePaifu.rounds.head.result.copy(
+            settlement = Some(
+              RoundSettlement(
+                riichiSticksDelta = 1000,
+                honbaPayment = 300,
+                notes = Vector("riichi sticks awarded")
+              )
+            )
+          )
+        )
+      )
+    )
+
+    app.tableService.recordCompletedTable(validTable.id, validPaifu)
+    val record = app.matchRecordRepository.findByTable(validTable.id).getOrElse(fail("record missing"))
+    assert(record.notes.exists(_.contains("settlement riichi=1000 honba=300")))
+
+    val (invalidTournament, invalidStage, invalidTable) = prepareTable("Settlement Invalid", 8000)
+    val invalidBasePaifu = demoPaifuForResult(
+      invalidTable,
+      invalidTournament.id,
+      invalidStage.id,
+      now.plusSeconds(8120),
+      winner = invalidTable.seats.head.playerId,
+      target = invalidTable.seats(1).playerId
+    )
+    val invalidPaifu = invalidBasePaifu.copy(
+      rounds = Vector(
+        invalidBasePaifu.rounds.head.copy(
+          descriptor = KyokuDescriptor(SeatWind.East, 1, honba = 0),
+          actions = invalidBasePaifu.rounds.head.actions.filterNot(_.actionType == PaifuActionType.Riichi),
+          result = invalidBasePaifu.rounds.head.result.copy(
+            settlement = Some(RoundSettlement(riichiSticksDelta = 1000, honbaPayment = 0))
+          )
+        )
+      )
+    )
+
+    intercept[IllegalArgumentException] {
+      app.tableService.recordCompletedTable(invalidTable.id, invalidPaifu)
+    }
+  }
+
 private def principalFor(app: ApplicationContext, playerId: PlayerId): AccessPrincipal =
   app.playerRepository.findById(playerId).get.asPrincipal
 

@@ -276,7 +276,8 @@ final case class ClubHonor(
     title: String,
     achievedAt: Instant,
     note: Option[String] = None
-) derives CanEqual
+) derives CanEqual:
+  require(title.trim.nonEmpty, "Club honor title cannot be empty")
 
 enum ClubMembershipApplicationStatus derives CanEqual:
   case Pending
@@ -407,7 +408,15 @@ final case class Club(
     copy(pointPool = pointPool + delta)
 
   def addHonor(honor: ClubHonor): Club =
-    copy(honors = honors :+ honor)
+    val normalizedTitle = honor.title.trim.toLowerCase
+    copy(
+      honors =
+        honors.filterNot(_.title.trim.toLowerCase == normalizedTitle) :+ honor
+    )
+
+  def removeHonor(title: String): Club =
+    val normalizedTitle = title.trim.toLowerCase
+    copy(honors = honors.filterNot(_.title.trim.toLowerCase == normalizedTitle))
 
   def grantAdmin(playerId: PlayerId): Club =
     copy(admins = (admins :+ playerId).distinct)

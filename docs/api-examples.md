@@ -93,6 +93,16 @@ curl -X POST http://localhost:8080/tournaments/tournament-123/stages/stage-swiss
 curl "http://localhost:8080/tournaments/tournament-123/stages/stage-swiss-1/standings"
 ```
 
+Paifu round settlements are now validated and preserved into archived match-record notes:
+
+```json
+{
+  "riichiSticksDelta": 1000,
+  "honbaPayment": 300,
+  "notes": ["riichi sticks awarded"]
+}
+```
+
 Players can update their own table seat readiness or disconnect state before a table starts:
 
 ```bash
@@ -154,6 +164,27 @@ curl -X POST http://localhost:8080/clubs/club-123/rank-tree   -H "Content-Type: 
       { "code": "elite", "label": "Elite", "minimumContribution": 1500, "privileges": ["priority-lineup"] }
     ],
     "note": "season refresh"
+  }'
+```
+
+Award or update a club honor:
+
+```bash
+curl -X POST http://localhost:8080/clubs/club-123/honors   -H "Content-Type: application/json"   -d '{
+    "operatorId": "player-club-admin",
+    "title": "Spring Split Champion",
+    "note": "won grand finals",
+    "achievedAt": "2026-03-15T18:00:00Z"
+  }'
+```
+
+Revoke a club honor:
+
+```bash
+curl -X POST http://localhost:8080/clubs/club-123/honors/revoke   -H "Content-Type: application/json"   -d '{
+    "operatorId": "player-club-admin",
+    "title": "Spring Split Champion",
+    "note": "season rollover"
   }'
 ```
 

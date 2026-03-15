@@ -137,6 +137,30 @@ final case class UpdateClubRankTreeRequest(
   def nodes: Vector[ClubRankNode] =
     ranks.map(_.toNode)
 
+final case class AwardClubHonorRequest(
+    operatorId: String,
+    title: String,
+    note: Option[String] = None,
+    achievedAt: Option[Instant] = None
+):
+  def operator: PlayerId =
+    PlayerId(operatorId)
+
+  def honor: ClubHonor =
+    ClubHonor(
+      title = title,
+      achievedAt = achievedAt.getOrElse(Instant.now()),
+      note = note
+    )
+
+final case class RevokeClubHonorRequest(
+    operatorId: String,
+    title: String,
+    note: Option[String] = None
+):
+  def operator: PlayerId =
+    PlayerId(operatorId)
+
 final case class CreateTournamentStageRequest(
     id: Option[String],
     name: String,
@@ -442,6 +466,8 @@ object ApiModels:
   given ReadWriter[AdjustClubPointPoolRequest] = macroRW
   given ReadWriter[ClubRankNodeRequest] = macroRW
   given ReadWriter[UpdateClubRankTreeRequest] = macroRW
+  given ReadWriter[AwardClubHonorRequest] = macroRW
+  given ReadWriter[RevokeClubHonorRequest] = macroRW
   given ReadWriter[CreateTournamentStageRequest] = macroRW
   given ReadWriter[CreateTournamentRequest] = macroRW
   given ReadWriter[ConfigureStageRulesRequest] = macroRW

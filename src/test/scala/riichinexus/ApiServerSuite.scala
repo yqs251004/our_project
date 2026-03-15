@@ -786,6 +786,31 @@ class ApiServerSuite extends FunSuite:
     }
   }
 
+
+  test("club honor endpoints award and revoke honors") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-15T15:20:00Z")
+
+    val owner = app.playerService.registerPlayer("api-honor-owner", "ApiHonorOwner", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1800)
+    val club = app.clubService.createClub("API Honor Club", owner.id, now, owner.asPrincipal)
+
+    withServer(app) { baseUrl =>
+      val awardResponse = postJson(
+        s"$baseUrl/clubs/${club.id.value}/honors",
+        write(AwardClubHonorRequest(owner.id.value, "Golden Tile", Some("season MVP"), Some(now.plusSeconds(60))))
+      )
+      assertEquals(awardResponse.statusCode(), 200)
+      assertEquals(read[Club](awardResponse.body()).honors.map(_.title), Vector("Golden Tile"))
+
+      val revokeResponse = postJson(
+        s"$baseUrl/clubs/${club.id.value}/honors/revoke",
+        write(RevokeClubHonorRequest(owner.id.value, "Golden Tile", Some("retired award")))
+      )
+      assertEquals(revokeResponse.statusCode(), 200)
+      assertEquals(read[Club](revokeResponse.body()).honors, Vector.empty)
+    }
+  }
+
   private def withServer[A](app: ApplicationContext)(f: String => A): A =
     val server = RiichiNexusApiServer(
       app,

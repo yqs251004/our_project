@@ -338,6 +338,27 @@ private final class ApiHandler(
             note = request.note
           )
         )
+      case ("POST", Vector("clubs", clubId, "honors")) =>
+        val request = readJsonBody[AwardClubHonorRequest](exchange)
+        sendOption(
+          exchange,
+          app.clubService.awardHonor(
+            clubId = ClubId(clubId),
+            honor = request.honor,
+            actor = principal(request.operator)
+          )
+        )
+      case ("POST", Vector("clubs", clubId, "honors", "revoke")) =>
+        val request = readJsonBody[RevokeClubHonorRequest](exchange)
+        sendOption(
+          exchange,
+          app.clubService.revokeHonor(
+            clubId = ClubId(clubId),
+            title = request.title,
+            actor = principal(request.operator),
+            note = request.note
+          )
+        )
       case ("POST", Vector("clubs", clubId, "relations")) =>
         val request = readJsonBody[UpdateClubRelationRequest](exchange)
         sendOption(
