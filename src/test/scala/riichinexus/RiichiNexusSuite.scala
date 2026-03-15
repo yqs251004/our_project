@@ -592,6 +592,163 @@ class RiichiNexusSuite extends FunSuite:
     assert(auditTypes.contains("ClubRelationUpdated"))
   }
 
+
+  test("swiss standings can reset each round when carryOverPoints is disabled") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-13T19:00:00Z")
+
+    val players = Vector(
+      app.playerService.registerPlayer("carry-a", "CarryA", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1650),
+      app.playerService.registerPlayer("carry-b", "CarryB", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1640),
+      app.playerService.registerPlayer("carry-c", "CarryC", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1630),
+      app.playerService.registerPlayer("carry-d", "CarryD", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1620)
+    )
+
+    val stage = TournamentStage(
+      IdGenerator.stageId(),
+      "Reset Swiss",
+      StageFormat.Swiss,
+      order = 1,
+      roundCount = 2,
+      swissRule = Some(SwissRuleConfig(carryOverPoints = false))
+    )
+    val tournament = app.tournamentService.createTournament(
+      "Reset Carry Cup",
+      "QA",
+      now,
+      now.plusSeconds(7200),
+      Vector(stage)
+    )
+
+    players.foreach(player => app.tournamentService.registerPlayer(tournament.id, player.id))
+    app.tournamentService.publishTournament(tournament.id)
+
+    val roundOne = app.tournamentService.scheduleStageTables(tournament.id, stage.id).head
+    roundOne.seats.foreach(seat =>
+      app.tableService.updateSeatState(
+        roundOne.id,
+        seat.seat,
+        principalFor(app, seat.playerId),
+        ready = Some(true)
+      )
+    )
+    app.tableService.startTable(roundOne.id, now.plusSeconds(60))
+    app.tableService.recordCompletedTable(
+      roundOne.id,
+      demoPaifuForResult(
+        roundOne,
+        tournament.id,
+        stage.id,
+        now.plusSeconds(120),
+        winner = roundOne.seats(0).playerId,
+        target = roundOne.seats(3).playerId
+      )
+    )
+
+    val roundTwo = app.tournamentService.scheduleStageTables(tournament.id, stage.id)
+      .find(_.stageRoundNumber == 2)
+      .getOrElse(fail("round two table missing"))
+    roundTwo.seats.foreach(seat =>
+      app.tableService.updateSeatState(
+        roundTwo.id,
+        seat.seat,
+        principalFor(app, seat.playerId),
+        ready = Some(true)
+      )
+    )
+    app.tableService.startTable(roundTwo.id, now.plusSeconds(180))
+    app.tableService.recordCompletedTable(
+      roundTwo.id,
+      demoPaifuForResult(
+        roundTwo,
+        tournament.id,
+        stage.id,
+        now.plusSeconds(240),
+        winner = roundTwo.seats(1).playerId,
+        target = roundTwo.seats(0).playerId
+      )
+    )
+
+    val standings = app.tournamentService.stageStandings(tournament.id, stage.id, now.plusSeconds(300))
+    assertEquals(
+      standings.entries.map(_.playerId).take(4),
+      Vector(
+        roundTwo.seats(1).playerId,
+        roundTwo.seats(2).playerId,
+        roundTwo.seats(3).playerId,
+        roundTwo.seats(0).playerId
+      )
+    )
+    assertEquals(
+      standings.entries.find(_.playerId == roundTwo.seats(0).playerId).map(_.matchesPlayed),
+      Some(1)
+    )
+  }
+
+  test("table seat readiness and disconnect workflow gates table start") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-13T20:00:00Z")
+
+    val players = Vector(
+      app.playerService.registerPlayer("seat-a", "SeatA", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1650),
+      app.playerService.registerPlayer("seat-b", "SeatB", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1640),
+      app.playerService.registerPlayer("seat-c", "SeatC", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1630),
+      app.playerService.registerPlayer("seat-d", "SeatD", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1620)
+    )
+
+    val stage = TournamentStage(IdGenerator.stageId(), "Seat State Stage", StageFormat.Swiss, 1, 1)
+    val tournament = app.tournamentService.createTournament(
+      "Seat State Cup",
+      "QA",
+      now,
+      now.plusSeconds(7200),
+      Vector(stage)
+    )
+
+    players.foreach(player => app.tournamentService.registerPlayer(tournament.id, player.id))
+    app.tournamentService.publishTournament(tournament.id)
+
+    val table = app.tournamentService.scheduleStageTables(tournament.id, stage.id).head
+    val disconnectedSeat = table.seats(0)
+    app.tableService.updateSeatState(
+      table.id,
+      disconnectedSeat.seat,
+      principalFor(app, disconnectedSeat.playerId),
+      disconnected = Some(true),
+      note = Some("network drop")
+    )
+    table.seats.tail.foreach(seat =>
+      app.tableService.updateSeatState(
+        table.id,
+        seat.seat,
+        principalFor(app, seat.playerId),
+        ready = Some(true)
+      )
+    )
+    intercept[IllegalArgumentException] {
+      app.tableService.startTable(table.id, now.plusSeconds(120))
+    }
+
+    app.tableService.updateSeatState(
+      table.id,
+      disconnectedSeat.seat,
+      principalFor(app, disconnectedSeat.playerId),
+      disconnected = Some(false)
+    )
+    app.tableService.updateSeatState(
+      table.id,
+      disconnectedSeat.seat,
+      principalFor(app, disconnectedSeat.playerId),
+      ready = Some(true)
+    )
+
+    val started = app.tableService.startTable(table.id, now.plusSeconds(180))
+      .getOrElse(fail("table did not start"))
+    assertEquals(started.status, TableStatus.InProgress)
+    assert(started.seats.forall(_.ready))
+    assert(!started.seats.exists(_.disconnected))
+  }
+
 private def principalFor(app: ApplicationContext, playerId: PlayerId): AccessPrincipal =
   app.playerRepository.findById(playerId).get.asPrincipal
 

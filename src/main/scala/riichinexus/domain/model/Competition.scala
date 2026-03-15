@@ -1,6 +1,7 @@
 package riichinexus.domain.model
 
 import java.time.Instant
+import java.util.NoSuchElementException
 
 enum TournamentStatus derives CanEqual:
   case Draft
@@ -437,10 +438,17 @@ final case class TableSeat(
   require(initialPoints > 0, "Seat initial points must be positive")
 
   def markReady: TableSeat =
+    require(!disconnected, "Disconnected seats cannot be marked ready")
     copy(ready = true)
 
+  def markNotReady: TableSeat =
+    copy(ready = false)
+
   def markDisconnected: TableSeat =
-    copy(disconnected = true)
+    copy(disconnected = true, ready = false)
+
+  def markConnected: TableSeat =
+    copy(disconnected = false)
 
 enum TableStatus derives CanEqual:
   case WaitingPreparation
@@ -484,6 +492,49 @@ final case class Table(
   require(seats.map(_.seat).distinct.size == 4, "Seats must be unique")
   require(stageRoundNumber >= 1, "Stage round number must be positive")
 
+  def seatFor(wind: SeatWind): TableSeat =
+    seats.find(_.seat == wind).getOrElse(
+      throw NoSuchElementException(s"Seat $wind was not found on table ${id.value}")
+    )
+
+  def allSeatsReady: Boolean =
+    seats.forall(_.ready)
+
+  def hasDisconnectedSeats: Boolean =
+    seats.exists(_.disconnected)
+
+  def updateSeatState(
+      targetSeat: SeatWind,
+      ready: Option[Boolean] = None,
+      disconnected: Option[Boolean] = None,
+      note: Option[String] = None
+  ): Table =
+    require(status != TableStatus.Archived, "Archived tables cannot update seat state")
+    if ready.isDefined then
+      require(
+        status == TableStatus.WaitingPreparation,
+        "Seat readiness can only be updated before a table starts"
+      )
+
+    val updatedSeats = seats.map { seat =>
+      if seat.seat != targetSeat then seat
+      else
+        val withConnection = disconnected match
+          case Some(true)  => seat.markDisconnected
+          case Some(false) => seat.markConnected
+          case None        => seat
+
+        ready match
+          case Some(true)  => withConnection.markReady
+          case Some(false) => withConnection.markNotReady
+          case None        => withConnection
+    }
+
+    copy(
+      seats = updatedSeats,
+      operatorNotes = operatorNotes ++ note.toVector
+    )
+
   def bindKnockoutMatch(
       matchId: String,
       roundNumber: Int,
@@ -500,7 +551,13 @@ final case class Table(
       status == TableStatus.WaitingPreparation,
       "Only waiting tables can be started"
     )
-    copy(status = TableStatus.InProgress, startedAt = Some(at))
+    val preparedSeats =
+      if seats.forall(seat => !seat.ready && !seat.disconnected) then seats.map(_.markReady)
+      else seats
+
+    require(preparedSeats.forall(_.ready), "All seats must be ready before a table starts")
+    require(!preparedSeats.exists(_.disconnected), "Disconnected seats must reconnect before a table starts")
+    copy(status = TableStatus.InProgress, seats = preparedSeats, startedAt = Some(at))
 
   def enterScoring(at: Instant): Table =
     require(status == TableStatus.InProgress, "Only running tables can enter scoring")
@@ -585,6 +642,7 @@ final case class MatchRecord(
     tableId: TableId,
     tournamentId: TournamentId,
     stageId: TournamentStageId,
+    stageRoundNumber: Int,
     generatedAt: Instant,
     seatResults: Vector[MatchRecordSeatResult],
     paifuId: Option[PaifuId] = None,
@@ -596,6 +654,7 @@ final case class MatchRecord(
   require(seatResults.map(_.playerId).distinct.size == 4, "Match record players must be unique")
   require(seatResults.map(_.seat).distinct.size == 4, "Match record seats must be unique")
   require(seatResults.map(_.placement).distinct.size == 4, "Match record placements must be unique")
+  require(stageRoundNumber >= 1, "Match record stage round number must be positive")
 
   def playerIds: Vector[PlayerId] =
     seatResults.map(_.playerId)
@@ -618,6 +677,7 @@ object MatchRecord:
       tableId = table.id,
       tournamentId = table.tournamentId,
       stageId = table.stageId,
+      stageRoundNumber = table.stageRoundNumber,
       generatedAt = generatedAt,
       seatResults = paifu.finalStandings.map { standing =>
         val scheduledSeat = seatMap(standing.playerId)

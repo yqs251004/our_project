@@ -58,6 +58,7 @@ enum Permission derives CanEqual:
   case ManageTournamentStages
   case ConfigureTournamentRules
   case ResetTableState
+  case ManageTableSeatState
   case FileAppealTicket
   case ResolveAppeal
   case ManageGlobalDictionary

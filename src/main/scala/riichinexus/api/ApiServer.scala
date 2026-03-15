@@ -650,6 +650,19 @@ private final class ApiHandler(
         )
       case ("GET", Vector("tables", tableId)) =>
         sendOption(exchange, app.tableRepository.findById(TableId(tableId)))
+      case ("POST", Vector("tables", tableId, "seats", seat, "state")) =>
+        val request = readJsonBody[UpdateTableSeatStateRequest](exchange)
+        sendOption(
+          exchange,
+          app.tableService.updateSeatState(
+            tableId = TableId(tableId),
+            seat = parseEnum("seat", seat)(SeatWind.valueOf),
+            actor = principal(request.operator),
+            ready = request.ready,
+            disconnected = request.disconnected,
+            note = request.note
+          )
+        )
       case ("POST", Vector("tables", tableId, "start")) =>
         val request = readOptionalJsonBody[OperatorRequest](exchange)
         sendOption(

@@ -74,9 +74,10 @@ final class DefaultTournamentRuleEngine extends TournamentRuleEngine:
       records: Vector[MatchRecord],
       at: Instant
   ): StageRankingSnapshot =
+    val effectiveRecords = rankingRecords(stage, records)
     val placementPointMap = Map(1 -> 4, 2 -> 2, 3 -> 1, 4 -> 0)
 
-    val statsByPlayer = records
+    val statsByPlayer = effectiveRecords
       .flatMap(_.seatResults)
       .groupBy(_.playerId)
       .view
@@ -141,7 +142,7 @@ final class DefaultTournamentRuleEngine extends TournamentRuleEngine:
       stageId = stage.id,
       generatedAt = at,
       entries = entries,
-      archivedTableCount = records.map(_.tableId).distinct.size,
+      archivedTableCount = effectiveRecords.map(_.tableId).distinct.size,
       scheduledTableCount = stage.scheduledTableIds.size
     )
 
@@ -324,6 +325,16 @@ final class DefaultTournamentRuleEngine extends TournamentRuleEngine:
           case "" => "Custom advancement policy requires declarative directives."
           case summary =>
             s"Custom advancement selected $qualifiedCount players using $summary."
+
+  private def rankingRecords(
+      stage: TournamentStage,
+      records: Vector[MatchRecord]
+  ): Vector[MatchRecord] =
+    if stage.format != StageFormat.Swiss || stage.swissRule.forall(_.carryOverPoints) then records
+    else
+      val latestRound = records.map(_.stageRoundNumber).foldLeft(0)(math.max)
+      if latestRound <= 0 then records
+      else records.filter(_.stageRoundNumber == latestRound)
 
   private def parseCustomPolicy(
       rule: AdvancementRule,

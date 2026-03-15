@@ -1691,6 +1691,37 @@ final class TableLifecycleService(
     transactionManager: TransactionManager = NoOpTransactionManager,
     authorizationService: AuthorizationService = NoOpAuthorizationService
 ):
+  def updateSeatState(
+      tableId: TableId,
+      seat: SeatWind,
+      actor: AccessPrincipal,
+      ready: Option[Boolean] = None,
+      disconnected: Option[Boolean] = None,
+      note: Option[String] = None
+  ): Option[Table] =
+    transactionManager.inTransaction {
+      tableRepository.findById(tableId).map { table =>
+        val targetSeat = table.seatFor(seat)
+        authorizationService.requirePermission(
+          actor,
+          Permission.ManageTableSeatState,
+          tournamentId = Some(table.tournamentId),
+          subjectPlayerId = Some(targetSeat.playerId)
+        )
+
+        tableRepository.save(
+          table.updateSeatState(
+            targetSeat = seat,
+            ready = ready,
+            disconnected = disconnected,
+            note = note.map(message =>
+              s"${actor.displayName} updated ${seat.toString} seat state: $message"
+            )
+          )
+        )
+      }
+    }
+
   def startTable(
       tableId: TableId,
       startedAt: Instant = Instant.now(),
@@ -1783,6 +1814,9 @@ final class TableLifecycleService(
   private def validatePaifu(table: Table, paifu: Paifu): Unit =
     val scheduledSeatsByPlayer = table.seats.map(seat => seat.playerId -> seat).toMap
     val seatPlayerIds = scheduledSeatsByPlayer.keySet
+    val stableSeatSignature = table.seats.map(seat =>
+      (seat.seat, seat.playerId, seat.initialPoints, seat.clubId)
+    ).toSet
 
     require(paifu.metadata.tableId == table.id, "Paifu table id does not match the table")
     require(
@@ -1791,7 +1825,9 @@ final class TableLifecycleService(
     )
     require(paifu.metadata.stageId == table.stageId, "Paifu stage id does not match the table")
     require(
-      paifu.metadata.seats.toSet == table.seats.toSet,
+      paifu.metadata.seats.map(seat =>
+        (seat.seat, seat.playerId, seat.initialPoints, seat.clubId)
+      ).toSet == stableSeatSignature,
       "Paifu seat map does not match the scheduled table"
     )
     require(paifu.rounds.nonEmpty, "Paifu must contain at least one round")

@@ -386,6 +386,17 @@ final case class ForceResetTableRequest(
   def operator: PlayerId =
     PlayerId(operatorId)
 
+final case class UpdateTableSeatStateRequest(
+    operatorId: String,
+    ready: Option[Boolean] = None,
+    disconnected: Option[Boolean] = None,
+    note: Option[String] = None
+):
+  require(ready.isDefined || disconnected.isDefined, "Seat state update must modify at least one flag")
+
+  def operator: PlayerId =
+    PlayerId(operatorId)
+
 final case class UpsertDictionaryRequest(
     operatorId: String,
     key: String,
@@ -449,6 +460,7 @@ object ApiModels:
   given ReadWriter[AdvanceKnockoutStageRequest] = macroRW
   given ReadWriter[SettleTournamentRequest] = macroRW
   given ReadWriter[ForceResetTableRequest] = macroRW
+  given ReadWriter[UpdateTableSeatStateRequest] = macroRW
   given ReadWriter[UpsertDictionaryRequest] = macroRW
   given ReadWriter[BanPlayerRequest] = macroRW
   given ReadWriter[DissolveClubRequest] = macroRW

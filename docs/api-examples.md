@@ -75,6 +75,45 @@ curl -X POST http://localhost:8080/tournaments/tournament-123/stages/stage-swiss
   }'
 ```
 
+
+Disable Swiss carry-over so each new round ranking only reflects the latest archived round:
+
+```bash
+curl -X POST http://localhost:8080/tournaments/tournament-123/stages/stage-swiss-1/rules   -H "Content-Type: application/json"   -d '{
+    "operatorId": "player-tournament-admin",
+    "advancementRuleType": "SwissCut",
+    "cutSize": 8,
+    "carryOverPoints": false,
+    "maxRounds": 2,
+    "schedulingPoolSize": 2
+  }'
+```
+
+```bash
+curl "http://localhost:8080/tournaments/tournament-123/stages/stage-swiss-1/standings"
+```
+
+Players can update their own table seat readiness or disconnect state before a table starts:
+
+```bash
+curl -X POST http://localhost:8080/tables/table-123/seats/East/state \
+  -H "Content-Type: application/json" \
+  -d '{
+    "operatorId": "player-a",
+    "ready": true
+  }'
+```
+
+```bash
+curl -X POST http://localhost:8080/tables/table-123/seats/South/state \
+  -H "Content-Type: application/json" \
+  -d '{
+    "operatorId": "player-b",
+    "disconnected": true,
+    "note": "temporary network loss"
+  }'
+```
+
 ```bash
 curl "http://localhost:8080/records?tournamentId=tournament-123&stageId=stage-swiss-1&playerId=player-123&limit=20"
 ```

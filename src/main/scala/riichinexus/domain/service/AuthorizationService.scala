@@ -73,6 +73,11 @@ final class StrictRbacAuthorizationService extends AuthorizationService:
           Permission.ResolveAppeal =>
         tournamentId.exists(id => principal.hasTournamentRole(RoleKind.TournamentAdmin, id))
 
+      case Permission.ManageTableSeatState =>
+        principal.isSuperAdmin ||
+          tournamentId.exists(id => principal.hasTournamentRole(RoleKind.TournamentAdmin, id)) ||
+          principal.playerId.exists(playerId => subjectPlayerId.contains(playerId))
+
       case Permission.FileAppealTicket =>
         principal.isSuperAdmin ||
           principal.playerId.exists(playerId => subjectPlayerId.forall(_ == playerId))

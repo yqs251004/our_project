@@ -644,6 +644,148 @@ class ApiServerSuite extends FunSuite:
     }
   }
 
+
+  test("stage standings endpoint honors swiss carryOverPoints flag") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-15T16:00:00Z")
+
+    val admin = app.playerService.registerPlayer("carry-api-admin", "CarryApiAdmin", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1750)
+    val players = Vector(
+      admin,
+      app.playerService.registerPlayer("carry-api-b", "CarryApiB", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1640),
+      app.playerService.registerPlayer("carry-api-c", "CarryApiC", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1630),
+      app.playerService.registerPlayer("carry-api-d", "CarryApiD", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1620)
+    )
+
+    val stage = TournamentStage(
+      IdGenerator.stageId(),
+      "Carry API Stage",
+      StageFormat.Swiss,
+      1,
+      2,
+      swissRule = Some(SwissRuleConfig(carryOverPoints = false))
+    )
+    val tournament = app.tournamentService.createTournament(
+      "Carry API Cup",
+      "QA",
+      now,
+      now.plusSeconds(7200),
+      Vector(stage),
+      adminId = Some(admin.id)
+    )
+
+    players.foreach(player => app.tournamentService.registerPlayer(tournament.id, player.id, principalFor(app, admin.id)))
+    app.tournamentService.publishTournament(tournament.id, principalFor(app, admin.id))
+
+    val roundOne = app.tournamentService.scheduleStageTables(tournament.id, stage.id, principalFor(app, admin.id)).head
+    roundOne.seats.foreach(seat =>
+      app.tableService.updateSeatState(roundOne.id, seat.seat, principalFor(app, seat.playerId), ready = Some(true))
+    )
+    app.tableService.startTable(roundOne.id, now.plusSeconds(60), principalFor(app, admin.id))
+    app.tableService.recordCompletedTable(
+      roundOne.id,
+      demoPaifuForResult(roundOne, tournament.id, stage.id, now.plusSeconds(120), roundOne.seats(0).playerId, roundOne.seats(3).playerId),
+      principalFor(app, admin.id)
+    )
+
+    val roundTwo = app.tournamentService.scheduleStageTables(tournament.id, stage.id, principalFor(app, admin.id))
+      .find(_.stageRoundNumber == 2)
+      .getOrElse(fail("round two table missing"))
+    roundTwo.seats.foreach(seat =>
+      app.tableService.updateSeatState(roundTwo.id, seat.seat, principalFor(app, seat.playerId), ready = Some(true))
+    )
+    app.tableService.startTable(roundTwo.id, now.plusSeconds(180), principalFor(app, admin.id))
+    app.tableService.recordCompletedTable(
+      roundTwo.id,
+      demoPaifuForResult(roundTwo, tournament.id, stage.id, now.plusSeconds(240), roundTwo.seats(1).playerId, roundTwo.seats(0).playerId),
+      principalFor(app, admin.id)
+    )
+
+    withServer(app) { baseUrl =>
+      val response = get(s"$baseUrl/tournaments/${tournament.id.value}/stages/${stage.id.value}/standings")
+      assertEquals(response.statusCode(), 200)
+      val standings = read[StageRankingSnapshot](response.body())
+      assertEquals(standings.entries.map(_.playerId).take(4), Vector(
+        roundTwo.seats(1).playerId,
+        roundTwo.seats(2).playerId,
+        roundTwo.seats(3).playerId,
+        roundTwo.seats(0).playerId
+      ))
+      assertEquals(standings.entries.find(_.playerId == roundTwo.seats(0).playerId).map(_.matchesPlayed), Some(1))
+    }
+  }
+
+  test("table seat state endpoint controls readiness and disconnect flow") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-15T16:30:00Z")
+
+    val admin = app.playerService.registerPlayer("seat-api-admin", "SeatApiAdmin", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1750)
+    val players = Vector(
+      admin,
+      app.playerService.registerPlayer("seat-api-b", "SeatApiB", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1640),
+      app.playerService.registerPlayer("seat-api-c", "SeatApiC", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1630),
+      app.playerService.registerPlayer("seat-api-d", "SeatApiD", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1620)
+    )
+    val stage = TournamentStage(IdGenerator.stageId(), "Seat API Stage", StageFormat.Swiss, 1, 1)
+    val tournament = app.tournamentService.createTournament(
+      "Seat API Cup",
+      "QA",
+      now,
+      now.plusSeconds(7200),
+      Vector(stage),
+      adminId = Some(admin.id)
+    )
+
+    players.foreach(player => app.tournamentService.registerPlayer(tournament.id, player.id, principalFor(app, admin.id)))
+    app.tournamentService.publishTournament(tournament.id, principalFor(app, admin.id))
+    val table = app.tournamentService.scheduleStageTables(tournament.id, stage.id, principalFor(app, admin.id)).head
+
+    withServer(app) { baseUrl =>
+      val disconnectedSeat = table.seats(0)
+      val disconnectResponse = postJson(
+        s"$baseUrl/tables/${table.id.value}/seats/${disconnectedSeat.seat.toString}/state",
+        write(UpdateTableSeatStateRequest(disconnectedSeat.playerId.value, disconnected = Some(true), note = Some("wifi down")))
+      )
+      assertEquals(disconnectResponse.statusCode(), 200)
+      assert(read[Table](disconnectResponse.body()).seats.find(_.seat == disconnectedSeat.seat).exists(_.disconnected))
+
+      table.seats.tail.foreach { seat =>
+        val readyResponse = postJson(
+          s"$baseUrl/tables/${table.id.value}/seats/${seat.seat.toString}/state",
+          write(UpdateTableSeatStateRequest(seat.playerId.value, ready = Some(true)))
+        )
+        assertEquals(readyResponse.statusCode(), 200)
+      }
+
+      val stillBlocked = postJson(
+        s"$baseUrl/tables/${table.id.value}/start",
+        write(OperatorRequest(Some(admin.id.value)))
+      )
+      assertEquals(stillBlocked.statusCode(), 400)
+
+      val reconnectResponse = postJson(
+        s"$baseUrl/tables/${table.id.value}/seats/${disconnectedSeat.seat.toString}/state",
+        write(UpdateTableSeatStateRequest(disconnectedSeat.playerId.value, disconnected = Some(false)))
+      )
+      assertEquals(reconnectResponse.statusCode(), 200)
+      val finalReady = postJson(
+        s"$baseUrl/tables/${table.id.value}/seats/${disconnectedSeat.seat.toString}/state",
+        write(UpdateTableSeatStateRequest(disconnectedSeat.playerId.value, ready = Some(true)))
+      )
+      assertEquals(finalReady.statusCode(), 200)
+
+      val started = postJson(
+        s"$baseUrl/tables/${table.id.value}/start",
+        write(OperatorRequest(Some(admin.id.value)))
+      )
+      assertEquals(started.statusCode(), 200)
+      val startedTable = read[Table](started.body())
+      assertEquals(startedTable.status, TableStatus.InProgress)
+      assert(startedTable.seats.forall(_.ready))
+      assert(!startedTable.seats.exists(_.disconnected))
+    }
+  }
+
   private def withServer[A](app: ApplicationContext)(f: String => A): A =
     val server = RiichiNexusApiServer(
       app,
