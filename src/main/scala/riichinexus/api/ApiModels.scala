@@ -93,12 +93,16 @@ final case class CreateTournamentStageRequest(
     format: String,
     order: Int,
     roundCount: Int,
+    operatorId: Option[String] = None,
     advancementRuleType: Option[String] = None,
     cutSize: Option[Int] = None,
     thresholdScore: Option[Int] = None,
     targetTableCount: Option[Int] = None,
     schedulingPoolSize: Option[Int] = None
 ):
+  def operator: Option[PlayerId] =
+    operatorId.map(PlayerId(_))
+
   def toStage: TournamentStage =
     val stageFormat = StageFormat.valueOf(format)
     TournamentStage(
@@ -224,6 +228,36 @@ final case class AssignTournamentAdminRequest(
   def operator: PlayerId =
     PlayerId(operatorId)
 
+final case class OperatorRequest(
+    operatorId: Option[String] = None
+):
+  def operator: Option[PlayerId] =
+    operatorId.map(PlayerId(_))
+
+final case class RejectClubApplicationRequest(
+    operatorId: String,
+    note: Option[String] = None
+):
+  def operator: PlayerId =
+    PlayerId(operatorId)
+
+final case class UpdateClubRelationRequest(
+    operatorId: String,
+    targetClubId: String,
+    relation: String,
+    note: Option[String] = None
+):
+  def operator: PlayerId =
+    PlayerId(operatorId)
+
+  def toRelation(updatedAt: Instant = Instant.now()): ClubRelation =
+    ClubRelation(
+      targetClubId = ClubId(targetClubId),
+      relation = ClubRelationKind.valueOf(relation),
+      updatedAt = updatedAt,
+      note = note
+    )
+
 final case class AppealAttachmentRequest(
     name: String,
     uri: String,
@@ -324,6 +358,12 @@ final case class DissolveClubRequest(
   def operator: PlayerId =
     PlayerId(operatorId)
 
+final case class GrantSuperAdminRequest(
+    operatorId: String
+):
+  def operator: PlayerId =
+    PlayerId(operatorId)
+
 object ApiModels:
   given ReadWriter[ApiError] = macroRW
   given ReadWriter[ApiMessage] = macroRW
@@ -341,6 +381,9 @@ object ApiModels:
   given ReadWriter[StageLineupSeatRequest] = macroRW
   given ReadWriter[SubmitStageLineupRequest] = macroRW
   given ReadWriter[AssignTournamentAdminRequest] = macroRW
+  given ReadWriter[OperatorRequest] = macroRW
+  given ReadWriter[RejectClubApplicationRequest] = macroRW
+  given ReadWriter[UpdateClubRelationRequest] = macroRW
   given ReadWriter[AppealAttachmentRequest] = macroRW
   given ReadWriter[FileAppealRequest] = macroRW
   given ReadWriter[ResolveAppealRequest] = macroRW
@@ -353,3 +396,4 @@ object ApiModels:
   given ReadWriter[UpsertDictionaryRequest] = macroRW
   given ReadWriter[BanPlayerRequest] = macroRW
   given ReadWriter[DissolveClubRequest] = macroRW
+  given ReadWriter[GrantSuperAdminRequest] = macroRW

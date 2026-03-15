@@ -285,6 +285,42 @@ final class ClubApplicationService(
         clubRepository.save(updatedClub)
     }
 
+  def rejectMembershipApplication(
+      clubId: ClubId,
+      applicationId: MembershipApplicationId,
+      actor: AccessPrincipal,
+      rejectedAt: Instant = Instant.now(),
+      note: Option[String] = None
+  ): Option[Club] =
+    transactionManager.inTransaction {
+      clubRepository.findById(clubId).map { club =>
+        ensureClubActive(club)
+        authorizationService.requirePermission(
+          actor,
+          Permission.ManageClubMembership,
+          clubId = Some(clubId)
+        )
+
+        val application = club
+          .findApplication(applicationId)
+          .getOrElse(
+            throw NoSuchElementException(
+              s"Membership application ${applicationId.value} was not found in club ${clubId.value}"
+            )
+          )
+
+        if !application.isPending then
+          throw IllegalArgumentException(
+            s"Membership application ${applicationId.value} has already been reviewed"
+          )
+
+        val reviewer = actor.playerId.getOrElse(club.creator)
+        clubRepository.save(
+          club.reviewApplication(applicationId, _.reject(reviewer, rejectedAt, note))
+        )
+      }
+    }
+
   def assignAdmin(
       clubId: ClubId,
       playerId: PlayerId,
@@ -463,8 +499,18 @@ final class TournamentApplicationService(
       )
     }
 
-  def registerPlayer(tournamentId: TournamentId, playerId: PlayerId): Option[Tournament] =
+  def registerPlayer(
+      tournamentId: TournamentId,
+      playerId: PlayerId,
+      actor: AccessPrincipal = AccessPrincipal.system
+  ): Option[Tournament] =
     transactionManager.inTransaction {
+      authorizationService.requirePermission(
+        actor,
+        Permission.ManageTournamentStages,
+        tournamentId = Some(tournamentId)
+      )
+
       playerRepository
         .findById(playerId)
         .map { player =>
@@ -477,8 +523,18 @@ final class TournamentApplicationService(
       }
     }
 
-  def registerClub(tournamentId: TournamentId, clubId: ClubId): Option[Tournament] =
+  def registerClub(
+      tournamentId: TournamentId,
+      clubId: ClubId,
+      actor: AccessPrincipal = AccessPrincipal.system
+  ): Option[Tournament] =
     transactionManager.inTransaction {
+      authorizationService.requirePermission(
+        actor,
+        Permission.ManageTournamentStages,
+        tournamentId = Some(tournamentId)
+      )
+
       clubRepository
         .findById(clubId)
         .map(ensureClubActive)
@@ -489,8 +545,18 @@ final class TournamentApplicationService(
       }
     }
 
-  def whitelistPlayer(tournamentId: TournamentId, playerId: PlayerId): Option[Tournament] =
+  def whitelistPlayer(
+      tournamentId: TournamentId,
+      playerId: PlayerId,
+      actor: AccessPrincipal = AccessPrincipal.system
+  ): Option[Tournament] =
     transactionManager.inTransaction {
+      authorizationService.requirePermission(
+        actor,
+        Permission.ManageTournamentStages,
+        tournamentId = Some(tournamentId)
+      )
+
       playerRepository
         .findById(playerId)
         .map { player =>
@@ -503,8 +569,18 @@ final class TournamentApplicationService(
       }
     }
 
-  def whitelistClub(tournamentId: TournamentId, clubId: ClubId): Option[Tournament] =
+  def whitelistClub(
+      tournamentId: TournamentId,
+      clubId: ClubId,
+      actor: AccessPrincipal = AccessPrincipal.system
+  ): Option[Tournament] =
     transactionManager.inTransaction {
+      authorizationService.requirePermission(
+        actor,
+        Permission.ManageTournamentStages,
+        tournamentId = Some(tournamentId)
+      )
+
       clubRepository
         .findById(clubId)
         .map(ensureClubActive)
@@ -515,9 +591,18 @@ final class TournamentApplicationService(
       }
     }
 
-  def publishTournament(tournamentId: TournamentId): Option[Tournament] =
+  def publishTournament(
+      tournamentId: TournamentId,
+      actor: AccessPrincipal = AccessPrincipal.system
+  ): Option[Tournament] =
     transactionManager.inTransaction {
       tournamentRepository.findById(tournamentId).map { tournament =>
+        authorizationService.requirePermission(
+          actor,
+          Permission.ManageTournamentStages,
+          tournamentId = Some(tournamentId)
+        )
+
         if tournament.stages.isEmpty then
           throw IllegalArgumentException(
             s"Tournament ${tournamentId.value} cannot be published without stages"
@@ -526,9 +611,18 @@ final class TournamentApplicationService(
       }
     }
 
-  def startTournament(tournamentId: TournamentId): Option[Tournament] =
+  def startTournament(
+      tournamentId: TournamentId,
+      actor: AccessPrincipal = AccessPrincipal.system
+  ): Option[Tournament] =
     transactionManager.inTransaction {
       tournamentRepository.findById(tournamentId).map { tournament =>
+        authorizationService.requirePermission(
+          actor,
+          Permission.ManageTournamentStages,
+          tournamentId = Some(tournamentId)
+        )
+
         if tournament.participatingPlayers.isEmpty && tournament.participatingClubs.isEmpty then
           throw IllegalArgumentException(
             s"Tournament ${tournamentId.value} cannot start without participants"
@@ -617,7 +711,7 @@ final class TournamentApplicationService(
   ): Option[Tournament] =
     transactionManager.inTransaction {
       tournamentRepository.findById(tournamentId).map { tournament =>
-        requireStage(tournament, stageId)
+        val stage = requireStage(tournament, stageId)
         authorizationService.requirePermission(
           actor,
           Permission.SubmitTournamentLineup,
@@ -634,6 +728,23 @@ final class TournamentApplicationService(
         if !isClubRegistered then
           throw IllegalArgumentException(
             s"Club ${submission.clubId.value} is not whitelisted for tournament ${tournamentId.value}"
+          )
+
+        val conflictingPlayers = stage.lineupSubmissions
+          .filterNot(_.clubId == submission.clubId)
+          .flatMap(existing => existing.activePlayerIds.map(_ -> existing.clubId))
+          .groupBy(_._1)
+          .collect {
+            case (playerId, assignments)
+                if submission.activePlayerIds.contains(playerId) &&
+                  assignments.map(_._2).distinct.nonEmpty =>
+              playerId.value
+          }
+          .toVector
+
+        if conflictingPlayers.nonEmpty then
+          throw IllegalArgumentException(
+            s"Stage ${stageId.value} already has player(s) assigned by another club: ${conflictingPlayers.mkString(", ")}"
           )
 
         val club = clubRepository
@@ -1511,12 +1622,14 @@ final class ClubProjectionSubscriber(
   override def handle(event: DomainEvent): Unit =
     event match
       case MatchRecordArchived(_, _, _, matchRecord, _, _) =>
-        val impactedClubIds = matchRecord.seatResults.flatMap { result =>
-          playerRepository.findById(result.playerId).flatMap(_.clubId)
+        val representedClubIds = matchRecord.seatResults.flatMap(_.clubId).distinct
+        val memberClubIds = matchRecord.seatResults.flatMap { result =>
+          playerRepository.findById(result.playerId).toVector.flatMap(_.boundClubIds)
         }.distinct
+        val impactedClubIds = (representedClubIds ++ memberClubIds).distinct
 
         matchRecord.seatResults.foreach { result =>
-          playerRepository.findById(result.playerId).flatMap(_.clubId).foreach { clubId =>
+          result.clubId.foreach { clubId =>
             clubRepository.findById(clubId).foreach { club =>
               clubRepository.save(club.addPoints(result.scoreDelta))
             }
@@ -1567,7 +1680,7 @@ final class DashboardProjectionSubscriber(
         }
 
         impactedPlayers
-          .flatMap(playerId => playerRepository.findById(playerId).flatMap(_.clubId))
+          .flatMap(playerId => playerRepository.findById(playerId).toVector.flatMap(_.boundClubIds))
           .distinct
           .foreach { clubId =>
             clubRepository.findById(clubId).foreach { club =>

@@ -156,6 +156,17 @@ private final class ApiHandler(
             note = request.note
           )
         )
+      case ("POST", Vector("clubs", clubId, "applications", applicationId, "reject")) =>
+        val request = readJsonBody[RejectClubApplicationRequest](exchange)
+        sendOption(
+          exchange,
+          app.clubService.rejectMembershipApplication(
+            clubId = ClubId(clubId),
+            applicationId = MembershipApplicationId(applicationId),
+            actor = principal(request.operator),
+            note = request.note
+          )
+        )
       case ("POST", Vector("clubs", clubId, "admins")) =>
         val request = readJsonBody[AssignClubAdminRequest](exchange)
         sendOption(
@@ -178,6 +189,16 @@ private final class ApiHandler(
             note = request.note
           )
         )
+      case ("POST", Vector("clubs", clubId, "relations")) =>
+        val request = readJsonBody[UpdateClubRelationRequest](exchange)
+        sendOption(
+          exchange,
+          app.clubService.updateRelation(
+            clubId = ClubId(clubId),
+            relation = request.toRelation(),
+            actor = principal(request.operator)
+          )
+        )
 
       case ("GET", Vector("tournaments")) =>
         sendJson(exchange, 200, app.tournamentRepository.findAll())
@@ -197,9 +218,23 @@ private final class ApiHandler(
         )
         sendJson(exchange, 201, tournament)
       case ("POST", Vector("tournaments", tournamentId, "publish")) =>
-        sendOption(exchange, app.tournamentService.publishTournament(TournamentId(tournamentId)))
+        val request = readOptionalJsonBody[OperatorRequest](exchange)
+        sendOption(
+          exchange,
+          app.tournamentService.publishTournament(
+            TournamentId(tournamentId),
+            request.flatMap(_.operator).map(principal).getOrElse(AccessPrincipal.system)
+          )
+        )
       case ("POST", Vector("tournaments", tournamentId, "start")) =>
-        sendOption(exchange, app.tournamentService.startTournament(TournamentId(tournamentId)))
+        val request = readOptionalJsonBody[OperatorRequest](exchange)
+        sendOption(
+          exchange,
+          app.tournamentService.startTournament(
+            TournamentId(tournamentId),
+            request.flatMap(_.operator).map(principal).getOrElse(AccessPrincipal.system)
+          )
+        )
       case ("POST", Vector("tournaments", tournamentId, "settle")) =>
         val request = readJsonBody[SettleTournamentRequest](exchange)
         sendJson(
@@ -214,14 +249,44 @@ private final class ApiHandler(
           )
         )
       case ("POST", Vector("tournaments", tournamentId, "players", playerId)) =>
+        val request = readOptionalJsonBody[OperatorRequest](exchange)
         sendOption(
           exchange,
-          app.tournamentService.registerPlayer(TournamentId(tournamentId), PlayerId(playerId))
+          app.tournamentService.registerPlayer(
+            TournamentId(tournamentId),
+            PlayerId(playerId),
+            request.flatMap(_.operator).map(principal).getOrElse(AccessPrincipal.system)
+          )
         )
       case ("POST", Vector("tournaments", tournamentId, "clubs", clubId)) =>
+        val request = readOptionalJsonBody[OperatorRequest](exchange)
         sendOption(
           exchange,
-          app.tournamentService.registerClub(TournamentId(tournamentId), ClubId(clubId))
+          app.tournamentService.registerClub(
+            TournamentId(tournamentId),
+            ClubId(clubId),
+            request.flatMap(_.operator).map(principal).getOrElse(AccessPrincipal.system)
+          )
+        )
+      case ("POST", Vector("tournaments", tournamentId, "whitelist", "players", playerId)) =>
+        val request = readJsonBody[OperatorRequest](exchange)
+        sendOption(
+          exchange,
+          app.tournamentService.whitelistPlayer(
+            TournamentId(tournamentId),
+            PlayerId(playerId),
+            request.operator.map(principal).getOrElse(AccessPrincipal.system)
+          )
+        )
+      case ("POST", Vector("tournaments", tournamentId, "whitelist", "clubs", clubId)) =>
+        val request = readJsonBody[OperatorRequest](exchange)
+        sendOption(
+          exchange,
+          app.tournamentService.whitelistClub(
+            TournamentId(tournamentId),
+            ClubId(clubId),
+            request.operator.map(principal).getOrElse(AccessPrincipal.system)
+          )
         )
       case ("POST", Vector("tournaments", tournamentId, "admins")) =>
         val request = readJsonBody[AssignTournamentAdminRequest](exchange)
@@ -240,7 +305,7 @@ private final class ApiHandler(
           app.tournamentService.addStage(
             tournamentId = TournamentId(tournamentId),
             stage = request.toStage,
-            actor = AccessPrincipal.system
+            actor = request.operator.map(principal).getOrElse(AccessPrincipal.system)
           )
         )
       case ("POST", Vector("tournaments", tournamentId, "stages", stageId, "rules")) =>
@@ -269,12 +334,14 @@ private final class ApiHandler(
           )
         )
       case ("POST", Vector("tournaments", tournamentId, "stages", stageId, "schedule")) =>
+        val request = readOptionalJsonBody[OperatorRequest](exchange)
         sendJson(
           exchange,
           200,
           app.tournamentService.scheduleStageTables(
             TournamentId(tournamentId),
-            TournamentStageId(stageId)
+            TournamentStageId(stageId),
+            request.flatMap(_.operator).map(principal).getOrElse(AccessPrincipal.system)
           )
         )
       case ("GET", Vector("tournaments", tournamentId, "stages", stageId, "standings")) =>
@@ -331,7 +398,14 @@ private final class ApiHandler(
       case ("GET", Vector("tables", tableId)) =>
         sendOption(exchange, app.tableRepository.findById(TableId(tableId)))
       case ("POST", Vector("tables", tableId, "start")) =>
-        sendOption(exchange, app.tableService.startTable(TableId(tableId)))
+        val request = readOptionalJsonBody[OperatorRequest](exchange)
+        sendOption(
+          exchange,
+          app.tableService.startTable(
+            TableId(tableId),
+            actor = request.flatMap(_.operator).map(principal).getOrElse(AccessPrincipal.system)
+          )
+        )
       case ("POST", Vector("tables", tableId, "paifu")) =>
         val request = readJsonBody[UploadPaifuRequest](exchange)
         sendOption(
@@ -438,6 +512,15 @@ private final class ApiHandler(
             actor = principal(request.operator)
           )
         )
+      case ("POST", Vector("admin", "players", playerId, "super-admin")) =>
+        val request = readJsonBody[GrantSuperAdminRequest](exchange)
+        sendOption(
+          exchange,
+          app.superAdminService.grantSuperAdmin(
+            playerId = PlayerId(playerId),
+            actor = principal(request.operator)
+          )
+        )
 
       case _ =>
         sendJson(exchange, 404, ApiError(s"Unsupported route: $method $path"))
@@ -456,6 +539,13 @@ private final class ApiHandler(
     if body.trim.isEmpty then
       throw IllegalArgumentException("Request body is required")
     else read[T](body)
+
+  private def readOptionalJsonBody[T: Reader](exchange: HttpExchange): Option[T] =
+    val body = Using.resource(exchange.getRequestBody) { inputStream =>
+      String(inputStream.readAllBytes(), StandardCharsets.UTF_8)
+    }
+
+    Option(body.trim).filter(_.nonEmpty).map(body => read[T](body))
 
   private def sendOption[T: Writer](exchange: HttpExchange, value: Option[T]): Unit =
     value match

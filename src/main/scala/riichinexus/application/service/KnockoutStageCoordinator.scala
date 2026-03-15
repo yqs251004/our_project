@@ -54,6 +54,7 @@ final class KnockoutStageCoordinator(
       val stage = requireStage(tournament, stageId)
       val existingTables = tableRepository.findByTournamentAndStage(tournamentId, stageId)
       val progression = buildProgression(tournamentId, stageId, at)
+      val representedClubByPlayer = representativeClubMap(stage)
 
       val startingTableNo = existingTables.map(_.tableNo).foldLeft(0)(math.max)
       val tablesToCreate = progression.rounds
@@ -71,7 +72,11 @@ final class KnockoutStageCoordinator(
             val player = playerRepository
               .findById(playerId)
               .getOrElse(throw NoSuchElementException(s"Player ${playerId.value} was not found"))
-            TableSeat(seat = wind, playerId = playerId, clubId = player.clubId)
+            TableSeat(
+              seat = wind,
+              playerId = playerId,
+              clubId = representedClubByPlayer.get(playerId).orElse(player.clubId)
+            )
           }
 
           Table(
@@ -168,3 +173,23 @@ final class KnockoutStageCoordinator(
 
       tableRepository.delete(table.id)
     }
+
+  private def representativeClubMap(stage: TournamentStage): Map[PlayerId, ClubId] =
+    val pairings = stage.lineupSubmissions.flatMap { submission =>
+      submission.activePlayerIds.map(_ -> submission.clubId)
+    }
+    val duplicatedAssignments = pairings
+      .groupBy(_._1)
+      .collect {
+        case (playerId, assignments)
+            if assignments.map(_._2).distinct.size > 1 =>
+          playerId.value
+      }
+      .toVector
+
+    require(
+      duplicatedAssignments.isEmpty,
+      s"Players cannot represent multiple clubs in the same stage: ${duplicatedAssignments.mkString(", ")}"
+    )
+
+    pairings.toMap

@@ -526,6 +526,7 @@ final case class Table(
 final case class MatchRecordSeatResult(
     playerId: PlayerId,
     seat: SeatWind,
+    clubId: Option[ClubId] = None,
     finalPoints: Int,
     placement: Int,
     scoreDelta: Int,
@@ -578,6 +579,7 @@ object MatchRecord:
         MatchRecordSeatResult(
           playerId = standing.playerId,
           seat = standing.seat,
+          clubId = scheduledSeat.clubId,
           finalPoints = standing.finalPoints,
           placement = standing.placement,
           scoreDelta = standing.finalPoints - scheduledSeat.initialPoints,

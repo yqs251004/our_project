@@ -22,12 +22,17 @@ final class BalancedEloSeatingPolicy extends SeatingPolicy:
   ): Vector[PlannedTable] =
     require(players.nonEmpty, s"Stage ${stage.name} needs players before scheduling")
     require(players.size % 4 == 0, "Player count must be divisible by 4 to schedule riichi tables")
+    val representedClubByPlayer = representativeClubMap(stage)
 
     val sortedPlayers = players
       .sortBy(player =>
         (
           -player.elo,
-          player.clubId.map(_.value).getOrElse("zzzzzz"),
+          representedClubByPlayer
+            .get(player.id)
+            .orElse(player.clubId)
+            .map(_.value)
+            .getOrElse("zzzzzz"),
           player.nickname
         )
       )
@@ -41,7 +46,11 @@ final class BalancedEloSeatingPolicy extends SeatingPolicy:
         PlannedTable(
           tableNo = index + 1,
           seats = SeatWind.all.zip(rotatedGroup).map { case (seat, player) =>
-            TableSeat(seat, player.id, clubId = player.clubId)
+            TableSeat(
+              seat,
+              player.id,
+              clubId = representedClubByPlayer.get(player.id).orElse(player.clubId)
+            )
           }
         )
       }
@@ -159,6 +168,26 @@ final class BalancedEloSeatingPolicy extends SeatingPolicy:
 
   private def pairKey(left: PlayerId, right: PlayerId): (PlayerId, PlayerId) =
     if left.value <= right.value then (left, right) else (right, left)
+
+  private def representativeClubMap(stage: TournamentStage): Map[PlayerId, ClubId] =
+    val pairings = stage.lineupSubmissions.flatMap { submission =>
+      submission.activePlayerIds.map(_ -> submission.clubId)
+    }
+    val duplicatedAssignments = pairings
+      .groupBy(_._1)
+      .collect {
+        case (playerId, assignments)
+            if assignments.map(_._2).distinct.size > 1 =>
+          playerId.value
+      }
+      .toVector
+
+    require(
+      duplicatedAssignments.isEmpty,
+      s"Players cannot represent multiple clubs in the same stage: ${duplicatedAssignments.mkString(", ")}"
+    )
+
+    pairings.toMap
 
   private def rotate[A](values: Vector[A], shift: Int): Vector[A] =
     if values.isEmpty then values
