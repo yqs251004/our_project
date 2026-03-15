@@ -274,6 +274,37 @@ class RiichiNexusSuite extends FunSuite:
     assertEquals(dashboard.map(_.sampleSize), Some(1))
   }
 
+  test("club titles can be cleared after assignment with audit trail") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-15T17:30:00Z")
+
+    val owner = app.playerService.registerPlayer("title-owner", "TitleOwner", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1800)
+    val member = app.playerService.registerPlayer("title-member", "TitleMember", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
+    val club = app.clubService.createClub("Title Club", owner.id, now, owner.asPrincipal)
+    app.clubService.addMember(club.id, member.id, principalFor(app, owner.id))
+
+    app.clubService.setInternalTitle(
+      club.id,
+      member.id,
+      "Vice Captain",
+      principalFor(app, owner.id),
+      now.plusSeconds(30),
+      Some("promotion")
+    )
+    val clearedClub = app.clubService.clearInternalTitle(
+      club.id,
+      member.id,
+      principalFor(app, owner.id),
+      now.plusSeconds(60),
+      Some("rotation")
+    ).getOrElse(fail("cleared club missing"))
+
+    assertEquals(clearedClub.titleAssignments, Vector.empty)
+    val auditTypes = app.auditEventRepository.findByAggregate("club", club.id.value).map(_.eventType)
+    assert(auditTypes.contains("ClubTitleAssigned"))
+    assert(auditTypes.contains("ClubTitleCleared"))
+  }
+
   test("registering players and managing club rosters initializes dashboards and power rating") {
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-13T12:00:00Z")

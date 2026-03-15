@@ -179,6 +179,27 @@ curl "http://localhost:8080/appeals?tournamentId=tournament-123&status=Open&tabl
 
 ## 6. Club treasury, point pool and rank tree operations
 
+Assign an internal club title:
+
+```bash
+curl -X POST http://localhost:8080/clubs/club-123/titles   -H "Content-Type: application/json"   -d '{
+    "playerId": "player-member-1",
+    "operatorId": "player-club-admin",
+    "title": "Vice Captain",
+    "note": "spring roster"
+  }'
+```
+
+Clear an assigned club title:
+
+```bash
+curl -X POST http://localhost:8080/clubs/club-123/titles/player-member-1/clear   -H "Content-Type: application/json"   -d '{
+    "operatorId": "player-club-admin",
+    "note": "rotation"
+  }'
+```
+
+
 Adjust a club treasury balance:
 
 ```bash

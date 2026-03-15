@@ -674,7 +674,7 @@ final class ClubApplicationService(
         )
 
         val assignedBy = actor.playerId.getOrElse(club.creator)
-        clubRepository.save(
+        val updatedClub = clubRepository.save(
           club.setInternalTitle(
             ClubTitleAssignment(
               playerId = playerId,
@@ -685,6 +685,69 @@ final class ClubApplicationService(
             )
           )
         )
+        auditEventRepository.save(
+          AuditEventEntry(
+            id = IdGenerator.auditEventId(),
+            aggregateType = "club",
+            aggregateId = clubId.value,
+            eventType = "ClubTitleAssigned",
+            occurredAt = assignedAt,
+            actorId = actor.playerId,
+            details = Map(
+              "playerId" -> playerId.value,
+              "title" -> title
+            ),
+            note = note
+          )
+        )
+        updatedClub
+    }
+
+  def clearInternalTitle(
+      clubId: ClubId,
+      playerId: PlayerId,
+      actor: AccessPrincipal,
+      clearedAt: Instant = Instant.now(),
+      note: Option[String] = None
+  ): Option[Club] =
+    transactionManager.inTransaction {
+      for
+        club <- clubRepository.findById(clubId)
+        player <- playerRepository.findById(playerId)
+      yield
+        ensureClubActive(club)
+        requireActivePlayer(player, s"Player ${playerId.value} cannot clear club title")
+        requireClubMember(club, playerId, "clear internal title")
+        authorizationService.requirePermission(
+          actor,
+          Permission.SetClubTitle,
+          clubId = Some(clubId)
+        )
+
+        val existingAssignment = club.titleAssignments.find(_.playerId == playerId)
+          .getOrElse(
+            throw NoSuchElementException(
+              s"Player ${playerId.value} does not hold a title in club ${clubId.value}"
+            )
+          )
+
+        val updatedClub = clubRepository.save(club.clearInternalTitle(playerId))
+        auditEventRepository.save(
+          AuditEventEntry(
+            id = IdGenerator.auditEventId(),
+            aggregateType = "club",
+            aggregateId = clubId.value,
+            eventType = "ClubTitleCleared",
+            occurredAt = clearedAt,
+            actorId = actor.playerId,
+            details = Map(
+              "playerId" -> playerId.value,
+              "title" -> existingAssignment.title
+            ),
+            note = note
+          )
+        )
+        updatedClub
     }
 
   def adjustTreasury(

@@ -639,6 +639,32 @@ class ApiServerSuite extends FunSuite:
   }
 
 
+  test("club title API supports clearing assigned titles") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-15T15:05:00Z")
+
+    val owner = app.playerService.registerPlayer("api-title-owner", "ApiTitleOwner", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1800)
+    val member = app.playerService.registerPlayer("api-title-member", "ApiTitleMember", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
+    val club = app.clubService.createClub("API Title Club", owner.id, now, owner.asPrincipal)
+    app.clubService.addMember(club.id, member.id, principalFor(app, owner.id))
+
+    withServer(app) { baseUrl =>
+      val assignResponse = postJson(
+        s"$baseUrl/clubs/${club.id.value}/titles",
+        write(AssignClubTitleRequest(member.id.value, owner.id.value, "Vice Captain", Some("promotion")))
+      )
+      assertEquals(assignResponse.statusCode(), 200)
+      assertEquals(read[Club](assignResponse.body()).titleAssignments.map(_.title), Vector("Vice Captain"))
+
+      val clearResponse = postJson(
+        s"$baseUrl/clubs/${club.id.value}/titles/${member.id.value}/clear",
+        write(ClearClubTitleRequest(owner.id.value, Some("rotation")))
+      )
+      assertEquals(clearResponse.statusCode(), 200)
+      assertEquals(read[Club](clearResponse.body()).titleAssignments, Vector.empty)
+    }
+  }
+
   test("club relation endpoint keeps reciprocal mappings in sync") {
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-15T15:15:00Z")

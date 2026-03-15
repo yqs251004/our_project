@@ -343,6 +343,17 @@ private final class ApiHandler(
             note = request.note
           )
         )
+      case ("POST", Vector("clubs", clubId, "titles", playerId, "clear")) =>
+        val request = readJsonBody[ClearClubTitleRequest](exchange)
+        sendOption(
+          exchange,
+          app.clubService.clearInternalTitle(
+            clubId = ClubId(clubId),
+            playerId = PlayerId(playerId),
+            actor = principal(request.operator),
+            note = request.note
+          )
+        )
       case ("POST", Vector("clubs", clubId, "treasury")) =>
         val request = readJsonBody[AdjustClubTreasuryRequest](exchange)
         sendOption(

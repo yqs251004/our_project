@@ -107,6 +107,13 @@ final case class AssignClubTitleRequest(
   def operator: PlayerId =
     PlayerId(operatorId)
 
+final case class ClearClubTitleRequest(
+    operatorId: String,
+    note: Option[String] = None
+):
+  def operator: PlayerId =
+    PlayerId(operatorId)
+
 final case class AdjustClubTreasuryRequest(
     operatorId: String,
     delta: Long,
@@ -485,6 +492,7 @@ object ApiModels:
   given ReadWriter[ApproveClubApplicationRequest] = macroRW
   given ReadWriter[AssignClubAdminRequest] = macroRW
   given ReadWriter[AssignClubTitleRequest] = macroRW
+  given ReadWriter[ClearClubTitleRequest] = macroRW
   given ReadWriter[AdjustClubTreasuryRequest] = macroRW
   given ReadWriter[AdjustClubPointPoolRequest] = macroRW
   given ReadWriter[ClubRankNodeRequest] = macroRW

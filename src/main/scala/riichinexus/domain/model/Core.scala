@@ -445,6 +445,11 @@ final case class Club(
         titleAssignments.filterNot(_.playerId == assignment.playerId) :+ assignment
     )
 
+  def clearInternalTitle(playerId: PlayerId): Club =
+    copy(
+      titleAssignments = titleAssignments.filterNot(_.playerId == playerId)
+    )
+
   def submitApplication(application: ClubMembershipApplication): Club =
     copy(
       membershipApplications =
