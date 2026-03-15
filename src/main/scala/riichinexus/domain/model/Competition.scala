@@ -65,7 +65,12 @@ final case class KnockoutRuleConfig(
     thirdPlaceMatch: Boolean = false,
     seedingPolicy: String = "rating",
     repechageEnabled: Boolean = false
-) derives CanEqual
+) derives CanEqual:
+  private val supportedPolicies = Set("rating", "elo", "ranking", "standings")
+  require(
+    supportedPolicies.contains(seedingPolicy.trim.toLowerCase),
+    s"Unsupported knockout seeding policy: $seedingPolicy"
+  )
 
 enum KnockoutLane derives CanEqual:
   case Championship

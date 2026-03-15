@@ -268,12 +268,12 @@ final case class ConfigureStageRulesRequest(
     else None
 
   def knockoutRule: Option[KnockoutRuleConfig] =
-    if bracketSize.isDefined || thirdPlaceMatch.isDefined || seedingPolicy.isDefined then
+    if bracketSize.isDefined || thirdPlaceMatch.isDefined || seedingPolicy.isDefined || repechageEnabled.isDefined then
       Some(
         KnockoutRuleConfig(
           bracketSize = bracketSize,
           thirdPlaceMatch = thirdPlaceMatch.getOrElse(false),
-          seedingPolicy = seedingPolicy.getOrElse("rating"),
+          seedingPolicy = seedingPolicy.map(_.trim.toLowerCase).getOrElse("rating"),
           repechageEnabled = repechageEnabled.getOrElse(false)
         )
       )

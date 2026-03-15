@@ -138,6 +138,23 @@ curl -X POST http://localhost:8080/tournaments/tournament-123/stages/stage-swiss
 curl "http://localhost:8080/tournaments/tournament-123/stages/stage-swiss-1/standings"
 ```
 
+Knockout stages now consume `seedingPolicy` for visible bracket ordering. `ranking` keeps qualified players in standings order, while `rating` reorders them by ELO before the bracket is seeded:
+
+```bash
+curl -X POST http://localhost:8080/tournaments/tournament-123/stages/stage-finals/rules   -H "Content-Type: application/json"   -d '{
+    "operatorId": "player-tournament-admin",
+    "advancementRuleType": "KnockoutElimination",
+    "targetTableCount": 2,
+    "bracketSize": 8,
+    "seedingPolicy": "rating",
+    "thirdPlaceMatch": true
+  }'
+```
+
+```bash
+curl "http://localhost:8080/tournaments/tournament-123/stages/stage-finals/bracket"
+```
+
 Paifu round settlements are now validated and preserved into archived match-record notes:
 
 ```json

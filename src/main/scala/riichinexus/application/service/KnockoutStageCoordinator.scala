@@ -25,18 +25,19 @@ final class KnockoutStageCoordinator(
       .findById(tournamentId)
       .getOrElse(throw NoSuchElementException(s"Tournament ${tournamentId.value} was not found"))
     val stage = requireStage(tournament, stageId)
-    val participants = resolveParticipants(tournament, stage).map(_.id)
+    val participants = resolveParticipants(tournament, stage)
     val records = stageRecords(tournamentId, stageId)
     val advancement = tournamentRuleEngine.projectAdvancement(
       tournament,
       stage,
-      tournamentRuleEngine.buildStageRanking(tournament, stage, participants, records, at),
+      tournamentRuleEngine.buildStageRanking(tournament, stage, participants.map(_.id), records, at),
       at
     )
     tournamentRuleEngine.buildKnockoutProgression(
       tournament = tournament,
       stage = stage,
       advancement = advancement,
+      participants = participants,
       tables = tableRepository.findByTournamentAndStage(tournamentId, stageId),
       records = records,
       at = at

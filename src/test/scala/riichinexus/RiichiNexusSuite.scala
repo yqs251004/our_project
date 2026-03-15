@@ -646,6 +646,55 @@ class RiichiNexusSuite extends FunSuite:
     )
   }
 
+  test("knockout seeding policy can follow rating instead of ranking order") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-16T09:00:00Z")
+
+    val players = (1 to 8).toVector.map { index =>
+      val player = Player(
+        id = PlayerId(f"seed-$index%02d"),
+        userId = s"seed-user-$index",
+        nickname = s"SeedPlayer$index",
+        registeredAt = now,
+        currentRank = RankSnapshot(RankPlatform.Tenhou, "4-dan"),
+        elo = 1200 + index * 100
+      )
+      app.playerRepository.save(player)
+    }
+
+    def bracketForPolicy(policy: String): KnockoutBracketSnapshot =
+      val stage = TournamentStage(
+        id = IdGenerator.stageId(),
+        name = s"Knockout $policy",
+        format = StageFormat.Knockout,
+        order = 1,
+        roundCount = 1,
+        advancementRule = AdvancementRule(AdvancementRuleType.KnockoutElimination, targetTableCount = Some(2)),
+        knockoutRule = Some(KnockoutRuleConfig(bracketSize = Some(8), seedingPolicy = policy))
+      )
+      val tournament = app.tournamentService.createTournament(
+        s"Knockout ${policy} Cup",
+        "QA",
+        now,
+        now.plusSeconds(7200),
+        Vector(stage)
+      )
+      players.foreach(player => app.tournamentService.registerPlayer(tournament.id, player.id))
+      app.tournamentService.publishTournament(tournament.id)
+      app.tournamentService.stageKnockoutBracket(tournament.id, stage.id, now.plusSeconds(60))
+
+    val rankingBracket = bracketForPolicy("ranking")
+    val ratingBracket = bracketForPolicy("rating")
+
+    val rankingFirstMatch = rankingBracket.rounds.head.matches.head
+    val ratingFirstMatch = ratingBracket.rounds.head.matches.head
+
+    assertEquals(rankingFirstMatch.slots.flatMap(_.playerId).headOption, Some(PlayerId("seed-01")))
+    assertEquals(ratingFirstMatch.slots.flatMap(_.playerId).headOption, Some(PlayerId("seed-08")))
+    assertNotEquals(rankingFirstMatch.slots.flatMap(_.playerId), ratingFirstMatch.slots.flatMap(_.playerId))
+    assert(ratingBracket.summary.contains("rating"))
+  }
+
   test("club relations stay reciprocal when updated or cleared") {
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-13T18:00:00Z")

@@ -24,6 +24,7 @@ trait TournamentRuleEngine:
       tournament: Tournament,
       stage: TournamentStage,
       advancement: StageAdvancementSnapshot,
+      participants: Vector[Player],
       at: Instant = Instant.now()
   ): KnockoutBracketSnapshot
 
@@ -31,6 +32,7 @@ trait TournamentRuleEngine:
       tournament: Tournament,
       stage: TournamentStage,
       advancement: StageAdvancementSnapshot,
+      participants: Vector[Player],
       tables: Vector[Table],
       records: Vector[MatchRecord],
       at: Instant = Instant.now()
@@ -201,14 +203,16 @@ final class DefaultTournamentRuleEngine extends TournamentRuleEngine:
       tournament: Tournament,
       stage: TournamentStage,
       advancement: StageAdvancementSnapshot,
+      participants: Vector[Player],
       at: Instant
   ): KnockoutBracketSnapshot =
-    buildKnockoutProgression(tournament, stage, advancement, Vector.empty, Vector.empty, at)
+    buildKnockoutProgression(tournament, stage, advancement, participants, Vector.empty, Vector.empty, at)
 
   override def buildKnockoutProgression(
       tournament: Tournament,
       stage: TournamentStage,
       advancement: StageAdvancementSnapshot,
+      participants: Vector[Player],
       tables: Vector[Table],
       records: Vector[MatchRecord],
       at: Instant
@@ -223,7 +227,7 @@ final class DefaultTournamentRuleEngine extends TournamentRuleEngine:
         s"Stage ${stage.id.value} is not configured as a knockout stage"
       )
 
-    val qualified = advancement.qualifiedPlayerIds.distinct
+    val qualified = resolveKnockoutSeeds(stage, advancement, participants)
     if qualified.isEmpty then
       throw IllegalArgumentException(
         s"Stage ${stage.id.value} does not have enough qualified players to build a knockout bracket"
@@ -299,7 +303,8 @@ final class DefaultTournamentRuleEngine extends TournamentRuleEngine:
       bracketSize = bracketSize,
       qualifiedPlayerIds = qualified,
       rounds = allRounds,
-      summary = s"Knockout progression seeded ${qualified.size} players and unlocked ${allRounds.flatMap(_.matches).count(_.unlocked)} matches."
+      summary =
+        s"Knockout progression seeded ${qualified.size} players using ${normalizedSeedingPolicy(stage)} and unlocked ${allRounds.flatMap(_.matches).count(_.unlocked)} matches."
     )
 
   private def defaultSwissCut(participantCount: Int): Int =
@@ -317,7 +322,7 @@ final class DefaultTournamentRuleEngine extends TournamentRuleEngine:
       case AdvancementRuleType.SwissCut =>
         s"Swiss cut selects top $qualifiedCount players from ${ranking.entries.size} ranked participants."
       case AdvancementRuleType.KnockoutElimination =>
-        s"Knockout seeding locks top $qualifiedCount players into the next bracket."
+        s"Knockout seeding locks top $qualifiedCount players into the next bracket using ${normalizedSeedingPolicy(stage)}."
       case AdvancementRuleType.ScoreThreshold =>
         s"Score threshold keeps $qualifiedCount players at or above ${stage.advancementRule.thresholdScore.getOrElse(0)}."
       case AdvancementRuleType.Custom =>
@@ -444,6 +449,41 @@ final class DefaultTournamentRuleEngine extends TournamentRuleEngine:
 
   private def round2(value: Double): Double =
     BigDecimal(value).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble
+
+  private def normalizedSeedingPolicy(stage: TournamentStage): String =
+    stage.knockoutRule.map(_.seedingPolicy.trim.toLowerCase).getOrElse("rating") match
+      case "elo"       => "rating"
+      case "standings" => "ranking"
+      case value       => value
+
+  private def resolveKnockoutSeeds(
+      stage: TournamentStage,
+      advancement: StageAdvancementSnapshot,
+      participants: Vector[Player]
+  ): Vector[PlayerId] =
+    val qualifiedIds = advancement.qualifiedPlayerIds.distinct
+    val rankingIndex = advancement.standings.zipWithIndex.map { case (entry, index) =>
+      entry.playerId -> index
+    }.toMap
+    val participantById = participants.map(player => player.id -> player).toMap
+
+    normalizedSeedingPolicy(stage) match
+      case "ranking" =>
+        advancement.standings
+          .filter(entry => qualifiedIds.contains(entry.playerId))
+          .sortBy(entry => (entry.seed.getOrElse(Int.MaxValue), rankingIndex.getOrElse(entry.playerId, Int.MaxValue)))
+          .map(_.playerId)
+      case "rating" =>
+        qualifiedIds.sortBy { playerId =>
+          val player = participantById.get(playerId)
+          (
+            -player.map(_.elo.toLong).getOrElse(Long.MinValue),
+            rankingIndex.getOrElse(playerId, Int.MaxValue),
+            playerId.value
+          )
+        }
+      case policy =>
+        throw IllegalArgumentException(s"Unsupported knockout seeding policy: $policy")
 
   private def nextPowerOfTwo(value: Int): Int =
     Iterator.iterate(1)(_ * 2).dropWhile(_ < math.max(1, value)).next()
