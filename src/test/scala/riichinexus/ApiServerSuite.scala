@@ -509,6 +509,109 @@ class ApiServerSuite extends FunSuite:
     }
   }
 
+  test("club operation endpoints update treasury point pool and rank tree") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-15T15:00:00Z")
+
+    val owner = app.playerService.registerPlayer("club-fin-owner", "ClubFinOwner", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1800)
+    val club = app.clubService.createClub("Club Finance", owner.id, now, owner.asPrincipal)
+
+    withServer(app) { baseUrl =>
+      val treasuryResponse = postJson(
+        s"$baseUrl/clubs/${club.id.value}/treasury",
+        write(AdjustClubTreasuryRequest(owner.id.value, 2500L, Some("sponsor")))
+      )
+      assertEquals(treasuryResponse.statusCode(), 200)
+      assertEquals(read[Club](treasuryResponse.body()).treasuryBalance, 2500L)
+
+      val pointPoolResponse = postJson(
+        s"$baseUrl/clubs/${club.id.value}/point-pool",
+        write(AdjustClubPointPoolRequest(owner.id.value, 180, Some("event reward")))
+      )
+      assertEquals(pointPoolResponse.statusCode(), 200)
+      assertEquals(read[Club](pointPoolResponse.body()).pointPool, 180)
+
+      val rankTreeResponse = postJson(
+        s"$baseUrl/clubs/${club.id.value}/rank-tree",
+        write(
+          UpdateClubRankTreeRequest(
+            operatorId = owner.id.value,
+            ranks = Vector(
+              ClubRankNodeRequest("rookie", "Rookie", 0),
+              ClubRankNodeRequest("elite", "Elite", 1500, Vector("priority-lineup"))
+            ),
+            note = Some("season refresh")
+          )
+        )
+      )
+      assertEquals(rankTreeResponse.statusCode(), 200)
+      assertEquals(read[Club](rankTreeResponse.body()).rankTree.map(_.code), Vector("rookie", "elite"))
+    }
+  }
+
+  test("stage table endpoints expose round filters for multi-round scheduling") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-15T15:30:00Z")
+
+    val admin = app.playerService.registerPlayer("round-admin", "RoundAdmin", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1750)
+    val players = (1 to 8).toVector.map { index =>
+      if index == 1 then admin
+      else app.playerService.registerPlayer(
+        s"round-p$index",
+        s"RoundPlayer$index",
+        RankSnapshot(RankPlatform.Tenhou, "4-dan"),
+        now,
+        1600 - index
+      )
+    }
+
+    val stage = TournamentStage(IdGenerator.stageId(), "Round Stage", StageFormat.Swiss, 1, 2, schedulingPoolSize = 1)
+    val tournament = app.tournamentService.createTournament(
+      "Round Filter Cup",
+      "QA",
+      now,
+      now.plusSeconds(7200),
+      Vector(stage),
+      adminId = Some(admin.id)
+    )
+    players.foreach(player => app.tournamentService.registerPlayer(tournament.id, player.id, principalFor(app, admin.id)))
+    app.tournamentService.publishTournament(tournament.id, principalFor(app, admin.id))
+
+    val firstRoundTable = app.tournamentService.scheduleStageTables(tournament.id, stage.id, principalFor(app, admin.id)).head
+    app.tableService.startTable(firstRoundTable.id, now.plusSeconds(60), principalFor(app, admin.id))
+    app.tableService.recordCompletedTable(
+      firstRoundTable.id,
+      demoPaifuForResult(firstRoundTable, tournament.id, stage.id, now.plusSeconds(120), firstRoundTable.seats.head.playerId, firstRoundTable.seats(1).playerId),
+      principalFor(app, admin.id)
+    )
+    val secondRoundOne = app.tournamentService.scheduleStageTables(tournament.id, stage.id, principalFor(app, admin.id)).last
+    app.tableService.startTable(secondRoundOne.id, now.plusSeconds(180), principalFor(app, admin.id))
+    app.tableService.recordCompletedTable(
+      secondRoundOne.id,
+      demoPaifuForResult(secondRoundOne, tournament.id, stage.id, now.plusSeconds(240), secondRoundOne.seats.head.playerId, secondRoundOne.seats(1).playerId),
+      principalFor(app, admin.id)
+    )
+    app.tournamentService.scheduleStageTables(tournament.id, stage.id, principalFor(app, admin.id))
+
+    withServer(app) { baseUrl =>
+      val stageTablesResponse = get(
+        s"$baseUrl/tournaments/${tournament.id.value}/stages/${stage.id.value}/tables?roundNumber=2"
+      )
+      assertEquals(stageTablesResponse.statusCode(), 200)
+      val stageTables = readPage[Table](stageTablesResponse.body())
+      assertEquals(stageTables.total, 1)
+      assertEquals(stageTables.items.head.stageRoundNumber, 2)
+
+      val globalTablesResponse = get(
+        s"$baseUrl/tables?tournamentId=${tournament.id.value}&roundNumber=2"
+      )
+      assertEquals(globalTablesResponse.statusCode(), 200)
+      val globalTables = readPage[Table](globalTablesResponse.body())
+      assertEquals(globalTables.total, 1)
+      assertEquals(globalTables.items.head.stageRoundNumber, 2)
+    }
+  }
+
   private def withServer[A](app: ApplicationContext)(f: String => A): A =
     val server = RiichiNexusApiServer(
       app,

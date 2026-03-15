@@ -107,22 +107,33 @@ final case class StageLineupSubmission(
   def activePlayerIds: Vector[PlayerId] =
     seats.filterNot(_.reserve).map(_.playerId)
 
+final case class StageTablePlan(
+    roundNumber: Int,
+    tableNo: Int,
+    seats: Vector[TableSeat]
+) derives CanEqual:
+  require(roundNumber >= 1, "Stage table plan round number must be positive")
+  require(seats.size == 4, "Stage table plan must contain four seats")
+
 final case class TournamentStage(
     id: TournamentStageId,
     name: String,
     format: StageFormat,
     order: Int,
     roundCount: Int,
+    currentRound: Int = 1,
     status: StageStatus = StageStatus.Pending,
     advancementRule: AdvancementRule = AdvancementRule(AdvancementRuleType.Custom, note = Some("unconfigured")),
     swissRule: Option[SwissRuleConfig] = None,
     knockoutRule: Option[KnockoutRuleConfig] = None,
     schedulingPoolSize: Int = 4,
     lineupSubmissions: Vector[StageLineupSubmission] = Vector.empty,
+    pendingTablePlans: Vector[StageTablePlan] = Vector.empty,
     scheduledTableIds: Vector[TableId] = Vector.empty
 ) derives CanEqual:
   require(order >= 1, "Stage order must be positive")
   require(roundCount >= 1, "Stage round count must be positive")
+  require(currentRound >= 1 && currentRound <= roundCount, "Current round must be within stage bounds")
   require(schedulingPoolSize >= 1, "Scheduling pool size must be positive")
 
   def withRules(
@@ -149,6 +160,38 @@ final case class TournamentStage(
       lineupSubmissions =
         lineupSubmissions.filterNot(_.clubId == submission.clubId) :+ submission
     )
+
+  def queueRoundPlans(
+      roundNumber: Int,
+      plans: Vector[StageTablePlan]
+  ): TournamentStage =
+    require(roundNumber >= 1 && roundNumber <= roundCount, "Round number is out of bounds")
+    require(plans.forall(_.roundNumber == roundNumber), "Queued plans must share the same round number")
+    copy(
+      currentRound = roundNumber,
+      status = StageStatus.Active,
+      pendingTablePlans = plans
+    )
+
+  def consumePendingPlans(
+      materializedPlans: Vector[StageTablePlan],
+      tableIds: Vector[TableId]
+  ): TournamentStage =
+    require(
+      materializedPlans.size == tableIds.size,
+      "Materialized plans and table ids must have the same size"
+    )
+    val consumedKeys = materializedPlans.map(plan => plan.roundNumber -> plan.tableNo).toSet
+    copy(
+      status = StageStatus.Active,
+      pendingTablePlans =
+        pendingTablePlans.filterNot(plan => consumedKeys.contains(plan.roundNumber -> plan.tableNo)),
+      scheduledTableIds = (scheduledTableIds ++ tableIds).distinct
+    )
+
+  def advanceRound(nextRound: Int): TournamentStage =
+    require(nextRound >= 1 && nextRound <= roundCount, "Next round is out of bounds")
+    copy(currentRound = nextRound)
 
   def registerScheduledTables(tableIds: Vector[TableId]): TournamentStage =
     require(tableIds.nonEmpty, "Scheduled tables cannot be empty")
@@ -423,6 +466,7 @@ final case class Table(
     tournamentId: TournamentId,
     stageId: TournamentStageId,
     seats: Vector[TableSeat],
+    stageRoundNumber: Int = 1,
     bracketMatchId: Option[String] = None,
     bracketRoundNumber: Option[Int] = None,
     feederMatchIds: Vector[String] = Vector.empty,
@@ -438,6 +482,7 @@ final case class Table(
 ) derives CanEqual:
   require(seats.size == 4, "A riichi table must have exactly four seats")
   require(seats.map(_.seat).distinct.size == 4, "Seats must be unique")
+  require(stageRoundNumber >= 1, "Stage round number must be positive")
 
   def bindKnockoutMatch(
       matchId: String,

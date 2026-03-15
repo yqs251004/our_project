@@ -96,6 +96,47 @@ final case class AssignClubTitleRequest(
   def operator: PlayerId =
     PlayerId(operatorId)
 
+final case class AdjustClubTreasuryRequest(
+    operatorId: String,
+    delta: Long,
+    note: Option[String] = None
+):
+  def operator: PlayerId =
+    PlayerId(operatorId)
+
+final case class AdjustClubPointPoolRequest(
+    operatorId: String,
+    delta: Int,
+    note: Option[String] = None
+):
+  def operator: PlayerId =
+    PlayerId(operatorId)
+
+final case class ClubRankNodeRequest(
+    code: String,
+    label: String,
+    minimumContribution: Int,
+    privileges: Vector[String] = Vector.empty
+):
+  def toNode: ClubRankNode =
+    ClubRankNode(
+      code = code,
+      label = label,
+      minimumContribution = minimumContribution,
+      privileges = privileges
+    )
+
+final case class UpdateClubRankTreeRequest(
+    operatorId: String,
+    ranks: Vector[ClubRankNodeRequest],
+    note: Option[String] = None
+):
+  def operator: PlayerId =
+    PlayerId(operatorId)
+
+  def nodes: Vector[ClubRankNode] =
+    ranks.map(_.toNode)
+
 final case class CreateTournamentStageRequest(
     id: Option[String],
     name: String,
@@ -386,6 +427,10 @@ object ApiModels:
   given ReadWriter[ApproveClubApplicationRequest] = macroRW
   given ReadWriter[AssignClubAdminRequest] = macroRW
   given ReadWriter[AssignClubTitleRequest] = macroRW
+  given ReadWriter[AdjustClubTreasuryRequest] = macroRW
+  given ReadWriter[AdjustClubPointPoolRequest] = macroRW
+  given ReadWriter[ClubRankNodeRequest] = macroRW
+  given ReadWriter[UpdateClubRankTreeRequest] = macroRW
   given ReadWriter[CreateTournamentStageRequest] = macroRW
   given ReadWriter[CreateTournamentRequest] = macroRW
   given ReadWriter[ConfigureStageRulesRequest] = macroRW

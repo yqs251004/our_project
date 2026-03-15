@@ -305,6 +305,39 @@ private final class ApiHandler(
             note = request.note
           )
         )
+      case ("POST", Vector("clubs", clubId, "treasury")) =>
+        val request = readJsonBody[AdjustClubTreasuryRequest](exchange)
+        sendOption(
+          exchange,
+          app.clubService.adjustTreasury(
+            clubId = ClubId(clubId),
+            delta = request.delta,
+            actor = principal(request.operator),
+            note = request.note
+          )
+        )
+      case ("POST", Vector("clubs", clubId, "point-pool")) =>
+        val request = readJsonBody[AdjustClubPointPoolRequest](exchange)
+        sendOption(
+          exchange,
+          app.clubService.adjustPointPool(
+            clubId = ClubId(clubId),
+            delta = request.delta,
+            actor = principal(request.operator),
+            note = request.note
+          )
+        )
+      case ("POST", Vector("clubs", clubId, "rank-tree")) =>
+        val request = readJsonBody[UpdateClubRankTreeRequest](exchange)
+        sendOption(
+          exchange,
+          app.clubService.updateRankTree(
+            clubId = ClubId(clubId),
+            rankTree = request.nodes,
+            actor = principal(request.operator),
+            note = request.note
+          )
+        )
       case ("POST", Vector("clubs", clubId, "relations")) =>
         val request = readJsonBody[UpdateClubRelationRequest](exchange)
         sendOption(
@@ -544,15 +577,17 @@ private final class ApiHandler(
         val statusFilter = queryParam(exchange, "status").filter(_.nonEmpty).map(
           parseEnum("status", _)(TableStatus.valueOf)
         )
+        val roundNumberFilter = queryIntParam(exchange, "roundNumber")
         val playerIdFilter = queryParam(exchange, "playerId").filter(_.nonEmpty).map(PlayerId(_))
         val tables = app.tableRepository.findByTournamentAndStage(
           TournamentId(tournamentId),
           TournamentStageId(stageId)
         )
           .filter(table => statusFilter.forall(_ == table.status))
+          .filter(table => roundNumberFilter.forall(_ == table.stageRoundNumber))
           .filter(table => playerIdFilter.forall(playerId => table.seats.exists(_.playerId == playerId)))
-          .sortBy(table => (table.tableNo, table.id.value))
-        sendPagedJson(exchange, tables, activeFilters(exchange, "status", "playerId"))
+          .sortBy(table => (table.stageRoundNumber, table.tableNo, table.id.value))
+        sendPagedJson(exchange, tables, activeFilters(exchange, "status", "roundNumber", "playerId"))
       case ("GET", Vector("tournaments", tournamentId, "stages", stageId, "advancement")) =>
         sendJson(
           exchange,
@@ -599,17 +634,19 @@ private final class ApiHandler(
         )
         val tournamentIdFilter = queryParam(exchange, "tournamentId").filter(_.nonEmpty).map(TournamentId(_))
         val stageIdFilter = queryParam(exchange, "stageId").filter(_.nonEmpty).map(TournamentStageId(_))
+        val roundNumberFilter = queryIntParam(exchange, "roundNumber")
         val playerIdFilter = queryParam(exchange, "playerId").filter(_.nonEmpty).map(PlayerId(_))
         val tables = app.tableRepository.findAll()
           .filter(table => statusFilter.forall(_ == table.status))
           .filter(table => tournamentIdFilter.forall(_ == table.tournamentId))
           .filter(table => stageIdFilter.forall(_ == table.stageId))
+          .filter(table => roundNumberFilter.forall(_ == table.stageRoundNumber))
           .filter(table => playerIdFilter.forall(playerId => table.seats.exists(_.playerId == playerId)))
-          .sortBy(table => (table.tournamentId.value, table.stageId.value, table.tableNo, table.id.value))
+          .sortBy(table => (table.tournamentId.value, table.stageId.value, table.stageRoundNumber, table.tableNo, table.id.value))
         sendPagedJson(
           exchange,
           tables,
-          activeFilters(exchange, "status", "tournamentId", "stageId", "playerId")
+          activeFilters(exchange, "status", "tournamentId", "stageId", "roundNumber", "playerId")
         )
       case ("GET", Vector("tables", tableId)) =>
         sendOption(exchange, app.tableRepository.findById(TableId(tableId)))

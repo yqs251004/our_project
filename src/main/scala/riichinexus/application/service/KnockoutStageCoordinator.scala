@@ -84,7 +84,8 @@ final class KnockoutStageCoordinator(
             tableNo = startingTableNo + index + 1,
             tournamentId = tournamentId,
             stageId = stageId,
-            seats = seats
+            seats = seats,
+            stageRoundNumber = matchNode.roundNumber
           ).bindKnockoutMatch(
             matchId = matchNode.id,
             roundNumber = matchNode.roundNumber,

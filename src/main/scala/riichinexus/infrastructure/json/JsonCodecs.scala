@@ -87,6 +87,7 @@ object JsonCodecs:
     stringEnumReadWriter(SeatWind.valueOf, _.toString)
   given ReadWriter[StageLineupSeat] = macroRW
   given ReadWriter[StageLineupSubmission] = macroRW
+  given ReadWriter[StageTablePlan] = macroRW
   given ReadWriter[TournamentParticipantKind] =
     stringEnumReadWriter(TournamentParticipantKind.valueOf, _.toString)
   given ReadWriter[TournamentWhitelistEntry] = macroRW

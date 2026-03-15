@@ -50,6 +50,12 @@ curl "http://localhost:8080/clubs?activeOnly=true&memberId=player-123&limit=10"
 curl "http://localhost:8080/tournaments/tournament-123/stages/stage-swiss-1/tables?status=WaitingPreparation&playerId=player-123&limit=8"
 ```
 
+Filter a specific scheduled round from a multi-round stage:
+
+```bash
+curl "http://localhost:8080/tournaments/tournament-123/stages/stage-swiss-1/tables?roundNumber=2&limit=8"
+```
+
 ```bash
 curl "http://localhost:8080/records?tournamentId=tournament-123&stageId=stage-swiss-1&playerId=player-123&limit=20"
 ```
@@ -58,7 +64,42 @@ curl "http://localhost:8080/records?tournamentId=tournament-123&stageId=stage-sw
 curl "http://localhost:8080/appeals?tournamentId=tournament-123&status=Open&tableId=table-123&limit=20"
 ```
 
-## 5. Query dictionary and audit trail
+## 5. Club treasury, point pool and rank tree operations
+
+Adjust a club treasury balance:
+
+```bash
+curl -X POST http://localhost:8080/clubs/club-123/treasury   -H "Content-Type: application/json"   -d '{
+    "operatorId": "player-club-admin",
+    "delta": 5000,
+    "note": "sponsor settlement"
+  }'
+```
+
+Adjust a club point pool:
+
+```bash
+curl -X POST http://localhost:8080/clubs/club-123/point-pool   -H "Content-Type: application/json"   -d '{
+    "operatorId": "player-club-admin",
+    "delta": 320,
+    "note": "internal ladder reward"
+  }'
+```
+
+Replace the full club rank tree:
+
+```bash
+curl -X POST http://localhost:8080/clubs/club-123/rank-tree   -H "Content-Type: application/json"   -d '{
+    "operatorId": "player-club-admin",
+    "ranks": [
+      { "code": "rookie", "label": "Rookie", "minimumContribution": 0, "privileges": [] },
+      { "code": "elite", "label": "Elite", "minimumContribution": 1500, "privileges": ["priority-lineup"] }
+    ],
+    "note": "season refresh"
+  }'
+```
+
+## 6. Query dictionary and audit trail
 
 Single dictionary key lookup:
 
@@ -84,7 +125,7 @@ Audit collection lookup:
 curl "http://localhost:8080/audits?operatorId=player-super-admin&aggregateType=dictionary&actorId=player-super-admin&limit=20"
 ```
 
-## 6. Dashboard reads now require `operatorId`
+## 7. Dashboard reads now require `operatorId`
 
 ```bash
 curl "http://localhost:8080/dashboards/players/player-123?operatorId=player-123"
@@ -94,7 +135,7 @@ curl "http://localhost:8080/dashboards/players/player-123?operatorId=player-123"
 curl "http://localhost:8080/dashboards/clubs/club-123?operatorId=player-club-admin"
 ```
 
-## 7. Upload a paifu for a completed table
+## 8. Upload a paifu for a completed table
 
 ```bash
 curl -X POST http://localhost:8080/tables/table-123/paifu \
@@ -169,7 +210,7 @@ Validation notes for uploads:
 - `rounds[*].actions` must be sorted by `sequenceNo` and contain exactly one terminal action.
 - `finalStandings[*].finalPoints` must equal initial points plus the cumulative deltas from all rounds.
 
-## 8. Adjudicate an appeal
+## 9. Adjudicate an appeal
 
 ```bash
 curl -X POST http://localhost:8080/appeals/appeal-123/adjudicate \
@@ -187,7 +228,7 @@ Possible values:
 - `decision`: `Resolve`, `Reject`, `Escalate`
 - `tableResolution`: `RestorePriorState`, `ArchiveTable`, `ResumeScoring`, `ResumePlay`, `ForceReset`
 
-## 9. Complete a stage after all tables are archived
+## 10. Complete a stage after all tables are archived
 
 ```bash
 curl -X POST http://localhost:8080/tournaments/tournament-123/stages/stage-finals/complete \

@@ -93,6 +93,7 @@ object ApplicationContext:
         clubRepository,
         playerRepository,
         dashboardRepository,
+        auditEventRepository,
         transactionManager,
         authorizationService
       ),
@@ -213,6 +214,7 @@ object ApplicationContext:
         clubRepository,
         playerRepository,
         dashboardRepository,
+        auditEventRepository,
         transactionManager,
         authorizationService
       ),

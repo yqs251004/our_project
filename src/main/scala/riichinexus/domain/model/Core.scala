@@ -51,6 +51,7 @@ enum Permission derives CanEqual:
   case ViewClubDashboard
   case SubmitClubApplication
   case ManageClubMembership
+  case ManageClubOperations
   case SetClubTitle
   case AssignClubAdmin
   case SubmitTournamentLineup
@@ -397,7 +398,12 @@ final case class Club(
     )
 
   def adjustTreasury(delta: Long): Club =
+    require(treasuryBalance + delta >= 0L, "Club treasury balance cannot be negative")
     copy(treasuryBalance = treasuryBalance + delta)
+
+  def adjustPointPool(delta: Int): Club =
+    require(pointPool + delta >= 0, "Club point pool cannot be negative")
+    copy(pointPool = pointPool + delta)
 
   def addHonor(honor: ClubHonor): Club =
     copy(honors = honors :+ honor)
@@ -435,6 +441,31 @@ final case class Club(
 
   def updatePowerRating(rating: Double): Club =
     copy(powerRating = rating)
+
+  def updateRankTree(nodes: Vector[ClubRankNode]): Club =
+    require(nodes.nonEmpty, "Club rank tree cannot be empty")
+    require(
+      nodes.map(_.code.trim.toLowerCase).distinct.size == nodes.size,
+      "Club rank node codes must be unique"
+    )
+    require(
+      nodes.map(_.label.trim.toLowerCase).distinct.size == nodes.size,
+      "Club rank node labels must be unique"
+    )
+    require(
+      nodes.forall(node => node.code.trim.nonEmpty && node.label.trim.nonEmpty),
+      "Club rank node code and label cannot be empty"
+    )
+    require(
+      nodes.forall(_.minimumContribution >= 0),
+      "Club rank node minimum contribution cannot be negative"
+    )
+    val normalized = nodes.sortBy(node => (node.minimumContribution, node.code.trim.toLowerCase))
+    require(
+      normalized.head.minimumContribution == 0,
+      "Club rank tree must start at minimum contribution 0"
+    )
+    copy(rankTree = normalized)
 
   def upsertRelation(relation: ClubRelation): Club =
     copy(

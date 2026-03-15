@@ -291,6 +291,127 @@ class RiichiNexusSuite extends FunSuite:
     assertEquals(seatByPlayer(north.id), SeatWind.North)
   }
 
+  test("club operations update treasury point pool and rank tree") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-13T14:00:00Z")
+
+    val owner = app.playerService.registerPlayer("club-ops-owner", "Owner", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1800)
+    val club = app.clubService.createClub("Operations Club", owner.id, now, owner.asPrincipal)
+
+    val afterTreasury = app.clubService.adjustTreasury(
+      club.id,
+      delta = 5000L,
+      actor = principalFor(app, owner.id),
+      occurredAt = now.plusSeconds(60),
+      note = Some("sponsor payment")
+    ).getOrElse(fail("treasury update failed"))
+    assertEquals(afterTreasury.treasuryBalance, 5000L)
+
+    val afterPointPool = app.clubService.adjustPointPool(
+      club.id,
+      delta = 320,
+      actor = principalFor(app, owner.id),
+      occurredAt = now.plusSeconds(120),
+      note = Some("internal event reward")
+    ).getOrElse(fail("point pool update failed"))
+    assertEquals(afterPointPool.pointPool, 320)
+
+    val updatedRankTree = app.clubService.updateRankTree(
+      club.id,
+      rankTree = Vector(
+        ClubRankNode("rookie", "Rookie", 0),
+        ClubRankNode("veteran", "Veteran", 1200, Vector("priority-lineup")),
+        ClubRankNode("captain", "Captain", 2400, Vector("approve-roster", "manage-bank"))
+      ),
+      actor = principalFor(app, owner.id),
+      occurredAt = now.plusSeconds(180),
+      note = Some("season update")
+    ).getOrElse(fail("rank tree update failed"))
+    assertEquals(updatedRankTree.rankTree.map(_.code), Vector("rookie", "veteran", "captain"))
+    assertEquals(updatedRankTree.rankTree.last.privileges, Vector("approve-roster", "manage-bank"))
+
+    val auditTypes = app.auditEventRepository.findByAggregate("club", club.id.value).map(_.eventType)
+    assert(auditTypes.contains("ClubTreasuryAdjusted"))
+    assert(auditTypes.contains("ClubPointPoolAdjusted"))
+    assert(auditTypes.contains("ClubRankTreeUpdated"))
+  }
+
+  test("multi-round scheduling respects pool size and advances rounds incrementally") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-13T15:00:00Z")
+
+    val players = (1 to 8).toVector.map { index =>
+      app.playerService.registerPlayer(
+        s"multi-round-$index",
+        s"Player$index",
+        RankSnapshot(RankPlatform.Tenhou, "4-dan"),
+        now,
+        1600 - index
+      )
+    }
+
+    val stage = TournamentStage(
+      IdGenerator.stageId(),
+      "Swiss Marathon",
+      StageFormat.Swiss,
+      order = 1,
+      roundCount = 2,
+      schedulingPoolSize = 1
+    )
+    val tournament = app.tournamentService.createTournament(
+      "Scheduling Cup",
+      "QA",
+      now,
+      now.plusSeconds(7200),
+      Vector(stage)
+    )
+
+    players.foreach(player => app.tournamentService.registerPlayer(tournament.id, player.id))
+    app.tournamentService.publishTournament(tournament.id)
+
+    val firstWave = app.tournamentService.scheduleStageTables(tournament.id, stage.id)
+    assertEquals(firstWave.size, 1)
+    assertEquals(firstWave.head.stageRoundNumber, 1)
+
+    app.tableService.startTable(firstWave.head.id, now.plusSeconds(60))
+    app.tableService.recordCompletedTable(
+      firstWave.head.id,
+      demoPaifuForResult(
+        firstWave.head,
+        tournament.id,
+        stage.id,
+        now.plusSeconds(120),
+        winner = firstWave.head.seats.head.playerId,
+        target = firstWave.head.seats(1).playerId
+      )
+    )
+
+    val secondWave = app.tournamentService.scheduleStageTables(tournament.id, stage.id)
+    assertEquals(secondWave.size, 2)
+    assertEquals(secondWave.last.stageRoundNumber, 1)
+
+    app.tableService.startTable(secondWave.last.id, now.plusSeconds(180))
+    app.tableService.recordCompletedTable(
+      secondWave.last.id,
+      demoPaifuForResult(
+        secondWave.last,
+        tournament.id,
+        stage.id,
+        now.plusSeconds(240),
+        winner = secondWave.last.seats.head.playerId,
+        target = secondWave.last.seats(1).playerId
+      )
+    )
+
+    val thirdWave = app.tournamentService.scheduleStageTables(tournament.id, stage.id)
+    assertEquals(thirdWave.count(_.stageRoundNumber == 2), 1)
+
+    val stageStateAfterAdvance = app.tournamentRepository.findById(tournament.id).flatMap(_.stages.find(_.id == stage.id))
+      .getOrElse(fail("stage missing after advance"))
+    assertEquals(stageStateAfterAdvance.currentRound, 2)
+    assert(stageStateAfterAdvance.pendingTablePlans.nonEmpty)
+  }
+
 private def principalFor(app: ApplicationContext, playerId: PlayerId): AccessPrincipal =
   app.playerRepository.findById(playerId).get.asPrincipal
 

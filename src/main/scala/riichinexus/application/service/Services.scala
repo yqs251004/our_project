@@ -205,6 +205,7 @@ final class ClubApplicationService(
     clubRepository: ClubRepository,
     playerRepository: PlayerRepository,
     dashboardRepository: DashboardRepository,
+    auditEventRepository: AuditEventRepository,
     transactionManager: TransactionManager = NoOpTransactionManager,
     authorizationService: AuthorizationService = NoOpAuthorizationService
 ):
@@ -559,6 +560,111 @@ final class ClubApplicationService(
             )
           )
         )
+    }
+
+  def adjustTreasury(
+      clubId: ClubId,
+      delta: Long,
+      actor: AccessPrincipal,
+      occurredAt: Instant = Instant.now(),
+      note: Option[String] = None
+  ): Option[Club] =
+    transactionManager.inTransaction {
+      clubRepository.findById(clubId).map { club =>
+        ensureClubActive(club)
+        authorizationService.requirePermission(
+          actor,
+          Permission.ManageClubOperations,
+          clubId = Some(clubId)
+        )
+
+        val updatedClub = clubRepository.save(club.adjustTreasury(delta))
+        auditEventRepository.save(
+          AuditEventEntry(
+            id = IdGenerator.auditEventId(),
+            aggregateType = "club",
+            aggregateId = clubId.value,
+            eventType = "ClubTreasuryAdjusted",
+            occurredAt = occurredAt,
+            actorId = actor.playerId,
+            details = Map(
+              "delta" -> delta.toString,
+              "treasuryBalance" -> updatedClub.treasuryBalance.toString
+            ),
+            note = note
+          )
+        )
+        updatedClub
+      }
+    }
+
+  def adjustPointPool(
+      clubId: ClubId,
+      delta: Int,
+      actor: AccessPrincipal,
+      occurredAt: Instant = Instant.now(),
+      note: Option[String] = None
+  ): Option[Club] =
+    transactionManager.inTransaction {
+      clubRepository.findById(clubId).map { club =>
+        ensureClubActive(club)
+        authorizationService.requirePermission(
+          actor,
+          Permission.ManageClubOperations,
+          clubId = Some(clubId)
+        )
+
+        val updatedClub = clubRepository.save(club.adjustPointPool(delta))
+        auditEventRepository.save(
+          AuditEventEntry(
+            id = IdGenerator.auditEventId(),
+            aggregateType = "club",
+            aggregateId = clubId.value,
+            eventType = "ClubPointPoolAdjusted",
+            occurredAt = occurredAt,
+            actorId = actor.playerId,
+            details = Map(
+              "delta" -> delta.toString,
+              "pointPool" -> updatedClub.pointPool.toString
+            ),
+            note = note
+          )
+        )
+        updatedClub
+      }
+    }
+
+  def updateRankTree(
+      clubId: ClubId,
+      rankTree: Vector[ClubRankNode],
+      actor: AccessPrincipal,
+      occurredAt: Instant = Instant.now(),
+      note: Option[String] = None
+  ): Option[Club] =
+    transactionManager.inTransaction {
+      clubRepository.findById(clubId).map { club =>
+        ensureClubActive(club)
+        authorizationService.requirePermission(
+          actor,
+          Permission.ManageClubOperations,
+          clubId = Some(clubId)
+        )
+
+        val updatedClub = clubRepository.save(club.updateRankTree(rankTree))
+        auditEventRepository.save(
+          AuditEventEntry(
+            id = IdGenerator.auditEventId(),
+            aggregateType = "club",
+            aggregateId = clubId.value,
+            eventType = "ClubRankTreeUpdated",
+            occurredAt = occurredAt,
+            actorId = actor.playerId,
+            details = Map("rankCount" -> updatedClub.rankTree.size.toString),
+            note = note
+          )
+        )
+        updatedClub
+      }
     }
 
   def updateRelation(
@@ -1018,59 +1124,89 @@ final class TournamentApplicationService(
         tournamentId = Some(tournamentId)
       )
 
-      val existingTables = tableRepository.findByTournamentAndStage(tournamentId, stageId)
-      if existingTables.nonEmpty then existingTables
-      else
-        val tournament = tournamentRepository
-          .findById(tournamentId)
-          .getOrElse(throw IllegalArgumentException(s"Tournament ${tournamentId.value} was not found"))
+      val tournament = tournamentRepository
+        .findById(tournamentId)
+        .getOrElse(throw IllegalArgumentException(s"Tournament ${tournamentId.value} was not found"))
 
-        val stage = tournament.stages
-          .find(_.id == stageId)
-          .getOrElse(throw IllegalArgumentException(s"Stage ${stageId.value} was not found"))
+      val stage = tournament.stages
+        .find(_.id == stageId)
+        .getOrElse(throw IllegalArgumentException(s"Stage ${stageId.value} was not found"))
 
-        if tournament.status == TournamentStatus.Draft then
-          throw IllegalArgumentException(
-            s"Tournament ${tournamentId.value} must be published before scheduling tables"
+      if tournament.status == TournamentStatus.Draft then
+        throw IllegalArgumentException(
+          s"Tournament ${tournamentId.value} must be published before scheduling tables"
+        )
+
+      val isKnockoutStage =
+        stage.format == StageFormat.Knockout ||
+          stage.format == StageFormat.Finals ||
+          stage.advancementRule.ruleType == AdvancementRuleType.KnockoutElimination
+
+      if isKnockoutStage then
+        val materialized = knockoutStageCoordinator.materializeUnlockedTables(tournamentId, stageId)
+        if materialized.nonEmpty then
+          tableRepository.findByTournamentAndStage(tournamentId, stageId).sortBy(table =>
+            (table.stageRoundNumber, table.tableNo, table.id.value)
           )
-
-        val isKnockoutStage =
-          stage.format == StageFormat.Knockout ||
-            stage.format == StageFormat.Finals ||
-            stage.advancementRule.ruleType == AdvancementRuleType.KnockoutElimination
-
-        if isKnockoutStage then
-          knockoutStageCoordinator.materializeUnlockedTables(tournamentId, stageId)
         else
-          val tournamentPlayers = resolveParticipants(tournament, stage)
-          if tournamentPlayers.size < 4 then
-            throw IllegalArgumentException(
-              s"Stage ${stageId.value} needs at least four active players before scheduling"
-            )
-          val tournamentHistory =
-            matchRecordRepository.findAll().filter(_.tournamentId == tournamentId)
-          val plannedTables = seatingPolicy.assignTables(tournamentPlayers, stage, tournamentHistory)
-
-          val savedTables = plannedTables.map { planned =>
-            tableRepository.save(
-              Table(
-                id = IdGenerator.tableId(),
-                tableNo = planned.tableNo,
-                tournamentId = tournamentId,
-                stageId = stageId,
-                seats = planned.seats
-              )
-            )
-          }
-
-          tournamentRepository.save(
-            tournament
-              .activateStage(stageId)
-              .markScheduled
-              .updateStage(stageId, _.registerScheduledTables(savedTables.map(_.id)))
+          tableRepository.findByTournamentAndStage(tournamentId, stageId).sortBy(table =>
+            (table.stageRoundNumber, table.tableNo, table.id.value)
+          )
+      else
+        val tournamentPlayers = resolveParticipants(tournament, stage)
+        if tournamentPlayers.size < 4 then
+          throw IllegalArgumentException(
+            s"Stage ${stageId.value} needs at least four active players before scheduling"
+          )
+        if tournamentPlayers.size % 4 != 0 then
+          throw IllegalArgumentException(
+            s"Stage ${stageId.value} requires player counts divisible by four; got ${tournamentPlayers.size}"
           )
 
-          savedTables
+        val existingTables = tableRepository.findByTournamentAndStage(tournamentId, stageId)
+        val preparedTournament =
+          prepareSwissRoundIfNeeded(
+            tournament = tournament,
+            stage = stage,
+            participants = tournamentPlayers,
+            existingTables = existingTables
+          )
+        val preparedStage = requireStage(preparedTournament, stageId)
+        val refreshedTables = tableRepository.findByTournamentAndStage(tournamentId, stageId)
+        val activePoolUsage = refreshedTables.count(_.status != TableStatus.Archived)
+        val availablePoolSlots = math.max(0, preparedStage.schedulingPoolSize - activePoolUsage)
+
+        val materializedTables =
+          if availablePoolSlots <= 0 || preparedStage.pendingTablePlans.isEmpty then Vector.empty
+          else
+            val plansToMaterialize = preparedStage.pendingTablePlans.take(availablePoolSlots)
+            val createdTables = plansToMaterialize.map { plan =>
+              tableRepository.save(
+                Table(
+                  id = IdGenerator.tableId(),
+                  tableNo = plan.tableNo,
+                  tournamentId = tournamentId,
+                  stageId = stageId,
+                  seats = plan.seats,
+                  stageRoundNumber = plan.roundNumber
+                )
+              )
+            }
+
+            val updatedTournament = preparedTournament
+              .activateStage(stageId)
+              .updateStage(stageId, _.consumePendingPlans(plansToMaterialize, createdTables.map(_.id)))
+            tournamentRepository.save(
+              if updatedTournament.status == TournamentStatus.RegistrationOpen then updatedTournament.markScheduled
+              else updatedTournament
+            )
+            createdTables
+
+        if materializedTables.nonEmpty || existingTables.nonEmpty || preparedStage.pendingTablePlans.nonEmpty then
+          tableRepository.findByTournamentAndStage(tournamentId, stageId).sortBy(table =>
+            (table.stageRoundNumber, table.tableNo, table.id.value)
+          )
+        else Vector.empty
     }
 
   def stageStandings(
@@ -1159,6 +1295,10 @@ final class TournamentApplicationService(
 
         val stage = requireStage(tournament, stageId)
         val stageTables = tableRepository.findByTournamentAndStage(tournamentId, stageId)
+        val isKnockoutStage =
+          stage.format == StageFormat.Knockout ||
+            stage.format == StageFormat.Finals ||
+            stage.advancementRule.ruleType == AdvancementRuleType.KnockoutElimination
 
         if stageTables.size != stage.scheduledTableIds.size then
           throw IllegalArgumentException(
@@ -1169,6 +1309,19 @@ final class TournamentApplicationService(
           throw IllegalArgumentException(
             s"Stage ${stageId.value} cannot complete while tables are still active or under appeal"
           )
+
+        if !isKnockoutStage then
+          val participants = resolveParticipants(tournament, stage)
+          val expectedTablesPerRound = participants.size / 4
+          val roundCounts = stageTables.groupBy(_.stageRoundNumber).view.mapValues(_.size).toMap
+          val missingRounds = (1 to stage.roundCount).filter(roundNumber =>
+            roundCounts.getOrElse(roundNumber, 0) != expectedTablesPerRound
+          )
+
+          if stage.pendingTablePlans.nonEmpty || stage.currentRound < stage.roundCount || missingRounds.nonEmpty then
+            throw IllegalArgumentException(
+              s"Stage ${stageId.value} cannot complete before all ${stage.roundCount} rounds are fully scheduled and archived"
+            )
 
         val ranking =
           tournamentRuleEngine.buildStageRanking(
@@ -1335,6 +1488,54 @@ final class TournamentApplicationService(
     targetPlayerIds.flatMap { playerId =>
       playerRepository.findById(playerId).filter(_.status == PlayerStatus.Active)
     }
+
+  private def prepareSwissRoundIfNeeded(
+      tournament: Tournament,
+      stage: TournamentStage,
+      participants: Vector[Player],
+      existingTables: Vector[Table]
+  ): Tournament =
+    if stage.pendingTablePlans.nonEmpty then tournament
+    else
+      val tablesPerRound = participants.size / 4
+      val currentRoundTables = existingTables.filter(_.stageRoundNumber == stage.currentRound)
+      val initialRound = existingTables.isEmpty && stage.currentRound == 1
+      val currentRoundFullyArchived =
+        currentRoundTables.nonEmpty &&
+          currentRoundTables.size >= tablesPerRound &&
+          currentRoundTables.forall(_.status == TableStatus.Archived)
+
+      val targetRound =
+        if initialRound then Some(1)
+        else if currentRoundFullyArchived && stage.currentRound < stage.roundCount then Some(stage.currentRound + 1)
+        else None
+
+      targetRound match
+        case None => tournament
+        case Some(roundNumber) =>
+          val tournamentHistory =
+            matchRecordRepository.findAll().filter(record =>
+              record.tournamentId == tournament.id && record.stageId == stage.id
+            )
+          val planningStage =
+            if roundNumber == stage.currentRound then stage
+            else stage.advanceRound(roundNumber)
+          val startingTableNo = existingTables.map(_.tableNo).foldLeft(0)(math.max)
+          val plans = seatingPolicy.assignTables(participants, planningStage, tournamentHistory)
+            .zipWithIndex
+            .map { case (planned, index) =>
+              StageTablePlan(
+                roundNumber = roundNumber,
+                tableNo = startingTableNo + index + 1,
+                seats = planned.seats
+              )
+            }
+
+          val updatedTournament = tournament.updateStage(stage.id, _.queueRoundPlans(roundNumber, plans))
+          tournamentRepository.save(
+            if updatedTournament.status == TournamentStatus.RegistrationOpen then updatedTournament.markScheduled
+            else updatedTournament
+          )
 
   private def normalizeStage(stage: TournamentStage): TournamentStage =
     if stage.advancementRule.ruleType == AdvancementRuleType.Custom &&

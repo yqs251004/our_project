@@ -59,6 +59,7 @@ final class StrictRbacAuthorizationService extends AuthorizationService:
         principal.isGuest || principal.hasRole(RoleKind.RegisteredPlayer)
 
       case Permission.ManageClubMembership |
+          Permission.ManageClubOperations |
           Permission.SetClubTitle |
           Permission.AssignClubAdmin =>
         clubId.exists(id => principal.hasClubRole(RoleKind.ClubAdmin, id))
