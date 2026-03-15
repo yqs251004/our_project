@@ -549,6 +549,38 @@ class ApiServerSuite extends FunSuite:
     }
   }
 
+
+  test("club relation endpoint keeps reciprocal mappings in sync") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-15T15:15:00Z")
+
+    val ownerA = app.playerService.registerPlayer("api-relation-a", "ApiRelationA", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1800)
+    val ownerB = app.playerService.registerPlayer("api-relation-b", "ApiRelationB", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1780)
+    val clubA = app.clubService.createClub("API Alliance A", ownerA.id, now, ownerA.asPrincipal)
+    val clubB = app.clubService.createClub("API Alliance B", ownerB.id, now, ownerB.asPrincipal)
+
+    withServer(app) { baseUrl =>
+      val allianceResponse = postJson(
+        s"$baseUrl/clubs/${clubA.id.value}/relations",
+        write(UpdateClubRelationRequest(ownerA.id.value, clubB.id.value, "Alliance", Some("partner")))
+      )
+      assertEquals(allianceResponse.statusCode(), 200)
+      assertEquals(read[Club](allianceResponse.body()).relations.map(_.targetClubId), Vector(clubB.id))
+      assertEquals(
+        app.clubRepository.findById(clubB.id).map(_.relations.map(_.targetClubId)),
+        Some(Vector(clubA.id))
+      )
+
+      val neutralResponse = postJson(
+        s"$baseUrl/clubs/${clubA.id.value}/relations",
+        write(UpdateClubRelationRequest(ownerA.id.value, clubB.id.value, "Neutral", Some("reset")))
+      )
+      assertEquals(neutralResponse.statusCode(), 200)
+      assertEquals(read[Club](neutralResponse.body()).relations, Vector.empty)
+      assertEquals(app.clubRepository.findById(clubB.id).map(_.relations), Some(Vector.empty))
+    }
+  }
+
   test("stage table endpoints expose round filters for multi-round scheduling") {
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-15T15:30:00Z")

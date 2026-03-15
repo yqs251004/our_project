@@ -56,6 +56,25 @@ Filter a specific scheduled round from a multi-round stage:
 curl "http://localhost:8080/tournaments/tournament-123/stages/stage-swiss-1/tables?roundNumber=2&limit=8"
 ```
 
+
+Reserve seats can be declared in a stage lineup; scheduling promotes them when active seats become unavailable, and `maxRounds` caps how many rounds are materialized for the stage:
+
+```bash
+curl -X POST http://localhost:8080/tournaments/tournament-123/stages/stage-swiss-1/lineups \
+  -H "Content-Type: application/json" \
+  -d '{
+    "clubId": "club-123",
+    "operatorId": "player-club-admin",
+    "seats": [
+      { "playerId": "player-a", "preferredWind": "East" },
+      { "playerId": "player-b", "preferredWind": "South" },
+      { "playerId": "player-c", "preferredWind": "West" },
+      { "playerId": "player-r1", "reserve": true }
+    ],
+    "note": "reserve enabled lineup"
+  }'
+```
+
 ```bash
 curl "http://localhost:8080/records?tournamentId=tournament-123&stageId=stage-swiss-1&playerId=player-123&limit=20"
 ```
@@ -96,6 +115,17 @@ curl -X POST http://localhost:8080/clubs/club-123/rank-tree   -H "Content-Type: 
       { "code": "elite", "label": "Elite", "minimumContribution": 1500, "privileges": ["priority-lineup"] }
     ],
     "note": "season refresh"
+  }'
+```
+
+Set or clear a reciprocal club relation:
+
+```bash
+curl -X POST http://localhost:8080/clubs/club-123/relations   -H "Content-Type: application/json"   -d '{
+    "operatorId": "player-club-admin",
+    "targetClubId": "club-456",
+    "relation": "Alliance",
+    "note": "shared training block"
   }'
 ```
 

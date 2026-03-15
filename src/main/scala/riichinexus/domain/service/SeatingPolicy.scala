@@ -166,7 +166,7 @@ final class BalancedEloSeatingPolicy extends SeatingPolicy:
 
   private def representativeClubMap(stage: TournamentStage): Map[PlayerId, ClubId] =
     val pairings = stage.lineupSubmissions.flatMap { submission =>
-      submission.activePlayerIds.map(_ -> submission.clubId)
+      submission.seats.map(_.playerId -> submission.clubId)
     }
     val duplicatedAssignments = pairings
       .groupBy(_._1)

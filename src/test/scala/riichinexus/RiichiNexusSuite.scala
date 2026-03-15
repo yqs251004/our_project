@@ -412,6 +412,186 @@ class RiichiNexusSuite extends FunSuite:
     assert(stageStateAfterAdvance.pendingTablePlans.nonEmpty)
   }
 
+
+  test("reserve lineup seats backfill unavailable active players during scheduling") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-13T16:00:00Z")
+
+    val owner = app.playerService.registerPlayer("reserve-owner", "Owner", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1800)
+    val alpha = app.playerService.registerPlayer("reserve-alpha", "Alpha", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1700)
+    val bravo = app.playerService.registerPlayer("reserve-bravo", "Bravo", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
+    val absent = app.playerService.registerPlayer("reserve-absent", "Absent", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1500)
+    val reserve = app.playerService.registerPlayer("reserve-bench", "Reserve", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1550)
+
+    val club = app.clubService.createClub("Reserve Club", owner.id, now, owner.asPrincipal)
+    Vector(alpha, bravo, absent, reserve).foreach(player =>
+      app.clubService.addMember(club.id, player.id, principalFor(app, owner.id))
+    )
+
+    val stage = TournamentStage(IdGenerator.stageId(), "Reserve Stage", StageFormat.Swiss, 1, 1)
+    val tournament = app.tournamentService.createTournament(
+      "Reserve Cup",
+      "QA",
+      now,
+      now.plusSeconds(7200),
+      Vector(stage)
+    )
+
+    app.tournamentService.registerClub(tournament.id, club.id)
+    app.tournamentService.publishTournament(tournament.id)
+    app.tournamentService.submitLineup(
+      tournament.id,
+      stage.id,
+      StageLineupSubmission(
+        id = IdGenerator.lineupSubmissionId(),
+        clubId = club.id,
+        submittedBy = owner.id,
+        submittedAt = now,
+        seats = Vector(
+          StageLineupSeat(owner.id),
+          StageLineupSeat(alpha.id),
+          StageLineupSeat(bravo.id),
+          StageLineupSeat(absent.id),
+          StageLineupSeat(reserve.id, reserve = true)
+        )
+      ),
+      principalFor(app, owner.id)
+    )
+
+    app.playerRepository.save(absent.copy(status = PlayerStatus.Suspended))
+
+    val table = app.tournamentService.scheduleStageTables(tournament.id, stage.id).head
+    assert(table.seats.exists(_.playerId == reserve.id))
+    assert(!table.seats.exists(_.playerId == absent.id))
+    assert(table.seats.forall(_.clubId.contains(club.id)))
+  }
+
+  test("swiss maxRounds limits scheduling horizon and completion requirements") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-13T17:00:00Z")
+
+    val players = (1 to 8).toVector.map { index =>
+      app.playerService.registerPlayer(
+        s"max-rounds-$index",
+        s"MaxRounds$index",
+        RankSnapshot(RankPlatform.Tenhou, "4-dan"),
+        now,
+        1650 - index
+      )
+    }
+
+    val stage = TournamentStage(
+      IdGenerator.stageId(),
+      "Limited Swiss",
+      StageFormat.Swiss,
+      order = 1,
+      roundCount = 3,
+      swissRule = Some(SwissRuleConfig(maxRounds = Some(2)))
+    )
+    val tournament = app.tournamentService.createTournament(
+      "Limited Swiss Cup",
+      "QA",
+      now,
+      now.plusSeconds(7200),
+      Vector(stage)
+    )
+
+    players.foreach(player => app.tournamentService.registerPlayer(tournament.id, player.id))
+    app.tournamentService.publishTournament(tournament.id)
+
+    val firstRoundTables = app.tournamentService.scheduleStageTables(tournament.id, stage.id)
+      .filter(_.stageRoundNumber == 1)
+    assertEquals(firstRoundTables.size, 2)
+    firstRoundTables.zipWithIndex.foreach { (table, index) =>
+      app.tableService.startTable(table.id, now.plusSeconds(60L * (index + 1)))
+      app.tableService.recordCompletedTable(
+        table.id,
+        demoPaifuForResult(
+          table,
+          tournament.id,
+          stage.id,
+          now.plusSeconds(180L * (index + 1)),
+          winner = table.seats.head.playerId,
+          target = table.seats(1).playerId
+        )
+      )
+    }
+
+    val secondRoundTables = app.tournamentService.scheduleStageTables(tournament.id, stage.id)
+      .filter(_.stageRoundNumber == 2)
+    assertEquals(secondRoundTables.size, 2)
+    secondRoundTables.zipWithIndex.foreach { (table, index) =>
+      app.tableService.startTable(table.id, now.plusSeconds(420L + 60L * index))
+      app.tableService.recordCompletedTable(
+        table.id,
+        demoPaifuForResult(
+          table,
+          tournament.id,
+          stage.id,
+          now.plusSeconds(540L + 180L * index),
+          winner = table.seats.head.playerId,
+          target = table.seats(1).playerId
+        )
+      )
+    }
+
+    val afterLimit = app.tournamentService.scheduleStageTables(tournament.id, stage.id)
+    assertEquals(afterLimit.count(_.stageRoundNumber == 3), 0)
+
+    val stageState = app.tournamentRepository.findById(tournament.id).flatMap(_.stages.find(_.id == stage.id))
+      .getOrElse(fail("stage missing after max-round scheduling"))
+    assertEquals(stageState.currentRound, 2)
+    assertEquals(stageState.pendingTablePlans.size, 0)
+
+    val advancement = app.tournamentService.completeStage(
+      tournament.id,
+      stage.id,
+      AccessPrincipal.system,
+      now.plusSeconds(1200)
+    )
+    assert(advancement.nonEmpty)
+    assertEquals(
+      app.tournamentRepository.findById(tournament.id).flatMap(_.stages.find(_.id == stage.id)).map(_.status),
+      Some(StageStatus.Completed)
+    )
+  }
+
+  test("club relations stay reciprocal when updated or cleared") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-13T18:00:00Z")
+
+    val ownerA = app.playerService.registerPlayer("relation-a", "RelationA", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1650)
+    val ownerB = app.playerService.registerPlayer("relation-b", "RelationB", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1640)
+    val clubA = app.clubService.createClub("Alliance A", ownerA.id, now, ownerA.asPrincipal)
+    val clubB = app.clubService.createClub("Alliance B", ownerB.id, now, ownerB.asPrincipal)
+
+    app.clubService.updateRelation(
+      clubA.id,
+      ClubRelation(clubB.id, ClubRelationKind.Alliance, now, Some("shared training")),
+      principalFor(app, ownerA.id),
+      now
+    )
+
+    val alliedA = app.clubRepository.findById(clubA.id).getOrElse(fail("clubA missing"))
+    val alliedB = app.clubRepository.findById(clubB.id).getOrElse(fail("clubB missing"))
+    assertEquals(alliedA.relations.map(_.targetClubId), Vector(clubB.id))
+    assertEquals(alliedA.relations.map(_.relation), Vector(ClubRelationKind.Alliance))
+    assertEquals(alliedB.relations.map(_.targetClubId), Vector(clubA.id))
+    assertEquals(alliedB.relations.map(_.relation), Vector(ClubRelationKind.Alliance))
+
+    app.clubService.updateRelation(
+      clubA.id,
+      ClubRelation(clubB.id, ClubRelationKind.Neutral, now.plusSeconds(60), Some("season reset")),
+      principalFor(app, ownerA.id),
+      now.plusSeconds(60)
+    )
+
+    assertEquals(app.clubRepository.findById(clubA.id).map(_.relations), Some(Vector.empty))
+    assertEquals(app.clubRepository.findById(clubB.id).map(_.relations), Some(Vector.empty))
+    val auditTypes = app.auditEventRepository.findByAggregate("club", clubA.id.value).map(_.eventType)
+    assert(auditTypes.contains("ClubRelationUpdated"))
+  }
+
 private def principalFor(app: ApplicationContext, playerId: PlayerId): AccessPrincipal =
   app.playerRepository.findById(playerId).get.asPrincipal
 

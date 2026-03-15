@@ -138,7 +138,7 @@ final class KnockoutStageCoordinator(
       tournament: Tournament,
       stage: TournamentStage
   ): Vector[Player] =
-    val stagePlayerIds = stage.lineupSubmissions.flatMap(_.activePlayerIds).distinct
+    val stagePlayerIds = StageLineupSupport.resolveEligiblePlayers(stage, playerRepository)
 
     val fallbackPlayerIds =
       val registeredClubMembers = tournament.participatingClubs.flatMap { clubId =>
@@ -180,9 +180,7 @@ final class KnockoutStageCoordinator(
     }
 
   private def representativeClubMap(stage: TournamentStage): Map[PlayerId, ClubId] =
-    val pairings = stage.lineupSubmissions.flatMap { submission =>
-      submission.activePlayerIds.map(_ -> submission.clubId)
-    }
+    val pairings = StageLineupSupport.submittedPlayersWithClub(stage)
     val duplicatedAssignments = pairings
       .groupBy(_._1)
       .collect {

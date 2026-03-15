@@ -88,6 +88,56 @@ private object ProjectionSupport:
   private def round2(value: Double): Double =
     BigDecimal(value).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble
 
+object StageLineupSupport:
+  def submittedPlayersWithClub(
+      stage: TournamentStage
+  ): Vector[(PlayerId, ClubId)] =
+    stage.lineupSubmissions.flatMap { submission =>
+      submission.seats.map(_.playerId -> submission.clubId)
+    }
+
+  def resolveEligiblePlayers(
+      stage: TournamentStage,
+      playerRepository: PlayerRepository
+  ): Vector[PlayerId] =
+    val resolvedBySubmission = stage.lineupSubmissions.flatMap { submission =>
+      val activeSeats = submission.seats.filterNot(_.reserve)
+      val reserveSeats = submission.seats.filter(_.reserve)
+
+      val availableActive = activeSeats.flatMap { seat =>
+        playerRepository.findById(seat.playerId).filter(_.status == PlayerStatus.Active).map(_ => seat.playerId)
+      }
+      val promotedReserves = reserveSeats
+        .filterNot(seat => availableActive.contains(seat.playerId))
+        .flatMap { seat =>
+          playerRepository.findById(seat.playerId).filter(_.status == PlayerStatus.Active).map(_ => seat.playerId)
+        }
+
+      val shortfall = math.max(0, activeSeats.size - availableActive.size)
+      availableActive ++ promotedReserves.take(shortfall)
+    }
+
+    val selected = resolvedBySubmission.distinct
+    val reserveCandidates = stage.lineupSubmissions
+      .flatMap(_.seats.filter(_.reserve).map(_.playerId))
+      .distinct
+      .filterNot(selected.contains)
+      .flatMap { playerId =>
+        playerRepository.findById(playerId).filter(_.status == PlayerStatus.Active).map(_ => playerId)
+      }
+
+    val remainder = selected.size % 4
+    if remainder == 0 then selected
+    else
+      val needed = 4 - remainder
+      if reserveCandidates.size >= needed then selected ++ reserveCandidates.take(needed)
+      else selected
+
+  def effectiveRoundLimit(stage: TournamentStage): Int =
+    stage.swissRule.flatMap(_.maxRounds) match
+      case Some(limit) => math.max(1, math.min(stage.roundCount, limit))
+      case None        => stage.roundCount
+
 final class PlayerApplicationService(
     playerRepository: PlayerRepository,
     dashboardRepository: DashboardRepository,
@@ -670,7 +720,8 @@ final class ClubApplicationService(
   def updateRelation(
       clubId: ClubId,
       relation: ClubRelation,
-      actor: AccessPrincipal
+      actor: AccessPrincipal,
+      occurredAt: Instant = Instant.now()
   ): Option[Club] =
     transactionManager.inTransaction {
       clubRepository.findById(clubId).map { club =>
@@ -684,16 +735,46 @@ final class ClubApplicationService(
         if relation.targetClubId == clubId then
           throw IllegalArgumentException("A club cannot define a relation to itself")
 
-        clubRepository
+        val targetClub = clubRepository
           .findById(relation.targetClubId)
-          .map(ensureClubActive)
+          .map { club =>
+            ensureClubActive(club)
+            club
+          }
           .getOrElse(
             throw NoSuchElementException(s"Club ${relation.targetClubId.value} was not found")
           )
 
+        val updatedSourceClub =
+          if relation.relation == ClubRelationKind.Neutral then
+            clubRepository.save(club.removeRelation(relation.targetClubId))
+          else clubRepository.save(club.upsertRelation(relation))
+
         if relation.relation == ClubRelationKind.Neutral then
-          clubRepository.save(club.removeRelation(relation.targetClubId))
-        else clubRepository.save(club.upsertRelation(relation))
+          clubRepository.save(targetClub.removeRelation(clubId))
+        else
+          clubRepository.save(
+            targetClub.upsertRelation(
+              relation.copy(targetClubId = clubId)
+            )
+          )
+
+        auditEventRepository.save(
+          AuditEventEntry(
+            id = IdGenerator.auditEventId(),
+            aggregateType = "club",
+            aggregateId = clubId.value,
+            eventType = "ClubRelationUpdated",
+            occurredAt = occurredAt,
+            actorId = actor.playerId,
+            details = Map(
+              "targetClubId" -> relation.targetClubId.value,
+              "relation" -> relation.relation.toString
+            ),
+            note = relation.note
+          )
+        )
+        updatedSourceClub
       }
     }
 
@@ -1072,13 +1153,14 @@ final class TournamentApplicationService(
             s"Club ${submission.clubId.value} is not whitelisted for tournament ${tournamentId.value}"
           )
 
+        val submissionPlayerIds = submission.seats.map(_.playerId).distinct
         val conflictingPlayers = stage.lineupSubmissions
           .filterNot(_.clubId == submission.clubId)
-          .flatMap(existing => existing.activePlayerIds.map(_ -> existing.clubId))
+          .flatMap(existing => existing.seats.map(_.playerId -> existing.clubId))
           .groupBy(_._1)
           .collect {
             case (playerId, assignments)
-                if submission.activePlayerIds.contains(playerId) &&
+                if submissionPlayerIds.contains(playerId) &&
                   assignments.map(_._2).distinct.nonEmpty =>
               playerId.value
           }
@@ -1094,7 +1176,8 @@ final class TournamentApplicationService(
           .getOrElse(throw NoSuchElementException(s"Club ${submission.clubId.value} was not found"))
         ensureClubActive(club)
 
-        submission.activePlayerIds.foreach { playerId =>
+        submission.seats.foreach { seat =>
+          val playerId = seat.playerId
           if !club.members.contains(playerId) then
             throw IllegalArgumentException(
               s"Player ${playerId.value} is not a member of club ${submission.clubId.value}"
@@ -1312,15 +1395,16 @@ final class TournamentApplicationService(
 
         if !isKnockoutStage then
           val participants = resolveParticipants(tournament, stage)
+          val effectiveRoundLimit = StageLineupSupport.effectiveRoundLimit(stage)
           val expectedTablesPerRound = participants.size / 4
           val roundCounts = stageTables.groupBy(_.stageRoundNumber).view.mapValues(_.size).toMap
-          val missingRounds = (1 to stage.roundCount).filter(roundNumber =>
+          val missingRounds = (1 to effectiveRoundLimit).filter(roundNumber =>
             roundCounts.getOrElse(roundNumber, 0) != expectedTablesPerRound
           )
 
-          if stage.pendingTablePlans.nonEmpty || stage.currentRound < stage.roundCount || missingRounds.nonEmpty then
+          if stage.pendingTablePlans.nonEmpty || stage.currentRound < effectiveRoundLimit || missingRounds.nonEmpty then
             throw IllegalArgumentException(
-              s"Stage ${stageId.value} cannot complete before all ${stage.roundCount} rounds are fully scheduled and archived"
+              s"Stage ${stageId.value} cannot complete before all $effectiveRoundLimit rounds are fully scheduled and archived"
             )
 
         val ranking =
@@ -1469,7 +1553,7 @@ final class TournamentApplicationService(
       tournament: Tournament,
       stage: TournamentStage
   ): Vector[Player] =
-    val stagePlayerIds = stage.lineupSubmissions.flatMap(_.activePlayerIds).distinct
+    val stagePlayerIds = StageLineupSupport.resolveEligiblePlayers(stage, playerRepository)
 
     val fallbackPlayerIds =
       val registeredClubMembers = tournament.participatingClubs.flatMap { clubId =>
@@ -1497,6 +1581,7 @@ final class TournamentApplicationService(
   ): Tournament =
     if stage.pendingTablePlans.nonEmpty then tournament
     else
+      val effectiveRoundLimit = StageLineupSupport.effectiveRoundLimit(stage)
       val tablesPerRound = participants.size / 4
       val currentRoundTables = existingTables.filter(_.stageRoundNumber == stage.currentRound)
       val initialRound = existingTables.isEmpty && stage.currentRound == 1
@@ -1507,7 +1592,7 @@ final class TournamentApplicationService(
 
       val targetRound =
         if initialRound then Some(1)
-        else if currentRoundFullyArchived && stage.currentRound < stage.roundCount then Some(stage.currentRound + 1)
+        else if currentRoundFullyArchived && stage.currentRound < effectiveRoundLimit then Some(stage.currentRound + 1)
         else None
 
       targetRound match
