@@ -8,12 +8,26 @@ final case class RatingChange(
 ) derives CanEqual
 
 trait RatingService:
-  def calculateDeltas(players: Vector[Player], standings: Vector[FinalStanding]): Vector[RatingChange]
+  def calculateDeltas(
+      players: Vector[Player],
+      standings: Vector[MatchRecordSeatResult]
+  ): Vector[RatingChange]
 
-final class PairwiseEloRatingService(kFactor: Int = 36) extends RatingService:
+final class PairwiseEloRatingService(
+    kFactor: Int = 36,
+    placementWeight: Double = 0.6,
+    scoreWeight: Double = 0.3,
+    umaWeight: Double = 0.1
+) extends RatingService:
+  require(kFactor > 0, "kFactor must be positive")
+  require(
+    math.abs((placementWeight + scoreWeight + umaWeight) - 1.0) <= 0.0001,
+    "Rating weights must sum to 1.0"
+  )
+
   override def calculateDeltas(
       players: Vector[Player],
-      standings: Vector[FinalStanding]
+      standings: Vector[MatchRecordSeatResult]
   ): Vector[RatingChange] =
     require(players.nonEmpty, "Cannot calculate rating deltas without players")
     require(
@@ -21,24 +35,24 @@ final class PairwiseEloRatingService(kFactor: Int = 36) extends RatingService:
       "Players and final standings must reference the same participants"
     )
 
-    val placementByPlayer = standings.map(standing => standing.playerId -> standing.placement).toMap
+    val standingByPlayer = standings.map(standing => standing.playerId -> standing).toMap
+    val volatilityFactor = tableVolatilityFactor(standings)
+
     val rawDeltas = players.map { player =>
-      val adjustment = players
+      val standing = standingByPlayer(player.id)
+      val expectedScore = players
         .filterNot(_.id == player.id)
         .map { opponent =>
-          val actualScore =
-            comparePlacements(
-              placementByPlayer(player.id),
-              placementByPlayer(opponent.id)
-            )
-          val expectedScore =
-            1.0 / (1.0 + math.pow(10.0, (opponent.elo - player.elo) / 400.0))
-
-          actualScore - expectedScore
+          expectedAgainst(player.elo, opponent.elo)
         }
         .sum / (players.size - 1).toDouble
 
-      player.id -> (kFactor * adjustment)
+      val actualScore =
+        placementWeight * placementPerformance(standing.placement, players.size) +
+          scoreWeight * scoreDeltaPerformance(standing.scoreDelta) +
+          umaWeight * umaPerformance(standing.uma + standing.oka)
+
+      player.id -> (kFactor * volatilityFactor * (actualScore - expectedScore))
     }
 
     val rounded = rawDeltas.map { case (playerId, delta) =>
@@ -48,10 +62,27 @@ final class PairwiseEloRatingService(kFactor: Int = 36) extends RatingService:
     val drift = rounded.map(_.delta).sum
     if drift == 0 || rounded.isEmpty then rounded
     else
-      val last = rounded.last
-      rounded.updated(rounded.size - 1, last.copy(delta = last.delta - drift))
+      val adjustmentIndex = rawDeltas.zipWithIndex.maxBy { case ((_, rawDelta), _) => math.abs(rawDelta) }._2
+      val target = rounded(adjustmentIndex)
+      rounded.updated(adjustmentIndex, target.copy(delta = target.delta - drift))
 
-  private def comparePlacements(playerPlacement: Int, opponentPlacement: Int): Double =
-    if playerPlacement < opponentPlacement then 1.0
-    else if playerPlacement > opponentPlacement then 0.0
-    else 0.5
+  private def expectedAgainst(playerElo: Int, opponentElo: Int): Double =
+    1.0 / (1.0 + math.pow(10.0, (opponentElo - playerElo) / 400.0))
+
+  private def placementPerformance(placement: Int, tableSize: Int): Double =
+    if tableSize <= 1 then 1.0
+    else (tableSize - placement).toDouble / (tableSize - 1).toDouble
+
+  private def scoreDeltaPerformance(scoreDelta: Int): Double =
+    logistic(scoreDelta.toDouble / 7000.0)
+
+  private def umaPerformance(totalUma: Double): Double =
+    logistic(totalUma / 15.0)
+
+  private def tableVolatilityFactor(standings: Vector[MatchRecordSeatResult]): Double =
+    val averageSwing =
+      standings.map(_.scoreDelta.abs).sum.toDouble / math.max(1.0, standings.size.toDouble)
+    (1.0 + averageSwing / 30000.0).min(1.35)
+
+  private def logistic(value: Double): Double =
+    1.0 / (1.0 + math.exp(-value))
