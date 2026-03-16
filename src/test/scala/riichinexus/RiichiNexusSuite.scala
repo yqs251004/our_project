@@ -710,14 +710,12 @@ class RiichiNexusSuite extends FunSuite:
     assertEquals(transferredNamespace.ownerPlayerId, outsider.id)
     assertEquals(transferredNamespace.status, DictionaryNamespaceReviewStatus.Approved)
 
-    intercept[IllegalArgumentException] {
-      app.superAdminService.upsertDictionary(
-        key = "ui.banner.message",
-        value = "old owner blocked",
-        actor = owner.asPrincipal,
-        updatedAt = now.plusSeconds(80)
-      )
-    }
+    val formerOwnerWrite = app.superAdminService.upsertDictionary(
+      key = "ui.banner.message",
+      value = "former owner co-owner write",
+      actor = owner.asPrincipal,
+      updatedAt = now.plusSeconds(80)
+    )
 
     val transferredWrite = app.superAdminService.upsertDictionary(
       key = "ui.banner.message",
@@ -748,7 +746,92 @@ class RiichiNexusSuite extends FunSuite:
     assert(namespaceAuditTypes.contains("DictionaryNamespaceRevoked"))
     assertEquals(metadata.key, "ui.banner.message")
     assertEquals(metadata.value, "Spring finals this weekend")
+    assertEquals(formerOwnerWrite.updatedBy, owner.id)
     assertEquals(transferredWrite.updatedBy, outsider.id)
+  }
+
+  test("dictionary namespace collaborators can write metadata and co-owners can manage editors") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-16T15:20:00Z")
+
+    val root = app.playerService.registerPlayer("dict-collab-root", "DictCollabRoot", RankSnapshot(RankPlatform.Custom, "S"), now, 2000)
+    val owner = app.playerService.registerPlayer("dict-collab-owner", "DictCollabOwner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
+    val coOwner = app.playerService.registerPlayer("dict-collab-coowner", "DictCollabCoOwner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1590)
+    val editor = app.playerService.registerPlayer("dict-collab-editor", "DictCollabEditor", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1580)
+    val replacementEditor = app.playerService.registerPlayer("dict-collab-replacement", "DictCollabReplacement", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1570)
+    val outsider = app.playerService.registerPlayer("dict-collab-outsider", "DictCollabOutsider", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1560)
+    val superAdmin = app.playerRepository.save(root.grantRole(RoleGrant.superAdmin(now)))
+
+    val pending = app.superAdminService.requestDictionaryNamespace(
+      namespacePrefix = "ui.banner",
+      actor = owner.asPrincipal,
+      coOwnerPlayerIds = Vector(coOwner.id),
+      editorPlayerIds = Vector(editor.id),
+      requestedAt = now.plusSeconds(10)
+    )
+    assertEquals(pending.coOwnerPlayerIds, Vector(coOwner.id))
+    assertEquals(pending.editorPlayerIds, Vector(editor.id))
+
+    app.superAdminService.reviewDictionaryNamespace(
+      namespacePrefix = "ui.banner",
+      approve = true,
+      actor = principalFor(app, superAdmin.id),
+      reviewedAt = now.plusSeconds(20)
+    ).getOrElse(fail("namespace approval missing"))
+
+    val coOwnerWrite = app.superAdminService.upsertDictionary(
+      key = "ui.banner.message",
+      value = "co-owner copy",
+      actor = coOwner.asPrincipal,
+      updatedAt = now.plusSeconds(30)
+    )
+    val editorWrite = app.superAdminService.upsertDictionary(
+      key = "ui.banner.subtitle",
+      value = "editor copy",
+      actor = editor.asPrincipal,
+      updatedAt = now.plusSeconds(40)
+    )
+
+    intercept[IllegalArgumentException] {
+      app.superAdminService.upsertDictionary(
+        key = "ui.banner.subtitle",
+        value = "outsider blocked",
+        actor = outsider.asPrincipal,
+        updatedAt = now.plusSeconds(50)
+      )
+    }
+
+    val updatedCollaborators = app.superAdminService.updateDictionaryNamespaceCollaborators(
+      namespacePrefix = "ui.banner",
+      coOwnerPlayerIds = Vector(coOwner.id),
+      editorPlayerIds = Vector(replacementEditor.id),
+      actor = coOwner.asPrincipal,
+      note = Some("rotate content editor"),
+      updatedAt = now.plusSeconds(60)
+    ).getOrElse(fail("collaborator update missing"))
+    assertEquals(updatedCollaborators.editorPlayerIds, Vector(replacementEditor.id))
+
+    intercept[IllegalArgumentException] {
+      app.superAdminService.upsertDictionary(
+        key = "ui.banner.subtitle",
+        value = "old editor blocked",
+        actor = editor.asPrincipal,
+        updatedAt = now.plusSeconds(70)
+      )
+    }
+
+    val replacementWrite = app.superAdminService.upsertDictionary(
+      key = "ui.banner.subtitle",
+      value = "replacement editor copy",
+      actor = replacementEditor.asPrincipal,
+      updatedAt = now.plusSeconds(80)
+    )
+
+    val auditTypes = app.auditEventRepository.findByAggregate("dictionary-namespace", "ui.banner.").map(_.eventType)
+    assert(auditTypes.contains("DictionaryNamespaceCollaboratorsUpdated"))
+    assertEquals(coOwnerWrite.updatedBy, coOwner.id)
+    assertEquals(editorWrite.updatedBy, editor.id)
+    assertEquals(replacementWrite.updatedBy, replacementEditor.id)
   }
 
   test("dictionary namespace ownership rejects suspended or banned owners") {
@@ -848,6 +931,150 @@ class RiichiNexusSuite extends FunSuite:
     assertEquals(backlog.ownerBacklog.map(_.ownerPlayerId), Vector(ownerA.id, ownerB.id))
     assertEquals(backlog.ownerBacklog.head.overdueCount, 1)
     assertEquals(backlog.ownerBacklog.head.dueSoonCount, 1)
+  }
+
+  test("dictionary namespace reminder processing emits due-soon and escalated actions without spamming") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-16T17:00:00Z")
+
+    val root = app.playerService.registerPlayer("dict-reminder-root", "DictReminderRoot", RankSnapshot(RankPlatform.Custom, "S"), now, 2000)
+    val ownerA = app.playerService.registerPlayer("dict-reminder-owner-a", "DictReminderOwnerA", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
+    val ownerB = app.playerService.registerPlayer("dict-reminder-owner-b", "DictReminderOwnerB", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1590)
+    val superAdmin = app.playerRepository.save(root.grantRole(RoleGrant.superAdmin(now)))
+
+    app.superAdminService.requestDictionaryNamespace(
+      namespacePrefix = "ui.soon",
+      actor = ownerA.asPrincipal,
+      requestedAt = now.minusSeconds(600),
+      reviewDueAt = Some(now.plusSeconds(2 * 3600))
+    )
+    app.superAdminService.requestDictionaryNamespace(
+      namespacePrefix = "ui.legacy",
+      actor = ownerB.asPrincipal,
+      requestedAt = now.minusSeconds(120 * 3600),
+      reviewDueAt = Some(now.minusSeconds(80 * 3600))
+    )
+
+    val firstBatch = app.superAdminService.processDictionaryNamespaceReminders(
+      actor = principalFor(app, superAdmin.id),
+      asOf = now,
+      dueSoonWindow = java.time.Duration.ofHours(6),
+      reminderInterval = java.time.Duration.ofHours(12),
+      escalationGrace = java.time.Duration.ofHours(72)
+    )
+    assertEquals(firstBatch.map(_.reminderKind.toString).sorted, Vector(DictionaryNamespaceReminderKind.DueSoon.toString, DictionaryNamespaceReminderKind.Escalated.toString).sorted)
+    assertEquals(firstBatch.map(_.namespacePrefix).sorted, Vector("ui.legacy.", "ui.soon."))
+
+    val secondBatch = app.superAdminService.processDictionaryNamespaceReminders(
+      actor = principalFor(app, superAdmin.id),
+      asOf = now.plusSeconds(3600),
+      dueSoonWindow = java.time.Duration.ofHours(6),
+      reminderInterval = java.time.Duration.ofHours(12),
+      escalationGrace = java.time.Duration.ofHours(72)
+    )
+    assertEquals(secondBatch, Vector.empty)
+
+    val reminderEvents = app.auditEventRepository.findByAggregate("dictionary-namespace", "ui.legacy.").filter(_.eventType == "DictionaryNamespaceReminderTriggered")
+    assertEquals(reminderEvents.size, 1)
+  }
+
+  test("dictionary namespace explicit context club governs collaborators transfers and writes") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-16T17:30:00Z")
+
+    val root = app.playerService.registerPlayer("dict-context-root", "DictContextRoot", RankSnapshot(RankPlatform.Custom, "S"), now, 2000)
+    val owner = app.playerService.registerPlayer("dict-context-owner", "DictContextOwner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
+    val coOwner = app.playerService.registerPlayer("dict-context-coowner", "DictContextCoOwner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1590)
+    val editor = app.playerService.registerPlayer("dict-context-editor", "DictContextEditor", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1580)
+    val outsider = app.playerService.registerPlayer("dict-context-outsider", "DictContextOutsider", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1570)
+    val superAdmin = app.playerRepository.save(root.grantRole(RoleGrant.superAdmin(now)))
+
+    val club = app.clubService.createClub("Namespace Context Club", owner.id, now, owner.asPrincipal)
+    app.clubService.addMember(club.id, coOwner.id, principalFor(app, owner.id))
+    app.clubService.addMember(club.id, editor.id, principalFor(app, owner.id))
+
+    val pending = app.superAdminService.requestDictionaryNamespace(
+      namespacePrefix = "ui.banner",
+      actor = owner.asPrincipal,
+      contextClubId = Some(club.id),
+      coOwnerPlayerIds = Vector(coOwner.id),
+      editorPlayerIds = Vector(editor.id),
+      requestedAt = now.plusSeconds(10)
+    )
+    assertEquals(pending.contextClubId, Some(club.id))
+
+    app.superAdminService.reviewDictionaryNamespace(
+      namespacePrefix = "ui.banner",
+      approve = true,
+      actor = principalFor(app, superAdmin.id),
+      reviewedAt = now.plusSeconds(20)
+    ).getOrElse(fail("namespace approval missing"))
+
+    val editorWrite = app.superAdminService.upsertDictionary(
+      key = "ui.banner.message",
+      value = "club editor write",
+      actor = editor.asPrincipal,
+      updatedAt = now.plusSeconds(30)
+    )
+    assertEquals(editorWrite.updatedBy, editor.id)
+
+    intercept[IllegalArgumentException] {
+      app.superAdminService.updateDictionaryNamespaceCollaborators(
+        namespacePrefix = "ui.banner",
+        coOwnerPlayerIds = Vector(coOwner.id),
+        editorPlayerIds = Vector(outsider.id),
+        actor = owner.asPrincipal,
+        updatedAt = now.plusSeconds(40)
+      )
+    }
+
+    intercept[IllegalArgumentException] {
+      app.superAdminService.transferDictionaryNamespace(
+        namespacePrefix = "ui.banner",
+        newOwnerId = outsider.id,
+        actor = principalFor(app, superAdmin.id),
+        transferredAt = now.plusSeconds(50)
+      )
+    }
+
+    app.clubService.removeMember(club.id, editor.id, principalFor(app, owner.id))
+
+    intercept[IllegalArgumentException] {
+      app.superAdminService.upsertDictionary(
+        key = "ui.banner.message",
+        value = "removed editor blocked",
+        actor = editor.asPrincipal,
+        updatedAt = now.plusSeconds(60)
+      )
+    }
+
+    val contextCleared = app.superAdminService.updateDictionaryNamespaceContext(
+      namespacePrefix = "ui.banner",
+      contextClubId = None,
+      actor = owner.asPrincipal,
+      note = Some("decouple from club"),
+      updatedAt = now.plusSeconds(70)
+    ).getOrElse(fail("namespace context update missing"))
+    assertEquals(contextCleared.contextClubId, None)
+
+    val transferred = app.superAdminService.transferDictionaryNamespace(
+      namespacePrefix = "ui.banner",
+      newOwnerId = outsider.id,
+      actor = principalFor(app, superAdmin.id),
+      transferredAt = now.plusSeconds(80)
+    ).getOrElse(fail("namespace transfer missing"))
+    assertEquals(transferred.ownerPlayerId, outsider.id)
+
+    val postClearWrite = app.superAdminService.upsertDictionary(
+      key = "ui.banner.message",
+      value = "editor restored after context clear",
+      actor = editor.asPrincipal,
+      updatedAt = now.plusSeconds(90)
+    )
+    assertEquals(postClearWrite.updatedBy, editor.id)
+
+    val auditTypes = app.auditEventRepository.findByAggregate("dictionary-namespace", "ui.banner.").map(_.eventType)
+    assert(auditTypes.contains("DictionaryNamespaceContextUpdated"))
   }
 
   test("global dictionary normalizes ranks in the public player leaderboard") {

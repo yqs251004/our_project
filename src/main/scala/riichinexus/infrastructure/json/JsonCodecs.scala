@@ -82,6 +82,9 @@ object JsonCodecs:
   given ReadWriter[DictionaryNamespaceRegistration] = macroRW
   given ReadWriter[DictionaryNamespaceOwnerBacklog] = macroRW
   given ReadWriter[DictionaryNamespaceBacklogView] = macroRW
+  given ReadWriter[DictionaryNamespaceReminderKind] =
+    stringEnumReadWriter(DictionaryNamespaceReminderKind.valueOf, _.toString)
+  given ReadWriter[DictionaryNamespaceReminderAction] = macroRW
   given ReadWriter[AuditEventEntry] = macroRW
   given ReadWriter[Club] = macroRW
 

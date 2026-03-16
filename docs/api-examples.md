@@ -377,6 +377,9 @@ Request and review a metadata namespace before non-admin owners write free-form 
 curl -X POST http://localhost:8080/dictionary/namespaces   -H "Content-Type: application/json"   -d '{
     "operatorId": "player-product-owner",
     "namespacePrefix": "ui.banner",
+    "contextClubId": "club-content-ops",
+    "coOwnerPlayerIds": ["player-content-lead"],
+    "editorPlayerIds": ["player-copywriter"],
     "note": "frontend copy family",
     "reviewDueAt": "2026-03-20T12:00:00Z"
   }'
@@ -395,6 +398,12 @@ Inspect namespace ownership and review status:
 
 ```bash
 curl "http://localhost:8080/dictionary/namespaces?operatorId=player-super-admin&status=Approved"
+```
+
+Filter approved namespaces by their explicit club context:
+
+```bash
+curl "http://localhost:8080/dictionary/namespaces?operatorId=player-super-admin&status=Approved&contextClubId=club-content-ops"
 ```
 
 Inspect namespace backlog and overdue pending reviews:
@@ -428,7 +437,42 @@ curl -X POST http://localhost:8080/dictionary/namespaces/revoke   -H "Content-Ty
   }'
 ```
 
-Once approved, the namespace owner can update metadata keys under that prefix through the same dictionary write endpoint. Namespace owners must be existing `Active` players; suspended or banned players cannot receive new namespace ownership through request-on-behalf or transfer flows.
+Update co-owners and editors after approval:
+
+```bash
+curl -X POST http://localhost:8080/dictionary/namespaces/collaborators   -H "Content-Type: application/json"   -d '{
+    "operatorId": "player-content-lead",
+    "namespacePrefix": "ui.banner",
+    "coOwnerPlayerIds": ["player-content-lead"],
+    "editorPlayerIds": ["player-copywriter-2"],
+    "note": "rotate banner editor"
+  }'
+```
+
+Update or clear the explicit club context after approval:
+
+```bash
+curl -X POST http://localhost:8080/dictionary/namespaces/context   -H "Content-Type: application/json"   -d '{
+    "operatorId": "player-product-owner",
+    "namespacePrefix": "ui.banner",
+    "contextClubId": null,
+    "note": "detach from current club ownership"
+  }'
+```
+
+Process due-soon / overdue namespace reminders:
+
+```bash
+curl -X POST http://localhost:8080/dictionary/namespaces/reminders/process   -H "Content-Type: application/json"   -d '{
+    "operatorId": "player-super-admin",
+    "asOf": "2026-03-19T12:00:00Z",
+    "dueSoonHours": 24,
+    "reminderIntervalHours": 12,
+    "escalationGraceHours": 72
+  }'
+```
+
+Once approved, the namespace owner can update metadata keys under that prefix through the same dictionary write endpoint. Namespace owners must be existing `Active` players; suspended or banned players cannot receive new namespace ownership through request-on-behalf or transfer flows. When `contextClubId` is set, owners/co-owners/editors and runtime writers must all currently belong to that exact club.
 
 ```bash
 curl -X POST http://localhost:8080/admin/dictionary   -H "Content-Type: application/json"   -d '{

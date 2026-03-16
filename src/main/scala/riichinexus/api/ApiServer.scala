@@ -1008,6 +1008,7 @@ private final class ApiHandler(
       case ("GET", Vector("dictionary", "namespaces")) =>
         val operator = queryPrincipal(exchange)
         val statusFilter = queryParam(exchange, "status").map(DictionaryNamespaceReviewStatus.valueOf)
+        val contextClubFilter = queryParam(exchange, "contextClubId").filter(_.nonEmpty).map(ClubId(_))
         val ownerFilter = queryParam(exchange, "ownerId").filter(_.nonEmpty).map(PlayerId(_))
         val requestedByFilter = queryParam(exchange, "requestedBy").filter(_.nonEmpty).map(PlayerId(_))
         val reviewedByFilter = queryParam(exchange, "reviewedBy").filter(_.nonEmpty).map(PlayerId(_))
@@ -1017,6 +1018,7 @@ private final class ApiHandler(
         val dueAfter = queryParam(exchange, "dueAfter").filter(_.nonEmpty).map(Instant.parse)
         val namespaces = app.dictionaryNamespaceRepository.findAll()
           .filter(registration => statusFilter.forall(_ == registration.status))
+          .filter(registration => contextClubFilter.forall(clubId => registration.contextClubId.contains(clubId)))
           .filter(registration => ownerFilter.forall(_ == registration.ownerPlayerId))
           .filter(registration => requestedByFilter.forall(_ == registration.requestedBy))
           .filter(registration => reviewedByFilter.forall(reviewer => registration.reviewedBy.contains(reviewer)))
@@ -1025,10 +1027,10 @@ private final class ApiHandler(
           .filter(registration => dueAfter.forall(bound => registration.reviewDueAt.exists(dueAt => !dueAt.isBefore(bound))))
           .filter(registration =>
             operator.isSuperAdmin ||
-              operator.playerId.contains(registration.ownerPlayerId) ||
+              operator.playerId.exists(registration.hasWriteAccess) ||
               operator.playerId.contains(registration.requestedBy)
           )
-        sendPagedJson(exchange, namespaces, activeFilters(exchange, "status", "ownerId", "requestedBy", "reviewedBy", "asOf", "overdueOnly", "dueBefore", "dueAfter"))
+        sendPagedJson(exchange, namespaces, activeFilters(exchange, "status", "contextClubId", "ownerId", "requestedBy", "reviewedBy", "asOf", "overdueOnly", "dueBefore", "dueAfter"))
       case ("POST", Vector("dictionary", "namespaces")) =>
         val request = readJsonBody[RequestDictionaryNamespaceRequest](exchange)
         sendJson(
@@ -1037,7 +1039,10 @@ private final class ApiHandler(
           app.superAdminService.requestDictionaryNamespace(
             namespacePrefix = request.namespacePrefix,
             actor = principal(request.operator),
+            contextClubId = request.contextClub,
             ownerPlayerId = request.owner,
+            coOwnerPlayerIds = request.coOwners,
+            editorPlayerIds = request.editors,
             note = request.note,
             reviewDueAt = request.parsedReviewDueAt
           )
@@ -1062,6 +1067,42 @@ private final class ApiHandler(
             newOwnerId = request.newOwner,
             actor = principal(request.operator),
             note = request.note
+          )
+        )
+      case ("POST", Vector("dictionary", "namespaces", "collaborators")) =>
+        val request = readJsonBody[UpdateDictionaryNamespaceCollaboratorsRequest](exchange)
+        sendOption(
+          exchange,
+          app.superAdminService.updateDictionaryNamespaceCollaborators(
+            namespacePrefix = request.namespacePrefix,
+            coOwnerPlayerIds = request.coOwners,
+            editorPlayerIds = request.editors,
+            actor = principal(request.operator),
+            note = request.note
+          )
+        )
+      case ("POST", Vector("dictionary", "namespaces", "context")) =>
+        val request = readJsonBody[UpdateDictionaryNamespaceContextRequest](exchange)
+        sendOption(
+          exchange,
+          app.superAdminService.updateDictionaryNamespaceContext(
+            namespacePrefix = request.namespacePrefix,
+            contextClubId = request.contextClub,
+            actor = principal(request.operator),
+            note = request.note
+          )
+        )
+      case ("POST", Vector("dictionary", "namespaces", "reminders", "process")) =>
+        val request = readJsonBody[ProcessDictionaryNamespaceRemindersRequest](exchange)
+        sendJson(
+          exchange,
+          200,
+          app.superAdminService.processDictionaryNamespaceReminders(
+            actor = principal(request.operator),
+            asOf = request.parsedAsOf.getOrElse(Instant.now()),
+            dueSoonWindow = java.time.Duration.ofHours(request.dueSoonHours.toLong),
+            reminderInterval = java.time.Duration.ofHours(request.reminderIntervalHours.toLong),
+            escalationGrace = java.time.Duration.ofHours(request.escalationGraceHours.toLong)
           )
         )
       case ("POST", Vector("dictionary", "namespaces", "revoke")) =>

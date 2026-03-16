@@ -480,7 +480,10 @@ final case class UpdateTableSeatStateRequest(
 final case class RequestDictionaryNamespaceRequest(
     operatorId: String,
     namespacePrefix: String,
+    contextClubId: Option[String] = None,
     ownerPlayerId: Option[String] = None,
+    coOwnerPlayerIds: Vector[String] = Vector.empty,
+    editorPlayerIds: Vector[String] = Vector.empty,
     note: Option[String] = None,
     reviewDueAt: Option[String] = None
 ):
@@ -489,6 +492,15 @@ final case class RequestDictionaryNamespaceRequest(
 
   def owner: Option[PlayerId] =
     ownerPlayerId.map(PlayerId(_))
+
+  def contextClub: Option[ClubId] =
+    contextClubId.map(ClubId(_))
+
+  def coOwners: Vector[PlayerId] =
+    coOwnerPlayerIds.map(PlayerId(_)).distinct
+
+  def editors: Vector[PlayerId] =
+    editorPlayerIds.map(PlayerId(_)).distinct
 
   def parsedReviewDueAt: Option[java.time.Instant] =
     reviewDueAt.map(java.time.Instant.parse)
@@ -513,6 +525,51 @@ final case class TransferDictionaryNamespaceRequest(
 
   def newOwner: PlayerId =
     PlayerId(newOwnerPlayerId)
+
+final case class UpdateDictionaryNamespaceCollaboratorsRequest(
+    operatorId: String,
+    namespacePrefix: String,
+    coOwnerPlayerIds: Vector[String] = Vector.empty,
+    editorPlayerIds: Vector[String] = Vector.empty,
+    note: Option[String] = None
+):
+  def operator: PlayerId =
+    PlayerId(operatorId)
+
+  def coOwners: Vector[PlayerId] =
+    coOwnerPlayerIds.map(PlayerId(_)).distinct
+
+  def editors: Vector[PlayerId] =
+    editorPlayerIds.map(PlayerId(_)).distinct
+
+final case class UpdateDictionaryNamespaceContextRequest(
+    operatorId: String,
+    namespacePrefix: String,
+    contextClubId: Option[String] = None,
+    note: Option[String] = None
+):
+  def operator: PlayerId =
+    PlayerId(operatorId)
+
+  def contextClub: Option[ClubId] =
+    contextClubId.map(ClubId(_))
+
+final case class ProcessDictionaryNamespaceRemindersRequest(
+    operatorId: String,
+    asOf: Option[String] = None,
+    dueSoonHours: Int = 24,
+    reminderIntervalHours: Int = 12,
+    escalationGraceHours: Int = 72
+):
+  require(dueSoonHours > 0, "Dictionary namespace dueSoonHours must be positive")
+  require(reminderIntervalHours > 0, "Dictionary namespace reminderIntervalHours must be positive")
+  require(escalationGraceHours > 0, "Dictionary namespace escalationGraceHours must be positive")
+
+  def operator: PlayerId =
+    PlayerId(operatorId)
+
+  def parsedAsOf: Option[java.time.Instant] =
+    asOf.map(java.time.Instant.parse)
 
 final case class RevokeDictionaryNamespaceRequest(
     operatorId: String,
@@ -620,5 +677,8 @@ object ApiModels:
   given ReadWriter[RequestDictionaryNamespaceRequest] = macroRW
   given ReadWriter[ReviewDictionaryNamespaceRequest] = macroRW
   given ReadWriter[TransferDictionaryNamespaceRequest] = macroRW
+  given ReadWriter[UpdateDictionaryNamespaceCollaboratorsRequest] = macroRW
+  given ReadWriter[UpdateDictionaryNamespaceContextRequest] = macroRW
   given ReadWriter[RevokeDictionaryNamespaceRequest] = macroRW
+  given ReadWriter[ProcessDictionaryNamespaceRemindersRequest] = macroRW
   given ReadWriter[ProcessAdvancedStatsTasksRequest] = macroRW

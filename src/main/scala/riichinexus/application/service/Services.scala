@@ -2904,10 +2904,105 @@ final class SuperAdminService(
           s"Dictionary namespace $context requires an existing player owner, but ${playerId.value} was not found"
         )
 
+  private def requireExistingNamespaceContextClub(clubId: ClubId, context: String): Club =
+    clubRepository.findById(clubId).getOrElse(
+      throw IllegalArgumentException(
+        s"Dictionary namespace $context requires an existing context club, but ${clubId.value} was not found"
+      )
+    )
+
+  private def requireNamespaceContextMembership(
+      player: Player,
+      contextClubId: ClubId,
+      context: String
+  ): Unit =
+    if !player.boundClubIds.contains(contextClubId) then
+      throw IllegalArgumentException(
+        s"Dictionary namespace $context requires ${player.id.value} to belong to context club ${contextClubId.value}"
+      )
+
+  private def validateNamespaceContextMembership(
+      contextClubId: Option[ClubId],
+      owner: Player,
+      coOwnerPlayerIds: Vector[PlayerId],
+      editorPlayerIds: Vector[PlayerId],
+      context: String
+  ): Option[ClubId] =
+    contextClubId.map { clubId =>
+      requireExistingNamespaceContextClub(clubId, context)
+      requireNamespaceContextMembership(owner, clubId, s"$context owner ${owner.id.value}")
+      coOwnerPlayerIds.foreach { playerId =>
+        val player = requireActiveNamespaceOwner(playerId, s"$context co-owner ${playerId.value}")
+        requireNamespaceContextMembership(player, clubId, s"$context co-owner ${playerId.value}")
+      }
+      editorPlayerIds.foreach { playerId =>
+        val player = requireActiveNamespaceOwner(playerId, s"$context editor ${playerId.value}")
+        requireNamespaceContextMembership(player, clubId, s"$context editor ${playerId.value}")
+      }
+      clubId
+    }
+
+  private def normalizeNamespaceCollaborators(
+      ownerPlayerId: PlayerId,
+      coOwnerPlayerIds: Vector[PlayerId],
+      editorPlayerIds: Vector[PlayerId],
+      context: String
+  ): (Vector[PlayerId], Vector[PlayerId]) =
+    val normalizedCoOwners = coOwnerPlayerIds.distinct.filterNot(_ == ownerPlayerId)
+    normalizedCoOwners.foreach(playerId => requireActiveNamespaceOwner(playerId, s"$context co-owner ${playerId.value}"))
+    val normalizedEditors = editorPlayerIds.distinct.filterNot(playerId => playerId == ownerPlayerId || normalizedCoOwners.contains(playerId))
+    normalizedEditors.foreach(playerId => requireActiveNamespaceOwner(playerId, s"$context editor ${playerId.value}"))
+    (normalizedCoOwners, normalizedEditors)
+
+  private def requireNamespaceManagementActor(
+      actor: AccessPrincipal,
+      registration: DictionaryNamespaceRegistration,
+      context: String
+  ): PlayerId =
+    if actor.isSuperAdmin then actor.playerId.getOrElse(PlayerId("system"))
+    else
+      val actorId = actor.playerId.getOrElse(
+        throw IllegalArgumentException(s"Dictionary namespace $context requires a registered player identity")
+      )
+      if registration.hasOwnership(actorId) then actorId
+      else
+        throw IllegalArgumentException(
+          s"Dictionary namespace ${registration.namespacePrefix} can only be managed by a super admin or one of its owners"
+        )
+
+  private def requireNamespaceWriterActor(
+      actorId: PlayerId,
+      registration: DictionaryNamespaceRegistration,
+      context: String
+  ): Unit =
+    if !registration.hasWriteAccess(actorId) then
+      throw IllegalArgumentException(
+        s"Metadata namespace ${registration.namespacePrefix} is writable only by its owners/editors"
+      )
+    registration.contextClubId.foreach { clubId =>
+      val player = requireActiveNamespaceOwner(actorId, s"$context writer ${actorId.value}")
+      requireNamespaceContextMembership(player, clubId, s"$context writer ${actorId.value}")
+    }
+
+  private def reminderKindFor(
+      registration: DictionaryNamespaceRegistration,
+      asOf: Instant,
+      escalationGrace: java.time.Duration
+  ): Option[DictionaryNamespaceReminderKind] =
+    registration.reviewDueAt.flatMap { dueAt =>
+      if registration.status != DictionaryNamespaceReviewStatus.Pending then None
+      else if !dueAt.isBefore(asOf) then Some(DictionaryNamespaceReminderKind.DueSoon)
+      else if !dueAt.plus(escalationGrace).isAfter(asOf) then Some(DictionaryNamespaceReminderKind.Escalated)
+      else Some(DictionaryNamespaceReminderKind.Overdue)
+    }
+
   def requestDictionaryNamespace(
       namespacePrefix: String,
       actor: AccessPrincipal,
+      contextClubId: Option[ClubId] = None,
       ownerPlayerId: Option[PlayerId] = None,
+      coOwnerPlayerIds: Vector[PlayerId] = Vector.empty,
+      editorPlayerIds: Vector[PlayerId] = Vector.empty,
       note: Option[String] = None,
       requestedAt: Instant = Instant.now(),
       reviewDueAt: Option[Instant] = None
@@ -2919,7 +3014,13 @@ final class SuperAdminService(
       val effectiveOwner = ownerPlayerId.getOrElse(requesterId)
       if effectiveOwner != requesterId && !actor.isSuperAdmin then
         throw IllegalArgumentException("Only super admins can request a namespace on behalf of another owner")
-      requireActiveNamespaceOwner(effectiveOwner, s"request ownership for ${effectiveOwner.value}")
+      val owner = requireActiveNamespaceOwner(effectiveOwner, s"request ownership for ${effectiveOwner.value}")
+      val (normalizedCoOwners, normalizedEditors) = normalizeNamespaceCollaborators(
+        effectiveOwner,
+        coOwnerPlayerIds,
+        editorPlayerIds,
+        s"request ${namespacePrefix.trim}"
+      )
 
       val normalizedPrefix = GlobalDictionaryRegistry.normalizeNamespacePrefix(namespacePrefix)
       val effectiveReviewDueAt = reviewDueAt.orElse(Some(requestedAt.plus(java.time.Duration.ofHours(72))))
@@ -2927,8 +3028,20 @@ final class SuperAdminService(
         effectiveReviewDueAt.forall(!_.isBefore(requestedAt)),
         "Dictionary namespace reviewDueAt cannot be earlier than requestedAt"
       )
+      val normalizedContextClubId = validateNamespaceContextMembership(
+        contextClubId,
+        owner,
+        normalizedCoOwners,
+        normalizedEditors,
+        s"request ${normalizedPrefix.trim}"
+      )
       dictionaryNamespaceRepository.findByPrefix(normalizedPrefix) match
-        case Some(existing) if existing.status == DictionaryNamespaceReviewStatus.Approved && existing.ownerPlayerId == effectiveOwner =>
+        case Some(existing)
+            if existing.status == DictionaryNamespaceReviewStatus.Approved &&
+              existing.ownerPlayerId == effectiveOwner &&
+              existing.coOwnerPlayerIds == normalizedCoOwners &&
+              existing.editorPlayerIds == normalizedEditors &&
+              existing.contextClubId == normalizedContextClubId =>
           existing
         case Some(existing) if existing.status == DictionaryNamespaceReviewStatus.Approved =>
           throw IllegalArgumentException(s"Dictionary namespace $normalizedPrefix is already owned by ${existing.ownerPlayerId.value}")
@@ -2938,7 +3051,10 @@ final class SuperAdminService(
           val registration = dictionaryNamespaceRepository.save(
             DictionaryNamespaceRegistration(
               namespacePrefix = normalizedPrefix,
+              contextClubId = normalizedContextClubId,
               ownerPlayerId = effectiveOwner,
+              coOwnerPlayerIds = normalizedCoOwners,
+              editorPlayerIds = normalizedEditors,
               requestedBy = requesterId,
               requestedAt = requestedAt,
               reviewDueAt = effectiveReviewDueAt,
@@ -2954,7 +3070,10 @@ final class SuperAdminService(
               occurredAt = requestedAt,
               actorId = Some(requesterId),
               details = Map(
+                "contextClubId" -> normalizedContextClubId.map(_.value).getOrElse(""),
                 "ownerPlayerId" -> effectiveOwner.value,
+                "coOwnerPlayerIds" -> normalizedCoOwners.map(_.value).mkString(","),
+                "editorPlayerIds" -> normalizedEditors.map(_.value).mkString(","),
                 "reviewDueAt" -> effectiveReviewDueAt.map(_.toString).getOrElse("")
               ),
               note = note
@@ -2988,11 +3107,64 @@ final class SuperAdminService(
             eventType = if approve then "DictionaryNamespaceApproved" else "DictionaryNamespaceRejected",
             occurredAt = reviewedAt,
             actorId = actor.playerId,
-            details = Map("ownerPlayerId" -> existing.ownerPlayerId.value),
+            details = Map(
+              "contextClubId" -> existing.contextClubId.map(_.value).getOrElse(""),
+              "ownerPlayerId" -> existing.ownerPlayerId.value,
+              "coOwnerPlayerIds" -> existing.coOwnerPlayerIds.map(_.value).mkString(","),
+              "editorPlayerIds" -> existing.editorPlayerIds.map(_.value).mkString(",")
+            ),
             note = note
           )
         )
         reviewed
+      }
+    }
+
+  def updateDictionaryNamespaceCollaborators(
+      namespacePrefix: String,
+      coOwnerPlayerIds: Vector[PlayerId],
+      editorPlayerIds: Vector[PlayerId],
+      actor: AccessPrincipal,
+      note: Option[String] = None,
+      updatedAt: Instant = Instant.now()
+  ): Option[DictionaryNamespaceRegistration] =
+    transactionManager.inTransaction {
+      val normalizedPrefix = GlobalDictionaryRegistry.normalizeNamespacePrefix(namespacePrefix)
+      dictionaryNamespaceRepository.findByPrefix(normalizedPrefix).map { existing =>
+        val reviewer = requireNamespaceManagementActor(actor, existing, s"update collaborators for $normalizedPrefix")
+        val (normalizedCoOwners, normalizedEditors) = normalizeNamespaceCollaborators(
+          existing.ownerPlayerId,
+          coOwnerPlayerIds,
+          editorPlayerIds,
+          s"update collaborators for $normalizedPrefix"
+        )
+        validateNamespaceContextMembership(
+          existing.contextClubId,
+          requireActiveNamespaceOwner(existing.ownerPlayerId, s"update collaborators for $normalizedPrefix owner ${existing.ownerPlayerId.value}"),
+          normalizedCoOwners,
+          normalizedEditors,
+          s"update collaborators for $normalizedPrefix"
+        )
+        val updated = existing.updateCollaborators(normalizedCoOwners, normalizedEditors, reviewer, updatedAt, note)
+        dictionaryNamespaceRepository.save(updated)
+        auditEventRepository.save(
+          AuditEventEntry(
+            id = IdGenerator.auditEventId(),
+            aggregateType = "dictionary-namespace",
+            aggregateId = normalizedPrefix,
+            eventType = "DictionaryNamespaceCollaboratorsUpdated",
+            occurredAt = updatedAt,
+            actorId = actor.playerId,
+            details = Map(
+              "contextClubId" -> existing.contextClubId.map(_.value).getOrElse(""),
+              "ownerPlayerId" -> existing.ownerPlayerId.value,
+              "coOwnerPlayerIds" -> normalizedCoOwners.map(_.value).mkString(","),
+              "editorPlayerIds" -> normalizedEditors.map(_.value).mkString(",")
+            ),
+            note = note
+          )
+        )
+        updated
       }
     }
 
@@ -3030,6 +3202,62 @@ final class SuperAdminService(
       )
     }
 
+  def processDictionaryNamespaceReminders(
+      actor: AccessPrincipal,
+      asOf: Instant = Instant.now(),
+      dueSoonWindow: java.time.Duration = java.time.Duration.ofHours(24),
+      reminderInterval: java.time.Duration = java.time.Duration.ofHours(12),
+      escalationGrace: java.time.Duration = java.time.Duration.ofHours(72)
+  ): Vector[DictionaryNamespaceReminderAction] =
+    transactionManager.inTransaction {
+      authorizationService.requirePermission(actor, Permission.ManageGlobalDictionary)
+      dictionaryNamespaceRepository.findAll()
+        .filter(_.status == DictionaryNamespaceReviewStatus.Pending)
+        .flatMap { registration =>
+          reminderKindFor(registration, asOf, escalationGrace)
+            .filter { kind =>
+              kind != DictionaryNamespaceReminderKind.DueSoon || registration.isPendingDueSoon(asOf, dueSoonWindow)
+            }
+            .filter(_ => registration.lastReminderAt.forall(lastSentAt => lastSentAt.plus(reminderInterval).isBefore(asOf) || lastSentAt.plus(reminderInterval).equals(asOf)))
+            .map { reminderKind =>
+              val updated = registration.markReminderSent(asOf)
+              dictionaryNamespaceRepository.save(updated)
+              auditEventRepository.save(
+                AuditEventEntry(
+                  id = IdGenerator.auditEventId(),
+                  aggregateType = "dictionary-namespace",
+                  aggregateId = registration.namespacePrefix,
+                  eventType = "DictionaryNamespaceReminderTriggered",
+                  occurredAt = asOf,
+                  actorId = actor.playerId,
+                  details = Map(
+                    "contextClubId" -> registration.contextClubId.map(_.value).getOrElse(""),
+                    "ownerPlayerId" -> registration.ownerPlayerId.value,
+                    "coOwnerPlayerIds" -> registration.coOwnerPlayerIds.map(_.value).mkString(","),
+                    "editorPlayerIds" -> registration.editorPlayerIds.map(_.value).mkString(","),
+                    "reminderKind" -> reminderKind.toString,
+                    "reminderCount" -> updated.reminderCount.toString,
+                    "reviewDueAt" -> registration.reviewDueAt.map(_.toString).getOrElse("")
+                  ),
+                  note = Some(s"Namespace ${registration.namespacePrefix} is ${reminderKind.toString.toLowerCase}")
+                )
+              )
+              DictionaryNamespaceReminderAction(
+                namespacePrefix = registration.namespacePrefix,
+                contextClubId = registration.contextClubId,
+                ownerPlayerId = registration.ownerPlayerId,
+                coOwnerPlayerIds = registration.coOwnerPlayerIds,
+                editorPlayerIds = registration.editorPlayerIds,
+                reminderKind = reminderKind,
+                triggeredAt = asOf,
+                dueAt = registration.reviewDueAt,
+                reminderCount = updated.reminderCount
+              )
+            }
+        }
+        .sortBy(action => (action.namespacePrefix, action.reminderKind.toString))
+    }
+
   def transferDictionaryNamespace(
       namespacePrefix: String,
       newOwnerId: PlayerId,
@@ -3040,9 +3268,16 @@ final class SuperAdminService(
     transactionManager.inTransaction {
       authorizationService.requirePermission(actor, Permission.ManageGlobalDictionary)
       val reviewer = actor.playerId.getOrElse(PlayerId("system"))
-      requireActiveNamespaceOwner(newOwnerId, s"transfer ownership to ${newOwnerId.value}")
+      val newOwner = requireActiveNamespaceOwner(newOwnerId, s"transfer ownership to ${newOwnerId.value}")
       val normalizedPrefix = GlobalDictionaryRegistry.normalizeNamespacePrefix(namespacePrefix)
       dictionaryNamespaceRepository.findByPrefix(normalizedPrefix).map { existing =>
+        existing.contextClubId.foreach { clubId =>
+          requireNamespaceContextMembership(
+            newOwner,
+            clubId,
+            s"transfer ownership for $normalizedPrefix to ${newOwnerId.value}"
+          )
+        }
         val transferred = existing.transferOwnership(newOwnerId, reviewer, transferredAt, note)
         dictionaryNamespaceRepository.save(transferred)
         auditEventRepository.save(
@@ -3054,13 +3289,59 @@ final class SuperAdminService(
             occurredAt = transferredAt,
             actorId = actor.playerId,
             details = Map(
+              "contextClubId" -> existing.contextClubId.map(_.value).getOrElse(""),
               "previousOwnerPlayerId" -> existing.ownerPlayerId.value,
-              "ownerPlayerId" -> newOwnerId.value
+              "ownerPlayerId" -> newOwnerId.value,
+              "coOwnerPlayerIds" -> transferred.coOwnerPlayerIds.map(_.value).mkString(","),
+              "editorPlayerIds" -> transferred.editorPlayerIds.map(_.value).mkString(",")
             ),
             note = note
           )
         )
         transferred
+      }
+    }
+
+  def updateDictionaryNamespaceContext(
+      namespacePrefix: String,
+      contextClubId: Option[ClubId],
+      actor: AccessPrincipal,
+      note: Option[String] = None,
+      updatedAt: Instant = Instant.now()
+  ): Option[DictionaryNamespaceRegistration] =
+    transactionManager.inTransaction {
+      val normalizedPrefix = GlobalDictionaryRegistry.normalizeNamespacePrefix(namespacePrefix)
+      dictionaryNamespaceRepository.findByPrefix(normalizedPrefix).map { existing =>
+        val reviewer = requireNamespaceManagementActor(actor, existing, s"update context for $normalizedPrefix")
+        val owner = requireActiveNamespaceOwner(existing.ownerPlayerId, s"update context for $normalizedPrefix owner ${existing.ownerPlayerId.value}")
+        val normalizedContextClubId = validateNamespaceContextMembership(
+          contextClubId,
+          owner,
+          existing.coOwnerPlayerIds,
+          existing.editorPlayerIds,
+          s"update context for $normalizedPrefix"
+        )
+        val updated = existing.updateContextClub(normalizedContextClubId, reviewer, updatedAt, note)
+        dictionaryNamespaceRepository.save(updated)
+        auditEventRepository.save(
+          AuditEventEntry(
+            id = IdGenerator.auditEventId(),
+            aggregateType = "dictionary-namespace",
+            aggregateId = normalizedPrefix,
+            eventType = "DictionaryNamespaceContextUpdated",
+            occurredAt = updatedAt,
+            actorId = actor.playerId,
+            details = Map(
+              "previousContextClubId" -> existing.contextClubId.map(_.value).getOrElse(""),
+              "contextClubId" -> normalizedContextClubId.map(_.value).getOrElse(""),
+              "ownerPlayerId" -> existing.ownerPlayerId.value,
+              "coOwnerPlayerIds" -> existing.coOwnerPlayerIds.map(_.value).mkString(","),
+              "editorPlayerIds" -> existing.editorPlayerIds.map(_.value).mkString(",")
+            ),
+            note = note
+          )
+        )
+        updated
       }
     }
 
@@ -3085,7 +3366,12 @@ final class SuperAdminService(
             eventType = "DictionaryNamespaceRevoked",
             occurredAt = revokedAt,
             actorId = actor.playerId,
-            details = Map("ownerPlayerId" -> existing.ownerPlayerId.value),
+            details = Map(
+              "contextClubId" -> existing.contextClubId.map(_.value).getOrElse(""),
+              "ownerPlayerId" -> existing.ownerPlayerId.value,
+              "coOwnerPlayerIds" -> existing.coOwnerPlayerIds.map(_.value).mkString(","),
+              "editorPlayerIds" -> existing.editorPlayerIds.map(_.value).mkString(",")
+            ),
             note = note
           )
         )
@@ -3122,10 +3408,8 @@ final class SuperAdminService(
         val actorId = actor.playerId.getOrElse(
           throw IllegalArgumentException("Metadata dictionary writes require a registered player identity")
         )
-        if !actor.isSuperAdmin && actorId != namespace.ownerPlayerId then
-          throw IllegalArgumentException(
-            s"Metadata namespace ${namespace.namespacePrefix} is owned by ${namespace.ownerPlayerId.value}"
-          )
+        if !actor.isSuperAdmin then
+          requireNamespaceWriterActor(actorId, namespace, s"write ${key.trim}")
       else
         authorizationService.requirePermission(actor, Permission.ManageGlobalDictionary)
 
