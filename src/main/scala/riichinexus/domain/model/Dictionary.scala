@@ -27,6 +27,7 @@ enum DictionaryNamespaceReviewStatus derives CanEqual:
   case Pending
   case Approved
   case Rejected
+  case Revoked
 
 final case class DictionaryNamespaceRegistration(
     namespacePrefix: String,
@@ -53,6 +54,30 @@ final case class DictionaryNamespaceRegistration(
     require(status == DictionaryNamespaceReviewStatus.Pending, "Only pending namespace requests can be rejected")
     copy(
       status = DictionaryNamespaceReviewStatus.Rejected,
+      reviewedBy = Some(by),
+      reviewedAt = Some(at),
+      reviewNote = note
+    )
+
+  def transferOwnership(
+      newOwner: PlayerId,
+      by: PlayerId,
+      at: java.time.Instant,
+      note: Option[String] = None
+  ): DictionaryNamespaceRegistration =
+    require(status == DictionaryNamespaceReviewStatus.Approved, "Only approved namespace registrations can be transferred")
+    require(newOwner != ownerPlayerId, "Dictionary namespace is already owned by the requested player")
+    copy(
+      ownerPlayerId = newOwner,
+      reviewedBy = Some(by),
+      reviewedAt = Some(at),
+      reviewNote = note
+    )
+
+  def revoke(by: PlayerId, at: java.time.Instant, note: Option[String] = None): DictionaryNamespaceRegistration =
+    require(status == DictionaryNamespaceReviewStatus.Approved, "Only approved namespace registrations can be revoked")
+    copy(
+      status = DictionaryNamespaceReviewStatus.Revoked,
       reviewedBy = Some(by),
       reviewedAt = Some(at),
       reviewNote = note

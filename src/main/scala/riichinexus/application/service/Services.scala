@@ -2973,6 +2973,68 @@ final class SuperAdminService(
       }
     }
 
+  def transferDictionaryNamespace(
+      namespacePrefix: String,
+      newOwnerId: PlayerId,
+      actor: AccessPrincipal,
+      note: Option[String] = None,
+      transferredAt: Instant = Instant.now()
+  ): Option[DictionaryNamespaceRegistration] =
+    transactionManager.inTransaction {
+      authorizationService.requirePermission(actor, Permission.ManageGlobalDictionary)
+      val reviewer = actor.playerId.getOrElse(PlayerId("system"))
+      val normalizedPrefix = GlobalDictionaryRegistry.normalizeNamespacePrefix(namespacePrefix)
+      dictionaryNamespaceRepository.findByPrefix(normalizedPrefix).map { existing =>
+        val transferred = existing.transferOwnership(newOwnerId, reviewer, transferredAt, note)
+        dictionaryNamespaceRepository.save(transferred)
+        auditEventRepository.save(
+          AuditEventEntry(
+            id = IdGenerator.auditEventId(),
+            aggregateType = "dictionary-namespace",
+            aggregateId = normalizedPrefix,
+            eventType = "DictionaryNamespaceTransferred",
+            occurredAt = transferredAt,
+            actorId = actor.playerId,
+            details = Map(
+              "previousOwnerPlayerId" -> existing.ownerPlayerId.value,
+              "ownerPlayerId" -> newOwnerId.value
+            ),
+            note = note
+          )
+        )
+        transferred
+      }
+    }
+
+  def revokeDictionaryNamespace(
+      namespacePrefix: String,
+      actor: AccessPrincipal,
+      note: Option[String] = None,
+      revokedAt: Instant = Instant.now()
+  ): Option[DictionaryNamespaceRegistration] =
+    transactionManager.inTransaction {
+      authorizationService.requirePermission(actor, Permission.ManageGlobalDictionary)
+      val reviewer = actor.playerId.getOrElse(PlayerId("system"))
+      val normalizedPrefix = GlobalDictionaryRegistry.normalizeNamespacePrefix(namespacePrefix)
+      dictionaryNamespaceRepository.findByPrefix(normalizedPrefix).map { existing =>
+        val revoked = existing.revoke(reviewer, revokedAt, note)
+        dictionaryNamespaceRepository.save(revoked)
+        auditEventRepository.save(
+          AuditEventEntry(
+            id = IdGenerator.auditEventId(),
+            aggregateType = "dictionary-namespace",
+            aggregateId = normalizedPrefix,
+            eventType = "DictionaryNamespaceRevoked",
+            occurredAt = revokedAt,
+            actorId = actor.playerId,
+            details = Map("ownerPlayerId" -> existing.ownerPlayerId.value),
+            note = note
+          )
+        )
+        revoked
+      }
+    }
+
   private def approvedMetadataNamespaceForKey(key: String): Option[DictionaryNamespaceRegistration] =
     val normalizedKey = GlobalDictionaryRegistry.normalizeKey(key)
     dictionaryNamespaceRepository.findAll()

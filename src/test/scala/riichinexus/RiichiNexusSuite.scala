@@ -700,8 +700,55 @@ class RiichiNexusSuite extends FunSuite:
       )
     }
 
+    val transferredNamespace = app.superAdminService.transferDictionaryNamespace(
+      namespacePrefix = "ui.banner",
+      newOwnerId = outsider.id,
+      actor = principalFor(app, superAdmin.id),
+      note = Some("product team handoff"),
+      transferredAt = now.plusSeconds(70)
+    ).getOrElse(fail("namespace transfer missing"))
+    assertEquals(transferredNamespace.ownerPlayerId, outsider.id)
+    assertEquals(transferredNamespace.status, DictionaryNamespaceReviewStatus.Approved)
+
+    intercept[IllegalArgumentException] {
+      app.superAdminService.upsertDictionary(
+        key = "ui.banner.message",
+        value = "old owner blocked",
+        actor = owner.asPrincipal,
+        updatedAt = now.plusSeconds(80)
+      )
+    }
+
+    val transferredWrite = app.superAdminService.upsertDictionary(
+      key = "ui.banner.message",
+      value = "Summer finals this weekend",
+      actor = outsider.asPrincipal,
+      updatedAt = now.plusSeconds(90)
+    )
+
+    val revokedNamespace = app.superAdminService.revokeDictionaryNamespace(
+      namespacePrefix = "ui.banner",
+      actor = principalFor(app, superAdmin.id),
+      note = Some("namespace retired"),
+      revokedAt = now.plusSeconds(100)
+    ).getOrElse(fail("namespace revoke missing"))
+    assertEquals(revokedNamespace.status, DictionaryNamespaceReviewStatus.Revoked)
+
+    intercept[IllegalArgumentException] {
+      app.superAdminService.upsertDictionary(
+        key = "ui.banner.message",
+        value = "revoked namespace blocked",
+        actor = outsider.asPrincipal,
+        updatedAt = now.plusSeconds(110)
+      )
+    }
+
+    val namespaceAuditTypes = app.auditEventRepository.findByAggregate("dictionary-namespace", "ui.banner.").map(_.eventType)
+    assert(namespaceAuditTypes.contains("DictionaryNamespaceTransferred"))
+    assert(namespaceAuditTypes.contains("DictionaryNamespaceRevoked"))
     assertEquals(metadata.key, "ui.banner.message")
     assertEquals(metadata.value, "Spring finals this weekend")
+    assertEquals(transferredWrite.updatedBy, outsider.id)
   }
 
   test("global dictionary normalizes ranks in the public player leaderboard") {

@@ -11,15 +11,15 @@ Recently completed features such as guest sessions, club applications, club hono
   - Current state:
     - metadata keys now require an approved namespace registration before they can be written
     - namespace owners can write keys under their approved prefix through the existing dictionary upsert endpoint
-    - super admins can request/review namespaces, and `/dictionary/namespaces` exposes the current registrations
+    - super admins can now request/review/transfer/revoke namespaces, and `/dictionary/namespaces` supports owner/requester/reviewer filters
     - reserved runtime namespaces still remain governed only by `GlobalDictionaryRegistry`
   - Evidence:
-    - `src/main/scala/riichinexus/domain/model/Dictionary.scala` now defines `DictionaryNamespaceRegistration` and review status
-    - `src/main/scala/riichinexus/application/service/Services.scala` now enforces approved namespace ownership for metadata writes
-    - `src/main/scala/riichinexus/api/ApiServer.scala` now serves `/dictionary/namespaces` and `/dictionary/namespaces/review`
+    - `src/main/scala/riichinexus/domain/model/Dictionary.scala` now defines namespace approval, transfer, and revocation transitions
+    - `src/main/scala/riichinexus/application/service/Services.scala` now enforces approved namespace ownership for metadata writes and exposes transfer/revoke flows
+    - `src/main/scala/riichinexus/api/ApiServer.scala` now serves `/dictionary/namespaces`, `/dictionary/namespaces/review`, `/dictionary/namespaces/transfer`, and `/dictionary/namespaces/revoke`
   - Suggested completion:
-    - add namespace transfer / revocation flows when owners leave the platform or teams change
-    - add approval SLA, reviewer attribution filters, and operational queries for namespace backlog triage
+    - add approval SLA / due-date tracking and operational backlog views for namespace triage
+    - add namespace transfer safety rules when the new owner is suspended/banned or leaves a team context
     - decide whether some metadata families should support multi-owner/editor policies instead of a single owner
 
 - [ ] Deepen the new Advanced Stats Board into fully rules-faithful mahjong analytics.

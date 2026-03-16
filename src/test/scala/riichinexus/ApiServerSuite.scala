@@ -431,6 +431,7 @@ class ApiServerSuite extends FunSuite:
 
     val root = app.playerService.registerPlayer("ns-root", "NsRoot", RankSnapshot(RankPlatform.Custom, "S"), now, 2000)
     val owner = app.playerService.registerPlayer("ns-owner", "NsOwner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
+    val transferee = app.playerService.registerPlayer("ns-transferee", "NsTransferee", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1580)
     val superAdmin = app.playerRepository.save(root.grantRole(RoleGrant.superAdmin(now)))
 
     withServer(app) { baseUrl =>
@@ -479,11 +480,83 @@ class ApiServerSuite extends FunSuite:
       val metadata = read[GlobalDictionaryEntry](upsertResponse.body())
       assertEquals(metadata.key, "ui.banner.message")
 
-      val listResponse = get(s"$baseUrl/dictionary/namespaces?operatorId=${owner.id.value}&status=Approved")
+      val transferResponse = postJson(
+        s"$baseUrl/dictionary/namespaces/transfer",
+        write(
+          TransferDictionaryNamespaceRequest(
+            operatorId = superAdmin.id.value,
+            namespacePrefix = "ui.banner",
+            newOwnerPlayerId = transferee.id.value,
+            note = Some("handoff to content ops")
+          )
+        )
+      )
+      assertEquals(transferResponse.statusCode(), 200)
+      val transferred = read[DictionaryNamespaceRegistration](transferResponse.body())
+      assertEquals(transferred.ownerPlayerId, transferee.id)
+      assertEquals(transferred.status, DictionaryNamespaceReviewStatus.Approved)
+
+      val oldOwnerDenied = postJson(
+        s"$baseUrl/admin/dictionary",
+        write(
+          UpsertDictionaryRequest(
+            operatorId = owner.id.value,
+            key = "ui.banner.message",
+            value = "old owner blocked",
+            note = Some("should fail")
+          )
+        )
+      )
+      assertEquals(oldOwnerDenied.statusCode(), 400)
+
+      val transfereeWrite = postJson(
+        s"$baseUrl/admin/dictionary",
+        write(
+          UpsertDictionaryRequest(
+            operatorId = transferee.id.value,
+            key = "ui.banner.message",
+            value = "Transferred owner content",
+            note = Some("new owner write")
+          )
+        )
+      )
+      assertEquals(transfereeWrite.statusCode(), 201)
+
+      val revokeResponse = postJson(
+        s"$baseUrl/dictionary/namespaces/revoke",
+        write(
+          RevokeDictionaryNamespaceRequest(
+            operatorId = superAdmin.id.value,
+            namespacePrefix = "ui.banner",
+            note = Some("retired family")
+          )
+        )
+      )
+      assertEquals(revokeResponse.statusCode(), 200)
+      val revoked = read[DictionaryNamespaceRegistration](revokeResponse.body())
+      assertEquals(revoked.status, DictionaryNamespaceReviewStatus.Revoked)
+
+      val revokedDenied = postJson(
+        s"$baseUrl/admin/dictionary",
+        write(
+          UpsertDictionaryRequest(
+            operatorId = transferee.id.value,
+            key = "ui.banner.message",
+            value = "revoked blocked",
+            note = Some("should fail")
+          )
+        )
+      )
+      assertEquals(revokedDenied.statusCode(), 400)
+
+      val listResponse = get(
+        s"$baseUrl/dictionary/namespaces?operatorId=${superAdmin.id.value}&status=Revoked&reviewedBy=${superAdmin.id.value}"
+      )
       assertEquals(listResponse.statusCode(), 200)
       val page = readPage[DictionaryNamespaceRegistration](listResponse.body())
       assertEquals(page.total, 1)
       assertEquals(page.items.head.namespacePrefix, "ui.banner.")
+      assertEquals(page.items.head.ownerPlayerId, transferee.id)
     }
   }
 

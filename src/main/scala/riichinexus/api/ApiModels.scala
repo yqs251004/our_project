@@ -498,6 +498,26 @@ final case class ReviewDictionaryNamespaceRequest(
   def operator: PlayerId =
     PlayerId(operatorId)
 
+final case class TransferDictionaryNamespaceRequest(
+    operatorId: String,
+    namespacePrefix: String,
+    newOwnerPlayerId: String,
+    note: Option[String] = None
+):
+  def operator: PlayerId =
+    PlayerId(operatorId)
+
+  def newOwner: PlayerId =
+    PlayerId(newOwnerPlayerId)
+
+final case class RevokeDictionaryNamespaceRequest(
+    operatorId: String,
+    namespacePrefix: String,
+    note: Option[String] = None
+):
+  def operator: PlayerId =
+    PlayerId(operatorId)
+
 final case class UpsertDictionaryRequest(
     operatorId: String,
     key: String,
@@ -595,4 +615,6 @@ object ApiModels:
   given ReadWriter[RecomputeAdvancedStatsRequest] = macroRW
   given ReadWriter[RequestDictionaryNamespaceRequest] = macroRW
   given ReadWriter[ReviewDictionaryNamespaceRequest] = macroRW
+  given ReadWriter[TransferDictionaryNamespaceRequest] = macroRW
+  given ReadWriter[RevokeDictionaryNamespaceRequest] = macroRW
   given ReadWriter[ProcessAdvancedStatsTasksRequest] = macroRW

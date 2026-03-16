@@ -396,6 +396,27 @@ Inspect namespace ownership and review status:
 curl "http://localhost:8080/dictionary/namespaces?operatorId=player-super-admin&status=Approved"
 ```
 
+Transfer an approved metadata namespace to a new owner:
+
+```bash
+curl -X POST http://localhost:8080/dictionary/namespaces/transfer   -H "Content-Type: application/json"   -d '{
+    "operatorId": "player-super-admin",
+    "namespacePrefix": "ui.banner",
+    "newOwnerPlayerId": "player-content-ops",
+    "note": "handoff to content ops"
+  }'
+```
+
+Revoke a namespace when the family is retired or ownership should be frozen:
+
+```bash
+curl -X POST http://localhost:8080/dictionary/namespaces/revoke   -H "Content-Type: application/json"   -d '{
+    "operatorId": "player-super-admin",
+    "namespacePrefix": "ui.banner",
+    "note": "retired metadata family"
+  }'
+```
+
 Once approved, the namespace owner can update metadata keys under that prefix through the same dictionary write endpoint:
 
 ```bash

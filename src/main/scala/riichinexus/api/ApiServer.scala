@@ -996,15 +996,19 @@ private final class ApiHandler(
         val operator = queryPrincipal(exchange)
         val statusFilter = queryParam(exchange, "status").map(DictionaryNamespaceReviewStatus.valueOf)
         val ownerFilter = queryParam(exchange, "ownerId").filter(_.nonEmpty).map(PlayerId(_))
+        val requestedByFilter = queryParam(exchange, "requestedBy").filter(_.nonEmpty).map(PlayerId(_))
+        val reviewedByFilter = queryParam(exchange, "reviewedBy").filter(_.nonEmpty).map(PlayerId(_))
         val namespaces = app.dictionaryNamespaceRepository.findAll()
           .filter(registration => statusFilter.forall(_ == registration.status))
           .filter(registration => ownerFilter.forall(_ == registration.ownerPlayerId))
+          .filter(registration => requestedByFilter.forall(_ == registration.requestedBy))
+          .filter(registration => reviewedByFilter.forall(reviewer => registration.reviewedBy.contains(reviewer)))
           .filter(registration =>
             operator.isSuperAdmin ||
               operator.playerId.contains(registration.ownerPlayerId) ||
               operator.playerId.contains(registration.requestedBy)
           )
-        sendPagedJson(exchange, namespaces, activeFilters(exchange, "status", "ownerId"))
+        sendPagedJson(exchange, namespaces, activeFilters(exchange, "status", "ownerId", "requestedBy", "reviewedBy"))
       case ("POST", Vector("dictionary", "namespaces")) =>
         val request = readJsonBody[RequestDictionaryNamespaceRequest](exchange)
         sendJson(
@@ -1024,6 +1028,27 @@ private final class ApiHandler(
           app.superAdminService.reviewDictionaryNamespace(
             namespacePrefix = request.namespacePrefix,
             approve = request.approve,
+            actor = principal(request.operator),
+            note = request.note
+          )
+        )
+      case ("POST", Vector("dictionary", "namespaces", "transfer")) =>
+        val request = readJsonBody[TransferDictionaryNamespaceRequest](exchange)
+        sendOption(
+          exchange,
+          app.superAdminService.transferDictionaryNamespace(
+            namespacePrefix = request.namespacePrefix,
+            newOwnerId = request.newOwner,
+            actor = principal(request.operator),
+            note = request.note
+          )
+        )
+      case ("POST", Vector("dictionary", "namespaces", "revoke")) =>
+        val request = readJsonBody[RevokeDictionaryNamespaceRequest](exchange)
+        sendOption(
+          exchange,
+          app.superAdminService.revokeDictionaryNamespace(
+            namespacePrefix = request.namespacePrefix,
             actor = principal(request.operator),
             note = request.note
           )
