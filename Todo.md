@@ -20,16 +20,18 @@ Recently completed features such as guest sessions, club applications, club hono
     - route dictionary values into tournament rule evaluation and any future rank normalization service
     - decide whether unknown keys remain free-form metadata or must move to a typed registry
 
-- [ ] Replace heuristic "advanced stats" proxies with a real Advanced Stats Board pipeline.
-  - Current state: the dashboard model is being used as the advanced-stats surface, but `ukeireExpectation`, `defenseStability`, and related values are proxy calculations rather than real mahjong analytics.
+- [ ] Deepen the new Advanced Stats Board into truly rules-faithful mahjong analytics.
+  - Current state:
+    - `Dashboard` and `AdvancedStatsBoard` are now separated
+    - advanced metrics now flow through a dedicated projection and repository/API surface
+    - some metrics are still inferred from shanten/action traces because paifu currently does not expose enough raw hand-state detail for exact ukeire math
   - Evidence:
-    - `src/main/scala/riichinexus/application/service/Services.scala` in `DashboardProjectionSubscriber`
-    - `ukeireProxy` is derived from shanten transitions and action bonuses, not actual ukeire enumeration
-    - there is no distinct `AdvancedStatsBoard` entity, job queue, or recomputation policy
+    - `src/main/scala/riichinexus/application/service/Services.scala` in `AdvancedStatsProjectionSubscriber`
+    - the current `ukeireExpectation` is still derived from tracked shanten/action progression rather than exact tile-state enumeration
   - Suggested completion:
-    - Split "dashboard summary" from "advanced stats board"
-    - Introduce true paifu-derived calculators for defense, deal-in contexts, ukeire EV, call efficiency, etc.
-    - Run projection asynchronously with versioning / recompute support
+    - enrich paifu data needed for exact ukeire and defense calculations
+    - introduce versioned advanced-stat calculators and recompute support
+    - move projection execution onto an async/outbox pipeline when the eventing layer is upgraded
 
 - [ ] Deepen tournament settlement beyond the current ranking-based prize split.
   - Current state: settlement is a single ranking snapshot plus a simple prize allocator; it does not model club/team splits, side awards, deductions, taxes/fees, or settlement revisions.

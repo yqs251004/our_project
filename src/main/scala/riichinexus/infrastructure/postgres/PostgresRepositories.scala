@@ -301,6 +301,20 @@ final class PostgresSchemaInitializer(connectionFactory: JdbcConnectionFactory):
       execute(
         connection,
         """
+          |create table if not exists advanced_stats_boards (
+          |  owner_key text primary key,
+          |  owner_type text not null,
+          |  payload jsonb not null,
+          |  updated_at timestamptz not null default now()
+          |)
+          |""".stripMargin
+      )
+      execute(connection, "alter table advanced_stats_boards add column if not exists owner_type text")
+      execute(connection, "alter table advanced_stats_boards add column if not exists payload jsonb")
+      execute(connection, "alter table advanced_stats_boards add column if not exists updated_at timestamptz default now()")
+      execute(
+        connection,
+        """
           |create table if not exists global_dictionary (
           |  key text primary key,
           |  updated_at timestamptz not null,
@@ -381,6 +395,14 @@ final class PostgresSchemaInitializer(connectionFactory: JdbcConnectionFactory):
         """
           |insert into schema_version(version, description)
           |values (4, 'Added guest session persistence schema')
+          |on conflict (version) do nothing
+          |""".stripMargin
+      )
+      execute(
+        connection,
+        """
+          |insert into schema_version(version, description)
+          |values (5, 'Added advanced stats board persistence schema')
           |on conflict (version) do nothing
           |""".stripMargin
       )
@@ -886,6 +908,51 @@ final class PostgresDashboardRepository(
       case DashboardOwner.Player(_) => "player"
       case DashboardOwner.Club(_)   => "club"
 
+final class PostgresAdvancedStatsBoardRepository(
+    protected val connectionFactory: JdbcConnectionFactory
+) extends AdvancedStatsBoardRepository
+    with JdbcRepositorySupport:
+  override def save(board: AdvancedStatsBoard): AdvancedStatsBoard =
+    val sql =
+      """
+        |insert into advanced_stats_boards (owner_key, owner_type, payload, updated_at)
+        |values (?, ?, cast(? as jsonb), now())
+        |on conflict (owner_key) do update set
+        |  owner_type = excluded.owner_type,
+        |  payload = excluded.payload,
+        |  updated_at = now()
+        |""".stripMargin
+
+    withConnection { connection =>
+      Using.resource(connection.prepareStatement(sql)) { statement =>
+        statement.setString(1, ownerKey(board.owner))
+        statement.setString(2, ownerType(board.owner))
+        statement.setString(3, writeJson(board))
+        statement.executeUpdate()
+      }
+    }
+
+    board
+
+  override def findByOwner(owner: DashboardOwner): Option[AdvancedStatsBoard] =
+    readOne[AdvancedStatsBoard]("select payload from advanced_stats_boards where owner_key = ?", {
+      statement =>
+        statement.setString(1, ownerKey(owner))
+    })
+
+  override def findAll(): Vector[AdvancedStatsBoard] =
+    readAll[AdvancedStatsBoard]("select payload from advanced_stats_boards order by owner_key")
+
+  private def ownerKey(owner: DashboardOwner): String =
+    owner match
+      case DashboardOwner.Player(playerId) => s"player:${playerId.value}"
+      case DashboardOwner.Club(clubId)     => s"club:${clubId.value}"
+
+  private def ownerType(owner: DashboardOwner): String =
+    owner match
+      case DashboardOwner.Player(_) => "player"
+      case DashboardOwner.Club(_)   => "club"
+
 final class PostgresGlobalDictionaryRepository(
     protected val connectionFactory: JdbcConnectionFactory
 ) extends GlobalDictionaryRepository
@@ -1040,6 +1107,7 @@ final class PostgresAdminService(connectionFactory: JdbcConnectionFactory):
       "paifus",
       "appeal_tickets",
       "dashboards",
+      "advanced_stats_boards",
       "global_dictionary",
       "tournament_settlements",
       "audit_events"
@@ -1075,6 +1143,7 @@ final class PostgresAdminService(connectionFactory: JdbcConnectionFactory):
         executeAdmin(connection, "truncate table tournament_settlements restart identity")
         executeAdmin(connection, "truncate table global_dictionary restart identity")
         executeAdmin(connection, "truncate table dashboards restart identity")
+        executeAdmin(connection, "truncate table advanced_stats_boards restart identity")
         executeAdmin(connection, "truncate table guest_sessions restart identity")
         executeAdmin(connection, "truncate table appeal_tickets restart identity")
         executeAdmin(connection, "truncate table paifus restart identity")

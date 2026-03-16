@@ -15,9 +15,6 @@ final case class Dashboard(
     riichiRate: Double,
     averagePlacement: Double,
     topFinishRate: Double,
-    defenseStability: Double,
-    ukeireExpectation: Double,
-    shantenTrajectory: Vector[Double],
     lastUpdatedAt: Instant
 ) derives CanEqual
 
@@ -32,8 +29,35 @@ object Dashboard:
       riichiRate = 0.0,
       averagePlacement = 0.0,
       topFinishRate = 0.0,
+      lastUpdatedAt = at
+    )
+
+final case class AdvancedStatsBoard(
+    owner: DashboardOwner,
+    sampleSize: Int,
+    defenseStability: Double,
+    ukeireExpectation: Double,
+    averageShantenImprovement: Double,
+    callAggressionRate: Double,
+    riichiConversionRate: Double,
+    pressureDefenseRate: Double,
+    postRiichiFoldRate: Double,
+    shantenTrajectory: Vector[Double],
+    lastUpdatedAt: Instant
+) derives CanEqual
+
+object AdvancedStatsBoard:
+  def empty(owner: DashboardOwner, at: Instant): AdvancedStatsBoard =
+    AdvancedStatsBoard(
+      owner = owner,
+      sampleSize = 0,
       defenseStability = 0.0,
       ukeireExpectation = 0.0,
+      averageShantenImprovement = 0.0,
+      callAggressionRate = 0.0,
+      riichiConversionRate = 0.0,
+      pressureDefenseRate = 0.0,
+      postRiichiFoldRate = 0.0,
       shantenTrajectory = Vector.empty,
       lastUpdatedAt = at
     )

@@ -151,6 +151,7 @@ object JsonCodecs:
       }
     )
   given ReadWriter[Dashboard] = macroRW
+  given ReadWriter[AdvancedStatsBoard] = macroRW
   given ReadWriter[PublicScheduleView] = macroRW
   given ReadWriter[PublicClubDirectoryEntry] = macroRW
   given ReadWriter[PlayerLeaderboardEntry] = macroRW

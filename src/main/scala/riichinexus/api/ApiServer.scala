@@ -940,6 +940,24 @@ private final class ApiHandler(
           clubId = Some(targetClubId)
         )
         sendOption(exchange, app.dashboardRepository.findByOwner(DashboardOwner.Club(targetClubId)))
+      case ("GET", Vector("advanced-stats", "players", playerId)) =>
+        val targetPlayerId = PlayerId(playerId)
+        val operator = queryPrincipal(exchange)
+        app.authorizationService.requirePermission(
+          operator,
+          Permission.ViewOwnDashboard,
+          subjectPlayerId = Some(targetPlayerId)
+        )
+        sendOption(exchange, app.advancedStatsBoardRepository.findByOwner(DashboardOwner.Player(targetPlayerId)))
+      case ("GET", Vector("advanced-stats", "clubs", clubId)) =>
+        val targetClubId = ClubId(clubId)
+        val operator = queryPrincipal(exchange)
+        app.authorizationService.requirePermission(
+          operator,
+          Permission.ViewClubDashboard,
+          clubId = Some(targetClubId)
+        )
+        sendOption(exchange, app.advancedStatsBoardRepository.findByOwner(DashboardOwner.Club(targetClubId)))
 
       case ("GET", Vector("dictionary")) =>
         val prefixFilter = queryParam(exchange, "prefix").filter(_.nonEmpty)

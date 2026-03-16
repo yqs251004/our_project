@@ -205,9 +205,6 @@ private object ProjectionSupport:
         riichiRate = weightedAverage(memberDashboards, _.riichiRate),
         averagePlacement = weightedAverage(memberDashboards, _.averagePlacement),
         topFinishRate = weightedAverage(memberDashboards, _.topFinishRate),
-        defenseStability = weightedAverage(memberDashboards, _.defenseStability),
-        ukeireExpectation = weightedAverage(memberDashboards, _.ukeireExpectation),
-        shantenTrajectory = averageTrajectory(memberDashboards.map(_.shantenTrajectory)),
         lastUpdatedAt = at
       )
 
@@ -222,15 +219,6 @@ private object ProjectionSupport:
         dashboards.map(dashboard => selector(dashboard) * dashboard.sampleSize).sum /
           totalWeight.toDouble
       )
-
-  private def averageTrajectory(trajectories: Vector[Vector[Double]]): Vector[Double] =
-    val maxLength = trajectories.map(_.size).foldLeft(0)(math.max)
-
-    (0 until maxLength).toVector.flatMap { index =>
-      val samples = trajectories.flatMap(_.lift(index))
-      if samples.isEmpty then None
-      else Some(round2(samples.sum / samples.size.toDouble))
-    }
 
   private def round2(value: Double): Double =
     BigDecimal(value).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble
@@ -2950,14 +2938,8 @@ final class ClubProjectionSubscriber(
       case _ =>
         ()
 
-final class DashboardProjectionSubscriber(
-    matchRecordRepository: MatchRecordRepository,
-    paifuRepository: PaifuRepository,
-    playerRepository: PlayerRepository,
-    clubRepository: ClubRepository,
-    dashboardRepository: DashboardRepository
-) extends DomainEventSubscriber:
-  private final case class PlayerRoundStats(
+private object AdvancedStatsSupport:
+  final case class PlayerRoundStats(
       shantenPath: Vector[Int],
       won: Boolean,
       dealtIn: Boolean,
@@ -2965,8 +2947,149 @@ final class DashboardProjectionSubscriber(
       riichiDeclared: Boolean,
       callCount: Int,
       pressureResponseCount: Int,
-      postRiichiDealIn: Boolean
+      postRiichiDealIn: Boolean,
+      foldLikeResponse: Boolean,
+      shantenImprovement: Double
   )
+
+  def buildRoundStats(round: KyokuRecord, playerId: PlayerId): PlayerRoundStats =
+    val playerActions = round.actions.filter(_.actor.contains(playerId))
+    val shantenPath = playerActions.flatMap(_.shantenAfterAction)
+    val riichiDeclared = playerActions.exists(_.actionType == PaifuActionType.Riichi)
+    val callCount = playerActions.count(action => isOpenCall(action.actionType))
+    val externalRiichiSequence = round.actions.collectFirst {
+      case action
+          if action.actionType == PaifuActionType.Riichi && action.actor.exists(_ != playerId) =>
+        action.sequenceNo
+    }
+    val pressureResponses =
+      externalRiichiSequence.toVector.flatMap { sequenceNo =>
+        playerActions.filter(_.sequenceNo > sequenceNo)
+      }
+    val dealtIn =
+      round.result.outcome == HandOutcome.Ron && round.result.target.contains(playerId)
+    val foldLikeResponse =
+      pressureResponses.nonEmpty && !riichiDeclared && callCount == 0 && !dealtIn
+    val shantenImprovement =
+      shantenPath.headOption.zip(shantenPath.lastOption).headOption match
+        case Some((initial, terminal)) => math.max(0.0, initial.toDouble - terminal.toDouble)
+        case None                      => 0.0
+
+    PlayerRoundStats(
+      shantenPath = shantenPath,
+      won = round.result.winner.contains(playerId),
+      dealtIn = dealtIn,
+      resultDelta = round.result.scoreChanges.find(_.playerId == playerId).map(_.delta).getOrElse(0),
+      riichiDeclared = riichiDeclared,
+      callCount = callCount,
+      pressureResponseCount = pressureResponses.size,
+      postRiichiDealIn =
+        externalRiichiSequence.nonEmpty &&
+          round.result.outcome == HandOutcome.Ron &&
+          round.result.target.contains(playerId),
+      foldLikeResponse = foldLikeResponse,
+      shantenImprovement = shantenImprovement
+    )
+
+  def calculateDefenseStability(
+      roundStats: Vector[PlayerRoundStats],
+      placements: Vector[Double]
+  ): Double =
+    val pressureRounds = roundStats.count(_.pressureResponseCount > 0)
+    val pressureHoldRounds = roundStats.count(stats => stats.pressureResponseCount > 0 && !stats.postRiichiDealIn)
+    val averageLossSeverity =
+      average(roundStats.filter(_.resultDelta < 0).map(stats => math.abs(stats.resultDelta).toDouble))
+    val placementStability = placementConsistency(placements)
+    val lossControl = 1.0 - math.min(1.0, averageLossSeverity / 12000.0)
+    val safeRoundRate = rawRatio(roundStats.count(_.resultDelta >= 0), roundStats.size)
+    val pressureHoldRate = rawRatio(pressureHoldRounds, pressureRounds)
+
+    round2(
+      clamp01(
+        safeRoundRate * 0.25 +
+          (1.0 - rawRatio(roundStats.count(_.dealtIn), roundStats.size)) * 0.4 +
+          pressureHoldRate * 0.2 +
+          lossControl * 0.1 +
+          placementStability * 0.05
+      )
+    )
+
+  def calculateUkeireExpectation(stats: PlayerRoundStats): Double =
+    if stats.shantenPath.isEmpty then 0.0
+    else
+      val shantenPotential = stats.shantenPath.map(shanten => 14.0 - shanten.toDouble)
+      val transitionBonuses = stats.shantenPath
+        .zip(stats.shantenPath.drop(1))
+        .map { case (previous, current) =>
+          if current < previous then 1.5
+          else if current == previous then 0.15
+          else -0.85
+        }
+      val actionBonus =
+        stats.callCount.toDouble * 0.25 +
+          (if stats.riichiDeclared then 0.65 else 0.0) +
+          (if stats.won then 0.3 else 0.0)
+      round2(
+        math.max(
+          0.0,
+          (shantenPotential.sum + transitionBonuses.sum + actionBonus) / stats.shantenPath.size.toDouble
+        )
+      )
+
+  def aggregateTrajectory(trajectories: Vector[Vector[Double]]): Vector[Double] =
+    val maxLength = trajectories.map(_.size).foldLeft(0)(math.max)
+
+    (0 until maxLength).toVector.flatMap { index =>
+      val samples = trajectories.flatMap(_.lift(index))
+      if samples.isEmpty then None else Some(round2(samples.sum / samples.size.toDouble))
+    }
+
+  def ratio(numerator: Int, denominator: Int): Double =
+    round2(rawRatio(numerator, denominator))
+
+  def rawRatio(numerator: Int, denominator: Int): Double =
+    if denominator <= 0 then 0.0 else numerator.toDouble / denominator.toDouble
+
+  def average(values: Vector[Double]): Double =
+    if values.isEmpty then 0.0 else round2(values.sum / values.size.toDouble)
+
+  def weightedAverage[T](
+      items: Vector[T],
+      sampleSize: T => Int,
+      selector: T => Double
+  ): Double =
+    val totalWeight = items.map(sampleSize).sum
+    if totalWeight <= 0 then 0.0
+    else round2(items.map(item => selector(item) * sampleSize(item)).sum / totalWeight.toDouble)
+
+  def clamp01(value: Double): Double =
+    math.max(0.0, math.min(1.0, value))
+
+  def round2(value: Double): Double =
+    BigDecimal(value).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble
+
+  private def placementConsistency(placements: Vector[Double]): Double =
+    if placements.isEmpty then 0.0
+    else
+      val mean = placements.sum / placements.size.toDouble
+      val variance = placements.map(value => math.pow(value - mean, 2)).sum / placements.size.toDouble
+      clamp01(1.0 - math.sqrt(variance) / 1.5)
+
+  private def isOpenCall(actionType: PaifuActionType): Boolean =
+    actionType match
+      case PaifuActionType.Chi | PaifuActionType.Pon | PaifuActionType.Kan | PaifuActionType.OpenKan =>
+        true
+      case _ =>
+        false
+
+final class DashboardProjectionSubscriber(
+    matchRecordRepository: MatchRecordRepository,
+    paifuRepository: PaifuRepository,
+    playerRepository: PlayerRepository,
+    clubRepository: ClubRepository,
+    dashboardRepository: DashboardRepository
+) extends DomainEventSubscriber:
+  import AdvancedStatsSupport.*
 
   override def handle(event: DomainEvent): Unit =
     event match
@@ -2991,46 +3114,21 @@ final class DashboardProjectionSubscriber(
 
   private def buildPlayerDashboard(playerId: PlayerId, at: Instant): Dashboard =
     val records = matchRecordRepository.findByPlayer(playerId)
-    val paifus = paifuRepository.findByPlayer(playerId)
-    val rounds = paifus.flatMap(_.rounds)
+    val rounds = paifuRepository.findByPlayer(playerId).flatMap(_.rounds)
     val playerResults = records.flatMap(_.seatResults.find(_.playerId == playerId))
+    val roundStats = rounds.map(round => buildRoundStats(round, playerId))
     val placements = playerResults.map(_.placement.toDouble)
     val topFinishes = playerResults.count(_.placement == 1)
-    val roundStats = rounds.map(round => buildRoundStats(round, playerId))
-    val winPointSamples = roundStats.filter(_.won).map(_.resultDelta.toDouble)
-    val riichiCount = roundStats.count(_.riichiDeclared)
-    val dealInCount = roundStats.count(_.dealtIn)
-    val winCount = roundStats.count(_.won)
-    val pressureRounds = roundStats.count(_.pressureResponseCount > 0)
-    val pressureHoldRounds = roundStats.count(stats => stats.pressureResponseCount > 0 && !stats.postRiichiDealIn)
-    val averageLossSeverity = average(roundStats.filter(_.resultDelta < 0).map(stats => math.abs(stats.resultDelta).toDouble))
-    val placementStability = placementConsistency(placements)
-    val lossControl = 1.0 - math.min(1.0, averageLossSeverity / 12000.0)
-    val safeRoundRate = rawRatio(roundStats.count(_.resultDelta >= 0), rounds.size)
-    val pressureHoldRate = rawRatio(pressureHoldRounds, pressureRounds)
-    val defenseStability =
-      round2(
-        clamp01(
-          safeRoundRate * 0.25 +
-            (1.0 - rawRatio(dealInCount, rounds.size)) * 0.4 +
-            pressureHoldRate * 0.2 +
-            lossControl * 0.1 +
-            placementStability * 0.05
-        )
-      )
 
     Dashboard(
       owner = DashboardOwner.Player(playerId),
       sampleSize = rounds.size,
-      dealInRate = ratio(dealInCount, rounds.size),
-      winRate = ratio(winCount, rounds.size),
-      averageWinPoints = average(winPointSamples),
-      riichiRate = ratio(riichiCount, rounds.size),
+      dealInRate = ratio(roundStats.count(_.dealtIn), rounds.size),
+      winRate = ratio(roundStats.count(_.won), rounds.size),
+      averageWinPoints = average(roundStats.filter(_.won).map(_.resultDelta.toDouble)),
+      riichiRate = ratio(roundStats.count(_.riichiDeclared), rounds.size),
       averagePlacement = average(placements),
       topFinishRate = ratio(topFinishes, records.size),
-      defenseStability = defenseStability,
-      ukeireExpectation = average(roundStats.map(ukeireProxy)),
-      shantenTrajectory = averageTrajectory(roundStats.map(_.shantenPath.map(_.toDouble))),
       lastUpdatedAt = at
     )
 
@@ -3044,114 +3142,86 @@ final class DashboardProjectionSubscriber(
       Dashboard(
         owner = DashboardOwner.Club(club.id),
         sampleSize = memberDashboards.map(_.sampleSize).sum,
-        dealInRate = weightedAverage(memberDashboards, _.dealInRate),
-        winRate = weightedAverage(memberDashboards, _.winRate),
-        averageWinPoints = weightedAverage(memberDashboards, _.averageWinPoints),
-        riichiRate = weightedAverage(memberDashboards, _.riichiRate),
-        averagePlacement = weightedAverage(memberDashboards, _.averagePlacement),
-        topFinishRate = weightedAverage(memberDashboards, _.topFinishRate),
-        defenseStability = weightedAverage(memberDashboards, _.defenseStability),
-        ukeireExpectation = weightedAverage(memberDashboards, _.ukeireExpectation),
-        shantenTrajectory = averageTrajectory(memberDashboards.map(_.shantenTrajectory)),
+        dealInRate = weightedAverage(memberDashboards, _.sampleSize, _.dealInRate),
+        winRate = weightedAverage(memberDashboards, _.sampleSize, _.winRate),
+        averageWinPoints = weightedAverage(memberDashboards, _.sampleSize, _.averageWinPoints),
+        riichiRate = weightedAverage(memberDashboards, _.sampleSize, _.riichiRate),
+        averagePlacement = weightedAverage(memberDashboards, _.sampleSize, _.averagePlacement),
+        topFinishRate = weightedAverage(memberDashboards, _.sampleSize, _.topFinishRate),
         lastUpdatedAt = at
       )
 
-  private def ratio(numerator: Int, denominator: Int): Double =
-    round2(rawRatio(numerator, denominator))
+final class AdvancedStatsProjectionSubscriber(
+    paifuRepository: PaifuRepository,
+    matchRecordRepository: MatchRecordRepository,
+    playerRepository: PlayerRepository,
+    clubRepository: ClubRepository,
+    advancedStatsBoardRepository: AdvancedStatsBoardRepository
+) extends DomainEventSubscriber:
+  import AdvancedStatsSupport.*
 
-  private def rawRatio(numerator: Int, denominator: Int): Double =
-    if denominator <= 0 then 0.0
-    else numerator.toDouble / denominator.toDouble
+  override def handle(event: DomainEvent): Unit =
+    event match
+      case MatchRecordArchived(_, _, _, matchRecord, _, occurredAt) =>
+        val impactedPlayers = matchRecord.playerIds.distinct
 
-  private def average(values: Vector[Double]): Double =
-    if values.isEmpty then 0.0
-    else round2(values.sum / values.size.toDouble)
+        impactedPlayers.foreach { playerId =>
+          advancedStatsBoardRepository.save(buildPlayerBoard(playerId, occurredAt))
+        }
 
-  private def buildRoundStats(round: KyokuRecord, playerId: PlayerId): PlayerRoundStats =
-    val playerActions = round.actions.filter(_.actor.contains(playerId))
-    val shantenPath = playerActions.flatMap(_.shantenAfterAction)
-    val riichiDeclared = playerActions.exists(_.actionType == PaifuActionType.Riichi)
-    val callCount = playerActions.count(action => isOpenCall(action.actionType))
-    val externalRiichiSequence = round.actions.collectFirst {
-      case action
-          if action.actionType == PaifuActionType.Riichi && action.actor.exists(_ != playerId) =>
-        action.sequenceNo
-    }
-    val pressureResponses =
-      externalRiichiSequence.toVector.flatMap { sequenceNo =>
-        playerActions.filter(_.sequenceNo > sequenceNo)
-      }
+        impactedPlayers
+          .flatMap(playerId => playerRepository.findById(playerId).toVector.flatMap(_.boundClubIds))
+          .distinct
+          .foreach { clubId =>
+            clubRepository.findById(clubId).foreach { club =>
+              advancedStatsBoardRepository.save(buildClubBoard(club, occurredAt))
+            }
+          }
 
-    PlayerRoundStats(
-      shantenPath = shantenPath,
-      won = round.result.winner.contains(playerId),
-      dealtIn = round.result.outcome == HandOutcome.Ron && round.result.target.contains(playerId),
-      resultDelta = round.result.scoreChanges.find(_.playerId == playerId).map(_.delta).getOrElse(0),
-      riichiDeclared = riichiDeclared,
-      callCount = callCount,
-      pressureResponseCount = pressureResponses.size,
-      postRiichiDealIn =
-        externalRiichiSequence.nonEmpty &&
-          round.result.outcome == HandOutcome.Ron &&
-          round.result.target.contains(playerId)
+      case _ =>
+        ()
+
+  private def buildPlayerBoard(playerId: PlayerId, at: Instant): AdvancedStatsBoard =
+    val records = matchRecordRepository.findByPlayer(playerId)
+    val rounds = paifuRepository.findByPlayer(playerId).flatMap(_.rounds)
+    val roundStats = rounds.map(round => buildRoundStats(round, playerId))
+    val placements = records
+      .flatMap(_.seatResults.find(_.playerId == playerId))
+      .map(_.placement.toDouble)
+    val riichiRounds = roundStats.count(_.riichiDeclared)
+    val pressureRounds = roundStats.count(_.pressureResponseCount > 0)
+
+    AdvancedStatsBoard(
+      owner = DashboardOwner.Player(playerId),
+      sampleSize = rounds.size,
+      defenseStability = calculateDefenseStability(roundStats, placements),
+      ukeireExpectation = average(roundStats.map(calculateUkeireExpectation)),
+      averageShantenImprovement = average(roundStats.map(_.shantenImprovement)),
+      callAggressionRate = ratio(roundStats.count(_.callCount > 0), rounds.size),
+      riichiConversionRate = ratio(roundStats.count(stats => stats.riichiDeclared && stats.won), riichiRounds),
+      pressureDefenseRate = ratio(roundStats.count(stats => stats.pressureResponseCount > 0 && !stats.postRiichiDealIn), pressureRounds),
+      postRiichiFoldRate = ratio(roundStats.count(_.foldLikeResponse), pressureRounds),
+      shantenTrajectory = aggregateTrajectory(roundStats.map(_.shantenPath.map(_.toDouble))),
+      lastUpdatedAt = at
     )
 
-  private def ukeireProxy(stats: PlayerRoundStats): Double =
-    if stats.shantenPath.isEmpty then 0.0
-    else
-      val shantenPotential = stats.shantenPath.map(shanten => 14.0 - shanten.toDouble)
-      val transitionBonuses = stats.shantenPath
-        .zip(stats.shantenPath.drop(1))
-        .map { case (previous, current) =>
-          if current < previous then 1.25
-          else if current == previous then 0.2
-          else -0.75
-        }
-      val actionBonus = stats.callCount.toDouble * 0.25 + (if stats.riichiDeclared then 0.5 else 0.0)
-      round2(
-        math.max(
-          0.0,
-          (shantenPotential.sum + transitionBonuses.sum + actionBonus) / stats.shantenPath.size.toDouble
-        )
-      )
-
-  private def placementConsistency(placements: Vector[Double]): Double =
-    if placements.isEmpty then 0.0
-    else
-      val mean = placements.sum / placements.size.toDouble
-      val variance = placements.map(value => math.pow(value - mean, 2)).sum / placements.size.toDouble
-      clamp01(1.0 - math.sqrt(variance) / 1.5)
-
-  private def isOpenCall(actionType: PaifuActionType): Boolean =
-    actionType match
-      case PaifuActionType.Chi | PaifuActionType.Pon | PaifuActionType.Kan | PaifuActionType.OpenKan =>
-        true
-      case _ =>
-        false
-
-  private def clamp01(value: Double): Double =
-    math.max(0.0, math.min(1.0, value))
-
-  private def weightedAverage(
-      dashboards: Vector[Dashboard],
-      selector: Dashboard => Double
-  ): Double =
-    val totalWeight = dashboards.map(_.sampleSize).sum
-    if totalWeight <= 0 then 0.0
-    else
-      round2(
-        dashboards.map(dashboard => selector(dashboard) * dashboard.sampleSize).sum /
-          totalWeight.toDouble
-      )
-
-  private def averageTrajectory(trajectories: Vector[Vector[Double]]): Vector[Double] =
-    val maxLength = trajectories.map(_.size).foldLeft(0)(math.max)
-
-    (0 until maxLength).toVector.flatMap { index =>
-      val samples = trajectories.flatMap(_.lift(index))
-      if samples.isEmpty then None
-      else Some(round2(samples.sum / samples.size.toDouble))
+  private def buildClubBoard(club: Club, at: Instant): AdvancedStatsBoard =
+    val memberBoards = club.members.flatMap { playerId =>
+      advancedStatsBoardRepository.findByOwner(DashboardOwner.Player(playerId))
     }
 
-  private def round2(value: Double): Double =
-    BigDecimal(value).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble
+    if memberBoards.isEmpty then AdvancedStatsBoard.empty(DashboardOwner.Club(club.id), at)
+    else
+      AdvancedStatsBoard(
+        owner = DashboardOwner.Club(club.id),
+        sampleSize = memberBoards.map(_.sampleSize).sum,
+        defenseStability = weightedAverage(memberBoards, _.sampleSize, _.defenseStability),
+        ukeireExpectation = weightedAverage(memberBoards, _.sampleSize, _.ukeireExpectation),
+        averageShantenImprovement = weightedAverage(memberBoards, _.sampleSize, _.averageShantenImprovement),
+        callAggressionRate = weightedAverage(memberBoards, _.sampleSize, _.callAggressionRate),
+        riichiConversionRate = weightedAverage(memberBoards, _.sampleSize, _.riichiConversionRate),
+        pressureDefenseRate = weightedAverage(memberBoards, _.sampleSize, _.pressureDefenseRate),
+        postRiichiFoldRate = weightedAverage(memberBoards, _.sampleSize, _.postRiichiFoldRate),
+        shantenTrajectory = aggregateTrajectory(memberBoards.map(_.shantenTrajectory)),
+        lastUpdatedAt = at
+      )

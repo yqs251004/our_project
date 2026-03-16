@@ -399,12 +399,24 @@ curl "http://localhost:8080/audits?operatorId=player-super-admin&aggregateType=d
 
 ## 7. Dashboard reads now require `operatorId`
 
+The lightweight dashboard endpoints now return summary KPIs only. Advanced metrics such as defense stability, ukeire expectation, shanten progression, and pressure-response rates have been split into dedicated advanced-stats boards.
+
 ```bash
 curl "http://localhost:8080/dashboards/players/player-123?operatorId=player-123"
 ```
 
 ```bash
 curl "http://localhost:8080/dashboards/clubs/club-123?operatorId=player-club-admin"
+```
+
+Read the dedicated advanced-stats boards:
+
+```bash
+curl "http://localhost:8080/advanced-stats/players/player-123?operatorId=player-123"
+```
+
+```bash
+curl "http://localhost:8080/advanced-stats/clubs/club-123?operatorId=player-club-admin"
 ```
 
 ## 8. Upload a paifu for a completed table

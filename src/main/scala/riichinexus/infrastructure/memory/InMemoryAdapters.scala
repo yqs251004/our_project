@@ -153,6 +153,24 @@ final class InMemoryDashboardRepository extends DashboardRepository:
       case DashboardOwner.Player(playerId) => s"player:${playerId.value}"
       case DashboardOwner.Club(clubId)     => s"club:${clubId.value}"
 
+final class InMemoryAdvancedStatsBoardRepository extends AdvancedStatsBoardRepository:
+  private val state = mutable.LinkedHashMap.empty[String, AdvancedStatsBoard]
+
+  override def save(board: AdvancedStatsBoard): AdvancedStatsBoard =
+    state.update(ownerKey(board.owner), board)
+    board
+
+  override def findByOwner(owner: DashboardOwner): Option[AdvancedStatsBoard] =
+    state.get(ownerKey(owner))
+
+  override def findAll(): Vector[AdvancedStatsBoard] =
+    state.values.toVector
+
+  private def ownerKey(owner: DashboardOwner): String =
+    owner match
+      case DashboardOwner.Player(playerId) => s"player:${playerId.value}"
+      case DashboardOwner.Club(clubId)     => s"club:${clubId.value}"
+
 final class InMemoryGlobalDictionaryRepository extends GlobalDictionaryRepository:
   private val state = mutable.LinkedHashMap.empty[String, GlobalDictionaryEntry]
 

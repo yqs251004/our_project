@@ -130,11 +130,15 @@ class RiichiNexusSuite extends FunSuite:
     val updatedBob = app.playerRepository.findById(bob.id).get
     val aliceDashboard = app.dashboardRepository.findByOwner(DashboardOwner.Player(alice.id))
     val bobDashboard = app.dashboardRepository.findByOwner(DashboardOwner.Player(bob.id))
+    val aliceAdvancedStats = app.advancedStatsBoardRepository.findByOwner(DashboardOwner.Player(alice.id))
+    val bobAdvancedStats = app.advancedStatsBoardRepository.findByOwner(DashboardOwner.Player(bob.id))
 
     assertNotEquals(updatedAlice.elo, alice.elo)
     assertNotEquals(updatedBob.elo, bob.elo)
     assert(aliceDashboard.nonEmpty)
     assert(bobDashboard.nonEmpty)
+    assert(aliceAdvancedStats.nonEmpty)
+    assert(bobAdvancedStats.nonEmpty)
     assertEquals(app.tableRepository.findById(table.id).get.status, TableStatus.Finished)
   }
 

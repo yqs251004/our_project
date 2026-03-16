@@ -306,6 +306,73 @@ class ApiServerSuite extends FunSuite:
     }
   }
 
+  test("advanced stats endpoints expose dedicated boards with dashboard RBAC") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-15T11:45:00Z")
+
+    val owner = app.playerService.registerPlayer("adv-owner", "AdvOwner", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1800)
+    val member = app.playerService.registerPlayer("adv-member", "AdvMember", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1520)
+    val intruder = app.playerService.registerPlayer("adv-intruder", "AdvIntruder", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1490)
+    val extraA = app.playerService.registerPlayer("adv-extra-a", "AdvExtraA", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1510)
+    val extraB = app.playerService.registerPlayer("adv-extra-b", "AdvExtraB", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1500)
+
+    val club = app.clubService.createClub("Advanced Stats Club", owner.id, now, owner.asPrincipal)
+    app.clubService.addMember(club.id, member.id, principalFor(app, owner.id))
+    app.clubService.addMember(club.id, extraA.id, principalFor(app, owner.id))
+    app.clubService.addMember(club.id, extraB.id, principalFor(app, owner.id))
+
+    val stage = TournamentStage(IdGenerator.stageId(), "Advanced Stats Stage", StageFormat.Swiss, 1, 1)
+    val tournament = app.tournamentService.createTournament(
+      "Advanced Stats Cup",
+      "QA",
+      now,
+      now.plusSeconds(7200),
+      Vector(stage)
+    )
+    Vector(owner, member, extraA, extraB).foreach(player => app.tournamentService.registerPlayer(tournament.id, player.id))
+    app.tournamentService.publishTournament(tournament.id)
+
+    val table = app.tournamentService.scheduleStageTables(tournament.id, stage.id).head
+    app.tableService.startTable(table.id, now.plusSeconds(60))
+    app.tableService.recordCompletedTable(
+      table.id,
+      demoPaifuForResult(
+        table,
+        tournament.id,
+        stage.id,
+        now.plusSeconds(120),
+        winner = table.seats.head.playerId,
+        target = table.seats(1).playerId
+      )
+    )
+
+    withServer(app) { baseUrl =>
+      val ownPlayerStats = get(
+        s"$baseUrl/advanced-stats/players/${owner.id.value}?operatorId=${owner.id.value}"
+      )
+      assertEquals(ownPlayerStats.statusCode(), 200)
+      val playerBoard = read[AdvancedStatsBoard](ownPlayerStats.body())
+      assert(playerBoard.sampleSize > 0)
+
+      val ownClubStats = get(
+        s"$baseUrl/advanced-stats/clubs/${club.id.value}?operatorId=${owner.id.value}"
+      )
+      assertEquals(ownClubStats.statusCode(), 200)
+      val clubBoard = read[AdvancedStatsBoard](ownClubStats.body())
+      assert(clubBoard.sampleSize > 0)
+
+      val forbiddenPlayerStats = get(
+        s"$baseUrl/advanced-stats/players/${owner.id.value}?operatorId=${intruder.id.value}"
+      )
+      assertEquals(forbiddenPlayerStats.statusCode(), 403)
+
+      val forbiddenClubStats = get(
+        s"$baseUrl/advanced-stats/clubs/${club.id.value}?operatorId=${member.id.value}"
+      )
+      assertEquals(forbiddenClubStats.statusCode(), 403)
+    }
+  }
+
   test("dictionary key and audit aggregate endpoints return targeted admin data") {
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-15T12:00:00Z")

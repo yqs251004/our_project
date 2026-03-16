@@ -23,6 +23,7 @@ final case class ApplicationContext(
     paifuRepository: PaifuRepository,
     appealTicketRepository: AppealTicketRepository,
     dashboardRepository: DashboardRepository,
+    advancedStatsBoardRepository: AdvancedStatsBoardRepository,
     globalDictionaryRepository: GlobalDictionaryRepository,
     tournamentSettlementRepository: TournamentSettlementRepository,
     auditEventRepository: AuditEventRepository,
@@ -50,6 +51,7 @@ object ApplicationContext:
     val paifuRepository = InMemoryPaifuRepository()
     val appealTicketRepository = InMemoryAppealTicketRepository()
     val dashboardRepository = InMemoryDashboardRepository()
+    val advancedStatsBoardRepository = InMemoryAdvancedStatsBoardRepository()
     val globalDictionaryRepository = InMemoryGlobalDictionaryRepository()
     val tournamentSettlementRepository = InMemoryTournamentSettlementRepository()
     val auditEventRepository = InMemoryAuditEventRepository()
@@ -83,6 +85,15 @@ object ApplicationContext:
         dashboardRepository
       )
     )
+    eventBus.register(
+      AdvancedStatsProjectionSubscriber(
+        paifuRepository,
+        matchRecordRepository,
+        playerRepository,
+        clubRepository,
+        advancedStatsBoardRepository
+      )
+    )
 
     ApplicationContext(
       playerService = PlayerApplicationService(
@@ -161,6 +172,7 @@ object ApplicationContext:
       paifuRepository = paifuRepository,
       appealTicketRepository = appealTicketRepository,
       dashboardRepository = dashboardRepository,
+      advancedStatsBoardRepository = advancedStatsBoardRepository,
       globalDictionaryRepository = globalDictionaryRepository,
       tournamentSettlementRepository = tournamentSettlementRepository,
       auditEventRepository = auditEventRepository,
@@ -184,6 +196,7 @@ object ApplicationContext:
     val paifuRepository = PostgresPaifuRepository(connectionFactory)
     val appealTicketRepository = PostgresAppealTicketRepository(connectionFactory)
     val dashboardRepository = PostgresDashboardRepository(connectionFactory)
+    val advancedStatsBoardRepository = PostgresAdvancedStatsBoardRepository(connectionFactory)
     val globalDictionaryRepository = PostgresGlobalDictionaryRepository(connectionFactory)
     val tournamentSettlementRepository = PostgresTournamentSettlementRepository(connectionFactory)
     val auditEventRepository = PostgresAuditEventRepository(connectionFactory)
@@ -217,6 +230,15 @@ object ApplicationContext:
         dashboardRepository
       )
     )
+    eventBus.register(
+      AdvancedStatsProjectionSubscriber(
+        paifuRepository,
+        matchRecordRepository,
+        playerRepository,
+        clubRepository,
+        advancedStatsBoardRepository
+      )
+    )
 
     ApplicationContext(
       playerService = PlayerApplicationService(
@@ -295,6 +317,7 @@ object ApplicationContext:
       paifuRepository = paifuRepository,
       appealTicketRepository = appealTicketRepository,
       dashboardRepository = dashboardRepository,
+      advancedStatsBoardRepository = advancedStatsBoardRepository,
       globalDictionaryRepository = globalDictionaryRepository,
       tournamentSettlementRepository = tournamentSettlementRepository,
       auditEventRepository = auditEventRepository,

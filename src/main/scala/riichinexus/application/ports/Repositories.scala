@@ -77,6 +77,11 @@ trait DashboardRepository:
   def findByOwner(owner: DashboardOwner): Option[Dashboard]
   def findAll(): Vector[Dashboard]
 
+trait AdvancedStatsBoardRepository:
+  def save(board: AdvancedStatsBoard): AdvancedStatsBoard
+  def findByOwner(owner: DashboardOwner): Option[AdvancedStatsBoard]
+  def findAll(): Vector[AdvancedStatsBoard]
+
 trait GlobalDictionaryRepository:
   def save(entry: GlobalDictionaryEntry): GlobalDictionaryEntry
   def findByKey(key: String): Option[GlobalDictionaryEntry]
