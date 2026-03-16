@@ -492,6 +492,26 @@ final case class GrantSuperAdminRequest(
   def operator: PlayerId =
     PlayerId(operatorId)
 
+final case class RecomputeAdvancedStatsRequest(
+    operatorId: String,
+    ownerType: Option[String] = None,
+    ownerId: Option[String] = None,
+    reason: Option[String] = None
+):
+  require(ownerType.nonEmpty == ownerId.nonEmpty, "ownerType and ownerId must be provided together")
+
+  def operator: PlayerId =
+    PlayerId(operatorId)
+
+final case class ProcessAdvancedStatsTasksRequest(
+    operatorId: String,
+    limit: Int = 50
+):
+  require(limit > 0, "Advanced stats task processing limit must be positive")
+
+  def operator: PlayerId =
+    PlayerId(operatorId)
+
 object ApiModels:
   given ReadWriter[ApiError] = macroRW
   given ReadWriter[ApiMessage] = macroRW
@@ -538,3 +558,5 @@ object ApiModels:
   given ReadWriter[BanPlayerRequest] = macroRW
   given ReadWriter[DissolveClubRequest] = macroRW
   given ReadWriter[GrantSuperAdminRequest] = macroRW
+  given ReadWriter[RecomputeAdvancedStatsRequest] = macroRW
+  given ReadWriter[ProcessAdvancedStatsTasksRequest] = macroRW

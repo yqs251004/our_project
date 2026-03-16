@@ -958,6 +958,13 @@ private final class ApiHandler(
           clubId = Some(targetClubId)
         )
         sendOption(exchange, app.advancedStatsBoardRepository.findByOwner(DashboardOwner.Club(targetClubId)))
+      case ("GET", Vector("admin", "advanced-stats", "tasks")) =>
+        val operator = queryPrincipal(exchange)
+        app.authorizationService.requirePermission(operator, Permission.ManageGlobalDictionary)
+        val statusFilter = queryParam(exchange, "status").map(AdvancedStatsRecomputeTaskStatus.valueOf)
+        val tasks = app.advancedStatsRecomputeTaskRepository.findAll()
+          .filter(task => statusFilter.forall(_ == task.status))
+        sendPagedJson(exchange, tasks, activeFilters(exchange, "status"))
 
       case ("GET", Vector("dictionary")) =>
         val prefixFilter = queryParam(exchange, "prefix").filter(_.nonEmpty)
@@ -1008,6 +1015,46 @@ private final class ApiHandler(
             playerId = PlayerId(playerId),
             actor = principal(request.operator)
           )
+        )
+      case ("POST", Vector("admin", "advanced-stats", "recompute")) =>
+        val request = readJsonBody[RecomputeAdvancedStatsRequest](exchange)
+        val operator = principal(request.operator)
+        app.authorizationService.requirePermission(operator, Permission.ManageGlobalDictionary)
+        val requestedAt = Instant.now()
+        val tasks =
+          (request.ownerType, request.ownerId) match
+            case (Some("player"), Some(ownerId)) =>
+              Vector(
+                app.advancedStatsPipelineService.enqueueOwnerRecompute(
+                  owner = DashboardOwner.Player(PlayerId(ownerId)),
+                  reason = request.reason.getOrElse("manual-targeted-recompute"),
+                  requestedAt = requestedAt
+                )
+              )
+            case (Some("club"), Some(ownerId)) =>
+              Vector(
+                app.advancedStatsPipelineService.enqueueOwnerRecompute(
+                  owner = DashboardOwner.Club(ClubId(ownerId)),
+                  reason = request.reason.getOrElse("manual-targeted-recompute"),
+                  requestedAt = requestedAt
+                )
+              )
+            case (Some(other), Some(_)) =>
+              throw IllegalArgumentException(s"Unsupported advanced stats ownerType: $other")
+            case _ =>
+              app.advancedStatsPipelineService.enqueueFullRecompute(
+                requestedAt = requestedAt,
+                reason = request.reason.getOrElse("manual-full-recompute")
+              )
+        sendJson(exchange, 202, tasks)
+      case ("POST", Vector("admin", "advanced-stats", "process")) =>
+        val request = readJsonBody[ProcessAdvancedStatsTasksRequest](exchange)
+        val operator = principal(request.operator)
+        app.authorizationService.requirePermission(operator, Permission.ManageGlobalDictionary)
+        sendJson(
+          exchange,
+          200,
+          app.advancedStatsPipelineService.processPending(limit = request.limit, processedAt = Instant.now())
         )
 
       case _ =>

@@ -311,6 +311,8 @@ class ApiServerSuite extends FunSuite:
     val now = Instant.parse("2026-03-15T11:45:00Z")
 
     val owner = app.playerService.registerPlayer("adv-owner", "AdvOwner", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1800)
+    val root = app.playerService.registerPlayer("adv-root", "AdvRoot", RankSnapshot(RankPlatform.Custom, "S"), now, 2100)
+    val rootAdmin = app.playerRepository.save(root.grantRole(RoleGrant.superAdmin(now)))
     val member = app.playerService.registerPlayer("adv-member", "AdvMember", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1520)
     val intruder = app.playerService.registerPlayer("adv-intruder", "AdvIntruder", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1490)
     val extraA = app.playerService.registerPlayer("adv-extra-a", "AdvExtraA", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1510)
@@ -347,6 +349,19 @@ class ApiServerSuite extends FunSuite:
     )
 
     withServer(app) { baseUrl =>
+      val pendingTasks = get(
+        s"$baseUrl/admin/advanced-stats/tasks?operatorId=${rootAdmin.id.value}&status=Pending"
+      )
+      assertEquals(pendingTasks.statusCode(), 200)
+      assert(readPage[AdvancedStatsRecomputeTask](pendingTasks.body()).total > 0)
+
+      val processTasks = postJson(
+        s"$baseUrl/admin/advanced-stats/process",
+        write(ProcessAdvancedStatsTasksRequest(rootAdmin.id.value, 20))
+      )
+      assertEquals(processTasks.statusCode(), 200)
+      assert(read[Vector[AdvancedStatsRecomputeTask]](processTasks.body()).nonEmpty)
+
       val ownPlayerStats = get(
         s"$baseUrl/advanced-stats/players/${owner.id.value}?operatorId=${owner.id.value}"
       )

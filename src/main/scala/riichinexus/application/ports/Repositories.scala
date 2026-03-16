@@ -82,6 +82,16 @@ trait AdvancedStatsBoardRepository:
   def findByOwner(owner: DashboardOwner): Option[AdvancedStatsBoard]
   def findAll(): Vector[AdvancedStatsBoard]
 
+trait AdvancedStatsRecomputeTaskRepository:
+  def save(task: AdvancedStatsRecomputeTask): AdvancedStatsRecomputeTask
+  def findById(id: AdvancedStatsRecomputeTaskId): Option[AdvancedStatsRecomputeTask]
+  def findAll(): Vector[AdvancedStatsRecomputeTask]
+  def findPending(limit: Int): Vector[AdvancedStatsRecomputeTask]
+  def findActiveByOwner(
+      owner: DashboardOwner,
+      calculatorVersion: Int
+  ): Option[AdvancedStatsRecomputeTask]
+
 trait GlobalDictionaryRepository:
   def save(entry: GlobalDictionaryEntry): GlobalDictionaryEntry
   def findByKey(key: String): Option[GlobalDictionaryEntry]

@@ -409,7 +409,7 @@ curl "http://localhost:8080/dashboards/players/player-123?operatorId=player-123"
 curl "http://localhost:8080/dashboards/clubs/club-123?operatorId=player-club-admin"
 ```
 
-Read the dedicated advanced-stats boards:
+Read the dedicated advanced-stats boards. These responses now include calculation metadata such as `calculatorVersion`, `strictRoundSampleSize`, `exactUkeireSampleRate`, and `exactDefenseSampleRate` so clients can distinguish exact tile-analytic samples from heuristic fallback samples.
 
 ```bash
 curl "http://localhost:8080/advanced-stats/players/player-123?operatorId=player-123"
@@ -417,6 +417,32 @@ curl "http://localhost:8080/advanced-stats/players/player-123?operatorId=player-
 
 ```bash
 curl "http://localhost:8080/advanced-stats/clubs/club-123?operatorId=player-club-admin"
+```
+
+List pending recompute tasks as a super admin:
+
+```bash
+curl "http://localhost:8080/admin/advanced-stats/tasks?operatorId=player-super-admin&status=Pending"
+```
+
+Queue a targeted recompute:
+
+```bash
+curl -X POST http://localhost:8080/admin/advanced-stats/recompute   -H "Content-Type: application/json"   -d '{
+    "operatorId": "player-super-admin",
+    "ownerType": "player",
+    "ownerId": "player-123",
+    "reason": "calculator-v2-backfill"
+  }'
+```
+
+Process the queued recompute worker batch:
+
+```bash
+curl -X POST http://localhost:8080/admin/advanced-stats/process   -H "Content-Type: application/json"   -d '{
+    "operatorId": "player-super-admin",
+    "limit": 50
+  }'
 ```
 
 ## 8. Upload a paifu for a completed table

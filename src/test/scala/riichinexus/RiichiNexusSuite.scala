@@ -125,6 +125,8 @@ class RiichiNexusSuite extends FunSuite:
 
     val paifu = demoPaifu(table, tournament.id, stage.id, now.plusSeconds(120))
     app.tableService.recordCompletedTable(table.id, paifu)
+    val pendingTasks = app.advancedStatsRecomputeTaskRepository.findPending(20)
+    app.advancedStatsPipelineService.processPending(limit = 20, processedAt = now.plusSeconds(180))
 
     val updatedAlice = app.playerRepository.findById(alice.id).get
     val updatedBob = app.playerRepository.findById(bob.id).get
@@ -135,11 +137,56 @@ class RiichiNexusSuite extends FunSuite:
 
     assertNotEquals(updatedAlice.elo, alice.elo)
     assertNotEquals(updatedBob.elo, bob.elo)
+    assert(pendingTasks.exists(_.owner == DashboardOwner.Player(alice.id)))
     assert(aliceDashboard.nonEmpty)
     assert(bobDashboard.nonEmpty)
     assert(aliceAdvancedStats.nonEmpty)
     assert(bobAdvancedStats.nonEmpty)
     assertEquals(app.tableRepository.findById(table.id).get.status, TableStatus.Finished)
+  }
+
+  test("advanced stats pipeline computes exact sample metadata from detailed paifu") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-16T03:00:00Z")
+
+    val players = Vector(
+      app.playerService.registerPlayer("exact-a", "ExactA", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1700),
+      app.playerService.registerPlayer("exact-b", "ExactB", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1650),
+      app.playerService.registerPlayer("exact-c", "ExactC", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600),
+      app.playerService.registerPlayer("exact-d", "ExactD", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1550)
+    )
+
+    val stage = TournamentStage(IdGenerator.stageId(), "Exact Stage", StageFormat.Swiss, 1, 1)
+    val tournament = app.tournamentService.createTournament(
+      "Exact Analytics Cup",
+      "QA",
+      now,
+      now.plusSeconds(3600),
+      Vector(stage)
+    )
+    players.foreach(player => app.tournamentService.registerPlayer(tournament.id, player.id))
+    app.tournamentService.publishTournament(tournament.id)
+
+    val table = app.tournamentService.scheduleStageTables(tournament.id, stage.id).head
+    val orderedSeats = table.seats.sortBy(_.seat.ordinal)
+    val targetPlayer = orderedSeats.head.playerId
+
+    app.tableService.startTable(table.id, now.plusSeconds(30))
+    app.tableService.recordCompletedTable(
+      table.id,
+      detailedAnalyticsPaifu(table, tournament.id, stage.id, now.plusSeconds(60))
+    )
+
+    val processed = app.advancedStatsPipelineService.processPending(limit = 20, processedAt = now.plusSeconds(90))
+    val board = app.advancedStatsBoardRepository.findByOwner(DashboardOwner.Player(targetPlayer)).getOrElse(
+      fail("expected advanced stats board")
+    )
+
+    assert(processed.exists(task => task.owner == DashboardOwner.Player(targetPlayer)))
+    assertEquals(board.calculatorVersion, AdvancedStatsBoard.CurrentCalculatorVersion)
+    assert(board.strictRoundSampleSize > 0)
+    assert(board.exactUkeireSampleRate > 0.0)
+    assert(board.exactDefenseSampleRate > 0.0)
   }
 
   test("stage lineups preserve represented club for multi-club players") {
@@ -1489,6 +1536,71 @@ class RiichiNexusSuite extends FunSuite:
 
 private def principalFor(app: ApplicationContext, playerId: PlayerId): AccessPrincipal =
   app.playerRepository.findById(playerId).get.asPrincipal
+
+private def detailedAnalyticsPaifu(
+    table: Table,
+    tournamentId: TournamentId,
+    stageId: TournamentStageId,
+    recordedAt: Instant
+): Paifu =
+  val orderedSeats = table.seats.sortBy(_.seat.ordinal)
+  val east = orderedSeats(0).playerId
+  val south = orderedSeats(1).playerId
+  val west = orderedSeats(2).playerId
+  val north = orderedSeats(3).playerId
+  val seatByPlayer = table.seats.map(seat => seat.playerId -> seat.seat).toMap
+
+  Paifu(
+    id = IdGenerator.paifuId(),
+    metadata = PaifuMetadata(
+      recordedAt = recordedAt,
+      source = "detailed-analytics-fixture",
+      tableId = table.id,
+      tournamentId = tournamentId,
+      stageId = stageId,
+      seats = table.seats
+    ),
+    rounds = Vector(
+      KyokuRecord(
+        descriptor = KyokuDescriptor(SeatWind.East, 1, 0),
+        initialHands = Map(
+          east -> Vector("1m", "2m", "3m", "4m", "5m", "6m", "7m", "2p", "3p", "4p", "6p", "1z", "1z"),
+          south -> Vector("2m", "3m", "4m", "2p", "3p", "4p", "6p", "7p", "8p", "3s", "4s", "5s", "1z"),
+          west -> Vector("3m", "4m", "5m", "4p", "5p", "6p", "4s", "5s", "6s", "2z", "3z", "4z", "7z"),
+          north -> Vector("6m", "7m", "8m", "1p", "1p", "2p", "2p", "7s", "8s", "9s", "5z", "6z", "7z")
+        ),
+        actions = Vector(
+          PaifuAction(1, Some(east), PaifuActionType.Draw, Some("5p"), Some(1)),
+          PaifuAction(2, Some(east), PaifuActionType.Discard, Some("1z"), Some(1)),
+          PaifuAction(3, Some(south), PaifuActionType.Riichi, Some("1z"), Some(0), Some("closed riichi")),
+          PaifuAction(4, Some(east), PaifuActionType.Draw, Some("9s"), Some(1)),
+          PaifuAction(5, Some(east), PaifuActionType.Discard, Some("1z"), Some(1)),
+          PaifuAction(6, Some(south), PaifuActionType.Win, Some("5s"), Some(-1))
+        ),
+        result = AgariResult(
+          outcome = HandOutcome.Ron,
+          winner = Some(south),
+          target = Some(west),
+          han = Some(3),
+          fu = Some(40),
+          yaku = Vector(Yaku("Riichi", 1), Yaku("Pinfu", 1), Yaku("Tanyao", 1)),
+          points = 7700,
+          scoreChanges = Vector(
+            ScoreChange(east, 0),
+            ScoreChange(south, 7700),
+            ScoreChange(west, -7700),
+            ScoreChange(north, 0)
+          )
+        )
+      )
+    ),
+    finalStandings = Vector(
+      FinalStanding(south, seatByPlayer(south), 32700, 1),
+      FinalStanding(east, seatByPlayer(east), 25000, 2),
+      FinalStanding(north, seatByPlayer(north), 25000, 3),
+      FinalStanding(west, seatByPlayer(west), 17300, 4)
+    )
+  )
 
 private def demoPaifu(
     table: Table,

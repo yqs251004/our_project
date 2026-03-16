@@ -171,6 +171,37 @@ final class InMemoryAdvancedStatsBoardRepository extends AdvancedStatsBoardRepos
       case DashboardOwner.Player(playerId) => s"player:${playerId.value}"
       case DashboardOwner.Club(clubId)     => s"club:${clubId.value}"
 
+final class InMemoryAdvancedStatsRecomputeTaskRepository extends AdvancedStatsRecomputeTaskRepository:
+  private val state = mutable.LinkedHashMap.empty[AdvancedStatsRecomputeTaskId, AdvancedStatsRecomputeTask]
+
+  override def save(task: AdvancedStatsRecomputeTask): AdvancedStatsRecomputeTask =
+    state.update(task.id, task)
+    task
+
+  override def findById(id: AdvancedStatsRecomputeTaskId): Option[AdvancedStatsRecomputeTask] =
+    state.get(id)
+
+  override def findAll(): Vector[AdvancedStatsRecomputeTask] =
+    state.values.toVector.sortBy(_.requestedAt)
+
+  override def findPending(limit: Int): Vector[AdvancedStatsRecomputeTask] =
+    state.values
+      .filter(task => task.status == AdvancedStatsRecomputeTaskStatus.Pending)
+      .toVector
+      .sortBy(_.requestedAt)
+      .take(limit)
+
+  override def findActiveByOwner(
+      owner: DashboardOwner,
+      calculatorVersion: Int
+  ): Option[AdvancedStatsRecomputeTask] =
+    state.values.find { task =>
+      task.owner == owner &&
+      task.calculatorVersion == calculatorVersion &&
+      (task.status == AdvancedStatsRecomputeTaskStatus.Pending ||
+        task.status == AdvancedStatsRecomputeTaskStatus.Processing)
+    }
+
 final class InMemoryGlobalDictionaryRepository extends GlobalDictionaryRepository:
   private val state = mutable.LinkedHashMap.empty[String, GlobalDictionaryEntry]
 

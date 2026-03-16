@@ -43,10 +43,16 @@ final case class AdvancedStatsBoard(
     pressureDefenseRate: Double,
     postRiichiFoldRate: Double,
     shantenTrajectory: Vector[Double],
+    calculatorVersion: Int,
+    strictRoundSampleSize: Int,
+    exactUkeireSampleRate: Double,
+    exactDefenseSampleRate: Double,
     lastUpdatedAt: Instant
 ) derives CanEqual
 
 object AdvancedStatsBoard:
+  val CurrentCalculatorVersion = 2
+
   def empty(owner: DashboardOwner, at: Instant): AdvancedStatsBoard =
     AdvancedStatsBoard(
       owner = owner,
@@ -59,7 +65,74 @@ object AdvancedStatsBoard:
       pressureDefenseRate = 0.0,
       postRiichiFoldRate = 0.0,
       shantenTrajectory = Vector.empty,
+      calculatorVersion = CurrentCalculatorVersion,
+      strictRoundSampleSize = 0,
+      exactUkeireSampleRate = 0.0,
+      exactDefenseSampleRate = 0.0,
       lastUpdatedAt = at
+    )
+
+enum AdvancedStatsRecomputeTaskStatus derives CanEqual:
+  case Pending
+  case Processing
+  case Completed
+  case Failed
+
+final case class AdvancedStatsRecomputeTask(
+    id: AdvancedStatsRecomputeTaskId,
+    owner: DashboardOwner,
+    reason: String,
+    calculatorVersion: Int,
+    requestedAt: Instant,
+    status: AdvancedStatsRecomputeTaskStatus,
+    attempts: Int = 0,
+    lastError: Option[String] = None,
+    lastMatchRecordId: Option[MatchRecordId] = None,
+    startedAt: Option[Instant] = None,
+    completedAt: Option[Instant] = None
+) derives CanEqual:
+  require(reason.trim.nonEmpty, "Advanced stats recompute reason cannot be empty")
+  require(attempts >= 0, "Advanced stats recompute attempts cannot be negative")
+
+  def markProcessing(at: Instant): AdvancedStatsRecomputeTask =
+    copy(
+      status = AdvancedStatsRecomputeTaskStatus.Processing,
+      attempts = attempts + 1,
+      startedAt = Some(at),
+      completedAt = None,
+      lastError = None
+    )
+
+  def markCompleted(at: Instant): AdvancedStatsRecomputeTask =
+    copy(
+      status = AdvancedStatsRecomputeTaskStatus.Completed,
+      completedAt = Some(at),
+      lastError = None
+    )
+
+  def markFailed(error: String, at: Instant): AdvancedStatsRecomputeTask =
+    copy(
+      status = AdvancedStatsRecomputeTaskStatus.Failed,
+      completedAt = Some(at),
+      lastError = Some(error)
+    )
+
+object AdvancedStatsRecomputeTask:
+  def create(
+      owner: DashboardOwner,
+      reason: String,
+      requestedAt: Instant = Instant.now(),
+      calculatorVersion: Int = AdvancedStatsBoard.CurrentCalculatorVersion,
+      lastMatchRecordId: Option[MatchRecordId] = None
+  ): AdvancedStatsRecomputeTask =
+    AdvancedStatsRecomputeTask(
+      id = IdGenerator.advancedStatsRecomputeTaskId(),
+      owner = owner,
+      reason = reason,
+      calculatorVersion = calculatorVersion,
+      requestedAt = requestedAt,
+      status = AdvancedStatsRecomputeTaskStatus.Pending,
+      lastMatchRecordId = lastMatchRecordId
     )
 
 final case class PublicScheduleView(

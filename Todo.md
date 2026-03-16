@@ -20,18 +20,20 @@ Recently completed features such as guest sessions, club applications, club hono
     - route dictionary values into tournament rule evaluation and any future rank normalization service
     - decide whether unknown keys remain free-form metadata or must move to a typed registry
 
-- [ ] Deepen the new Advanced Stats Board into truly rules-faithful mahjong analytics.
+- [ ] Deepen the new Advanced Stats Board into fully rules-faithful mahjong analytics.
   - Current state:
     - `Dashboard` and `AdvancedStatsBoard` are now separated
-    - advanced metrics now flow through a dedicated projection and repository/API surface
-    - some metrics are still inferred from shanten/action traces because paifu currently does not expose enough raw hand-state detail for exact ukeire math
+    - advanced metrics now flow through a dedicated repository/API surface with versioned calculator metadata
+    - recomputation now goes through queued `AdvancedStatsRecomputeTask` records plus explicit worker-style processing endpoints
+    - exact tile-aware ukeire / riichi-pressure defense calculations now run when paifu detail is sufficient, and fall back to heuristics otherwise
   - Evidence:
-    - `src/main/scala/riichinexus/application/service/Services.scala` in `AdvancedStatsProjectionSubscriber`
-    - the current `ukeireExpectation` is still derived from tracked shanten/action progression rather than exact tile-state enumeration
+    - `src/main/scala/riichinexus/application/service/Services.scala` now contains `AdvancedStatsPipelineService` and exact/fallback calculation branches
+    - `src/main/scala/riichinexus/api/ApiServer.scala` now exposes admin recompute/task-processing endpoints
+    - exact analytics still degrade to fallback mode when paifu lacks full concealed-hand / meld composition detail
   - Suggested completion:
-    - enrich paifu data needed for exact ukeire and defense calculations
-    - introduce versioned advanced-stat calculators and recompute support
-    - move projection execution onto an async/outbox pipeline when the eventing layer is upgraded
+    - enrich paifu data further so all meld/open-hand states can stay in exact mode instead of falling back
+    - move the current manual worker endpoints onto a real async/outbox execution layer
+    - add historical recalculation orchestration, batching, and backfill observability for large datasets
 
 - [ ] Deepen tournament settlement beyond the current ranking-based prize split.
   - Current state: settlement is a single ranking snapshot plus a simple prize allocator; it does not model club/team splits, side awards, deductions, taxes/fees, or settlement revisions.

@@ -15,6 +15,7 @@ final case class ApplicationContext(
     tableService: TableLifecycleService,
     appealService: AppealApplicationService,
     superAdminService: SuperAdminService,
+    advancedStatsPipelineService: AdvancedStatsPipelineService,
     playerRepository: PlayerRepository,
     clubRepository: ClubRepository,
     tournamentRepository: TournamentRepository,
@@ -24,6 +25,7 @@ final case class ApplicationContext(
     appealTicketRepository: AppealTicketRepository,
     dashboardRepository: DashboardRepository,
     advancedStatsBoardRepository: AdvancedStatsBoardRepository,
+    advancedStatsRecomputeTaskRepository: AdvancedStatsRecomputeTaskRepository,
     globalDictionaryRepository: GlobalDictionaryRepository,
     tournamentSettlementRepository: TournamentSettlementRepository,
     auditEventRepository: AuditEventRepository,
@@ -52,12 +54,22 @@ object ApplicationContext:
     val appealTicketRepository = InMemoryAppealTicketRepository()
     val dashboardRepository = InMemoryDashboardRepository()
     val advancedStatsBoardRepository = InMemoryAdvancedStatsBoardRepository()
+    val advancedStatsRecomputeTaskRepository = InMemoryAdvancedStatsRecomputeTaskRepository()
     val globalDictionaryRepository = InMemoryGlobalDictionaryRepository()
     val tournamentSettlementRepository = InMemoryTournamentSettlementRepository()
     val auditEventRepository = InMemoryAuditEventRepository()
 
     val eventBus = InMemoryDomainEventBus()
     val tournamentRuleEngine = DefaultTournamentRuleEngine()
+    val advancedStatsPipelineService = AdvancedStatsPipelineService(
+      paifuRepository,
+      matchRecordRepository,
+      playerRepository,
+      clubRepository,
+      advancedStatsBoardRepository,
+      advancedStatsRecomputeTaskRepository,
+      transactionManager
+    )
     val knockoutStageCoordinator = KnockoutStageCoordinator(
       tournamentRepository,
       playerRepository,
@@ -87,11 +99,7 @@ object ApplicationContext:
     )
     eventBus.register(
       AdvancedStatsProjectionSubscriber(
-        paifuRepository,
-        matchRecordRepository,
-        playerRepository,
-        clubRepository,
-        advancedStatsBoardRepository
+        advancedStatsPipelineService
       )
     )
 
@@ -164,6 +172,7 @@ object ApplicationContext:
         transactionManager,
         authorizationService
       ),
+      advancedStatsPipelineService = advancedStatsPipelineService,
       playerRepository = playerRepository,
       clubRepository = clubRepository,
       tournamentRepository = tournamentRepository,
@@ -173,6 +182,7 @@ object ApplicationContext:
       appealTicketRepository = appealTicketRepository,
       dashboardRepository = dashboardRepository,
       advancedStatsBoardRepository = advancedStatsBoardRepository,
+      advancedStatsRecomputeTaskRepository = advancedStatsRecomputeTaskRepository,
       globalDictionaryRepository = globalDictionaryRepository,
       tournamentSettlementRepository = tournamentSettlementRepository,
       auditEventRepository = auditEventRepository,
@@ -197,12 +207,22 @@ object ApplicationContext:
     val appealTicketRepository = PostgresAppealTicketRepository(connectionFactory)
     val dashboardRepository = PostgresDashboardRepository(connectionFactory)
     val advancedStatsBoardRepository = PostgresAdvancedStatsBoardRepository(connectionFactory)
+    val advancedStatsRecomputeTaskRepository = PostgresAdvancedStatsRecomputeTaskRepository(connectionFactory)
     val globalDictionaryRepository = PostgresGlobalDictionaryRepository(connectionFactory)
     val tournamentSettlementRepository = PostgresTournamentSettlementRepository(connectionFactory)
     val auditEventRepository = PostgresAuditEventRepository(connectionFactory)
 
     val eventBus = InMemoryDomainEventBus()
     val tournamentRuleEngine = DefaultTournamentRuleEngine()
+    val advancedStatsPipelineService = AdvancedStatsPipelineService(
+      paifuRepository,
+      matchRecordRepository,
+      playerRepository,
+      clubRepository,
+      advancedStatsBoardRepository,
+      advancedStatsRecomputeTaskRepository,
+      transactionManager
+    )
     val knockoutStageCoordinator = KnockoutStageCoordinator(
       tournamentRepository,
       playerRepository,
@@ -232,11 +252,7 @@ object ApplicationContext:
     )
     eventBus.register(
       AdvancedStatsProjectionSubscriber(
-        paifuRepository,
-        matchRecordRepository,
-        playerRepository,
-        clubRepository,
-        advancedStatsBoardRepository
+        advancedStatsPipelineService
       )
     )
 
@@ -309,6 +325,7 @@ object ApplicationContext:
         transactionManager,
         authorizationService
       ),
+      advancedStatsPipelineService = advancedStatsPipelineService,
       playerRepository = playerRepository,
       clubRepository = clubRepository,
       tournamentRepository = tournamentRepository,
@@ -318,6 +335,7 @@ object ApplicationContext:
       appealTicketRepository = appealTicketRepository,
       dashboardRepository = dashboardRepository,
       advancedStatsBoardRepository = advancedStatsBoardRepository,
+      advancedStatsRecomputeTaskRepository = advancedStatsRecomputeTaskRepository,
       globalDictionaryRepository = globalDictionaryRepository,
       tournamentSettlementRepository = tournamentSettlementRepository,
       auditEventRepository = auditEventRepository,

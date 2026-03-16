@@ -315,6 +315,36 @@ final class PostgresSchemaInitializer(connectionFactory: JdbcConnectionFactory):
       execute(
         connection,
         """
+          |create table if not exists advanced_stats_recompute_tasks (
+          |  id text primary key,
+          |  owner_key text not null,
+          |  owner_type text not null,
+          |  status text not null,
+          |  calculator_version integer not null,
+          |  requested_at timestamptz not null,
+          |  payload jsonb not null,
+          |  updated_at timestamptz not null default now()
+          |)
+          |""".stripMargin
+      )
+      execute(connection, "alter table advanced_stats_recompute_tasks add column if not exists owner_key text")
+      execute(connection, "alter table advanced_stats_recompute_tasks add column if not exists owner_type text")
+      execute(connection, "alter table advanced_stats_recompute_tasks add column if not exists status text")
+      execute(connection, "alter table advanced_stats_recompute_tasks add column if not exists calculator_version integer")
+      execute(connection, "alter table advanced_stats_recompute_tasks add column if not exists requested_at timestamptz")
+      execute(connection, "alter table advanced_stats_recompute_tasks add column if not exists payload jsonb")
+      execute(connection, "alter table advanced_stats_recompute_tasks add column if not exists updated_at timestamptz default now()")
+      execute(
+        connection,
+        "create index if not exists idx_advanced_stats_tasks_pending on advanced_stats_recompute_tasks (status, requested_at)"
+      )
+      execute(
+        connection,
+        "create index if not exists idx_advanced_stats_tasks_owner on advanced_stats_recompute_tasks (owner_key, calculator_version, status)"
+      )
+      execute(
+        connection,
+        """
           |create table if not exists global_dictionary (
           |  key text primary key,
           |  updated_at timestamptz not null,
@@ -403,6 +433,14 @@ final class PostgresSchemaInitializer(connectionFactory: JdbcConnectionFactory):
         """
           |insert into schema_version(version, description)
           |values (5, 'Added advanced stats board persistence schema')
+          |on conflict (version) do nothing
+          |""".stripMargin
+      )
+      execute(
+        connection,
+        """
+          |insert into schema_version(version, description)
+          |values (6, 'Added advanced stats recompute task pipeline schema')
           |on conflict (version) do nothing
           |""".stripMargin
       )
@@ -953,6 +991,103 @@ final class PostgresAdvancedStatsBoardRepository(
       case DashboardOwner.Player(_) => "player"
       case DashboardOwner.Club(_)   => "club"
 
+final class PostgresAdvancedStatsRecomputeTaskRepository(
+    protected val connectionFactory: JdbcConnectionFactory
+) extends AdvancedStatsRecomputeTaskRepository
+    with JdbcRepositorySupport:
+  override def save(task: AdvancedStatsRecomputeTask): AdvancedStatsRecomputeTask =
+    val sql =
+      """
+        |insert into advanced_stats_recompute_tasks (
+        |  id,
+        |  owner_key,
+        |  owner_type,
+        |  status,
+        |  calculator_version,
+        |  requested_at,
+        |  payload,
+        |  updated_at
+        |)
+        |values (?, ?, ?, ?, ?, ?, cast(? as jsonb), now())
+        |on conflict (id) do update set
+        |  owner_key = excluded.owner_key,
+        |  owner_type = excluded.owner_type,
+        |  status = excluded.status,
+        |  calculator_version = excluded.calculator_version,
+        |  requested_at = excluded.requested_at,
+        |  payload = excluded.payload,
+        |  updated_at = now()
+        |""".stripMargin
+
+    withConnection { connection =>
+      Using.resource(connection.prepareStatement(sql)) { statement =>
+        statement.setString(1, task.id.value)
+        statement.setString(2, ownerKey(task.owner))
+        statement.setString(3, ownerType(task.owner))
+        statement.setString(4, task.status.toString)
+        statement.setInt(5, task.calculatorVersion)
+        statement.setTimestamp(6, Timestamp.from(task.requestedAt))
+        statement.setString(7, writeJson(task))
+        statement.executeUpdate()
+      }
+    }
+
+    task
+
+  override def findById(id: AdvancedStatsRecomputeTaskId): Option[AdvancedStatsRecomputeTask] =
+    readOne[AdvancedStatsRecomputeTask](
+      "select payload from advanced_stats_recompute_tasks where id = ?",
+      { statement =>
+        statement.setString(1, id.value)
+      }
+    )
+
+  override def findAll(): Vector[AdvancedStatsRecomputeTask] =
+    readAll[AdvancedStatsRecomputeTask](
+      "select payload from advanced_stats_recompute_tasks order by requested_at, id"
+    )
+
+  override def findPending(limit: Int): Vector[AdvancedStatsRecomputeTask] =
+    readAll[AdvancedStatsRecomputeTask](
+      "select payload from advanced_stats_recompute_tasks where status = ? order by requested_at, id limit ?",
+      { statement =>
+        statement.setString(1, AdvancedStatsRecomputeTaskStatus.Pending.toString)
+        statement.setInt(2, limit)
+      }
+    )
+
+  override def findActiveByOwner(
+      owner: DashboardOwner,
+      calculatorVersion: Int
+  ): Option[AdvancedStatsRecomputeTask] =
+    readOne[AdvancedStatsRecomputeTask](
+      """
+        |select payload
+        |from advanced_stats_recompute_tasks
+        |where owner_key = ?
+        |  and calculator_version = ?
+        |  and status in (?, ?)
+        |order by requested_at
+        |limit 1
+        |""".stripMargin,
+      { statement =>
+        statement.setString(1, ownerKey(owner))
+        statement.setInt(2, calculatorVersion)
+        statement.setString(3, AdvancedStatsRecomputeTaskStatus.Pending.toString)
+        statement.setString(4, AdvancedStatsRecomputeTaskStatus.Processing.toString)
+      }
+    )
+
+  private def ownerKey(owner: DashboardOwner): String =
+    owner match
+      case DashboardOwner.Player(playerId) => s"player:${playerId.value}"
+      case DashboardOwner.Club(clubId)     => s"club:${clubId.value}"
+
+  private def ownerType(owner: DashboardOwner): String =
+    owner match
+      case DashboardOwner.Player(_) => "player"
+      case DashboardOwner.Club(_)   => "club"
+
 final class PostgresGlobalDictionaryRepository(
     protected val connectionFactory: JdbcConnectionFactory
 ) extends GlobalDictionaryRepository
@@ -1108,6 +1243,7 @@ final class PostgresAdminService(connectionFactory: JdbcConnectionFactory):
       "appeal_tickets",
       "dashboards",
       "advanced_stats_boards",
+      "advanced_stats_recompute_tasks",
       "global_dictionary",
       "tournament_settlements",
       "audit_events"
@@ -1142,6 +1278,7 @@ final class PostgresAdminService(connectionFactory: JdbcConnectionFactory):
         executeAdmin(connection, "truncate table audit_events restart identity")
         executeAdmin(connection, "truncate table tournament_settlements restart identity")
         executeAdmin(connection, "truncate table global_dictionary restart identity")
+        executeAdmin(connection, "truncate table advanced_stats_recompute_tasks restart identity")
         executeAdmin(connection, "truncate table dashboards restart identity")
         executeAdmin(connection, "truncate table advanced_stats_boards restart identity")
         executeAdmin(connection, "truncate table guest_sessions restart identity")

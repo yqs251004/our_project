@@ -3,6 +3,8 @@ package riichinexus.application.service
 import java.time.Instant
 import java.util.NoSuchElementException
 
+import scala.collection.mutable
+
 import riichinexus.application.ports.*
 import riichinexus.domain.event.*
 import riichinexus.domain.model.*
@@ -2939,6 +2941,17 @@ final class ClubProjectionSubscriber(
         ()
 
 private object AdvancedStatsSupport:
+  private val TerminalAndHonorIndices =
+    Set(0, 8, 9, 17, 18, 26, 27, 28, 29, 30, 31, 32, 33)
+
+  final case class ExactRoundStats(
+      strictTileTrackable: Boolean,
+      ukeireSamples: Vector[Int],
+      postRiichiDiscardCount: Int,
+      safePostRiichiDiscardCount: Int,
+      foldDiscardCount: Int
+  )
+
   final case class PlayerRoundStats(
       shantenPath: Vector[Int],
       won: Boolean,
@@ -2949,8 +2962,82 @@ private object AdvancedStatsSupport:
       pressureResponseCount: Int,
       postRiichiDealIn: Boolean,
       foldLikeResponse: Boolean,
-      shantenImprovement: Double
+      shantenImprovement: Double,
+      exactUkeireSamples: Vector[Int],
+      exactDefenseSampleCount: Int,
+      exactSafeDefenseCount: Int,
+      exactFoldCount: Int,
+      strictTileTrackable: Boolean
   )
+
+  def buildPlayerBoard(
+      playerId: PlayerId,
+      records: Vector[MatchRecord],
+      paifus: Vector[Paifu],
+      at: Instant
+  ): AdvancedStatsBoard =
+    val rounds = paifus.flatMap(_.rounds)
+    val roundStats = rounds.map(round => buildRoundStats(round, playerId))
+    val placements = records
+      .flatMap(_.seatResults.find(_.playerId == playerId))
+      .map(_.placement.toDouble)
+    val riichiRounds = roundStats.count(_.riichiDeclared)
+    val pressureRounds = roundStats.count(_.pressureResponseCount > 0)
+    val exactDefenseSamples = roundStats.map(_.exactDefenseSampleCount).sum
+    val exactSafeDefenseSamples = roundStats.map(_.exactSafeDefenseCount).sum
+    val exactFoldSamples = roundStats.map(_.exactDefenseSampleCount).sum
+    val exactFoldCount = roundStats.map(_.exactFoldCount).sum
+    val fallbackPressureDefenseRate =
+      ratio(roundStats.count(stats => stats.pressureResponseCount > 0 && !stats.postRiichiDealIn), pressureRounds)
+    val fallbackFoldRate =
+      ratio(roundStats.count(_.foldLikeResponse), pressureRounds)
+
+    AdvancedStatsBoard(
+      owner = DashboardOwner.Player(playerId),
+      sampleSize = rounds.size,
+      defenseStability = calculateDefenseStability(roundStats, placements),
+      ukeireExpectation = average(roundStats.map(calculateUkeireExpectation)),
+      averageShantenImprovement = average(roundStats.map(_.shantenImprovement)),
+      callAggressionRate = ratio(roundStats.count(_.callCount > 0), rounds.size),
+      riichiConversionRate = ratio(roundStats.count(stats => stats.riichiDeclared && stats.won), riichiRounds),
+      pressureDefenseRate =
+        if exactDefenseSamples > 0 then ratio(exactSafeDefenseSamples, exactDefenseSamples)
+        else fallbackPressureDefenseRate,
+      postRiichiFoldRate =
+        if exactFoldSamples > 0 then ratio(exactFoldCount, exactFoldSamples)
+        else fallbackFoldRate,
+      shantenTrajectory = aggregateTrajectory(roundStats.map(_.shantenPath.map(_.toDouble))),
+      calculatorVersion = AdvancedStatsBoard.CurrentCalculatorVersion,
+      strictRoundSampleSize = roundStats.count(_.strictTileTrackable),
+      exactUkeireSampleRate = ratio(roundStats.count(_.exactUkeireSamples.nonEmpty), rounds.size),
+      exactDefenseSampleRate = ratio(roundStats.count(_.exactDefenseSampleCount > 0), rounds.size),
+      lastUpdatedAt = at
+    )
+
+  def buildClubBoard(
+      club: Club,
+      memberBoards: Vector[AdvancedStatsBoard],
+      at: Instant
+  ): AdvancedStatsBoard =
+    if memberBoards.isEmpty then AdvancedStatsBoard.empty(DashboardOwner.Club(club.id), at)
+    else
+      AdvancedStatsBoard(
+        owner = DashboardOwner.Club(club.id),
+        sampleSize = memberBoards.map(_.sampleSize).sum,
+        defenseStability = weightedAverage(memberBoards, _.sampleSize, _.defenseStability),
+        ukeireExpectation = weightedAverage(memberBoards, _.sampleSize, _.ukeireExpectation),
+        averageShantenImprovement = weightedAverage(memberBoards, _.sampleSize, _.averageShantenImprovement),
+        callAggressionRate = weightedAverage(memberBoards, _.sampleSize, _.callAggressionRate),
+        riichiConversionRate = weightedAverage(memberBoards, _.sampleSize, _.riichiConversionRate),
+        pressureDefenseRate = weightedAverage(memberBoards, _.sampleSize, _.pressureDefenseRate),
+        postRiichiFoldRate = weightedAverage(memberBoards, _.sampleSize, _.postRiichiFoldRate),
+        shantenTrajectory = aggregateTrajectory(memberBoards.map(_.shantenTrajectory)),
+        calculatorVersion = AdvancedStatsBoard.CurrentCalculatorVersion,
+        strictRoundSampleSize = memberBoards.map(_.strictRoundSampleSize).sum,
+        exactUkeireSampleRate = weightedAverage(memberBoards, _.sampleSize, _.exactUkeireSampleRate),
+        exactDefenseSampleRate = weightedAverage(memberBoards, _.sampleSize, _.exactDefenseSampleRate),
+        lastUpdatedAt = at
+      )
 
   def buildRoundStats(round: KyokuRecord, playerId: PlayerId): PlayerRoundStats =
     val playerActions = round.actions.filter(_.actor.contains(playerId))
@@ -2974,6 +3061,7 @@ private object AdvancedStatsSupport:
       shantenPath.headOption.zip(shantenPath.lastOption).headOption match
         case Some((initial, terminal)) => math.max(0.0, initial.toDouble - terminal.toDouble)
         case None                      => 0.0
+    val exactStats = analyzeRoundExactly(round, playerId)
 
     PlayerRoundStats(
       shantenPath = shantenPath,
@@ -2988,7 +3076,12 @@ private object AdvancedStatsSupport:
           round.result.outcome == HandOutcome.Ron &&
           round.result.target.contains(playerId),
       foldLikeResponse = foldLikeResponse,
-      shantenImprovement = shantenImprovement
+      shantenImprovement = shantenImprovement,
+      exactUkeireSamples = exactStats.ukeireSamples,
+      exactDefenseSampleCount = exactStats.postRiichiDiscardCount,
+      exactSafeDefenseCount = exactStats.safePostRiichiDiscardCount,
+      exactFoldCount = exactStats.foldDiscardCount,
+      strictTileTrackable = exactStats.strictTileTrackable
     )
 
   def calculateDefenseStability(
@@ -2997,12 +3090,16 @@ private object AdvancedStatsSupport:
   ): Double =
     val pressureRounds = roundStats.count(_.pressureResponseCount > 0)
     val pressureHoldRounds = roundStats.count(stats => stats.pressureResponseCount > 0 && !stats.postRiichiDealIn)
+    val exactDefenseSamples = roundStats.map(_.exactDefenseSampleCount).sum
+    val exactSafeDefenseSamples = roundStats.map(_.exactSafeDefenseCount).sum
     val averageLossSeverity =
       average(roundStats.filter(_.resultDelta < 0).map(stats => math.abs(stats.resultDelta).toDouble))
     val placementStability = placementConsistency(placements)
     val lossControl = 1.0 - math.min(1.0, averageLossSeverity / 12000.0)
     val safeRoundRate = rawRatio(roundStats.count(_.resultDelta >= 0), roundStats.size)
-    val pressureHoldRate = rawRatio(pressureHoldRounds, pressureRounds)
+    val pressureHoldRate =
+      if exactDefenseSamples > 0 then rawRatio(exactSafeDefenseSamples, exactDefenseSamples)
+      else rawRatio(pressureHoldRounds, pressureRounds)
 
     round2(
       clamp01(
@@ -3015,7 +3112,8 @@ private object AdvancedStatsSupport:
     )
 
   def calculateUkeireExpectation(stats: PlayerRoundStats): Double =
-    if stats.shantenPath.isEmpty then 0.0
+    if stats.exactUkeireSamples.nonEmpty then average(stats.exactUkeireSamples.map(_.toDouble))
+    else if stats.shantenPath.isEmpty then 0.0
     else
       val shantenPotential = stats.shantenPath.map(shanten => 14.0 - shanten.toDouble)
       val transitionBonuses = stats.shantenPath
@@ -3068,6 +3166,260 @@ private object AdvancedStatsSupport:
   def round2(value: Double): Double =
     BigDecimal(value).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble
 
+  private def analyzeRoundExactly(round: KyokuRecord, playerId: PlayerId): ExactRoundStats =
+    val ukeireSamples = analyzeExactUkeire(round, playerId)
+    val defenseStats = analyzeExactDefense(round, playerId)
+
+    ExactRoundStats(
+      strictTileTrackable = ukeireSamples.nonEmpty || defenseStats.postRiichiDiscardCount > 0,
+      ukeireSamples = ukeireSamples,
+      postRiichiDiscardCount = defenseStats.postRiichiDiscardCount,
+      safePostRiichiDiscardCount = defenseStats.safePostRiichiDiscardCount,
+      foldDiscardCount = defenseStats.foldDiscardCount
+    )
+
+  private def analyzeExactUkeire(round: KyokuRecord, playerId: PlayerId): Vector[Int] =
+    if round.actions.exists(action => isOpaqueCall(action.actionType)) then Vector.empty
+    else
+      round.initialHands.get(playerId).flatMap(parseHandCounts) match
+        case None => Vector.empty
+        case Some(initialCounts) if initialCounts.sum != 13 =>
+          Vector.empty
+        case Some(initialCounts) =>
+          val visibleKnown = initialCounts.clone()
+          val hand = initialCounts.clone()
+          val samples = Vector.newBuilder[Int]
+          var trackable = true
+
+          round.actions.foreach { action =>
+            if trackable then
+              val parsedTile = action.tile.flatMap(parseTile)
+              action.actor match
+                case Some(actor) if actor == playerId =>
+                  action.actionType match
+                    case PaifuActionType.Draw =>
+                      parsedTile match
+                        case Some(tileIndex) =>
+                          hand(tileIndex) += 1
+                          visibleKnown(tileIndex) += 1
+                        case None =>
+                          trackable = false
+                    case PaifuActionType.Discard =>
+                      parsedTile match
+                        case Some(tileIndex) if hand(tileIndex) > 0 =>
+                          hand(tileIndex) -= 1
+                          if hand.sum == 13 then
+                            samples += calculateExactUkeire(hand.clone(), visibleKnown.clone())
+                        case _ =>
+                          trackable = false
+                    case PaifuActionType.Riichi =>
+                      parsedTile match
+                        case Some(tileIndex) if hand(tileIndex) > 0 =>
+                          hand(tileIndex) -= 1
+                          if hand.sum == 13 then
+                            samples += calculateExactUkeire(hand.clone(), visibleKnown.clone())
+                        case None =>
+                          ()
+                        case _ =>
+                          trackable = false
+                    case PaifuActionType.Chi | PaifuActionType.Pon | PaifuActionType.Kan |
+                        PaifuActionType.AddedKan | PaifuActionType.ClosedKan | PaifuActionType.OpenKan =>
+                      trackable = false
+                    case _ =>
+                      ()
+                case _ =>
+                  if isPublicExposure(action.actionType) then
+                    parsedTile.foreach { tileIndex =>
+                      visibleKnown(tileIndex) = math.min(4, visibleKnown(tileIndex) + 1)
+                    }
+          }
+
+          if trackable then samples.result() else Vector.empty
+
+  private def analyzeExactDefense(round: KyokuRecord, playerId: PlayerId): ExactRoundStats =
+    if round.actions.exists(action => isOpaqueCall(action.actionType)) then
+      ExactRoundStats(false, Vector.empty, 0, 0, 0)
+    else
+      val riichiDiscards = mutable.Map.empty[PlayerId, mutable.Set[Int]]
+      var playerDeclaredRiichi = false
+      var postRiichiDiscardCount = 0
+      var safePostRiichiDiscardCount = 0
+      var foldDiscardCount = 0
+      val publicVisible = Array.fill(34)(0)
+
+      round.actions.foreach { action =>
+        val parsedTile = action.tile.flatMap(parseTile)
+        action.actor match
+          case Some(actor) if action.actionType == PaifuActionType.Riichi && actor != playerId =>
+            val discards = riichiDiscards.getOrElseUpdate(actor, mutable.Set.empty)
+            parsedTile.foreach { tileIndex =>
+              discards += tileIndex
+              publicVisible(tileIndex) = math.min(4, publicVisible(tileIndex) + 1)
+            }
+          case Some(actor) if action.actionType == PaifuActionType.Discard && actor != playerId =>
+            parsedTile.foreach { tileIndex =>
+              riichiDiscards.get(actor).foreach(_ += tileIndex)
+              publicVisible(tileIndex) = math.min(4, publicVisible(tileIndex) + 1)
+            }
+          case Some(actor) if actor == playerId && action.actionType == PaifuActionType.Riichi =>
+            playerDeclaredRiichi = true
+          case Some(actor) if actor == playerId && action.actionType == PaifuActionType.Discard && riichiDiscards.nonEmpty =>
+            parsedTile.foreach { tileIndex =>
+              postRiichiDiscardCount += 1
+              val genbutsuSafe = riichiDiscards.values.forall(_.contains(tileIndex))
+              val deadSafe = publicVisible(tileIndex) + 1 >= 4
+              if genbutsuSafe || deadSafe then
+                safePostRiichiDiscardCount += 1
+                if !playerDeclaredRiichi then foldDiscardCount += 1
+              publicVisible(tileIndex) = math.min(4, publicVisible(tileIndex) + 1)
+            }
+          case _ =>
+            if isPublicExposure(action.actionType) then
+              parsedTile.foreach { tileIndex =>
+                publicVisible(tileIndex) = math.min(4, publicVisible(tileIndex) + 1)
+              }
+      }
+
+      ExactRoundStats(
+        strictTileTrackable = postRiichiDiscardCount > 0,
+        ukeireSamples = Vector.empty,
+        postRiichiDiscardCount = postRiichiDiscardCount,
+        safePostRiichiDiscardCount = safePostRiichiDiscardCount,
+        foldDiscardCount = foldDiscardCount
+      )
+
+  private def calculateExactUkeire(
+      handCounts: Array[Int],
+      visibleKnown: Array[Int]
+  ): Int =
+    val currentShanten = calculateShanten(handCounts)
+
+    (0 until 34).foldLeft(0) { (total, tileIndex) =>
+      val remainingCopies = 4 - visibleKnown(tileIndex)
+      if remainingCopies <= 0 then total
+      else
+        handCounts(tileIndex) += 1
+        val improved = bestShantenAfterDiscard(handCounts) < currentShanten
+        handCounts(tileIndex) -= 1
+        if improved then total + remainingCopies else total
+    }
+
+  private def bestShantenAfterDiscard(counts: Array[Int]): Int =
+    (0 until 34)
+      .filter(counts(_) > 0)
+      .map { tileIndex =>
+        counts(tileIndex) -= 1
+        val shanten = calculateShanten(counts)
+        counts(tileIndex) += 1
+        shanten
+      }
+      .foldLeft(8)(math.min)
+
+  private def calculateShanten(counts: Array[Int]): Int =
+    Vector(
+      calculateRegularShanten(counts.clone()),
+      calculateChiitoiShanten(counts),
+      calculateKokushiShanten(counts)
+    ).min
+
+  private def calculateRegularShanten(counts: Array[Int]): Int =
+    var best = 8
+
+    def dfs(index: Int, melds: Int, pairs: Int, taatsu: Int): Unit =
+      var nextIndex = index
+      while nextIndex < 34 && counts(nextIndex) == 0 do nextIndex += 1
+
+      val boundedTaatsu = math.min(taatsu, 4 - melds)
+      best = math.min(best, 8 - melds * 2 - boundedTaatsu - pairs)
+
+      if nextIndex >= 34 then ()
+      else
+        if counts(nextIndex) >= 3 then
+          counts(nextIndex) -= 3
+          dfs(nextIndex, melds + 1, pairs, taatsu)
+          counts(nextIndex) += 3
+
+        if isSuitTile(nextIndex) && tileNumber(nextIndex) <= 7 &&
+            counts(nextIndex + 1) > 0 && counts(nextIndex + 2) > 0 then
+          counts(nextIndex) -= 1
+          counts(nextIndex + 1) -= 1
+          counts(nextIndex + 2) -= 1
+          dfs(nextIndex, melds + 1, pairs, taatsu)
+          counts(nextIndex) += 1
+          counts(nextIndex + 1) += 1
+          counts(nextIndex + 2) += 1
+
+        if counts(nextIndex) >= 2 then
+          if pairs == 0 then
+            counts(nextIndex) -= 2
+            dfs(nextIndex, melds, pairs + 1, taatsu)
+            counts(nextIndex) += 2
+
+          counts(nextIndex) -= 2
+          dfs(nextIndex, melds, pairs, taatsu + 1)
+          counts(nextIndex) += 2
+
+        if isSuitTile(nextIndex) && tileNumber(nextIndex) <= 8 && counts(nextIndex + 1) > 0 then
+          counts(nextIndex) -= 1
+          counts(nextIndex + 1) -= 1
+          dfs(nextIndex, melds, pairs, taatsu + 1)
+          counts(nextIndex) += 1
+          counts(nextIndex + 1) += 1
+
+        if isSuitTile(nextIndex) && tileNumber(nextIndex) <= 7 && counts(nextIndex + 2) > 0 then
+          counts(nextIndex) -= 1
+          counts(nextIndex + 2) -= 1
+          dfs(nextIndex, melds, pairs, taatsu + 1)
+          counts(nextIndex) += 1
+          counts(nextIndex + 2) += 1
+
+        dfs(nextIndex + 1, melds, pairs, taatsu)
+
+    dfs(0, 0, 0, 0)
+    best
+
+  private def calculateChiitoiShanten(counts: Array[Int]): Int =
+    val pairCount = counts.count(_ >= 2)
+    val uniqueCount = counts.count(_ > 0)
+    6 - pairCount + math.max(0, 7 - uniqueCount)
+
+  private def calculateKokushiShanten(counts: Array[Int]): Int =
+    val uniqueCount = TerminalAndHonorIndices.count(index => counts(index) > 0)
+    val pairExists = TerminalAndHonorIndices.exists(index => counts(index) >= 2)
+    13 - uniqueCount - (if pairExists then 1 else 0)
+
+  private def parseHandCounts(tiles: Vector[String]): Option[Array[Int]] =
+    val counts = Array.fill(34)(0)
+    val parsed = tiles.map(parseTile)
+    if parsed.exists(_.isEmpty) then None
+    else
+      parsed.flatten.foreach { tileIndex =>
+        counts(tileIndex) += 1
+      }
+      Some(counts)
+
+  private def parseTile(tile: String): Option[Int] =
+    if tile == null || tile.length != 2 then None
+    else
+      val numberChar = tile.charAt(0)
+      val suitChar = tile.charAt(1)
+      val normalizedNumber =
+        if numberChar == '0' then 5
+        else if numberChar.isDigit then numberChar.asDigit
+        else -1
+
+      suitChar match
+        case 'm' if normalizedNumber >= 1 && normalizedNumber <= 9 =>
+          Some(normalizedNumber - 1)
+        case 'p' if normalizedNumber >= 1 && normalizedNumber <= 9 =>
+          Some(9 + normalizedNumber - 1)
+        case 's' if normalizedNumber >= 1 && normalizedNumber <= 9 =>
+          Some(18 + normalizedNumber - 1)
+        case 'z' if normalizedNumber >= 1 && normalizedNumber <= 7 =>
+          Some(27 + normalizedNumber - 1)
+        case _ =>
+          None
+
   private def placementConsistency(placements: Vector[Double]): Double =
     if placements.isEmpty then 0.0
     else
@@ -3075,9 +3427,31 @@ private object AdvancedStatsSupport:
       val variance = placements.map(value => math.pow(value - mean, 2)).sum / placements.size.toDouble
       clamp01(1.0 - math.sqrt(variance) / 1.5)
 
+  private def isSuitTile(index: Int): Boolean =
+    index < 27
+
+  private def tileNumber(index: Int): Int =
+    (index % 9) + 1
+
   private def isOpenCall(actionType: PaifuActionType): Boolean =
     actionType match
       case PaifuActionType.Chi | PaifuActionType.Pon | PaifuActionType.Kan | PaifuActionType.OpenKan =>
+        true
+      case _ =>
+        false
+
+  private def isOpaqueCall(actionType: PaifuActionType): Boolean =
+    actionType match
+      case PaifuActionType.Chi | PaifuActionType.Pon | PaifuActionType.Kan |
+          PaifuActionType.OpenKan | PaifuActionType.ClosedKan | PaifuActionType.AddedKan =>
+        true
+      case _ =>
+        false
+
+  private def isPublicExposure(actionType: PaifuActionType): Boolean =
+    actionType match
+      case PaifuActionType.Discard | PaifuActionType.Riichi | PaifuActionType.DoraReveal |
+          PaifuActionType.Win | PaifuActionType.DrawGame =>
         true
       case _ =>
         false
@@ -3151,77 +3525,117 @@ final class DashboardProjectionSubscriber(
         lastUpdatedAt = at
       )
 
-final class AdvancedStatsProjectionSubscriber(
+final class AdvancedStatsPipelineService(
     paifuRepository: PaifuRepository,
     matchRecordRepository: MatchRecordRepository,
     playerRepository: PlayerRepository,
     clubRepository: ClubRepository,
-    advancedStatsBoardRepository: AdvancedStatsBoardRepository
-) extends DomainEventSubscriber:
+    advancedStatsBoardRepository: AdvancedStatsBoardRepository,
+    advancedStatsRecomputeTaskRepository: AdvancedStatsRecomputeTaskRepository,
+    transactionManager: TransactionManager
+):
   import AdvancedStatsSupport.*
 
+  def enqueueImpactedOwners(
+      matchRecord: MatchRecord,
+      requestedAt: Instant,
+      reason: String = "match-record-archived"
+  ): Vector[AdvancedStatsRecomputeTask] =
+    val impactedPlayers = matchRecord.playerIds.distinct
+    val impactedClubs = impactedPlayers
+      .flatMap(playerId => playerRepository.findById(playerId).toVector.flatMap(_.boundClubIds))
+      .distinct
+
+    (impactedPlayers.map(playerId => DashboardOwner.Player(playerId)) ++
+      impactedClubs.map(clubId => DashboardOwner.Club(clubId)))
+      .distinct
+      .map(owner =>
+        enqueueOwnerRecompute(
+          owner = owner,
+          reason = reason,
+          requestedAt = requestedAt,
+          lastMatchRecordId = Some(matchRecord.id)
+        )
+      )
+
+  def enqueueFullRecompute(
+      requestedAt: Instant = Instant.now(),
+      reason: String = "manual-full-recompute"
+  ): Vector[AdvancedStatsRecomputeTask] =
+    val owners =
+      playerRepository.findAll().map(player => DashboardOwner.Player(player.id)) ++
+        clubRepository.findActive().map(club => DashboardOwner.Club(club.id))
+
+    owners.distinct.map(owner => enqueueOwnerRecompute(owner, reason, requestedAt))
+
+  def enqueueOwnerRecompute(
+      owner: DashboardOwner,
+      reason: String,
+      requestedAt: Instant = Instant.now(),
+      lastMatchRecordId: Option[MatchRecordId] = None
+  ): AdvancedStatsRecomputeTask =
+    transactionManager.inTransaction {
+      advancedStatsRecomputeTaskRepository
+        .findActiveByOwner(owner, AdvancedStatsBoard.CurrentCalculatorVersion)
+        .getOrElse(
+          advancedStatsRecomputeTaskRepository.save(
+            AdvancedStatsRecomputeTask.create(
+              owner = owner,
+              reason = reason,
+              requestedAt = requestedAt,
+              calculatorVersion = AdvancedStatsBoard.CurrentCalculatorVersion,
+              lastMatchRecordId = lastMatchRecordId
+            )
+          )
+        )
+    }
+
+  def processPending(
+      limit: Int = 50,
+      processedAt: Instant = Instant.now()
+  ): Vector[AdvancedStatsRecomputeTask] =
+    advancedStatsRecomputeTaskRepository.findPending(limit).map { task =>
+      val processing = advancedStatsRecomputeTaskRepository.save(task.markProcessing(processedAt))
+      try
+        processing.owner match
+          case DashboardOwner.Player(playerId) =>
+            advancedStatsBoardRepository.save(rebuildPlayerBoard(playerId, processedAt))
+          case DashboardOwner.Club(clubId) =>
+            val club = clubRepository.findById(clubId).getOrElse(
+              throw NoSuchElementException(s"Club ${clubId.value} was not found")
+            )
+            advancedStatsBoardRepository.save(rebuildClubBoard(club, processedAt))
+
+        advancedStatsRecomputeTaskRepository.save(processing.markCompleted(processedAt))
+      catch
+        case error: Throwable =>
+          advancedStatsRecomputeTaskRepository.save(
+            processing.markFailed(Option(error.getMessage).getOrElse(error.getClass.getSimpleName), processedAt)
+          )
+    }
+
+  def rebuildPlayerBoard(
+      playerId: PlayerId,
+      at: Instant = Instant.now()
+  ): AdvancedStatsBoard =
+    val records = matchRecordRepository.findByPlayer(playerId)
+    val paifus = paifuRepository.findByPlayer(playerId)
+    buildPlayerBoard(playerId, records, paifus, at)
+
+  def rebuildClubBoard(
+      club: Club,
+      at: Instant = Instant.now()
+  ): AdvancedStatsBoard =
+    val memberBoards = club.members.map(playerId => rebuildPlayerBoard(playerId, at))
+    buildClubBoard(club, memberBoards, at)
+
+final class AdvancedStatsProjectionSubscriber(
+    advancedStatsPipelineService: AdvancedStatsPipelineService
+) extends DomainEventSubscriber:
   override def handle(event: DomainEvent): Unit =
     event match
       case MatchRecordArchived(_, _, _, matchRecord, _, occurredAt) =>
-        val impactedPlayers = matchRecord.playerIds.distinct
-
-        impactedPlayers.foreach { playerId =>
-          advancedStatsBoardRepository.save(buildPlayerBoard(playerId, occurredAt))
-        }
-
-        impactedPlayers
-          .flatMap(playerId => playerRepository.findById(playerId).toVector.flatMap(_.boundClubIds))
-          .distinct
-          .foreach { clubId =>
-            clubRepository.findById(clubId).foreach { club =>
-              advancedStatsBoardRepository.save(buildClubBoard(club, occurredAt))
-            }
-          }
-
+        advancedStatsPipelineService.enqueueImpactedOwners(matchRecord, occurredAt)
+        ()
       case _ =>
         ()
-
-  private def buildPlayerBoard(playerId: PlayerId, at: Instant): AdvancedStatsBoard =
-    val records = matchRecordRepository.findByPlayer(playerId)
-    val rounds = paifuRepository.findByPlayer(playerId).flatMap(_.rounds)
-    val roundStats = rounds.map(round => buildRoundStats(round, playerId))
-    val placements = records
-      .flatMap(_.seatResults.find(_.playerId == playerId))
-      .map(_.placement.toDouble)
-    val riichiRounds = roundStats.count(_.riichiDeclared)
-    val pressureRounds = roundStats.count(_.pressureResponseCount > 0)
-
-    AdvancedStatsBoard(
-      owner = DashboardOwner.Player(playerId),
-      sampleSize = rounds.size,
-      defenseStability = calculateDefenseStability(roundStats, placements),
-      ukeireExpectation = average(roundStats.map(calculateUkeireExpectation)),
-      averageShantenImprovement = average(roundStats.map(_.shantenImprovement)),
-      callAggressionRate = ratio(roundStats.count(_.callCount > 0), rounds.size),
-      riichiConversionRate = ratio(roundStats.count(stats => stats.riichiDeclared && stats.won), riichiRounds),
-      pressureDefenseRate = ratio(roundStats.count(stats => stats.pressureResponseCount > 0 && !stats.postRiichiDealIn), pressureRounds),
-      postRiichiFoldRate = ratio(roundStats.count(_.foldLikeResponse), pressureRounds),
-      shantenTrajectory = aggregateTrajectory(roundStats.map(_.shantenPath.map(_.toDouble))),
-      lastUpdatedAt = at
-    )
-
-  private def buildClubBoard(club: Club, at: Instant): AdvancedStatsBoard =
-    val memberBoards = club.members.flatMap { playerId =>
-      advancedStatsBoardRepository.findByOwner(DashboardOwner.Player(playerId))
-    }
-
-    if memberBoards.isEmpty then AdvancedStatsBoard.empty(DashboardOwner.Club(club.id), at)
-    else
-      AdvancedStatsBoard(
-        owner = DashboardOwner.Club(club.id),
-        sampleSize = memberBoards.map(_.sampleSize).sum,
-        defenseStability = weightedAverage(memberBoards, _.sampleSize, _.defenseStability),
-        ukeireExpectation = weightedAverage(memberBoards, _.sampleSize, _.ukeireExpectation),
-        averageShantenImprovement = weightedAverage(memberBoards, _.sampleSize, _.averageShantenImprovement),
-        callAggressionRate = weightedAverage(memberBoards, _.sampleSize, _.callAggressionRate),
-        riichiConversionRate = weightedAverage(memberBoards, _.sampleSize, _.riichiConversionRate),
-        pressureDefenseRate = weightedAverage(memberBoards, _.sampleSize, _.pressureDefenseRate),
-        postRiichiFoldRate = weightedAverage(memberBoards, _.sampleSize, _.postRiichiFoldRate),
-        shantenTrajectory = aggregateTrajectory(memberBoards.map(_.shantenTrajectory)),
-        lastUpdatedAt = at
-      )
