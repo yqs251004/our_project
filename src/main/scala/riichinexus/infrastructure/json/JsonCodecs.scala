@@ -134,6 +134,8 @@ object JsonCodecs:
   given ReadWriter[MatchRecord] = macroRW
   given ReadWriter[AppealAttachment] = macroRW
   given ReadWriter[AppealDecisionLog] = macroRW
+  given ReadWriter[AppealPriority] =
+    stringEnumReadWriter(AppealPriority.valueOf, _.toString)
   given ReadWriter[AppealStatus] =
     stringEnumReadWriter(AppealStatus.valueOf, _.toString)
   given ReadWriter[AppealDecisionType] =

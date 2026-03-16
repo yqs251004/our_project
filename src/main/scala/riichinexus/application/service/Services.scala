@@ -2770,6 +2770,7 @@ final class TableLifecycleService(
 final class AppealApplicationService(
     appealTicketRepository: AppealTicketRepository,
     tableRepository: TableRepository,
+    playerRepository: PlayerRepository,
     knockoutStageCoordinator: KnockoutStageCoordinator,
     auditEventRepository: AuditEventRepository,
     eventBus: DomainEventBus,
@@ -2781,12 +2782,15 @@ final class AppealApplicationService(
       openedBy: PlayerId,
       description: String,
       attachments: Vector[AppealAttachment] = Vector.empty,
+      priority: AppealPriority = AppealPriority.Normal,
+      dueAt: Option[Instant] = None,
       actor: AccessPrincipal,
       createdAt: Instant = Instant.now()
   ): Option[AppealTicket] =
     transactionManager.inTransaction {
       tableRepository.findById(tableId).map { table =>
         require(description.trim.nonEmpty, "Appeal description cannot be empty")
+        require(dueAt.forall(!_.isBefore(createdAt)), "Appeal dueAt cannot be earlier than createdAt")
         authorizationService.requirePermission(
           actor,
           Permission.FileAppealTicket,
@@ -2816,6 +2820,8 @@ final class AppealApplicationService(
           openedBy = openedBy,
           description = description,
           attachments = attachments,
+          priority = priority,
+          dueAt = dueAt,
           createdAt = createdAt,
           updatedAt = createdAt
         )
@@ -2823,6 +2829,71 @@ final class AppealApplicationService(
         val savedTicket = appealTicketRepository.save(ticket)
         tableRepository.save(table.flagAppeal(savedTicket.id, Some(description)))
         eventBus.publish(AppealTicketFiled(savedTicket, createdAt))
+        savedTicket
+      }
+    }
+
+  def updateAppealWorkflow(
+      ticketId: AppealTicketId,
+      actor: AccessPrincipal,
+      assigneeId: Option[PlayerId] = None,
+      clearAssignee: Boolean = false,
+      priority: Option[AppealPriority] = None,
+      dueAt: Option[Instant] = None,
+      clearDueAt: Boolean = false,
+      updatedAt: Instant = Instant.now(),
+      note: Option[String] = None
+  ): Option[AppealTicket] =
+    transactionManager.inTransaction {
+      appealTicketRepository.findById(ticketId).map { ticket =>
+        authorizationService.requirePermission(
+          actor,
+          Permission.ResolveAppeal,
+          tournamentId = Some(ticket.tournamentId)
+        )
+
+        val operatorId = actor.playerId.getOrElse(ticket.openedBy)
+        assigneeId.foreach(id => requireActiveAppealOperator(id, "Appeal assignee must be an active player"))
+        val nextAssignee =
+          if clearAssignee then None
+          else assigneeId.orElse(ticket.assigneeId)
+        val nextPriority = priority.getOrElse(ticket.priority)
+        val nextDueAt =
+          if clearDueAt then None
+          else dueAt.orElse(ticket.dueAt)
+
+        require(nextDueAt.forall(!_.isBefore(updatedAt)), "Appeal dueAt cannot be earlier than workflow update time")
+
+        val reassignedTicket =
+          if nextAssignee != ticket.assigneeId then
+            ticket.assign(operatorId, nextAssignee, updatedAt, note)
+          else ticket
+
+        val triagedTicket =
+          if nextPriority != reassignedTicket.priority || nextDueAt != reassignedTicket.dueAt then
+            reassignedTicket.reprioritize(operatorId, nextPriority, nextDueAt, updatedAt, note)
+          else reassignedTicket
+
+        val savedTicket = appealTicketRepository.save(triagedTicket.copy(updatedAt = updatedAt))
+        eventBus.publish(AppealTicketWorkflowUpdated(savedTicket, updatedAt))
+        auditEventRepository.save(
+          AuditEventEntry(
+            id = IdGenerator.auditEventId(),
+            aggregateType = "appeal",
+            aggregateId = ticketId.value,
+            eventType = "AppealTicketWorkflowUpdated",
+            occurredAt = updatedAt,
+            actorId = actor.playerId,
+            details = Map(
+              "tournamentId" -> ticket.tournamentId.value,
+              "tableId" -> ticket.tableId.value,
+              "assigneeId" -> savedTicket.assigneeId.map(_.value).getOrElse("none"),
+              "priority" -> savedTicket.priority.toString,
+              "dueAt" -> savedTicket.dueAt.map(_.toString).getOrElse("none")
+            ),
+            note = note
+          )
+        )
         savedTicket
       }
     }
@@ -2936,6 +3007,56 @@ final class AppealApplicationService(
         adjudicatedTicket
       }
     }
+
+  def reopenAppeal(
+      ticketId: AppealTicketId,
+      reason: String,
+      actor: AccessPrincipal,
+      reopenedAt: Instant = Instant.now(),
+      note: Option[String] = None
+  ): Option[AppealTicket] =
+    transactionManager.inTransaction {
+      appealTicketRepository.findById(ticketId).map { ticket =>
+        val operatorId = actor.playerId.getOrElse(ticket.openedBy)
+        if actor.playerId.contains(ticket.openedBy) then ()
+        else
+          authorizationService.requirePermission(
+            actor,
+            Permission.ResolveAppeal,
+            tournamentId = Some(ticket.tournamentId)
+          )
+
+        val reopenedTicket = appealTicketRepository.save(ticket.reopen(operatorId, reason, reopenedAt, note))
+        tableRepository.findById(ticket.tableId).foreach { table =>
+          if table.status != TableStatus.Archived then
+            tableRepository.save(table.flagAppeal(ticket.id, note.orElse(Some(s"Appeal ${ticket.id.value} reopened"))))
+        }
+        eventBus.publish(AppealTicketReopened(reopenedTicket, reopenedAt))
+        auditEventRepository.save(
+          AuditEventEntry(
+            id = IdGenerator.auditEventId(),
+            aggregateType = "appeal",
+            aggregateId = ticketId.value,
+            eventType = "AppealTicketReopened",
+            occurredAt = reopenedAt,
+            actorId = actor.playerId,
+            details = Map(
+              "tournamentId" -> ticket.tournamentId.value,
+              "tableId" -> ticket.tableId.value,
+              "reopenCount" -> reopenedTicket.reopenCount.toString
+            ),
+            note = note.orElse(Some(reason))
+          )
+        )
+        reopenedTicket
+      }
+    }
+
+  private def requireActiveAppealOperator(playerId: PlayerId, context: String): Unit =
+    val player = playerRepository.findById(playerId)
+      .getOrElse(throw NoSuchElementException(s"Player ${playerId.value} was not found"))
+    if player.status != PlayerStatus.Active then
+      throw IllegalArgumentException(context)
 
 final class SuperAdminService(
     playerRepository: PlayerRepository,
@@ -4547,6 +4668,41 @@ final class EventCascadeProjectionSubscriber(
               "tournamentId" -> ticket.tournamentId.value,
               "tableId" -> ticket.tableId.value,
               "status" -> ticket.status.toString
+            )
+          )
+        )
+      case AppealTicketWorkflowUpdated(ticket, occurredAt) =>
+        eventCascadeRecordRepository.save(
+          EventCascadeRecord.completed(
+            eventType = "AppealTicketWorkflowUpdated",
+            consumer = EventCascadeConsumer.ModerationInbox,
+            aggregateType = "appeal-ticket",
+            aggregateId = ticket.id.value,
+            summary = s"Appeal ${ticket.id.value} workflow updated",
+            occurredAt = occurredAt,
+            handledAt = occurredAt,
+            metadata = Map(
+              "status" -> ticket.status.toString,
+              "priority" -> ticket.priority.toString,
+              "assigneeId" -> ticket.assigneeId.map(_.value).getOrElse("none"),
+              "dueAt" -> ticket.dueAt.map(_.toString).getOrElse("none")
+            )
+          )
+        )
+      case AppealTicketReopened(ticket, occurredAt) =>
+        eventCascadeRecordRepository.save(
+          EventCascadeRecord.pending(
+            eventType = "AppealTicketReopened",
+            consumer = EventCascadeConsumer.ModerationInbox,
+            aggregateType = "appeal-ticket",
+            aggregateId = ticket.id.value,
+            summary = s"Appeal ${ticket.id.value} reopened for renewed review",
+            occurredAt = occurredAt,
+            metadata = Map(
+              "status" -> ticket.status.toString,
+              "reopenCount" -> ticket.reopenCount.toString,
+              "assigneeId" -> ticket.assigneeId.map(_.value).getOrElse("none"),
+              "priority" -> ticket.priority.toString
             )
           )
         )

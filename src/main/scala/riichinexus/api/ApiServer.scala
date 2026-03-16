@@ -815,6 +815,8 @@ private final class ApiHandler(
             openedBy = request.player,
             description = request.description,
             attachments = request.attachments.map(_.toAttachment),
+            priority = request.priorityLevel,
+            dueAt = request.dueAtInstant,
             actor = principal(request.player)
           )
         )
@@ -861,21 +863,34 @@ private final class ApiHandler(
         val statusFilter = queryParam(exchange, "status").filter(_.nonEmpty).map(
           parseEnum("status", _)(AppealStatus.valueOf)
         )
+        val priorityFilter = queryParam(exchange, "priority").filter(_.nonEmpty).map(
+          parseEnum("priority", _)(AppealPriority.valueOf)
+        )
         val tournamentIdFilter = queryParam(exchange, "tournamentId").filter(_.nonEmpty).map(TournamentId(_))
         val stageIdFilter = queryParam(exchange, "stageId").filter(_.nonEmpty).map(TournamentStageId(_))
         val tableIdFilter = queryParam(exchange, "tableId").filter(_.nonEmpty).map(TableId(_))
         val openedByFilter = queryParam(exchange, "openedBy").filter(_.nonEmpty).map(PlayerId(_))
+        val assigneeIdFilter = queryParam(exchange, "assigneeId").filter(_.nonEmpty).map(PlayerId(_))
+        val overdueOnly = queryParam(exchange, "overdueOnly").exists(_.equalsIgnoreCase("true"))
+        val dueBeforeFilter = queryParam(exchange, "dueBefore").filter(_.nonEmpty).map(Instant.parse)
+        val dueAfterFilter = queryParam(exchange, "dueAfter").filter(_.nonEmpty).map(Instant.parse)
+        val asOf = queryParam(exchange, "asOf").filter(_.nonEmpty).map(Instant.parse).getOrElse(Instant.now())
         val appeals = app.appealTicketRepository.findAll()
           .filter(ticket => statusFilter.forall(_ == ticket.status))
+          .filter(ticket => priorityFilter.forall(_ == ticket.priority))
           .filter(ticket => tournamentIdFilter.forall(_ == ticket.tournamentId))
           .filter(ticket => stageIdFilter.forall(_ == ticket.stageId))
           .filter(ticket => tableIdFilter.forall(_ == ticket.tableId))
           .filter(ticket => openedByFilter.forall(_ == ticket.openedBy))
+          .filter(ticket => assigneeIdFilter.forall(ticket.assigneeId.contains))
+          .filter(ticket => !overdueOnly || ticket.dueAt.exists(_.isBefore(asOf)))
+          .filter(ticket => dueBeforeFilter.forall(limit => ticket.dueAt.exists(dueAt => !dueAt.isAfter(limit))))
+          .filter(ticket => dueAfterFilter.forall(limit => ticket.dueAt.exists(dueAt => !dueAt.isBefore(limit))))
           .sortBy(ticket => (ticket.updatedAt, ticket.id.value))
         sendPagedJson(
           exchange,
           appeals,
-          activeFilters(exchange, "status", "tournamentId", "stageId", "tableId", "openedBy")
+          activeFilters(exchange, "status", "priority", "tournamentId", "stageId", "tableId", "openedBy", "assigneeId", "overdueOnly", "dueBefore", "dueAfter", "asOf")
         )
       case ("GET", Vector("appeals", appealId)) =>
         sendOption(exchange, app.appealTicketRepository.findById(AppealTicketId(appealId)))
@@ -939,6 +954,32 @@ private final class ApiHandler(
             verdict = request.verdict,
             actor = principal(request.operator),
             tableResolution = request.resolution,
+            note = request.note
+          )
+        )
+      case ("POST", Vector("appeals", appealId, "workflow")) =>
+        val request = readJsonBody[UpdateAppealWorkflowRequest](exchange)
+        sendOption(
+          exchange,
+          app.appealService.updateAppealWorkflow(
+            ticketId = AppealTicketId(appealId),
+            actor = principal(request.operator),
+            assigneeId = request.assignee,
+            clearAssignee = request.clearAssignee,
+            priority = request.priorityLevel,
+            dueAt = request.dueAtInstant,
+            clearDueAt = request.clearDueAt,
+            note = request.note
+          )
+        )
+      case ("POST", Vector("appeals", appealId, "reopen")) =>
+        val request = readJsonBody[ReopenAppealRequest](exchange)
+        sendOption(
+          exchange,
+          app.appealService.reopenAppeal(
+            ticketId = AppealTicketId(appealId),
+            reason = request.reason,
+            actor = principal(request.operator),
             note = request.note
           )
         )

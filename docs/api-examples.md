@@ -237,6 +237,12 @@ curl "http://localhost:8080/records?tournamentId=tournament-123&stageId=stage-sw
 curl "http://localhost:8080/appeals?tournamentId=tournament-123&status=Open&tableId=table-123&limit=20"
 ```
 
+Appeal queues now also support assignee / priority / overdue triage filters:
+
+```bash
+curl "http://localhost:8080/appeals?status=Open&priority=Critical&assigneeId=player-tournament-admin&overdueOnly=true&asOf=2026-03-16T12:00:00Z"
+```
+
 ## 6. Club treasury, point pool and rank tree operations
 
 Assign an internal club title:
@@ -787,6 +793,28 @@ curl -X POST http://localhost:8080/appeals/appeal-123/adjudicate \
 Possible values:
 - `decision`: `Resolve`, `Reject`, `Escalate`
 - `tableResolution`: `RestorePriorState`, `ArchiveTable`, `ResumeScoring`, `ResumePlay`, `ForceReset`
+
+Update appeal workflow ownership / priority / SLA:
+
+```bash
+curl -X POST http://localhost:8080/appeals/appeal-123/workflow   -H "Content-Type: application/json"   -d '{
+    "operatorId": "player-tournament-admin",
+    "assigneeId": "player-reviewer-1",
+    "priority": "Critical",
+    "dueAt": "2026-03-16T13:00:00Z",
+    "note": "featured finals table"
+  }'
+```
+
+Reopen a resolved or rejected appeal when new evidence arrives:
+
+```bash
+curl -X POST http://localhost:8080/appeals/appeal-123/reopen   -H "Content-Type: application/json"   -d '{
+    "operatorId": "player-123",
+    "reason": "uploaded a clearer screenshot",
+    "note": "please review the updated evidence"
+  }'
+```
 
 ## 10. Complete a stage after all tables are archived
 

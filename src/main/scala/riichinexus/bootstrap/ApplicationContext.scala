@@ -173,6 +173,7 @@ object ApplicationContext:
       appealService = AppealApplicationService(
         appealTicketRepository,
         tableRepository,
+        playerRepository,
         knockoutStageCoordinator,
         auditEventRepository,
         eventBus,
@@ -343,6 +344,7 @@ object ApplicationContext:
       appealService = AppealApplicationService(
         appealTicketRepository,
         tableRepository,
+        playerRepository,
         knockoutStageCoordinator,
         auditEventRepository,
         eventBus,

@@ -778,6 +778,12 @@ final case class AppealDecisionLog(
     note: Option[String] = None
 ) derives CanEqual
 
+enum AppealPriority derives CanEqual:
+  case Low
+  case Normal
+  case High
+  case Critical
+
 enum AppealStatus derives CanEqual:
   case Open
   case UnderReview
@@ -798,12 +804,56 @@ final case class AppealTicket(
     openedBy: PlayerId,
     description: String,
     attachments: Vector[AppealAttachment] = Vector.empty,
+    priority: AppealPriority = AppealPriority.Normal,
+    assigneeId: Option[PlayerId] = None,
+    dueAt: Option[Instant] = None,
     status: AppealStatus = AppealStatus.Open,
     logs: Vector[AppealDecisionLog] = Vector.empty,
+    reopenCount: Int = 0,
     createdAt: Instant,
     updatedAt: Instant,
     resolution: Option[String] = None
 ) derives CanEqual:
+  require(dueAt.forall(!_.isBefore(createdAt)), "Appeal dueAt cannot be earlier than createdAt")
+
+  def assign(
+      operatorId: PlayerId,
+      assigneeId: Option[PlayerId],
+      at: Instant,
+      note: Option[String] = None
+  ): AppealTicket =
+    copy(
+      assigneeId = assigneeId,
+      logs =
+        logs :+ AppealDecisionLog(
+          operatorId,
+          assigneeId.map(assignee => s"assigned:${assignee.value}").getOrElse("unassigned"),
+          at,
+          note
+        ),
+      updatedAt = at
+    )
+
+  def reprioritize(
+      operatorId: PlayerId,
+      priority: AppealPriority,
+      dueAt: Option[Instant],
+      at: Instant,
+      note: Option[String] = None
+  ): AppealTicket =
+    copy(
+      priority = priority,
+      dueAt = dueAt,
+      logs =
+        logs :+ AppealDecisionLog(
+          operatorId,
+          s"triaged:${priority.toString.toLowerCase}",
+          at,
+          note.orElse(dueAt.map(value => s"dueAt=${value.toString}"))
+        ),
+      updatedAt = at
+    )
+
   def markUnderReview(operatorId: PlayerId, at: Instant, note: Option[String] = None): AppealTicket =
     require(
       status == AppealStatus.Open || status == AppealStatus.Escalated,
@@ -867,4 +917,23 @@ final case class AppealTicket(
       logs = logs :+ AppealDecisionLog(operatorId, s"escalated:$reason", at, note),
       updatedAt = at,
       resolution = Some(reason)
+    )
+
+  def reopen(
+      operatorId: PlayerId,
+      reason: String,
+      at: Instant,
+      note: Option[String] = None
+  ): AppealTicket =
+    require(reason.trim.nonEmpty, "Appeal reopen reason cannot be empty")
+    require(
+      status == AppealStatus.Resolved || status == AppealStatus.Rejected,
+      "Only resolved or rejected appeals can be reopened"
+    )
+    copy(
+      status = AppealStatus.Open,
+      logs = logs :+ AppealDecisionLog(operatorId, s"reopened:$reason", at, note),
+      reopenCount = reopenCount + 1,
+      updatedAt = at,
+      resolution = None
     )

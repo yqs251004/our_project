@@ -26,6 +26,16 @@ final case class AppealTicketResolved(
     occurredAt: Instant
 ) extends DomainEvent
 
+final case class AppealTicketWorkflowUpdated(
+    ticket: AppealTicket,
+    occurredAt: Instant
+) extends DomainEvent
+
+final case class AppealTicketReopened(
+    ticket: AppealTicket,
+    occurredAt: Instant
+) extends DomainEvent
+
 final case class AppealTicketAdjudicated(
     ticket: AppealTicket,
     decision: AppealDecisionType,

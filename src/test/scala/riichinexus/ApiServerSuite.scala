@@ -272,6 +272,114 @@ class ApiServerSuite extends FunSuite:
     }
   }
 
+  test("appeal workflow endpoints support triage filters and reopen flow") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-15T10:20:00Z")
+
+    val admin = app.playerService.registerPlayer("api-appeal-admin", "ApiAppealAdmin", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1810)
+    val players = Vector(
+      admin,
+      app.playerService.registerPlayer("api-appeal-b", "ApiAppealB", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1700),
+      app.playerService.registerPlayer("api-appeal-c", "ApiAppealC", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600),
+      app.playerService.registerPlayer("api-appeal-d", "ApiAppealD", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1500)
+    )
+
+    val stage = TournamentStage(IdGenerator.stageId(), "API Appeal Workflow", StageFormat.Swiss, 1, 1)
+    val tournament = app.tournamentService.createTournament(
+      "API Appeal Cup",
+      "QA",
+      now,
+      now.plusSeconds(7200),
+      Vector(stage),
+      adminId = Some(admin.id)
+    )
+
+    players.foreach(player =>
+      app.tournamentService.registerPlayer(tournament.id, player.id, principalFor(app, admin.id))
+    )
+    app.tournamentService.publishTournament(tournament.id, principalFor(app, admin.id))
+    val table = app.tournamentService.scheduleStageTables(
+      tournament.id,
+      stage.id,
+      principalFor(app, admin.id)
+    ).head
+    app.tableService.startTable(table.id, now.plusSeconds(60), principalFor(app, admin.id))
+    val openerId = table.seats.head.playerId
+
+    val appeal = app.appealService.fileAppeal(
+      tableId = table.id,
+      openedBy = openerId,
+      description = "disconnect happened again",
+      priority = AppealPriority.High,
+      dueAt = Some(now.plusSeconds(180)),
+      actor = principalFor(app, openerId),
+      createdAt = now.plusSeconds(90)
+    ).getOrElse(fail("appeal was not created"))
+    assertEquals(appeal.priority, AppealPriority.High)
+
+    withServer(app) { baseUrl =>
+      val workflowDueAt = Instant.now().plusSeconds(600)
+      val workflowResponse = postJson(
+        s"$baseUrl/appeals/${appeal.id.value}/workflow",
+        write(
+          UpdateAppealWorkflowRequest(
+            operatorId = admin.id.value,
+            assigneeId = Some(admin.id.value),
+            priority = Some("Critical"),
+            dueAt = Some(workflowDueAt.toString),
+            note = Some("expedite this table")
+          )
+        )
+      )
+      assertEquals(workflowResponse.statusCode(), 200)
+      val triaged = read[AppealTicket](workflowResponse.body())
+      assertEquals(triaged.assigneeId, Some(admin.id))
+      assertEquals(triaged.priority, AppealPriority.Critical)
+
+      val filteredResponse = get(
+        s"$baseUrl/appeals?priority=Critical&assigneeId=${admin.id.value}&overdueOnly=true&asOf=${workflowDueAt.plusSeconds(60)}"
+      )
+      assertEquals(filteredResponse.statusCode(), 200)
+      val filteredPage = readPage[AppealTicket](filteredResponse.body())
+      assertEquals(filteredPage.total, 1)
+      assertEquals(filteredPage.items.head.id, appeal.id)
+
+      val rejectResponse = postJson(
+        s"$baseUrl/appeals/${appeal.id.value}/adjudicate",
+        write(
+          AdjudicateAppealRequest(
+            operatorId = admin.id.value,
+            decision = "Reject",
+            verdict = "need stronger evidence",
+            note = Some("reopen if more logs arrive")
+          )
+        )
+      )
+      assertEquals(rejectResponse.statusCode(), 200)
+      assertEquals(read[AppealTicket](rejectResponse.body()).status, AppealStatus.Rejected)
+
+      val reopenResponse = postJson(
+        s"$baseUrl/appeals/${appeal.id.value}/reopen",
+        write(
+          ReopenAppealRequest(
+            operatorId = openerId.value,
+            reason = "new screenshot uploaded",
+            note = Some("please review updated proof")
+          )
+        )
+      )
+      assertEquals(reopenResponse.statusCode(), 200)
+      val reopened = read[AppealTicket](reopenResponse.body())
+      assertEquals(reopened.status, AppealStatus.Open)
+      assertEquals(reopened.reopenCount, 1)
+      assertEquals(reopened.assigneeId, Some(admin.id))
+
+      val detailResponse = get(s"$baseUrl/appeals/${appeal.id.value}")
+      assertEquals(detailResponse.statusCode(), 200)
+      assertEquals(read[AppealTicket](detailResponse.body()).reopenCount, 1)
+    }
+  }
+
   test("dashboard endpoints enforce RBAC and allow scoped access") {
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-15T11:00:00Z")

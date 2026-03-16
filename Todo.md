@@ -52,13 +52,18 @@ Recently completed features such as guest sessions, club applications, club hono
     - expose export-ready club payout aggregates if downstream finance systems need per-club remittance ledgers
 
 - [ ] Enrich appeal handling into a real workflow, not just a verdict log plus table mutation.
-  - Current state: appeal attachments are references only, and adjudication is limited to resolve/reject/escalate plus a coarse table resolution.
+  - Current state:
+    - appeals now support triage metadata (`priority`, `assigneeId`, `dueAt`), workflow updates, overdue queue filters, and reopen flow through both service and HTTP API
+    - moderation cascade records now capture workflow updates and reopened tickets in addition to filed/resolved notifications
+    - attachments are still references only, and adjudication side effects still collapse down to the coarse table-resolution enum
   - Evidence:
-    - `src/main/scala/riichinexus/application/service/Services.scala` in `AppealApplicationService`
-    - no assignee, priority, SLA, reopen flow, counter-appeal, or evidence storage pipeline
+    - `src/main/scala/riichinexus/domain/model/Competition.scala` now defines appeal priority/assignee/dueAt/reopen state on `AppealTicket`
+    - `src/main/scala/riichinexus/application/service/Services.scala` now exposes `updateAppealWorkflow` and `reopenAppeal`, publishes workflow/reopen domain events, and feeds moderation cascade records
+    - `src/main/scala/riichinexus/api/ApiServer.scala` now supports `/appeals/:id/workflow`, `/appeals/:id/reopen`, and assignee/priority/overdue filters on `/appeals`
   - Suggested completion:
-    - Add appeal ownership, queues, deadlines, reopen/escalate chains, and evidence lifecycle
+    - Add evidence storage / checksum / retention lifecycle instead of raw attachment references
     - Model adjudication side effects more precisely than `ForceReset` / `RestorePriorState`
+    - If counter-appeals become real, model parent/child appeal chains instead of overloading reopen history
 
 - [ ] Turn club relations into meaningful game logic instead of metadata only.
   - Current state: alliance/rivalry/neutral is stored, mirrored, and shown publicly, but nothing else in scheduling, matchmaking, or analytics consumes it.

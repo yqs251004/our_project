@@ -399,10 +399,18 @@ final case class AppealAttachmentRequest(
 final case class FileAppealRequest(
     playerId: String,
     description: String,
-    attachments: Vector[AppealAttachmentRequest] = Vector.empty
+    attachments: Vector[AppealAttachmentRequest] = Vector.empty,
+    priority: Option[String] = None,
+    dueAt: Option[String] = None
 ):
   def player: PlayerId =
     PlayerId(playerId)
+
+  def priorityLevel: AppealPriority =
+    priority.map(AppealPriority.valueOf).getOrElse(AppealPriority.Normal)
+
+  def dueAtInstant: Option[Instant] =
+    dueAt.map(Instant.parse)
 
 final case class ResolveAppealRequest(
     operatorId: String,
@@ -427,6 +435,35 @@ final case class AdjudicateAppealRequest(
 
   def resolution: Option[AppealTableResolution] =
     tableResolution.map(AppealTableResolution.valueOf)
+
+final case class UpdateAppealWorkflowRequest(
+    operatorId: String,
+    assigneeId: Option[String] = None,
+    clearAssignee: Boolean = false,
+    priority: Option[String] = None,
+    dueAt: Option[String] = None,
+    clearDueAt: Boolean = false,
+    note: Option[String] = None
+):
+  def operator: PlayerId =
+    PlayerId(operatorId)
+
+  def assignee: Option[PlayerId] =
+    assigneeId.map(PlayerId(_))
+
+  def priorityLevel: Option[AppealPriority] =
+    priority.map(AppealPriority.valueOf)
+
+  def dueAtInstant: Option[Instant] =
+    dueAt.map(Instant.parse)
+
+final case class ReopenAppealRequest(
+    operatorId: String,
+    reason: String,
+    note: Option[String] = None
+):
+  def operator: PlayerId =
+    PlayerId(operatorId)
 
 final case class UploadPaifuRequest(
     operatorId: String,
@@ -698,6 +735,8 @@ object ApiModels:
   given ReadWriter[FileAppealRequest] = macroRW
   given ReadWriter[ResolveAppealRequest] = macroRW
   given ReadWriter[AdjudicateAppealRequest] = macroRW
+  given ReadWriter[UpdateAppealWorkflowRequest] = macroRW
+  given ReadWriter[ReopenAppealRequest] = macroRW
   given ReadWriter[UploadPaifuRequest] = macroRW
   given ReadWriter[CompleteStageRequest] = macroRW
   given ReadWriter[AdvanceKnockoutStageRequest] = macroRW
