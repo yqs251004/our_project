@@ -80,6 +80,8 @@ object JsonCodecs:
   given ReadWriter[DictionaryNamespaceReviewStatus] =
     stringEnumReadWriter(DictionaryNamespaceReviewStatus.valueOf, _.toString)
   given ReadWriter[DictionaryNamespaceRegistration] = macroRW
+  given ReadWriter[DictionaryNamespaceOwnerBacklog] = macroRW
+  given ReadWriter[DictionaryNamespaceBacklogView] = macroRW
   given ReadWriter[AuditEventEntry] = macroRW
   given ReadWriter[Club] = macroRW
 

@@ -11,16 +11,18 @@ Recently completed features such as guest sessions, club applications, club hono
   - Current state:
     - metadata keys now require an approved namespace registration before they can be written
     - namespace owners can write keys under their approved prefix through the existing dictionary upsert endpoint
-    - super admins can now request/review/transfer/revoke namespaces, and `/dictionary/namespaces` supports owner/requester/reviewer filters
+    - super admins can now request/review/transfer/revoke namespaces, and `/dictionary/namespaces` supports owner/requester/reviewer filters plus overdue triage
+    - pending namespace requests now carry `reviewDueAt`, and `/dictionary/namespaces/backlog` exposes pending / overdue / due-soon counts
+    - namespace ownership can now be assigned only to existing `Active` players; suspended/banned players are rejected for request-on-behalf and transfer flows
     - reserved runtime namespaces still remain governed only by `GlobalDictionaryRegistry`
   - Evidence:
-    - `src/main/scala/riichinexus/domain/model/Dictionary.scala` now defines namespace approval, transfer, and revocation transitions
-    - `src/main/scala/riichinexus/application/service/Services.scala` now enforces approved namespace ownership for metadata writes and exposes transfer/revoke flows
-    - `src/main/scala/riichinexus/api/ApiServer.scala` now serves `/dictionary/namespaces`, `/dictionary/namespaces/review`, `/dictionary/namespaces/transfer`, and `/dictionary/namespaces/revoke`
+    - `src/main/scala/riichinexus/domain/model/Dictionary.scala` now defines namespace due dates and backlog views alongside approval, transfer, and revocation transitions
+    - `src/main/scala/riichinexus/application/service/Services.scala` now computes namespace backlog summaries and enforces active-owner checks plus approved namespace ownership for metadata writes
+    - `src/main/scala/riichinexus/api/ApiServer.scala` now serves `/dictionary/namespaces/backlog` and overdue filters on `/dictionary/namespaces`
   - Suggested completion:
-    - add approval SLA / due-date tracking and operational backlog views for namespace triage
-    - add namespace transfer safety rules when the new owner is suspended/banned or leaves a team context
     - decide whether some metadata families should support multi-owner/editor policies instead of a single owner
+    - optionally add reminder/escalation hooks when `reviewDueAt` is breached repeatedly
+    - if namespace ownership should track org/team membership, introduce an explicit team-context model instead of inferring it from current club bindings
 
 - [ ] Deepen the new Advanced Stats Board into fully rules-faithful mahjong analytics.
   - Current state:

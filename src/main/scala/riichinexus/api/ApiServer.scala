@@ -992,23 +992,43 @@ private final class ApiHandler(
         sendPagedJson(exchange, entries, activeFilters(exchange, "prefix", "updatedBy"))
       case ("GET", Vector("dictionary", "schema")) =>
         sendJson(exchange, 200, GlobalDictionaryRegistry.schemaView)
+      case ("GET", Vector("dictionary", "namespaces", "backlog")) =>
+        val operator = queryPrincipal(exchange)
+        val asOf = queryParam(exchange, "asOf").filter(_.nonEmpty).map(Instant.parse).getOrElse(Instant.now())
+        val dueSoonHours = queryParam(exchange, "dueSoonHours").filter(_.nonEmpty).map(_.toLong).getOrElse(24L)
+        sendJson(
+          exchange,
+          200,
+          app.superAdminService.dictionaryNamespaceBacklog(
+            actor = operator,
+            asOf = asOf,
+            dueSoonWindow = java.time.Duration.ofHours(dueSoonHours)
+          )
+        )
       case ("GET", Vector("dictionary", "namespaces")) =>
         val operator = queryPrincipal(exchange)
         val statusFilter = queryParam(exchange, "status").map(DictionaryNamespaceReviewStatus.valueOf)
         val ownerFilter = queryParam(exchange, "ownerId").filter(_.nonEmpty).map(PlayerId(_))
         val requestedByFilter = queryParam(exchange, "requestedBy").filter(_.nonEmpty).map(PlayerId(_))
         val reviewedByFilter = queryParam(exchange, "reviewedBy").filter(_.nonEmpty).map(PlayerId(_))
+        val asOf = queryParam(exchange, "asOf").filter(_.nonEmpty).map(Instant.parse).getOrElse(Instant.now())
+        val overdueOnly = queryParam(exchange, "overdueOnly").exists(_.equalsIgnoreCase("true"))
+        val dueBefore = queryParam(exchange, "dueBefore").filter(_.nonEmpty).map(Instant.parse)
+        val dueAfter = queryParam(exchange, "dueAfter").filter(_.nonEmpty).map(Instant.parse)
         val namespaces = app.dictionaryNamespaceRepository.findAll()
           .filter(registration => statusFilter.forall(_ == registration.status))
           .filter(registration => ownerFilter.forall(_ == registration.ownerPlayerId))
           .filter(registration => requestedByFilter.forall(_ == registration.requestedBy))
           .filter(registration => reviewedByFilter.forall(reviewer => registration.reviewedBy.contains(reviewer)))
+          .filter(registration => !overdueOnly || registration.isPendingOverdue(asOf))
+          .filter(registration => dueBefore.forall(bound => registration.reviewDueAt.exists(dueAt => !dueAt.isAfter(bound))))
+          .filter(registration => dueAfter.forall(bound => registration.reviewDueAt.exists(dueAt => !dueAt.isBefore(bound))))
           .filter(registration =>
             operator.isSuperAdmin ||
               operator.playerId.contains(registration.ownerPlayerId) ||
               operator.playerId.contains(registration.requestedBy)
           )
-        sendPagedJson(exchange, namespaces, activeFilters(exchange, "status", "ownerId", "requestedBy", "reviewedBy"))
+        sendPagedJson(exchange, namespaces, activeFilters(exchange, "status", "ownerId", "requestedBy", "reviewedBy", "asOf", "overdueOnly", "dueBefore", "dueAfter"))
       case ("POST", Vector("dictionary", "namespaces")) =>
         val request = readJsonBody[RequestDictionaryNamespaceRequest](exchange)
         sendJson(
@@ -1018,7 +1038,8 @@ private final class ApiHandler(
             namespacePrefix = request.namespacePrefix,
             actor = principal(request.operator),
             ownerPlayerId = request.owner,
-            note = request.note
+            note = request.note,
+            reviewDueAt = request.parsedReviewDueAt
           )
         )
       case ("POST", Vector("dictionary", "namespaces", "review")) =>

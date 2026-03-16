@@ -560,6 +560,114 @@ class ApiServerSuite extends FunSuite:
     }
   }
 
+  test("dictionary namespace transfer rejects suspended owners over the API") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-16T16:40:00Z")
+
+    val root = app.playerService.registerPlayer("ns-transfer-root", "NsTransferRoot", RankSnapshot(RankPlatform.Custom, "S"), now, 2000)
+    val owner = app.playerService.registerPlayer("ns-transfer-owner", "NsTransferOwner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
+    val suspended = app.playerService.registerPlayer("ns-transfer-suspended", "NsTransferSuspended", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1500)
+    val superAdmin = app.playerRepository.save(root.grantRole(RoleGrant.superAdmin(now)))
+    app.playerRepository.save(suspended.copy(status = PlayerStatus.Suspended))
+
+    withServer(app) { baseUrl =>
+      val requestResponse = postJson(
+        s"$baseUrl/dictionary/namespaces",
+        write(
+          RequestDictionaryNamespaceRequest(
+            operatorId = owner.id.value,
+            namespacePrefix = "ui.banner",
+            note = Some("frontend banners")
+          )
+        )
+      )
+      assertEquals(requestResponse.statusCode(), 201)
+
+      val reviewResponse = postJson(
+        s"$baseUrl/dictionary/namespaces/review",
+        write(
+          ReviewDictionaryNamespaceRequest(
+            operatorId = superAdmin.id.value,
+            namespacePrefix = "ui.banner",
+            approve = true,
+            note = Some("approved")
+          )
+        )
+      )
+      assertEquals(reviewResponse.statusCode(), 200)
+
+      val transferResponse = postJson(
+        s"$baseUrl/dictionary/namespaces/transfer",
+        write(
+          TransferDictionaryNamespaceRequest(
+            operatorId = superAdmin.id.value,
+            namespacePrefix = "ui.banner",
+            newOwnerPlayerId = suspended.id.value,
+            note = Some("should fail")
+          )
+        )
+      )
+      assertEquals(transferResponse.statusCode(), 400)
+      assert(transferResponse.body().contains("active player owner"))
+    }
+  }
+
+  test("dictionary namespace backlog endpoints expose overdue triage data") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-16T16:10:00Z")
+
+    val root = app.playerService.registerPlayer("ns-backlog-root", "NsBacklogRoot", RankSnapshot(RankPlatform.Custom, "S"), now, 2000)
+    val ownerA = app.playerService.registerPlayer("ns-backlog-owner-a", "NsBacklogOwnerA", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
+    val ownerB = app.playerService.registerPlayer("ns-backlog-owner-b", "NsBacklogOwnerB", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1580)
+    val superAdmin = app.playerRepository.save(root.grantRole(RoleGrant.superAdmin(now)))
+
+    withServer(app) { baseUrl =>
+      val firstRequest = postJson(
+        s"$baseUrl/dictionary/namespaces",
+        write(
+          RequestDictionaryNamespaceRequest(
+            operatorId = ownerA.id.value,
+            namespacePrefix = "ui.alert",
+            note = Some("alert family"),
+            reviewDueAt = Some(now.plusSeconds(1800).toString)
+          )
+        )
+      )
+      assertEquals(firstRequest.statusCode(), 201)
+
+      val secondRequest = postJson(
+        s"$baseUrl/dictionary/namespaces",
+        write(
+          RequestDictionaryNamespaceRequest(
+            operatorId = ownerB.id.value,
+            namespacePrefix = "ui.scoreboard",
+            note = Some("scoreboard family"),
+            reviewDueAt = Some(now.plusSeconds(8 * 3600).toString)
+          )
+        )
+      )
+      assertEquals(secondRequest.statusCode(), 201)
+
+      val backlogResponse = get(
+        s"$baseUrl/dictionary/namespaces/backlog?operatorId=${superAdmin.id.value}&asOf=${now.plusSeconds(3 * 3600)}&dueSoonHours=8"
+      )
+      assertEquals(backlogResponse.statusCode(), 200)
+      val backlog = read[DictionaryNamespaceBacklogView](backlogResponse.body())
+      assertEquals(backlog.pendingCount, 2)
+      assertEquals(backlog.overdueCount, 1)
+      assertEquals(backlog.dueSoonCount, 1)
+      assertEquals(backlog.ownerBacklog.map(_.ownerPlayerId), Vector(ownerA.id, ownerB.id))
+
+      val overdueResponse = get(
+        s"$baseUrl/dictionary/namespaces?operatorId=${superAdmin.id.value}&status=Pending&overdueOnly=true&asOf=${now.plusSeconds(3 * 3600)}"
+      )
+      assertEquals(overdueResponse.statusCode(), 200)
+      val overduePage = readPage[DictionaryNamespaceRegistration](overdueResponse.body())
+      assertEquals(overduePage.total, 1)
+      assertEquals(overduePage.items.head.namespacePrefix, "ui.alert.")
+    }
+  }
+
   test("dictionary key and audit aggregate endpoints return targeted admin data") {
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-15T12:00:00Z")

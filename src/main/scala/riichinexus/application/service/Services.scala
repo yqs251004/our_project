@@ -2892,12 +2892,25 @@ final class SuperAdminService(
       }
     }
 
+  private def requireActiveNamespaceOwner(playerId: PlayerId, context: String): Player =
+    playerRepository.findById(playerId) match
+      case Some(player) if player.status == PlayerStatus.Active => player
+      case Some(player) =>
+        throw IllegalArgumentException(
+          s"Dictionary namespace $context requires an active player owner, but ${playerId.value} is ${player.status.toString.toLowerCase}"
+        )
+      case None =>
+        throw IllegalArgumentException(
+          s"Dictionary namespace $context requires an existing player owner, but ${playerId.value} was not found"
+        )
+
   def requestDictionaryNamespace(
       namespacePrefix: String,
       actor: AccessPrincipal,
       ownerPlayerId: Option[PlayerId] = None,
       note: Option[String] = None,
-      requestedAt: Instant = Instant.now()
+      requestedAt: Instant = Instant.now(),
+      reviewDueAt: Option[Instant] = None
   ): DictionaryNamespaceRegistration =
     transactionManager.inTransaction {
       val requesterId = actor.playerId.getOrElse(
@@ -2906,8 +2919,14 @@ final class SuperAdminService(
       val effectiveOwner = ownerPlayerId.getOrElse(requesterId)
       if effectiveOwner != requesterId && !actor.isSuperAdmin then
         throw IllegalArgumentException("Only super admins can request a namespace on behalf of another owner")
+      requireActiveNamespaceOwner(effectiveOwner, s"request ownership for ${effectiveOwner.value}")
 
       val normalizedPrefix = GlobalDictionaryRegistry.normalizeNamespacePrefix(namespacePrefix)
+      val effectiveReviewDueAt = reviewDueAt.orElse(Some(requestedAt.plus(java.time.Duration.ofHours(72))))
+      require(
+        effectiveReviewDueAt.forall(!_.isBefore(requestedAt)),
+        "Dictionary namespace reviewDueAt cannot be earlier than requestedAt"
+      )
       dictionaryNamespaceRepository.findByPrefix(normalizedPrefix) match
         case Some(existing) if existing.status == DictionaryNamespaceReviewStatus.Approved && existing.ownerPlayerId == effectiveOwner =>
           existing
@@ -2922,6 +2941,7 @@ final class SuperAdminService(
               ownerPlayerId = effectiveOwner,
               requestedBy = requesterId,
               requestedAt = requestedAt,
+              reviewDueAt = effectiveReviewDueAt,
               reviewNote = note
             )
           )
@@ -2933,7 +2953,10 @@ final class SuperAdminService(
               eventType = "DictionaryNamespaceRequested",
               occurredAt = requestedAt,
               actorId = Some(requesterId),
-              details = Map("ownerPlayerId" -> effectiveOwner.value),
+              details = Map(
+                "ownerPlayerId" -> effectiveOwner.value,
+                "reviewDueAt" -> effectiveReviewDueAt.map(_.toString).getOrElse("")
+              ),
               note = note
             )
           )
@@ -2973,6 +2996,40 @@ final class SuperAdminService(
       }
     }
 
+  def dictionaryNamespaceBacklog(
+      actor: AccessPrincipal,
+      asOf: Instant = Instant.now(),
+      dueSoonWindow: java.time.Duration = java.time.Duration.ofHours(24)
+  ): DictionaryNamespaceBacklogView =
+    transactionManager.inTransaction {
+      authorizationService.requirePermission(actor, Permission.ManageGlobalDictionary)
+      val pending = dictionaryNamespaceRepository.findAll()
+        .filter(_.status == DictionaryNamespaceReviewStatus.Pending)
+
+      val ownerBacklog = pending
+        .groupBy(_.ownerPlayerId)
+        .toVector
+        .map { case (ownerId, registrations) =>
+          DictionaryNamespaceOwnerBacklog(
+            ownerPlayerId = ownerId,
+            pendingCount = registrations.size,
+            overdueCount = registrations.count(_.isPendingOverdue(asOf)),
+            dueSoonCount = registrations.count(_.isPendingDueSoon(asOf, dueSoonWindow))
+          )
+        }
+        .sortBy(bucket => (-bucket.overdueCount, -bucket.pendingCount, bucket.ownerPlayerId.value))
+
+      DictionaryNamespaceBacklogView(
+        asOf = asOf,
+        pendingCount = pending.size,
+        overdueCount = pending.count(_.isPendingOverdue(asOf)),
+        dueSoonCount = pending.count(_.isPendingDueSoon(asOf, dueSoonWindow)),
+        oldestPendingRequestedAt = pending.map(_.requestedAt).sorted.headOption,
+        nextDueAt = pending.flatMap(_.reviewDueAt).sorted.headOption,
+        ownerBacklog = ownerBacklog
+      )
+    }
+
   def transferDictionaryNamespace(
       namespacePrefix: String,
       newOwnerId: PlayerId,
@@ -2983,6 +3040,7 @@ final class SuperAdminService(
     transactionManager.inTransaction {
       authorizationService.requirePermission(actor, Permission.ManageGlobalDictionary)
       val reviewer = actor.playerId.getOrElse(PlayerId("system"))
+      requireActiveNamespaceOwner(newOwnerId, s"transfer ownership to ${newOwnerId.value}")
       val normalizedPrefix = GlobalDictionaryRegistry.normalizeNamespacePrefix(namespacePrefix)
       dictionaryNamespaceRepository.findByPrefix(normalizedPrefix).map { existing =>
         val transferred = existing.transferOwnership(newOwnerId, reviewer, transferredAt, note)

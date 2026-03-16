@@ -751,6 +751,105 @@ class RiichiNexusSuite extends FunSuite:
     assertEquals(transferredWrite.updatedBy, outsider.id)
   }
 
+  test("dictionary namespace ownership rejects suspended or banned owners") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-16T16:30:00Z")
+
+    val root = app.playerService.registerPlayer("dict-owner-safety-root", "OwnerSafetyRoot", RankSnapshot(RankPlatform.Custom, "S"), now, 2000)
+    val owner = app.playerService.registerPlayer("dict-owner-safety-owner", "OwnerSafetyOwner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
+    val suspended = app.playerService.registerPlayer("dict-owner-safety-suspended", "OwnerSafetySuspended", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1500)
+    val banned = app.playerService.registerPlayer("dict-owner-safety-banned", "OwnerSafetyBanned", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1490)
+    val superAdmin = app.playerRepository.save(root.grantRole(RoleGrant.superAdmin(now)))
+    app.playerRepository.save(suspended.copy(status = PlayerStatus.Suspended))
+    app.playerRepository.save(banned.ban("policy violation"))
+
+    intercept[IllegalArgumentException] {
+      app.superAdminService.requestDictionaryNamespace(
+        namespacePrefix = "ui.suspended-owner",
+        actor = principalFor(app, superAdmin.id),
+        ownerPlayerId = Some(suspended.id),
+        requestedAt = now.plusSeconds(10)
+      )
+    }
+
+    app.superAdminService.requestDictionaryNamespace(
+      namespacePrefix = "ui.banner",
+      actor = owner.asPrincipal,
+      requestedAt = now.plusSeconds(20)
+    )
+    app.superAdminService.reviewDictionaryNamespace(
+      namespacePrefix = "ui.banner",
+      approve = true,
+      actor = principalFor(app, superAdmin.id),
+      reviewedAt = now.plusSeconds(30)
+    ).getOrElse(fail("namespace approval missing"))
+
+    intercept[IllegalArgumentException] {
+      app.superAdminService.transferDictionaryNamespace(
+        namespacePrefix = "ui.banner",
+        newOwnerId = suspended.id,
+        actor = principalFor(app, superAdmin.id),
+        transferredAt = now.plusSeconds(40)
+      )
+    }
+
+    intercept[IllegalArgumentException] {
+      app.superAdminService.transferDictionaryNamespace(
+        namespacePrefix = "ui.banner",
+        newOwnerId = banned.id,
+        actor = principalFor(app, superAdmin.id),
+        transferredAt = now.plusSeconds(50)
+      )
+    }
+  }
+
+  test("dictionary namespace backlog tracks pending overdue and due-soon reviews") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-16T16:00:00Z")
+
+    val root = app.playerService.registerPlayer("dict-backlog-root", "DictBacklogRoot", RankSnapshot(RankPlatform.Custom, "S"), now, 2000)
+    val ownerA = app.playerService.registerPlayer("dict-backlog-owner-a", "OwnerA", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
+    val ownerB = app.playerService.registerPlayer("dict-backlog-owner-b", "OwnerB", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1580)
+    val superAdmin = app.playerRepository.save(root.grantRole(RoleGrant.superAdmin(now)))
+
+    app.superAdminService.requestDictionaryNamespace(
+      namespacePrefix = "ui.banner",
+      actor = ownerA.asPrincipal,
+      requestedAt = now,
+      reviewDueAt = Some(now.plusSeconds(3600)),
+      note = Some("banner family")
+    )
+    app.superAdminService.requestDictionaryNamespace(
+      namespacePrefix = "ui.notice",
+      actor = ownerA.asPrincipal,
+      requestedAt = now.plusSeconds(60),
+      reviewDueAt = Some(now.plusSeconds(8 * 3600)),
+      note = Some("notice family")
+    )
+    app.superAdminService.requestDictionaryNamespace(
+      namespacePrefix = "ui.card",
+      actor = ownerB.asPrincipal,
+      requestedAt = now.plusSeconds(120),
+      reviewDueAt = Some(now.plusSeconds(72 * 3600)),
+      note = Some("card family")
+    )
+
+    val backlog = app.superAdminService.dictionaryNamespaceBacklog(
+      actor = principalFor(app, superAdmin.id),
+      asOf = now.plusSeconds(5 * 3600),
+      dueSoonWindow = java.time.Duration.ofHours(6)
+    )
+
+    assertEquals(backlog.pendingCount, 3)
+    assertEquals(backlog.overdueCount, 1)
+    assertEquals(backlog.dueSoonCount, 1)
+    assertEquals(backlog.oldestPendingRequestedAt, Some(now))
+    assertEquals(backlog.nextDueAt, Some(now.plusSeconds(3600)))
+    assertEquals(backlog.ownerBacklog.map(_.ownerPlayerId), Vector(ownerA.id, ownerB.id))
+    assertEquals(backlog.ownerBacklog.head.overdueCount, 1)
+    assertEquals(backlog.ownerBacklog.head.dueSoonCount, 1)
+  }
+
   test("global dictionary normalizes ranks in the public player leaderboard") {
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-16T12:30:00Z")

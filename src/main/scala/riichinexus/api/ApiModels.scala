@@ -481,13 +481,17 @@ final case class RequestDictionaryNamespaceRequest(
     operatorId: String,
     namespacePrefix: String,
     ownerPlayerId: Option[String] = None,
-    note: Option[String] = None
+    note: Option[String] = None,
+    reviewDueAt: Option[String] = None
 ):
   def operator: PlayerId =
     PlayerId(operatorId)
 
   def owner: Option[PlayerId] =
     ownerPlayerId.map(PlayerId(_))
+
+  def parsedReviewDueAt: Option[java.time.Instant] =
+    reviewDueAt.map(java.time.Instant.parse)
 
 final case class ReviewDictionaryNamespaceRequest(
     operatorId: String,

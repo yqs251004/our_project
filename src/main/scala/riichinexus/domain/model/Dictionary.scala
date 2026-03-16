@@ -34,12 +34,25 @@ final case class DictionaryNamespaceRegistration(
     ownerPlayerId: PlayerId,
     requestedBy: PlayerId,
     requestedAt: java.time.Instant,
+    reviewDueAt: Option[java.time.Instant] = None,
     status: DictionaryNamespaceReviewStatus = DictionaryNamespaceReviewStatus.Pending,
     reviewedBy: Option[PlayerId] = None,
     reviewedAt: Option[java.time.Instant] = None,
     reviewNote: Option[String] = None
 ) derives CanEqual:
   require(namespacePrefix.trim.nonEmpty, "Dictionary namespace prefix cannot be empty")
+
+  def isPendingOverdue(asOf: java.time.Instant): Boolean =
+    status == DictionaryNamespaceReviewStatus.Pending && reviewDueAt.exists(_.isBefore(asOf))
+
+  def isPendingDueSoon(
+      asOf: java.time.Instant,
+      dueSoonWindow: java.time.Duration = java.time.Duration.ofHours(24)
+  ): Boolean =
+    status == DictionaryNamespaceReviewStatus.Pending &&
+      reviewDueAt.exists { dueAt =>
+        !dueAt.isBefore(asOf) && !dueAt.isAfter(asOf.plus(dueSoonWindow))
+      }
 
   def approve(by: PlayerId, at: java.time.Instant, note: Option[String] = None): DictionaryNamespaceRegistration =
     require(status == DictionaryNamespaceReviewStatus.Pending, "Only pending namespace requests can be approved")
@@ -83,3 +96,19 @@ final case class DictionaryNamespaceRegistration(
       reviewNote = note
     )
 
+final case class DictionaryNamespaceOwnerBacklog(
+    ownerPlayerId: PlayerId,
+    pendingCount: Int,
+    overdueCount: Int,
+    dueSoonCount: Int
+) derives CanEqual
+
+final case class DictionaryNamespaceBacklogView(
+    asOf: java.time.Instant,
+    pendingCount: Int,
+    overdueCount: Int,
+    dueSoonCount: Int,
+    oldestPendingRequestedAt: Option[java.time.Instant],
+    nextDueAt: Option[java.time.Instant],
+    ownerBacklog: Vector[DictionaryNamespaceOwnerBacklog]
+) derives CanEqual

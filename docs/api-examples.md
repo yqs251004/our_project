@@ -377,7 +377,8 @@ Request and review a metadata namespace before non-admin owners write free-form 
 curl -X POST http://localhost:8080/dictionary/namespaces   -H "Content-Type: application/json"   -d '{
     "operatorId": "player-product-owner",
     "namespacePrefix": "ui.banner",
-    "note": "frontend copy family"
+    "note": "frontend copy family",
+    "reviewDueAt": "2026-03-20T12:00:00Z"
   }'
 ```
 
@@ -394,6 +395,16 @@ Inspect namespace ownership and review status:
 
 ```bash
 curl "http://localhost:8080/dictionary/namespaces?operatorId=player-super-admin&status=Approved"
+```
+
+Inspect namespace backlog and overdue pending reviews:
+
+```bash
+curl "http://localhost:8080/dictionary/namespaces/backlog?operatorId=player-super-admin&asOf=2026-03-19T12:00:00Z&dueSoonHours=24"
+```
+
+```bash
+curl "http://localhost:8080/dictionary/namespaces?operatorId=player-super-admin&status=Pending&overdueOnly=true&asOf=2026-03-19T12:00:00Z"
 ```
 
 Transfer an approved metadata namespace to a new owner:
@@ -417,7 +428,7 @@ curl -X POST http://localhost:8080/dictionary/namespaces/revoke   -H "Content-Ty
   }'
 ```
 
-Once approved, the namespace owner can update metadata keys under that prefix through the same dictionary write endpoint:
+Once approved, the namespace owner can update metadata keys under that prefix through the same dictionary write endpoint. Namespace owners must be existing `Active` players; suspended or banned players cannot receive new namespace ownership through request-on-behalf or transfer flows.
 
 ```bash
 curl -X POST http://localhost:8080/admin/dictionary   -H "Content-Type: application/json"   -d '{
