@@ -131,7 +131,9 @@ private object RuntimeDictionarySupport:
       playerRepository: PlayerRepository,
       globalDictionaryRepository: GlobalDictionaryRepository
   ): Double =
-    val memberElos = club.members.flatMap(memberId => playerRepository.findById(memberId).map(_.elo))
+    val memberElos = club.members.flatMap(memberId =>
+      playerRepository.findById(memberId).filter(_.status == PlayerStatus.Active).map(_.elo)
+    )
     val averageElo =
       if memberElos.isEmpty then 0.0 else memberElos.sum.toDouble / memberElos.size.toDouble
     val config = currentClubPowerConfig(globalDictionaryRepository)
@@ -369,7 +371,7 @@ private object ProjectionSupport:
       at: Instant
   ): Club =
     val refreshedClub = recalculateClubPowerRating(club, playerRepository, globalDictionaryRepository)
-    dashboardRepository.save(buildClubDashboard(refreshedClub, dashboardRepository, at))
+    dashboardRepository.save(buildClubDashboard(refreshedClub, playerRepository, dashboardRepository, at))
     refreshedClub
 
   private def recalculateClubPowerRating(
@@ -383,11 +385,14 @@ private object ProjectionSupport:
 
   private def buildClubDashboard(
       club: Club,
+      playerRepository: PlayerRepository,
       dashboardRepository: DashboardRepository,
       at: Instant
   ): Dashboard =
     val memberDashboards = club.members.flatMap { playerId =>
-      dashboardRepository.findByOwner(DashboardOwner.Player(playerId))
+      playerRepository.findById(playerId)
+        .filter(_.status == PlayerStatus.Active)
+        .flatMap(_ => dashboardRepository.findByOwner(DashboardOwner.Player(playerId)))
     }
 
     if memberDashboards.isEmpty then Dashboard.empty(DashboardOwner.Club(club.id), at)
@@ -3745,7 +3750,9 @@ final class DashboardProjectionSubscriber(
 
   private def buildClubDashboard(club: Club, at: Instant): Dashboard =
     val memberDashboards = club.members.flatMap { playerId =>
-      dashboardRepository.findByOwner(DashboardOwner.Player(playerId))
+      playerRepository.findById(playerId)
+        .filter(_.status == PlayerStatus.Active)
+        .flatMap(_ => dashboardRepository.findByOwner(DashboardOwner.Player(playerId)))
     }
 
     if memberDashboards.isEmpty then Dashboard.empty(DashboardOwner.Club(club.id), at)
@@ -3878,7 +3885,11 @@ final class AdvancedStatsPipelineService(
       club: Club,
       at: Instant = Instant.now()
   ): AdvancedStatsBoard =
-    val memberBoards = club.members.map(playerId => rebuildPlayerBoard(playerId, at))
+    val memberBoards = club.members.flatMap { playerId =>
+      playerRepository.findById(playerId)
+        .filter(_.status == PlayerStatus.Active)
+        .map(_ => rebuildPlayerBoard(playerId, at))
+    }
     buildClubBoard(club, memberBoards, at)
 
   private def scheduleAsyncDrain(): Unit =
@@ -3907,3 +3918,163 @@ final class AdvancedStatsProjectionSubscriber(
         ()
       case _ =>
         ()
+
+
+final class EventCascadeProjectionSubscriber(
+    playerRepository: PlayerRepository,
+    clubRepository: ClubRepository,
+    dashboardRepository: DashboardRepository,
+    advancedStatsBoardRepository: AdvancedStatsBoardRepository,
+    eventCascadeRecordRepository: EventCascadeRecordRepository,
+    advancedStatsPipelineService: AdvancedStatsPipelineService,
+    globalDictionaryRepository: GlobalDictionaryRepository
+) extends DomainEventSubscriber:
+  override def handle(event: DomainEvent): Unit =
+    event match
+      case AppealTicketFiled(ticket, occurredAt) =>
+        eventCascadeRecordRepository.save(
+          EventCascadeRecord.pending(
+            eventType = "AppealTicketFiled",
+            consumer = EventCascadeConsumer.ModerationInbox,
+            aggregateType = "appeal-ticket",
+            aggregateId = ticket.id.value,
+            summary = s"Appeal filed for table ${ticket.tableId.value}",
+            occurredAt = occurredAt,
+            metadata = Map(
+              "tournamentId" -> ticket.tournamentId.value,
+              "tableId" -> ticket.tableId.value,
+              "status" -> ticket.status.toString
+            )
+          )
+        )
+      case AppealTicketResolved(ticket, occurredAt) =>
+        eventCascadeRecordRepository.save(
+          EventCascadeRecord.completed(
+            eventType = "AppealTicketResolved",
+            consumer = EventCascadeConsumer.ModerationInbox,
+            aggregateType = "appeal-ticket",
+            aggregateId = ticket.id.value,
+            summary = s"Appeal ${ticket.id.value} resolved with status ${ticket.status}",
+            occurredAt = occurredAt,
+            handledAt = occurredAt,
+            metadata = Map(
+              "tournamentId" -> ticket.tournamentId.value,
+              "tableId" -> ticket.tableId.value,
+              "status" -> ticket.status.toString
+            )
+          )
+        )
+      case AppealTicketAdjudicated(ticket, decision, tableResolution, occurredAt) =>
+        eventCascadeRecordRepository.save(
+          EventCascadeRecord.completed(
+            eventType = "AppealTicketAdjudicated",
+            consumer = EventCascadeConsumer.Notification,
+            aggregateType = "appeal-ticket",
+            aggregateId = ticket.id.value,
+            summary = s"Appeal ${ticket.id.value} adjudicated as ${decision}",
+            occurredAt = occurredAt,
+            handledAt = occurredAt,
+            metadata = Map(
+              "decision" -> decision.toString,
+              "tableResolution" -> tableResolution.map(_.toString).getOrElse("none")
+            )
+          )
+        )
+      case TournamentSettlementRecorded(settlement, occurredAt) =>
+        eventCascadeRecordRepository.save(
+          EventCascadeRecord.completed(
+            eventType = "TournamentSettlementRecorded",
+            consumer = EventCascadeConsumer.SettlementExport,
+            aggregateType = "tournament-settlement",
+            aggregateId = settlement.id.value,
+            summary = s"Settlement snapshot exported for tournament ${settlement.tournamentId.value}",
+            occurredAt = occurredAt,
+            handledAt = occurredAt,
+            metadata = Map(
+              "tournamentId" -> settlement.tournamentId.value,
+              "stageId" -> settlement.stageId.value,
+              "entryCount" -> settlement.entries.size.toString,
+              "totalAwarded" -> settlement.entries.map(_.awardAmount).sum.toString
+            )
+          )
+        )
+      case GlobalDictionaryUpdated(entry, occurredAt) =>
+        val repairedClubCount =
+          if entry.key.trim.toLowerCase.startsWith("club.power.") then
+            clubRepository.findActive().map { club =>
+              val refreshed = ProjectionSupport.refreshClubProjection(
+                club,
+                playerRepository,
+                globalDictionaryRepository,
+                dashboardRepository,
+                occurredAt
+              )
+              clubRepository.save(refreshed)
+            }.size
+          else 0
+
+        eventCascadeRecordRepository.save(
+          EventCascadeRecord.completed(
+            eventType = "GlobalDictionaryUpdated",
+            consumer = EventCascadeConsumer.ProjectionRepair,
+            aggregateType = "dictionary",
+            aggregateId = entry.key,
+            summary = s"Dictionary update cascaded for ${entry.key}",
+            occurredAt = occurredAt,
+            handledAt = occurredAt,
+            metadata = Map(
+              "repairedClubCount" -> repairedClubCount.toString,
+              "updatedBy" -> entry.updatedBy.value
+            )
+          )
+        )
+      case PlayerBanned(playerId, reason, occurredAt) =>
+        dashboardRepository.save(Dashboard.empty(DashboardOwner.Player(playerId), occurredAt))
+        advancedStatsBoardRepository.save(AdvancedStatsBoard.empty(DashboardOwner.Player(playerId), occurredAt))
+        val repairedClubIds = playerRepository.findById(playerId).toVector.flatMap(_.boundClubIds).distinct.flatMap { clubId =>
+          clubRepository.findById(clubId).map { club =>
+            val refreshed = ProjectionSupport.refreshClubProjection(
+              club,
+              playerRepository,
+              globalDictionaryRepository,
+              dashboardRepository,
+              occurredAt
+            )
+            clubRepository.save(refreshed)
+            advancedStatsBoardRepository.save(advancedStatsPipelineService.rebuildClubBoard(refreshed, occurredAt))
+            clubId.value
+          }
+        }
+
+        eventCascadeRecordRepository.save(
+          EventCascadeRecord.completed(
+            eventType = "PlayerBanned",
+            consumer = EventCascadeConsumer.ProjectionRepair,
+            aggregateType = "player",
+            aggregateId = playerId.value,
+            summary = s"Banned player ${playerId.value} removed from derived projections",
+            occurredAt = occurredAt,
+            handledAt = occurredAt,
+            metadata = Map(
+              "reason" -> reason,
+              "repairedClubIds" -> repairedClubIds.mkString(",")
+            )
+          )
+        )
+      case ClubDissolved(clubId, occurredAt) =>
+        dashboardRepository.save(Dashboard.empty(DashboardOwner.Club(clubId), occurredAt))
+        advancedStatsBoardRepository.save(AdvancedStatsBoard.empty(DashboardOwner.Club(clubId), occurredAt))
+        eventCascadeRecordRepository.save(
+          EventCascadeRecord.completed(
+            eventType = "ClubDissolved",
+            consumer = EventCascadeConsumer.ProjectionRepair,
+            aggregateType = "club",
+            aggregateId = clubId.value,
+            summary = s"Dissolved club ${clubId.value} cleared from derived projections",
+            occurredAt = occurredAt,
+            handledAt = occurredAt
+          )
+        )
+      case _ =>
+        ()
+

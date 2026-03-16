@@ -526,6 +526,109 @@ class RiichiNexusSuite extends FunSuite:
     )
 
     assertEquals(settlement.entries.take(3).map(_.awardAmount), Vector(700L, 200L, 100L))
+    val exportRecord = app.eventCascadeRecordRepository.findAll()
+      .find(_.eventType == "TournamentSettlementRecorded")
+      .getOrElse(fail("settlement export record missing"))
+    assertEquals(exportRecord.consumer, EventCascadeConsumer.SettlementExport)
+    assertEquals(exportRecord.status, EventCascadeStatus.Completed)
+    assertEquals(exportRecord.aggregateId, settlement.id.value)
+  }
+
+  test("appeal workflow emits moderation and notification cascade records") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-16T13:30:00Z")
+
+    val admin = app.playerService.registerPlayer("appeal-admin", "AppealAdmin", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1800)
+    val players = Vector(
+      admin,
+      app.playerService.registerPlayer("appeal-b", "AppealB", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1700),
+      app.playerService.registerPlayer("appeal-c", "AppealC", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600),
+      app.playerService.registerPlayer("appeal-d", "AppealD", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1500)
+    )
+
+    val stage = TournamentStage(IdGenerator.stageId(), "Appeal Stage", StageFormat.Swiss, 1, 1)
+    val tournament = app.tournamentService.createTournament(
+      "Appeal Cascade Cup",
+      "QA",
+      now,
+      now.plusSeconds(7200),
+      Vector(stage),
+      adminId = Some(admin.id)
+    )
+
+    players.foreach(player => app.tournamentService.registerPlayer(tournament.id, player.id, principalFor(app, admin.id)))
+    app.tournamentService.publishTournament(tournament.id, principalFor(app, admin.id))
+    val table = app.tournamentService.scheduleStageTables(tournament.id, stage.id, principalFor(app, admin.id)).head
+    app.tableService.startTable(table.id, now.plusSeconds(60), principalFor(app, admin.id))
+
+    val ticket = app.appealService.fileAppeal(
+      tableId = table.id,
+      openedBy = table.seats.head.playerId,
+      description = "score mismatch",
+      actor = principalFor(app, table.seats.head.playerId),
+      createdAt = now.plusSeconds(90)
+    ).getOrElse(fail("appeal ticket missing"))
+
+    app.appealService.resolveAppeal(
+      ticketId = ticket.id,
+      verdict = "restored prior state",
+      actor = principalFor(app, admin.id),
+      resolvedAt = now.plusSeconds(120)
+    )
+
+    val records = app.eventCascadeRecordRepository.findAll().filter(_.aggregateId == ticket.id.value)
+    assert(records.exists(record => record.eventType == "AppealTicketFiled" && record.consumer == EventCascadeConsumer.ModerationInbox && record.status == EventCascadeStatus.Pending))
+    assert(records.exists(record => record.eventType == "AppealTicketResolved" && record.consumer == EventCascadeConsumer.ModerationInbox && record.status == EventCascadeStatus.Completed))
+    assert(records.exists(record => record.eventType == "AppealTicketAdjudicated" && record.consumer == EventCascadeConsumer.Notification && record.status == EventCascadeStatus.Completed))
+  }
+
+  test("dictionary updates and player bans repair club projections and emit cascade records") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-16T13:45:00Z")
+
+    val owner = app.playerService.registerPlayer("repair-owner", "RepairOwner", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1800)
+    val member = app.playerService.registerPlayer("repair-member", "RepairMember", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
+    val club = app.clubService.createClub("Repair Club", owner.id, now, owner.asPrincipal)
+    app.clubService.addMember(club.id, member.id, principalFor(app, owner.id))
+
+    val powerBefore = app.clubRepository.findById(club.id).getOrElse(fail("club missing before update")).powerRating
+
+    app.superAdminService.upsertDictionary(
+      key = "club.power.baseBonus",
+      value = "50",
+      actor = AccessPrincipal.system,
+      updatedAt = now.plusSeconds(30)
+    )
+
+    val boostedClub = app.clubRepository.findById(club.id).getOrElse(fail("club missing after dictionary update"))
+    assert(boostedClub.powerRating > powerBefore)
+
+    app.superAdminService.banPlayer(
+      playerId = owner.id,
+      reason = "rules violation",
+      actor = AccessPrincipal.system,
+      at = now.plusSeconds(60)
+    )
+
+    val repairedClub = app.clubRepository.findById(club.id).getOrElse(fail("club missing after ban"))
+    assert(repairedClub.powerRating < boostedClub.powerRating)
+    assertEquals(
+      app.dashboardRepository.findByOwner(DashboardOwner.Player(owner.id)).map(_.sampleSize),
+      Some(0)
+    )
+    assertEquals(
+      app.advancedStatsBoardRepository.findByOwner(DashboardOwner.Player(owner.id)).map(_.sampleSize),
+      Some(0)
+    )
+
+    val records = app.eventCascadeRecordRepository.findAll()
+    val dictionaryRecord = records.find(_.eventType == "GlobalDictionaryUpdated").getOrElse(fail("dictionary cascade record missing"))
+    assertEquals(dictionaryRecord.consumer, EventCascadeConsumer.ProjectionRepair)
+    assertEquals(dictionaryRecord.metadata.get("repairedClubCount"), Some("1"))
+
+    val banRecord = records.find(_.eventType == "PlayerBanned").getOrElse(fail("ban cascade record missing"))
+    assertEquals(banRecord.consumer, EventCascadeConsumer.ProjectionRepair)
+    assert(banRecord.metadata.getOrElse("repairedClubIds", "").contains(club.id.value))
   }
 
   test("global dictionary normalizes ranks in the public player leaderboard") {

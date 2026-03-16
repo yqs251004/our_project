@@ -965,6 +965,22 @@ private final class ApiHandler(
         val tasks = app.advancedStatsRecomputeTaskRepository.findAll()
           .filter(task => statusFilter.forall(_ == task.status))
         sendPagedJson(exchange, tasks, activeFilters(exchange, "status"))
+      case ("GET", Vector("admin", "event-cascade-records")) =>
+        val operator = queryPrincipal(exchange)
+        app.authorizationService.requirePermission(operator, Permission.ManageGlobalDictionary)
+        val statusFilter = queryParam(exchange, "status").map(EventCascadeStatus.valueOf)
+        val consumerFilter = queryParam(exchange, "consumer").map(EventCascadeConsumer.valueOf)
+        val eventTypeFilter = queryParam(exchange, "eventType").filter(_.nonEmpty)
+        val aggregateTypeFilter = queryParam(exchange, "aggregateType").filter(_.nonEmpty)
+        val aggregateIdFilter = queryParam(exchange, "aggregateId").filter(_.nonEmpty)
+        val records = app.eventCascadeRecordRepository.findAll()
+          .filter(record => statusFilter.forall(_ == record.status))
+          .filter(record => consumerFilter.forall(_ == record.consumer))
+          .filter(record => eventTypeFilter.forall(_ == record.eventType))
+          .filter(record => aggregateTypeFilter.forall(_ == record.aggregateType))
+          .filter(record => aggregateIdFilter.forall(_ == record.aggregateId))
+          .sortBy(record => (record.occurredAt, record.id.value))
+        sendPagedJson(exchange, records, activeFilters(exchange, "status", "consumer", "eventType", "aggregateType", "aggregateId"))
 
       case ("GET", Vector("dictionary")) =>
         val prefixFilter = queryParam(exchange, "prefix").filter(_.nonEmpty)

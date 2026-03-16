@@ -85,24 +85,17 @@ Recently completed features such as guest sessions, club applications, club hono
 
 ## 2. Eventing / Projection / Event-Sourcing Gaps
 
-- [ ] Finish the event-driven cascade promised by the architecture description.
-  - Current state: only `MatchRecordArchived` has active subscribers; other published domain events do not trigger any downstream processing.
+- [ ] Deepen the new event-cascade subscribers beyond the current inbox/projection-repair baseline.
+  - Current state: non-match domain events now do trigger downstream work through `EventCascadeProjectionSubscriber`.
   - Evidence:
-    - `src/main/scala/riichinexus/domain/event/DomainEvents.scala`
-    - active subscribers in `src/main/scala/riichinexus/application/service/Services.scala`:
-      - `RatingProjectionSubscriber`
-      - `ClubProjectionSubscriber`
-      - `DashboardProjectionSubscriber`
-    - events with no subscriber behavior today:
-      - `AppealTicketFiled`
-      - `AppealTicketResolved`
-      - `AppealTicketAdjudicated`
-      - `TournamentSettlementRecorded`
-      - `GlobalDictionaryUpdated`
-      - `PlayerBanned`
-      - `ClubDissolved`
+    - `AppealTicketFiled` / `AppealTicketResolved` now create moderation-inbox cascade records
+    - `AppealTicketAdjudicated` now creates notification cascade records
+    - `TournamentSettlementRecorded` now creates settlement-export cascade records
+    - `GlobalDictionaryUpdated`, `PlayerBanned`, and `ClubDissolved` now create projection-repair cascade records, with immediate club/dashboard/advanced-stats repair where applicable
   - Suggested completion:
-    - Define downstream consumers for notifications, cache refresh, moderation, settlement exports, and projection repair
+    - turn cascade records into richer delivery targets instead of summary-only records
+    - connect moderation inbox entries to assignees/SLA queues
+    - connect settlement-export entries to real export sinks/webhooks
 
 - [ ] Replace synchronous in-process event dispatch with a durable async pipeline.
   - Current state: the event bus is in-memory and synchronous; failures would happen inline and there is no outbox, retry, replay, or delivery auditing.

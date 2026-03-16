@@ -106,6 +106,20 @@ trait TournamentSettlementRepository:
   def findByTournament(tournamentId: TournamentId): Vector[TournamentSettlementSnapshot]
   def findAll(): Vector[TournamentSettlementSnapshot]
 
+trait EventCascadeRecordRepository:
+  def save(record: EventCascadeRecord): EventCascadeRecord
+  def findById(id: EventCascadeRecordId): Option[EventCascadeRecord]
+  def findAll(): Vector[EventCascadeRecord]
+
+  def findPending(limit: Int): Vector[EventCascadeRecord] =
+    findAll()
+      .filter(_.status == EventCascadeStatus.Pending)
+      .sortBy(_.occurredAt)
+      .take(limit)
+
+  def findByAggregate(aggregateType: String, aggregateId: String): Vector[EventCascadeRecord] =
+    findAll().filter(record => record.aggregateType == aggregateType && record.aggregateId == aggregateId)
+
 trait AuditEventRepository:
   def save(entry: AuditEventEntry): AuditEventEntry
   def findByAggregate(aggregateType: String, aggregateId: String): Vector[AuditEventEntry]

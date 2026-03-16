@@ -28,6 +28,7 @@ final case class ApplicationContext(
     advancedStatsRecomputeTaskRepository: AdvancedStatsRecomputeTaskRepository,
     globalDictionaryRepository: GlobalDictionaryRepository,
     tournamentSettlementRepository: TournamentSettlementRepository,
+    eventCascadeRecordRepository: EventCascadeRecordRepository,
     auditEventRepository: AuditEventRepository,
     eventBus: DomainEventBus,
     authorizationService: AuthorizationService,
@@ -57,6 +58,7 @@ object ApplicationContext:
     val advancedStatsRecomputeTaskRepository = InMemoryAdvancedStatsRecomputeTaskRepository()
     val globalDictionaryRepository = InMemoryGlobalDictionaryRepository()
     val tournamentSettlementRepository = InMemoryTournamentSettlementRepository()
+    val eventCascadeRecordRepository = InMemoryEventCascadeRecordRepository()
     val auditEventRepository = InMemoryAuditEventRepository()
 
     val eventBus = InMemoryDomainEventBus()
@@ -102,6 +104,17 @@ object ApplicationContext:
         advancedStatsPipelineService
       )
     )
+    eventBus.register(
+      EventCascadeProjectionSubscriber(
+        playerRepository,
+        clubRepository,
+        dashboardRepository,
+        advancedStatsBoardRepository,
+        eventCascadeRecordRepository,
+        advancedStatsPipelineService,
+        globalDictionaryRepository
+      )
+    )
 
     ApplicationContext(
       playerService = PlayerApplicationService(
@@ -186,6 +199,7 @@ object ApplicationContext:
       advancedStatsRecomputeTaskRepository = advancedStatsRecomputeTaskRepository,
       globalDictionaryRepository = globalDictionaryRepository,
       tournamentSettlementRepository = tournamentSettlementRepository,
+      eventCascadeRecordRepository = eventCascadeRecordRepository,
       auditEventRepository = auditEventRepository,
       eventBus = eventBus,
       authorizationService = authorizationService,
@@ -211,6 +225,7 @@ object ApplicationContext:
     val advancedStatsRecomputeTaskRepository = PostgresAdvancedStatsRecomputeTaskRepository(connectionFactory)
     val globalDictionaryRepository = PostgresGlobalDictionaryRepository(connectionFactory)
     val tournamentSettlementRepository = PostgresTournamentSettlementRepository(connectionFactory)
+    val eventCascadeRecordRepository = PostgresEventCascadeRecordRepository(connectionFactory)
     val auditEventRepository = PostgresAuditEventRepository(connectionFactory)
 
     val eventBus = InMemoryDomainEventBus()
@@ -256,6 +271,17 @@ object ApplicationContext:
         advancedStatsPipelineService
       )
     )
+    eventBus.register(
+      EventCascadeProjectionSubscriber(
+        playerRepository,
+        clubRepository,
+        dashboardRepository,
+        advancedStatsBoardRepository,
+        eventCascadeRecordRepository,
+        advancedStatsPipelineService,
+        globalDictionaryRepository
+      )
+    )
 
     ApplicationContext(
       playerService = PlayerApplicationService(
@@ -340,6 +366,7 @@ object ApplicationContext:
       advancedStatsRecomputeTaskRepository = advancedStatsRecomputeTaskRepository,
       globalDictionaryRepository = globalDictionaryRepository,
       tournamentSettlementRepository = tournamentSettlementRepository,
+      eventCascadeRecordRepository = eventCascadeRecordRepository,
       auditEventRepository = auditEventRepository,
       eventBus = eventBus,
       authorizationService = authorizationService,

@@ -234,6 +234,19 @@ final class InMemoryTournamentSettlementRepository extends TournamentSettlementR
   override def findAll(): Vector[TournamentSettlementSnapshot] =
     state.values.toVector
 
+final class InMemoryEventCascadeRecordRepository extends EventCascadeRecordRepository:
+  private val state = mutable.LinkedHashMap.empty[EventCascadeRecordId, EventCascadeRecord]
+
+  override def save(record: EventCascadeRecord): EventCascadeRecord =
+    state.update(record.id, record)
+    record
+
+  override def findById(id: EventCascadeRecordId): Option[EventCascadeRecord] =
+    state.get(id)
+
+  override def findAll(): Vector[EventCascadeRecord] =
+    state.values.toVector.sortBy(record => (record.occurredAt, record.id.value))
+
 final class InMemoryAuditEventRepository extends AuditEventRepository:
   private val state = mutable.ArrayBuffer.empty[AuditEventEntry]
 

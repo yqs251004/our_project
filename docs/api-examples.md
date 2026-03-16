@@ -453,6 +453,16 @@ Audit collection lookup:
 curl "http://localhost:8080/audits?operatorId=player-super-admin&aggregateType=dictionary&actorId=player-super-admin&limit=20"
 ```
 
+Inspect non-match event cascade records such as moderation inbox entries, settlement export summaries, and projection repairs:
+
+```bash
+curl "http://localhost:8080/admin/event-cascade-records?operatorId=player-super-admin&eventType=PlayerBanned"
+```
+
+```bash
+curl "http://localhost:8080/admin/event-cascade-records?operatorId=player-super-admin&consumer=ModerationInbox&status=Pending"
+```
+
 ## 7. Dashboard reads now require `operatorId`
 
 The lightweight dashboard endpoints now return summary KPIs only. Advanced metrics such as defense stability, ukeire expectation, shanten progression, and pressure-response rates have been split into dedicated advanced-stats boards.

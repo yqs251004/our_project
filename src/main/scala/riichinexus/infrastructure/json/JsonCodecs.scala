@@ -43,6 +43,8 @@ object JsonCodecs:
     readwriter[String].bimap[AuditEventId](_.value, AuditEventId(_))
   given ReadWriter[AdvancedStatsRecomputeTaskId] =
     readwriter[String].bimap[AdvancedStatsRecomputeTaskId](_.value, AdvancedStatsRecomputeTaskId(_))
+  given ReadWriter[EventCascadeRecordId] =
+    readwriter[String].bimap[EventCascadeRecordId](_.value, EventCascadeRecordId(_))
 
   given ReadWriter[RoleKind] =
     stringEnumReadWriter(RoleKind.valueOf, _.toString)
@@ -157,6 +159,11 @@ object JsonCodecs:
   given ReadWriter[AdvancedStatsRecomputeTaskStatus] =
     stringEnumReadWriter(AdvancedStatsRecomputeTaskStatus.valueOf, _.toString)
   given ReadWriter[AdvancedStatsRecomputeTask] = macroRW
+  given ReadWriter[EventCascadeConsumer] =
+    stringEnumReadWriter(EventCascadeConsumer.valueOf, _.toString)
+  given ReadWriter[EventCascadeStatus] =
+    stringEnumReadWriter(EventCascadeStatus.valueOf, _.toString)
+  given ReadWriter[EventCascadeRecord] = macroRW
   given ReadWriter[PublicScheduleView] = macroRW
   given ReadWriter[PublicClubDirectoryEntry] = macroRW
   given ReadWriter[PlayerLeaderboardEntry] = macroRW

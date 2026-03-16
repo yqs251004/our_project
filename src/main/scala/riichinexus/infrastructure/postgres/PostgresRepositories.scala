@@ -377,6 +377,31 @@ final class PostgresSchemaInitializer(connectionFactory: JdbcConnectionFactory):
       execute(
         connection,
         """
+          |create table if not exists event_cascade_records (
+          |  id text primary key,
+          |  consumer text not null,
+          |  status text not null,
+          |  aggregate_type text not null,
+          |  aggregate_id text not null,
+          |  occurred_at timestamptz not null,
+          |  payload jsonb not null,
+          |  updated_at timestamptz not null default now()
+          |)
+          |""".stripMargin
+      )
+      execute(connection, "alter table event_cascade_records add column if not exists consumer text")
+      execute(connection, "alter table event_cascade_records add column if not exists status text")
+      execute(connection, "alter table event_cascade_records add column if not exists aggregate_type text")
+      execute(connection, "alter table event_cascade_records add column if not exists aggregate_id text")
+      execute(connection, "alter table event_cascade_records add column if not exists occurred_at timestamptz")
+      execute(connection, "alter table event_cascade_records add column if not exists payload jsonb")
+      execute(connection, "alter table event_cascade_records add column if not exists updated_at timestamptz default now()")
+      execute(connection, "create index if not exists idx_event_cascade_records_status on event_cascade_records (status, occurred_at)")
+      execute(connection, "create index if not exists idx_event_cascade_records_consumer on event_cascade_records (consumer, occurred_at)")
+      execute(connection, "create index if not exists idx_event_cascade_records_aggregate on event_cascade_records (aggregate_type, aggregate_id)")
+      execute(
+        connection,
+        """
           |create table if not exists audit_events (
           |  id text primary key,
           |  aggregate_type text not null,
@@ -441,6 +466,14 @@ final class PostgresSchemaInitializer(connectionFactory: JdbcConnectionFactory):
         """
           |insert into schema_version(version, description)
           |values (6, 'Added advanced stats recompute task pipeline schema')
+          |on conflict (version) do nothing
+          |""".stripMargin
+      )
+      execute(
+        connection,
+        """
+          |insert into schema_version(version, description)
+          |values (7, 'Added event cascade record subscriber schema')
           |on conflict (version) do nothing
           |""".stripMargin
       )
@@ -1179,6 +1212,53 @@ final class PostgresTournamentSettlementRepository(
       "select payload from tournament_settlements order by generated_at desc"
     )
 
+final class PostgresEventCascadeRecordRepository(
+    protected val connectionFactory: JdbcConnectionFactory
+) extends EventCascadeRecordRepository
+    with JdbcRepositorySupport:
+  override def save(record: EventCascadeRecord): EventCascadeRecord =
+    val sql =
+      """
+        |insert into event_cascade_records (id, consumer, status, aggregate_type, aggregate_id, occurred_at, payload, updated_at)
+        |values (?, ?, ?, ?, ?, ?, cast(? as jsonb), now())
+        |on conflict (id) do update set
+        |  consumer = excluded.consumer,
+        |  status = excluded.status,
+        |  aggregate_type = excluded.aggregate_type,
+        |  aggregate_id = excluded.aggregate_id,
+        |  occurred_at = excluded.occurred_at,
+        |  payload = excluded.payload,
+        |  updated_at = now()
+        |""".stripMargin
+
+    withConnection { connection =>
+      Using.resource(connection.prepareStatement(sql)) { statement =>
+        statement.setString(1, record.id.value)
+        statement.setString(2, record.consumer.toString)
+        statement.setString(3, record.status.toString)
+        statement.setString(4, record.aggregateType)
+        statement.setString(5, record.aggregateId)
+        statement.setTimestamp(6, Timestamp.from(record.occurredAt))
+        statement.setString(7, writeJson(record))
+        statement.executeUpdate()
+      }
+    }
+
+    record
+
+  override def findById(id: EventCascadeRecordId): Option[EventCascadeRecord] =
+    readOne[EventCascadeRecord](
+      "select payload from event_cascade_records where id = ?",
+      { statement =>
+        statement.setString(1, id.value)
+      }
+    )
+
+  override def findAll(): Vector[EventCascadeRecord] =
+    readAll[EventCascadeRecord](
+      "select payload from event_cascade_records order by occurred_at desc, id desc"
+    )
+
 final class PostgresAuditEventRepository(
     protected val connectionFactory: JdbcConnectionFactory
 ) extends AuditEventRepository
@@ -1246,6 +1326,7 @@ final class PostgresAdminService(connectionFactory: JdbcConnectionFactory):
       "advanced_stats_recompute_tasks",
       "global_dictionary",
       "tournament_settlements",
+      "event_cascade_records",
       "audit_events"
     )
 
@@ -1277,6 +1358,7 @@ final class PostgresAdminService(connectionFactory: JdbcConnectionFactory):
       connectionFactory.withConnection { connection =>
         executeAdmin(connection, "truncate table audit_events restart identity")
         executeAdmin(connection, "truncate table tournament_settlements restart identity")
+        executeAdmin(connection, "truncate table event_cascade_records restart identity")
         executeAdmin(connection, "truncate table global_dictionary restart identity")
         executeAdmin(connection, "truncate table advanced_stats_recompute_tasks restart identity")
         executeAdmin(connection, "truncate table dashboards restart identity")

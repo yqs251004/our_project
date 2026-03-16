@@ -17,6 +17,7 @@ final case class GuestSessionId(value: String) derives CanEqual
 final case class SettlementSnapshotId(value: String) derives CanEqual
 final case class AuditEventId(value: String) derives CanEqual
 final case class AdvancedStatsRecomputeTaskId(value: String) derives CanEqual
+final case class EventCascadeRecordId(value: String) derives CanEqual
 
 object IdGenerator:
   private def nextId(prefix: String): String =
@@ -38,6 +39,8 @@ object IdGenerator:
   def auditEventId(): AuditEventId = AuditEventId(nextId("audit"))
   def advancedStatsRecomputeTaskId(): AdvancedStatsRecomputeTaskId =
     AdvancedStatsRecomputeTaskId(nextId("advanced-stats-task"))
+  def eventCascadeRecordId(): EventCascadeRecordId =
+    EventCascadeRecordId(nextId("event-cascade"))
 
 enum RoleKind derives CanEqual:
   case Guest
