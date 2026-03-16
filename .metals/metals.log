@@ -2012,3 +2012,6 @@ org.eclipse.lsp4j.jsonrpc.ResponseErrorException: Request window/showMessageRequ
 2026.03.15 20:17:07 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\riichinexus\domain\service\SeatingPolicy.scala. Using presentation compiler with project's scala-library version: 3.3.7
 2026.03.15 21:12:42 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\riichinexus\domain\service\SeatingPolicy.scala. Using presentation compiler with project's scala-library version: 3.3.7
 2026.03.16 00:35:56 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\riichinexus\domain\service\SeatingPolicy.scala. Using presentation compiler with project's scala-library version: 3.3.7
+2026.03.16 10:52:36 INFO  Started: Metals version 1.6.6 in folders 'D:\school\2026spring\front-back\our_project' for client Visual Studio Code 1.111.0.
+2026.03.16 10:52:36 INFO  Memory monitor started
+2026.03.16 10:52:40 WARN  Using H2 2.4.240 which is newer than the version Flyway has been verified with. The latest verified version of H2 is 2.3.232.
