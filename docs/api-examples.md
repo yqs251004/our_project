@@ -34,6 +34,8 @@ curl "http://localhost:8080/public/schedules?tournamentStatus=InProgress&stageSt
 curl "http://localhost:8080/public/leaderboards/players?clubId=club-123&status=Active&limit=20"
 ```
 
+The public player leaderboard now carries both the raw `currentRank` snapshot and a dictionary-backed `normalizedRankScore`, so mixed-platform ladders can break ELO ties consistently.
+
 ## 3. Query players and clubs with shared pagination
 
 ```bash
@@ -137,6 +139,26 @@ curl -X POST http://localhost:8080/tournaments/tournament-123/stages/stage-swiss
 
 ```bash
 curl "http://localhost:8080/tournaments/tournament-123/stages/stage-swiss-1/standings"
+```
+
+Stage rules can also be injected from a global dictionary template. First register a template as a super admin:
+
+```bash
+curl -X POST http://localhost:8080/admin/dictionary   -H "Content-Type: application/json"   -d '{
+    "operatorId": "player-super-admin",
+    "key": "tournament.rule-template.swiss-snake-template",
+    "value": "advancement=SwissCut;cutSize=8;pairingMethod=snake;maxRounds=2;schedulingPoolSize=2;note=template backed",
+    "note": "shared swiss template"
+  }'
+```
+
+Then reference it when configuring a stage without repeating the full rule payload:
+
+```bash
+curl -X POST http://localhost:8080/tournaments/tournament-123/stages/stage-swiss-1/rules   -H "Content-Type: application/json"   -d '{
+    "operatorId": "player-tournament-admin",
+    "ruleTemplateKey": "swiss-snake-template"
+  }'
 ```
 
 Round-robin stages now use dedicated pod rotation across rounds instead of reusing Swiss scheduling semantics, and custom stages can cap each round to a featured subset of tables with `targetTableCount`:
@@ -351,6 +373,11 @@ Runtime-sensitive dictionary keys are now consumed by live services. The current
 - `club.power.pointWeight`
 - `club.power.baseBonus`
 - `settlement.defaultPayoutRatios`
+- `rank.normalization.<platform>.<tier>`
+- `rank.normalization.<platform>.<tier>.<stars>`
+- `rank.normalization.<platform>.<tier>-<stars>`
+- `rank.normalization.<platform>.starWeight`
+- `tournament.rule-template.<templateKey>`
 
 For example, increase the live ELO k-factor without redeploying:
 
@@ -382,6 +409,35 @@ curl -X POST http://localhost:8080/admin/dictionary   -H "Content-Type: applicat
     "key": "settlement.defaultPayoutRatios",
     "value": "0.6,0.25,0.15",
     "note": "major event payout profile"
+  }'
+```
+
+Normalize cross-platform ranks for the public leaderboard:
+
+```bash
+curl -X POST http://localhost:8080/admin/dictionary   -H "Content-Type: application/json"   -d '{
+    "operatorId": "player-super-admin",
+    "key": "rank.normalization.tenhou.5-dan",
+    "value": "550",
+    "note": "Tenhou dan baseline"
+  }'
+```
+
+```bash
+curl -X POST http://localhost:8080/admin/dictionary   -H "Content-Type: application/json"   -d '{
+    "operatorId": "player-super-admin",
+    "key": "rank.normalization.mahjongsoul.master",
+    "value": "600",
+    "note": "Mahjong Soul master baseline"
+  }'
+```
+
+```bash
+curl -X POST http://localhost:8080/admin/dictionary   -H "Content-Type: application/json"   -d '{
+    "operatorId": "player-super-admin",
+    "key": "rank.normalization.mahjongsoul.starWeight",
+    "value": "10",
+    "note": "Mahjong Soul star increment"
   }'
 ```
 

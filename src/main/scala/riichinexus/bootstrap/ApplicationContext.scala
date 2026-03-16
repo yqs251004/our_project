@@ -118,6 +118,7 @@ object ApplicationContext:
         tableRepository,
         playerRepository,
         clubRepository,
+        globalDictionaryRepository,
         authorizationService
       ),
       clubService = ClubApplicationService(
@@ -271,6 +272,7 @@ object ApplicationContext:
         tableRepository,
         playerRepository,
         clubRepository,
+        globalDictionaryRepository,
         authorizationService
       ),
       clubService = ClubApplicationService(

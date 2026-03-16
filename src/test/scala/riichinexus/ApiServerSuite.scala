@@ -969,6 +969,71 @@ class ApiServerSuite extends FunSuite:
   }
 
 
+  test("dictionary-backed rule templates can configure stage rules over the API") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-15T15:35:00Z")
+
+    val root = app.playerService.registerPlayer("template-root", "TemplateRoot", RankSnapshot(RankPlatform.Custom, "S"), now, 2100)
+    val superAdmin = app.playerRepository.save(root.grantRole(RoleGrant.superAdmin(now)))
+    val admin = app.playerService.registerPlayer("template-admin", "TemplateAdmin", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1800)
+    val players = (1 to 8).toVector.map { index =>
+      if index == 1 then admin
+      else app.playerService.registerPlayer(
+        s"template-$index",
+        s"Template$index",
+        RankSnapshot(RankPlatform.Tenhou, "4-dan"),
+        now,
+        1800 - index * 35
+      )
+    }
+
+    val stage = TournamentStage(IdGenerator.stageId(), "Template Stage", StageFormat.Swiss, 1, 3)
+    val tournament = app.tournamentService.createTournament(
+      "Template Cup",
+      "QA",
+      now,
+      now.plusSeconds(7200),
+      Vector(stage),
+      adminId = Some(admin.id)
+    )
+    players.foreach(player => app.tournamentService.registerPlayer(tournament.id, player.id, principalFor(app, admin.id)))
+    app.tournamentService.publishTournament(tournament.id, principalFor(app, admin.id))
+
+    withServer(app) { baseUrl =>
+      val dictionaryResponse = postJson(
+        s"$baseUrl/admin/dictionary",
+        write(
+          UpsertDictionaryRequest(
+            operatorId = superAdmin.id.value,
+            key = "tournament.rule-template.swiss-snake-template",
+            value = "advancement=SwissCut;cutSize=8;pairingMethod=snake;maxRounds=2;schedulingPoolSize=2;note=template backed",
+            note = Some("template seed")
+          )
+        )
+      )
+      assertEquals(dictionaryResponse.statusCode(), 201)
+
+      val rulesResponse = postJson(
+        s"$baseUrl/tournaments/${tournament.id.value}/stages/${stage.id.value}/rules",
+        write(
+          ConfigureStageRulesRequest(
+            operatorId = admin.id.value,
+            advancementRuleType = None,
+            schedulingPoolSize = None,
+            ruleTemplateKey = Some("swiss-snake-template")
+          )
+        )
+      )
+      assertEquals(rulesResponse.statusCode(), 200)
+      val updatedStage = read[Tournament](rulesResponse.body()).stages.head
+      assertEquals(updatedStage.advancementRule.cutSize, Some(8))
+      assertEquals(updatedStage.swissRule.map(_.pairingMethod), Some("snake"))
+      assertEquals(updatedStage.swissRule.flatMap(_.maxRounds), Some(2))
+      assertEquals(updatedStage.schedulingPoolSize, 2)
+    }
+  }
+
+
   test("stage rules API can switch swiss pairingMethod to snake") {
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-15T15:45:00Z")
@@ -1003,7 +1068,7 @@ class ApiServerSuite extends FunSuite:
         write(
           ConfigureStageRulesRequest(
             operatorId = admin.id.value,
-            advancementRuleType = "SwissCut",
+            advancementRuleType = Some("SwissCut"),
             cutSize = Some(8),
             pairingMethod = Some("snake")
           )
@@ -1064,7 +1129,7 @@ class ApiServerSuite extends FunSuite:
         write(
           ConfigureStageRulesRequest(
             operatorId = admin.id.value,
-            advancementRuleType = "Custom",
+            advancementRuleType = Some("Custom"),
             targetTableCount = Some(1),
             note = Some("top=4")
           )

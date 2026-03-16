@@ -528,6 +528,41 @@ class RiichiNexusSuite extends FunSuite:
     assertEquals(settlement.entries.take(3).map(_.awardAmount), Vector(700L, 200L, 100L))
   }
 
+  test("global dictionary normalizes ranks in the public player leaderboard") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-16T12:30:00Z")
+
+    app.superAdminService.upsertDictionary(
+      key = "rank.normalization.tenhou.5-dan",
+      value = "550",
+      actor = AccessPrincipal.system,
+      updatedAt = now
+    )
+    app.superAdminService.upsertDictionary(
+      key = "rank.normalization.mahjongsoul.master",
+      value = "600",
+      actor = AccessPrincipal.system,
+      updatedAt = now.plusSeconds(1)
+    )
+    app.superAdminService.upsertDictionary(
+      key = "rank.normalization.mahjongsoul.starWeight",
+      value = "10",
+      actor = AccessPrincipal.system,
+      updatedAt = now.plusSeconds(2)
+    )
+
+    val tenhou = app.playerService.registerPlayer("rank-dict-a", "RankA", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1700)
+    val soul = app.playerService.registerPlayer("rank-dict-b", "RankB", RankSnapshot(RankPlatform.MahjongSoul, "Master", Some(2)), now, 1700)
+
+    val leaderboard = app.publicQueryService.publicPlayerLeaderboard(10)
+    val soulEntry = leaderboard.find(_.playerId == soul.id).getOrElse(fail("soul entry missing"))
+    val tenhouEntry = leaderboard.find(_.playerId == tenhou.id).getOrElse(fail("tenhou entry missing"))
+
+    assertEquals(soulEntry.normalizedRankScore, Some(620))
+    assertEquals(tenhouEntry.normalizedRankScore, Some(550))
+    assertEquals(leaderboard.head.playerId, soul.id)
+  }
+
   test("stage lineup preferred winds influence scheduled seats") {
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-13T13:00:00Z")

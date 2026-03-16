@@ -7,18 +7,18 @@ Recently completed features such as guest sessions, club applications, club hono
 
 ## 1. Business Logic Still Not Fully Landed
 
-- [ ] Extend the global dictionary beyond the runtime formulas already wired.
+- [ ] Formalize the global dictionary into a typed registry now that runtime consumers are wired.
   - Current state:
-    - dictionary entries now affect live ELO tuning, club power formula, and default tournament payout ratios
-    - rank conversion and tournament rule evaluation still do not consume dictionary entries
+    - dictionary entries now affect live ELO tuning, club power formula, default tournament payout ratios, public rank normalization, and tournament rule templates
+    - the supported keys are still validated by ad-hoc string prefixes rather than a first-class registry/schema
   - Evidence:
     - runtime consumption is now wired in `src/main/scala/riichinexus/application/service/Services.scala`
     - `src/main/scala/riichinexus/domain/service/RatingService.scala` now reads runtime ELO config through a provider
-    - there is still no rank-conversion engine or tournament-rule dictionary adapter
+    - `PublicQueryService` and stage-rule normalization now also resolve dictionary-backed rank normalization and rule templates
   - Suggested completion:
-    - define supported keys for rank conversion and rule templates
-    - route dictionary values into tournament rule evaluation and any future rank normalization service
-    - decide whether unknown keys remain free-form metadata or must move to a typed registry
+    - introduce a typed registry or schema object for supported dictionary keys
+    - centralize parsing/validation/error messages instead of scattering prefix-based decoders
+    - decide whether unknown keys remain free-form metadata or must move behind explicit registration
 
 - [ ] Deepen the new Advanced Stats Board into fully rules-faithful mahjong analytics.
   - Current state:
@@ -158,7 +158,7 @@ Recently completed features such as guest sessions, club applications, club hono
 ## 4. Recommended Execution Order
 
 - [ ] First pass:
-  - global dictionary runtime consumption
+  - typed dictionary registry / schema hardening
   - event subscribers for non-match events
   - advanced stats board separation
 

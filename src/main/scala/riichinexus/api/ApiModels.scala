@@ -198,6 +198,7 @@ final case class CreateTournamentStageRequest(
     order: Int,
     roundCount: Int,
     operatorId: Option[String] = None,
+    ruleTemplateKey: Option[String] = None,
     advancementRuleType: Option[String] = None,
     cutSize: Option[Int] = None,
     thresholdScore: Option[Int] = None,
@@ -221,10 +222,15 @@ final case class CreateTournamentStageRequest(
             ruleType = AdvancementRuleType.valueOf(rule),
             cutSize = cutSize,
             thresholdScore = thresholdScore,
-            targetTableCount = targetTableCount
+            targetTableCount = targetTableCount,
+            templateKey = ruleTemplateKey
           )
         )
-        .getOrElse(AdvancementRule.defaultFor(stageFormat)),
+        .getOrElse(
+          AdvancementRule.defaultFor(stageFormat).copy(
+            templateKey = ruleTemplateKey
+          )
+        ),
       schedulingPoolSize = schedulingPoolSize.getOrElse(4)
     )
 
@@ -244,11 +250,12 @@ final case class CreateTournamentRequest(
 
 final case class ConfigureStageRulesRequest(
     operatorId: String,
-    advancementRuleType: String,
+    advancementRuleType: Option[String] = None,
     cutSize: Option[Int] = None,
     thresholdScore: Option[Int] = None,
     targetTableCount: Option[Int] = None,
-    schedulingPoolSize: Int = 4,
+    schedulingPoolSize: Option[Int] = None,
+    ruleTemplateKey: Option[String] = None,
     pairingMethod: Option[String] = None,
     carryOverPoints: Option[Boolean] = None,
     maxRounds: Option[Int] = None,
@@ -258,15 +265,21 @@ final case class ConfigureStageRulesRequest(
     seedingPolicy: Option[String] = None,
     note: Option[String] = None
 ):
+  require(
+    advancementRuleType.nonEmpty || ruleTemplateKey.nonEmpty,
+    "ConfigureStageRulesRequest requires advancementRuleType or ruleTemplateKey"
+  )
+
   def operator: PlayerId =
     PlayerId(operatorId)
 
   def advancementRule: AdvancementRule =
     AdvancementRule(
-      ruleType = AdvancementRuleType.valueOf(advancementRuleType),
+      ruleType = advancementRuleType.map(AdvancementRuleType.valueOf).getOrElse(AdvancementRuleType.Custom),
       cutSize = cutSize,
       thresholdScore = thresholdScore,
       targetTableCount = targetTableCount,
+      templateKey = ruleTemplateKey,
       note = note
     )
 

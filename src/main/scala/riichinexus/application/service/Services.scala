@@ -22,6 +22,8 @@ private object RuntimeDictionarySupport:
   private val ClubPowerPointWeightKey = "club.power.pointweight"
   private val ClubPowerBaseBonusKey = "club.power.basebonus"
   private val SettlementPayoutRatiosKey = "settlement.defaultpayoutratios"
+  private val RankNormalizationPrefix = "rank.normalization."
+  private val TournamentRuleTemplatePrefix = "tournament.rule-template."
 
   final case class ClubPowerConfig(
       eloWeight: Double = 1.0,
@@ -29,11 +31,33 @@ private object RuntimeDictionarySupport:
       baseBonus: Double = 0.0
   )
 
+  final case class NormalizedRank(
+      score: Int,
+      sourceKey: String
+  )
+
+  final case class StageRuleTemplate(
+      ruleType: Option[AdvancementRuleType] = None,
+      cutSize: Option[Int] = None,
+      thresholdScore: Option[Int] = None,
+      targetTableCount: Option[Int] = None,
+      schedulingPoolSize: Option[Int] = None,
+      pairingMethod: Option[String] = None,
+      carryOverPoints: Option[Boolean] = None,
+      maxRounds: Option[Int] = None,
+      bracketSize: Option[Int] = None,
+      thirdPlaceMatch: Option[Boolean] = None,
+      repechageEnabled: Option[Boolean] = None,
+      seedingPolicy: Option[String] = None,
+      note: Option[String] = None
+  )
+
   def validateRuntimeEntry(
       key: String,
       value: String
   ): Unit =
-    normalizedKey(key) match
+    val normalized = normalizedKey(key)
+    normalized match
       case RatingKFactorKey =>
         require(parseInt(value).exists(_ > 0), "rating.elo.kFactor must be a positive integer")
       case RatingPlacementWeightKey | RatingScoreWeightKey | RatingUmaWeightKey =>
@@ -51,7 +75,13 @@ private object RuntimeDictionarySupport:
         require(ratios.forall(_ >= 0.0), "settlement.defaultPayoutRatios cannot contain negative values")
         require(ratios.exists(_ > 0.0), "settlement.defaultPayoutRatios must contain a positive ratio")
       case _ =>
-        ()
+        if normalized.startsWith(RankNormalizationPrefix) then
+          validateRankNormalizationEntry(normalized, value)
+        else if normalized.startsWith(TournamentRuleTemplatePrefix) then
+          parseStageRuleTemplate(value)
+          ()
+        else
+          ()
 
   def currentEloRatingConfig(
       globalDictionaryRepository: GlobalDictionaryRepository
@@ -107,6 +137,47 @@ private object RuntimeDictionarySupport:
     val config = currentClubPowerConfig(globalDictionaryRepository)
     round2(averageElo * config.eloWeight + club.totalPoints.toDouble * config.pointWeight + config.baseBonus)
 
+  def normalizeRank(
+      rank: RankSnapshot,
+      globalDictionaryRepository: GlobalDictionaryRepository
+  ): Option[NormalizedRank] =
+    val platformKey = normalizedPlatformKey(rank.platform)
+    val normalizedTier = normalizedToken(rank.tier)
+    val starSpecificKeys =
+      rank.stars.toVector.flatMap { stars =>
+        Vector(
+          s"$RankNormalizationPrefix$platformKey.$normalizedTier.$stars",
+          s"$RankNormalizationPrefix$platformKey.$normalizedTier-$stars"
+        )
+      }
+    val baseKey = s"$RankNormalizationPrefix$platformKey.$normalizedTier"
+
+    starSpecificKeys
+      .flatMap(key => readInt(globalDictionaryRepository, key).map(score => NormalizedRank(score, key)))
+      .headOption
+      .orElse {
+        readInt(globalDictionaryRepository, baseKey).map { base =>
+          val weightedScore = rank.stars.flatMap { stars =>
+            readInt(globalDictionaryRepository, s"$RankNormalizationPrefix$platformKey.starweight")
+              .map(starWeight => base + stars * starWeight)
+          }.getOrElse(base)
+
+          NormalizedRank(
+            score = weightedScore,
+            sourceKey = if rank.stars.nonEmpty then s"$RankNormalizationPrefix$platformKey.starweight" else baseKey
+          )
+        }
+      }
+
+  def resolveStageRules(
+      stage: TournamentStage,
+      globalDictionaryRepository: GlobalDictionaryRepository
+  ): TournamentStage =
+    stage.advancementRule.templateKey
+      .flatMap(templateKey => readStageRuleTemplate(globalDictionaryRepository, templateKey))
+      .map(template => applyStageRuleTemplate(stage, template))
+      .getOrElse(stage)
+
   private def readInt(
       globalDictionaryRepository: GlobalDictionaryRepository,
       key: String
@@ -151,8 +222,128 @@ private object RuntimeDictionarySupport:
   private def normalizedKey(key: String): String =
     key.trim.toLowerCase
 
+  private def validateRankNormalizationEntry(
+      normalizedKey: String,
+      value: String
+  ): Unit =
+    if normalizedKey.endsWith(".starweight") then
+      require(parseInt(value).nonEmpty, s"$normalizedKey must be an integer")
+    else
+      require(parseInt(value).nonEmpty, s"$normalizedKey must be an integer")
+
+  private def readStageRuleTemplate(
+      globalDictionaryRepository: GlobalDictionaryRepository,
+      templateKey: String
+  ): Option[StageRuleTemplate] =
+    readValue(globalDictionaryRepository, s"$TournamentRuleTemplatePrefix$templateKey")
+      .map(parseStageRuleTemplate)
+
+  private def parseStageRuleTemplate(value: String): StageRuleTemplate =
+    val directives = value
+      .split(";")
+      .toVector
+      .map(_.trim)
+      .filter(_.nonEmpty)
+      .map { directive =>
+        val Array(rawKey, rawValue) = directive.split("=", 2)
+        normalizedToken(rawKey) -> rawValue.trim
+      }
+      .toMap
+
+    StageRuleTemplate(
+      ruleType = directives.get("advancement").orElse(directives.get("advancementruletype")).map(parseAdvancementRuleType),
+      cutSize = directives.get("cutsize").flatMap(parseInt),
+      thresholdScore = directives.get("thresholdscore").flatMap(parseInt),
+      targetTableCount = directives.get("targettablecount").flatMap(parseInt),
+      schedulingPoolSize = directives.get("schedulingpoolsize").flatMap(parseInt),
+      pairingMethod = directives.get("pairingmethod"),
+      carryOverPoints = directives.get("carryoverpoints").flatMap(parseBoolean),
+      maxRounds = directives.get("maxrounds").flatMap(parseInt),
+      bracketSize = directives.get("bracketsize").flatMap(parseInt),
+      thirdPlaceMatch = directives.get("thirdplacematch").flatMap(parseBoolean),
+      repechageEnabled = directives.get("repechageenabled").flatMap(parseBoolean),
+      seedingPolicy = directives.get("seedingpolicy"),
+      note = directives.get("note").filter(_.nonEmpty)
+    )
+
+  private def applyStageRuleTemplate(
+      stage: TournamentStage,
+      template: StageRuleTemplate
+  ): TournamentStage =
+    val existingRule = stage.advancementRule
+    val defaultRule = AdvancementRule.defaultFor(stage.format)
+    val usingPlaceholderRule =
+      existingRule.ruleType == AdvancementRuleType.Custom &&
+        existingRule.cutSize.isEmpty &&
+        existingRule.thresholdScore.isEmpty &&
+        existingRule.targetTableCount.isEmpty &&
+        existingRule.note.forall(note => note.trim.isEmpty || note == "unconfigured")
+
+    val resolvedAdvancementRule = existingRule.copy(
+      ruleType =
+        if usingPlaceholderRule then template.ruleType.getOrElse(defaultRule.ruleType)
+        else existingRule.ruleType,
+      cutSize = existingRule.cutSize.orElse(template.cutSize),
+      thresholdScore = existingRule.thresholdScore.orElse(template.thresholdScore),
+      targetTableCount = existingRule.targetTableCount.orElse(template.targetTableCount),
+      note = existingRule.note.filter(note => note.trim.nonEmpty && note != "unconfigured").orElse(template.note)
+    )
+
+    val resolvedSwissRule =
+      stage.swissRule.orElse {
+        if template.pairingMethod.isDefined || template.carryOverPoints.isDefined || template.maxRounds.isDefined then
+          Some(
+            SwissRuleConfig(
+              pairingMethod = template.pairingMethod.getOrElse("balanced-elo"),
+              carryOverPoints = template.carryOverPoints.getOrElse(true),
+              maxRounds = template.maxRounds
+            )
+          )
+        else None
+      }
+
+    val resolvedKnockoutRule =
+      stage.knockoutRule.orElse {
+        if template.bracketSize.isDefined || template.thirdPlaceMatch.isDefined ||
+            template.repechageEnabled.isDefined || template.seedingPolicy.isDefined then
+          Some(
+            KnockoutRuleConfig(
+              bracketSize = template.bracketSize,
+              thirdPlaceMatch = template.thirdPlaceMatch.getOrElse(false),
+              seedingPolicy = template.seedingPolicy.getOrElse("rating"),
+              repechageEnabled = template.repechageEnabled.getOrElse(false)
+            )
+          )
+        else None
+      }
+
+    stage.copy(
+      advancementRule = resolvedAdvancementRule,
+      swissRule = resolvedSwissRule,
+      knockoutRule = resolvedKnockoutRule,
+      schedulingPoolSize =
+        if stage.schedulingPoolSize == 4 then template.schedulingPoolSize.getOrElse(stage.schedulingPoolSize)
+        else stage.schedulingPoolSize
+    )
+
   private def round2(value: Double): Double =
     BigDecimal(value).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble
+
+  private def parseBoolean(value: String): Option[Boolean] =
+    value.trim.toLowerCase match
+      case "true" | "yes" | "1"  => Some(true)
+      case "false" | "no" | "0"  => Some(false)
+      case _                     => None
+
+  private def parseAdvancementRuleType(value: String): AdvancementRuleType =
+    AdvancementRuleType.values.find(rule => normalizedToken(rule.toString) == normalizedToken(value))
+      .getOrElse(throw IllegalArgumentException(s"Unsupported advancement rule type: $value"))
+
+  private def normalizedPlatformKey(platform: RankPlatform): String =
+    normalizedToken(platform.toString)
+
+  private def normalizedToken(value: String): String =
+    value.trim.toLowerCase.replaceAll("[^a-z0-9]+", "-").stripPrefix("-").stripSuffix("-")
 
 final class DictionaryBackedRatingConfigProvider(
     globalDictionaryRepository: GlobalDictionaryRepository
@@ -342,6 +533,7 @@ final class PublicQueryService(
     tableRepository: TableRepository,
     playerRepository: PlayerRepository,
     clubRepository: ClubRepository,
+    globalDictionaryRepository: GlobalDictionaryRepository,
     authorizationService: AuthorizationService = NoOpAuthorizationService
 ):
   private val guestPrincipal = AccessPrincipal.guest()
@@ -384,13 +576,23 @@ final class PublicQueryService(
     authorizationService.requirePermission(guestPrincipal, Permission.ViewPublicLeaderboard)
 
     playerRepository.findAll()
-      .sortBy(player => (-player.elo, player.nickname))
+      .sortBy { player =>
+        val normalizedRankScore =
+          RuntimeDictionarySupport.normalizeRank(player.currentRank, globalDictionaryRepository)
+            .map(_.score)
+            .getOrElse(Int.MinValue)
+        (-player.elo, -normalizedRankScore, player.nickname)
+      }
       .take(limit)
       .map { player =>
+        val normalizedRank =
+          RuntimeDictionarySupport.normalizeRank(player.currentRank, globalDictionaryRepository)
         PlayerLeaderboardEntry(
           playerId = player.id,
           nickname = player.nickname,
           elo = player.elo,
+          currentRank = player.currentRank,
+          normalizedRankScore = normalizedRank.map(_.score),
           clubIds = player.boundClubIds,
           status = player.status
         )
@@ -1561,20 +1763,29 @@ final class TournamentApplicationService(
       advancementRule: AdvancementRule,
       swissRule: Option[SwissRuleConfig],
       knockoutRule: Option[KnockoutRuleConfig],
-      schedulingPoolSize: Int,
+      schedulingPoolSize: Option[Int],
       actor: AccessPrincipal
   ): Option[Tournament] =
     transactionManager.inTransaction {
       tournamentRepository.findById(tournamentId).map { tournament =>
-        requireStage(tournament, stageId)
+        val currentStage = requireStage(tournament, stageId)
         authorizationService.requirePermission(
           actor,
           Permission.ConfigureTournamentRules,
           tournamentId = Some(tournamentId)
         )
 
+        val configuredStage = normalizeStage(
+          currentStage.withRules(
+            advancementRule,
+            swissRule,
+            knockoutRule,
+            schedulingPoolSize.getOrElse(currentStage.schedulingPoolSize)
+          )
+        )
+
         tournamentRepository.save(
-          tournament.updateStage(stageId, _.withRules(advancementRule, swissRule, knockoutRule, schedulingPoolSize))
+          tournament.updateStage(stageId, _ => configuredStage)
         )
       }
     }
@@ -2284,10 +2495,14 @@ final class TournamentApplicationService(
       values.drop(normalized) ++ values.take(normalized)
 
   private def normalizeStage(stage: TournamentStage): TournamentStage =
-    if stage.advancementRule.ruleType == AdvancementRuleType.Custom &&
-        stage.advancementRule.note.contains("unconfigured")
-    then stage.copy(advancementRule = AdvancementRule.defaultFor(stage.format))
-    else stage
+    val templatedStage =
+      RuntimeDictionarySupport.resolveStageRules(stage, globalDictionaryRepository)
+
+    if templatedStage.advancementRule.ruleType == AdvancementRuleType.Custom &&
+        templatedStage.advancementRule.note.contains("unconfigured") &&
+        templatedStage.advancementRule.templateKey.isEmpty
+    then templatedStage.copy(advancementRule = AdvancementRule.defaultFor(templatedStage.format))
+    else templatedStage
 
   private def stageRecords(
       tournamentId: TournamentId,

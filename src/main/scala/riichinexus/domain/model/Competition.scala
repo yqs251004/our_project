@@ -37,6 +37,7 @@ final case class AdvancementRule(
     cutSize: Option[Int] = None,
     thresholdScore: Option[Int] = None,
     targetTableCount: Option[Int] = None,
+    templateKey: Option[String] = None,
     note: Option[String] = None
 ) derives CanEqual
 

@@ -161,6 +161,8 @@ final case class PlayerLeaderboardEntry(
     playerId: PlayerId,
     nickname: String,
     elo: Int,
+    currentRank: RankSnapshot,
+    normalizedRankScore: Option[Int],
     clubIds: Vector[ClubId],
     status: PlayerStatus
 ) derives CanEqual
