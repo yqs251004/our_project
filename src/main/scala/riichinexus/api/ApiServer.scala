@@ -17,7 +17,7 @@ import scala.util.Using
 import riichinexus.api.ApiModels.given
 import riichinexus.bootstrap.ApplicationContext
 import riichinexus.domain.model.*
-import riichinexus.domain.service.AuthorizationFailure
+import riichinexus.domain.service.{AuthorizationFailure, GlobalDictionaryRegistry}
 import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.*
 
@@ -990,6 +990,8 @@ private final class ApiHandler(
           .filter(entry => updatedByFilter.forall(_ == entry.updatedBy))
           .sortBy(_.key)
         sendPagedJson(exchange, entries, activeFilters(exchange, "prefix", "updatedBy"))
+      case ("GET", Vector("dictionary", "schema")) =>
+        sendJson(exchange, 200, GlobalDictionaryRegistry.schemaView)
       case ("GET", Vector("dictionary", key)) =>
         sendOption(exchange, app.globalDictionaryRepository.findByKey(key))
       case ("POST", Vector("admin", "dictionary")) =>
@@ -1209,3 +1211,4 @@ private final class ApiHandler(
     Using.resource(exchange.getResponseBody) { output =>
       output.write(bytes)
     }
+

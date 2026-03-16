@@ -14,16 +14,15 @@ import riichinexus.domain.model.*
 import riichinexus.domain.service.*
 
 private object RuntimeDictionarySupport:
-  private val RatingKFactorKey = "rating.elo.kfactor"
-  private val RatingPlacementWeightKey = "rating.elo.placementweight"
-  private val RatingScoreWeightKey = "rating.elo.scoreweight"
-  private val RatingUmaWeightKey = "rating.elo.umaweight"
-  private val ClubPowerEloWeightKey = "club.power.eloweight"
-  private val ClubPowerPointWeightKey = "club.power.pointweight"
-  private val ClubPowerBaseBonusKey = "club.power.basebonus"
-  private val SettlementPayoutRatiosKey = "settlement.defaultpayoutratios"
-  private val RankNormalizationPrefix = "rank.normalization."
-  private val TournamentRuleTemplatePrefix = "tournament.rule-template."
+  private val RatingKFactorKey = GlobalDictionaryRegistry.RatingKFactorKey
+  private val RatingPlacementWeightKey = GlobalDictionaryRegistry.RatingPlacementWeightKey
+  private val RatingScoreWeightKey = GlobalDictionaryRegistry.RatingScoreWeightKey
+  private val RatingUmaWeightKey = GlobalDictionaryRegistry.RatingUmaWeightKey
+  private val ClubPowerEloWeightKey = GlobalDictionaryRegistry.ClubPowerEloWeightKey
+  private val ClubPowerPointWeightKey = GlobalDictionaryRegistry.ClubPowerPointWeightKey
+  private val ClubPowerBaseBonusKey = GlobalDictionaryRegistry.ClubPowerBaseBonusKey
+  private val SettlementPayoutRatiosKey = GlobalDictionaryRegistry.SettlementPayoutRatiosKey
+  private val RankNormalizationPrefix = GlobalDictionaryRegistry.RankNormalizationPrefix
 
   final case class ClubPowerConfig(
       eloWeight: Double = 1.0,
@@ -36,52 +35,11 @@ private object RuntimeDictionarySupport:
       sourceKey: String
   )
 
-  final case class StageRuleTemplate(
-      ruleType: Option[AdvancementRuleType] = None,
-      cutSize: Option[Int] = None,
-      thresholdScore: Option[Int] = None,
-      targetTableCount: Option[Int] = None,
-      schedulingPoolSize: Option[Int] = None,
-      pairingMethod: Option[String] = None,
-      carryOverPoints: Option[Boolean] = None,
-      maxRounds: Option[Int] = None,
-      bracketSize: Option[Int] = None,
-      thirdPlaceMatch: Option[Boolean] = None,
-      repechageEnabled: Option[Boolean] = None,
-      seedingPolicy: Option[String] = None,
-      note: Option[String] = None
-  )
-
   def validateRuntimeEntry(
       key: String,
       value: String
   ): Unit =
-    val normalized = normalizedKey(key)
-    normalized match
-      case RatingKFactorKey =>
-        require(parseInt(value).exists(_ > 0), "rating.elo.kFactor must be a positive integer")
-      case RatingPlacementWeightKey | RatingScoreWeightKey | RatingUmaWeightKey =>
-        require(
-          parseDouble(value).exists(weight => weight >= 0.0 && weight <= 1.0),
-          s"$key must be a number between 0.0 and 1.0"
-        )
-      case ClubPowerEloWeightKey | ClubPowerPointWeightKey =>
-        require(parseDouble(value).exists(_ >= 0.0), s"$key must be a non-negative number")
-      case ClubPowerBaseBonusKey =>
-        require(parseDouble(value).nonEmpty, s"$key must be a valid number")
-      case SettlementPayoutRatiosKey =>
-        val ratios = parseDoubleVector(value)
-        require(ratios.nonEmpty, "settlement.defaultPayoutRatios must contain at least one ratio")
-        require(ratios.forall(_ >= 0.0), "settlement.defaultPayoutRatios cannot contain negative values")
-        require(ratios.exists(_ > 0.0), "settlement.defaultPayoutRatios must contain a positive ratio")
-      case _ =>
-        if normalized.startsWith(RankNormalizationPrefix) then
-          validateRankNormalizationEntry(normalized, value)
-        else if normalized.startsWith(TournamentRuleTemplatePrefix) then
-          parseStageRuleTemplate(value)
-          ()
-        else
-          ()
+    GlobalDictionaryRegistry.validate(key, value)
 
   def currentEloRatingConfig(
       globalDictionaryRepository: GlobalDictionaryRepository
@@ -143,8 +101,8 @@ private object RuntimeDictionarySupport:
       rank: RankSnapshot,
       globalDictionaryRepository: GlobalDictionaryRepository
   ): Option[NormalizedRank] =
-    val platformKey = normalizedPlatformKey(rank.platform)
-    val normalizedTier = normalizedToken(rank.tier)
+    val platformKey = GlobalDictionaryRegistry.normalizePlatformKey(rank.platform)
+    val normalizedTier = GlobalDictionaryRegistry.normalizedToken(rank.tier)
     val starSpecificKeys =
       rank.stars.toVector.flatMap { stars =>
         Vector(
@@ -222,55 +180,18 @@ private object RuntimeDictionarySupport:
       .flatMap(parseDouble)
 
   private def normalizedKey(key: String): String =
-    key.trim.toLowerCase
-
-  private def validateRankNormalizationEntry(
-      normalizedKey: String,
-      value: String
-  ): Unit =
-    if normalizedKey.endsWith(".starweight") then
-      require(parseInt(value).nonEmpty, s"$normalizedKey must be an integer")
-    else
-      require(parseInt(value).nonEmpty, s"$normalizedKey must be an integer")
+    GlobalDictionaryRegistry.normalizeKey(key)
 
   private def readStageRuleTemplate(
       globalDictionaryRepository: GlobalDictionaryRepository,
       templateKey: String
-  ): Option[StageRuleTemplate] =
-    readValue(globalDictionaryRepository, s"$TournamentRuleTemplatePrefix$templateKey")
-      .map(parseStageRuleTemplate)
-
-  private def parseStageRuleTemplate(value: String): StageRuleTemplate =
-    val directives = value
-      .split(";")
-      .toVector
-      .map(_.trim)
-      .filter(_.nonEmpty)
-      .map { directive =>
-        val Array(rawKey, rawValue) = directive.split("=", 2)
-        normalizedToken(rawKey) -> rawValue.trim
-      }
-      .toMap
-
-    StageRuleTemplate(
-      ruleType = directives.get("advancement").orElse(directives.get("advancementruletype")).map(parseAdvancementRuleType),
-      cutSize = directives.get("cutsize").flatMap(parseInt),
-      thresholdScore = directives.get("thresholdscore").flatMap(parseInt),
-      targetTableCount = directives.get("targettablecount").flatMap(parseInt),
-      schedulingPoolSize = directives.get("schedulingpoolsize").flatMap(parseInt),
-      pairingMethod = directives.get("pairingmethod"),
-      carryOverPoints = directives.get("carryoverpoints").flatMap(parseBoolean),
-      maxRounds = directives.get("maxrounds").flatMap(parseInt),
-      bracketSize = directives.get("bracketsize").flatMap(parseInt),
-      thirdPlaceMatch = directives.get("thirdplacematch").flatMap(parseBoolean),
-      repechageEnabled = directives.get("repechageenabled").flatMap(parseBoolean),
-      seedingPolicy = directives.get("seedingpolicy"),
-      note = directives.get("note").filter(_.nonEmpty)
-    )
+  ): Option[GlobalDictionaryRegistry.StageRuleTemplate] =
+    readValue(globalDictionaryRepository, GlobalDictionaryRegistry.stageRuleTemplateKey(templateKey))
+      .map(GlobalDictionaryRegistry.parseStageRuleTemplate)
 
   private def applyStageRuleTemplate(
       stage: TournamentStage,
-      template: StageRuleTemplate
+      template: GlobalDictionaryRegistry.StageRuleTemplate
   ): TournamentStage =
     val existingRule = stage.advancementRule
     val defaultRule = AdvancementRule.defaultFor(stage.format)
@@ -330,22 +251,6 @@ private object RuntimeDictionarySupport:
 
   private def round2(value: Double): Double =
     BigDecimal(value).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble
-
-  private def parseBoolean(value: String): Option[Boolean] =
-    value.trim.toLowerCase match
-      case "true" | "yes" | "1"  => Some(true)
-      case "false" | "no" | "0"  => Some(false)
-      case _                     => None
-
-  private def parseAdvancementRuleType(value: String): AdvancementRuleType =
-    AdvancementRuleType.values.find(rule => normalizedToken(rule.toString) == normalizedToken(value))
-      .getOrElse(throw IllegalArgumentException(s"Unsupported advancement rule type: $value"))
-
-  private def normalizedPlatformKey(platform: RankPlatform): String =
-    normalizedToken(platform.toString)
-
-  private def normalizedToken(value: String): String =
-    value.trim.toLowerCase.replaceAll("[^a-z0-9]+", "-").stripPrefix("-").stripSuffix("-")
 
 final class DictionaryBackedRatingConfigProvider(
     globalDictionaryRepository: GlobalDictionaryRepository

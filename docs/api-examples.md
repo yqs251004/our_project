@@ -363,6 +363,12 @@ Paginated dictionary listing:
 curl "http://localhost:8080/dictionary?prefix=rank.&limit=20"
 ```
 
+Inspect the typed runtime dictionary schema and the current unknown-key policy:
+
+```bash
+curl "http://localhost:8080/dictionary/schema"
+```
+
 Runtime-sensitive dictionary keys are now consumed by live services. The currently wired keys are:
 
 - `rating.elo.kFactor`

@@ -631,6 +631,30 @@ class RiichiNexusSuite extends FunSuite:
     assert(banRecord.metadata.getOrElse("repairedClubIds", "").contains(club.id.value))
   }
 
+  test("dictionary registry validates registered keys while allowing free-form metadata") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-16T15:00:00Z")
+
+    intercept[IllegalArgumentException] {
+      app.superAdminService.upsertDictionary(
+        key = "rating.elo.kFactor",
+        value = "oops",
+        actor = AccessPrincipal.system,
+        updatedAt = now
+      )
+    }
+
+    val metadata = app.superAdminService.upsertDictionary(
+      key = "ui.banner.message",
+      value = "Spring finals this weekend",
+      actor = AccessPrincipal.system,
+      updatedAt = now.plusSeconds(30)
+    )
+
+    assertEquals(metadata.key, "ui.banner.message")
+    assertEquals(metadata.value, "Spring finals this weekend")
+  }
+
   test("global dictionary normalizes ranks in the public player leaderboard") {
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-16T12:30:00Z")

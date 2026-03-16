@@ -7,18 +7,18 @@ Recently completed features such as guest sessions, club applications, club hono
 
 ## 1. Business Logic Still Not Fully Landed
 
-- [ ] Formalize the global dictionary into a typed registry now that runtime consumers are wired.
+- [ ] Decide whether unknown dictionary keys should remain free-form metadata or move behind explicit registration.
   - Current state:
-    - dictionary entries now affect live ELO tuning, club power formula, default tournament payout ratios, public rank normalization, and tournament rule templates
-    - the supported keys are still validated by ad-hoc string prefixes rather than a first-class registry/schema
+    - the runtime-sensitive dictionary surface is now described by `GlobalDictionaryRegistry`, with typed schema entries exposed through `/dictionary/schema`
+    - registered keys now share centralized validation and parsing instead of scattered prefix checks
+    - unknown keys are still allowed, but are explicitly classified as metadata-only entries outside the live runtime schema
   - Evidence:
-    - runtime consumption is now wired in `src/main/scala/riichinexus/application/service/Services.scala`
-    - `src/main/scala/riichinexus/domain/service/RatingService.scala` now reads runtime ELO config through a provider
-    - `PublicQueryService` and stage-rule normalization now also resolve dictionary-backed rank normalization and rule templates
+    - `src/main/scala/riichinexus/domain/service/GlobalDictionaryRegistry.scala`
+    - `src/main/scala/riichinexus/application/service/Services.scala` now delegates validation and template parsing through the registry
+    - `src/main/scala/riichinexus/api/ApiServer.scala` now serves `/dictionary/schema`
   - Suggested completion:
-    - introduce a typed registry or schema object for supported dictionary keys
-    - centralize parsing/validation/error messages instead of scattering prefix-based decoders
-    - decide whether unknown keys remain free-form metadata or must move behind explicit registration
+    - decide whether metadata keys stay permanently open-ended or require registration namespaces
+    - if stricter governance is desired, add namespace ownership and reject unregistered production keys
 
 - [ ] Deepen the new Advanced Stats Board into fully rules-faithful mahjong analytics.
   - Current state:

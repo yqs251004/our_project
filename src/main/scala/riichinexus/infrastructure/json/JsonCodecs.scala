@@ -73,6 +73,10 @@ object JsonCodecs:
   given ReadWriter[ClubRelation] = macroRW
   given ReadWriter[ClubHonor] = macroRW
   given ReadWriter[GlobalDictionaryEntry] = macroRW
+  given ReadWriter[GlobalDictionaryValueType] =
+    stringEnumReadWriter(GlobalDictionaryValueType.valueOf, _.toString)
+  given ReadWriter[GlobalDictionarySchemaEntry] = macroRW
+  given ReadWriter[GlobalDictionarySchemaView] = macroRW
   given ReadWriter[AuditEventEntry] = macroRW
   given ReadWriter[Club] = macroRW
 
