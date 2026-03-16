@@ -200,6 +200,17 @@ private final class ApiHandler(
           .filter(player => nicknameFilter.forall(containsIgnoreCase(player.nickname, _)))
           .sortBy(player => (player.nickname, player.id.value))
         sendPagedJson(exchange, members, activeFilters(exchange, "status", "nickname"))
+      case ("GET", Vector("clubs", clubId, "member-privileges")) =>
+        val playerIdFilter = queryParam(exchange, "playerId").filter(_.nonEmpty).map(PlayerId(_))
+        val privilegeFilter = queryParam(exchange, "privilege").filter(_.nonEmpty).map(_.trim.toLowerCase)
+        val rankCodeFilter = queryParam(exchange, "rankCode").filter(_.nonEmpty).map(_.trim.toLowerCase)
+        val snapshots = app.clubService.listMemberPrivilegeSnapshots(ClubId(clubId))
+          .filter(snapshot => playerIdFilter.forall(_ == snapshot.playerId))
+          .filter(snapshot => privilegeFilter.forall(snapshot.privileges.contains))
+          .filter(snapshot => rankCodeFilter.forall(_ == snapshot.rankCode.trim.toLowerCase))
+        sendPagedJson(exchange, snapshots, activeFilters(exchange, "playerId", "privilege", "rankCode"))
+      case ("GET", Vector("clubs", clubId, "member-privileges", playerId)) =>
+        sendOption(exchange, app.clubService.memberPrivilegeSnapshot(ClubId(clubId), PlayerId(playerId)))
       case ("GET", Vector("clubs", clubId, "applications")) =>
         val applications = app.clubRepository
           .findById(ClubId(clubId))
@@ -371,6 +382,18 @@ private final class ApiHandler(
           exchange,
           app.clubService.adjustPointPool(
             clubId = ClubId(clubId),
+            delta = request.delta,
+            actor = principal(request.operator),
+            note = request.note
+          )
+        )
+      case ("POST", Vector("clubs", clubId, "member-contributions")) =>
+        val request = readJsonBody[AdjustClubMemberContributionRequest](exchange)
+        sendOption(
+          exchange,
+          app.clubService.adjustMemberContribution(
+            clubId = ClubId(clubId),
+            playerId = request.player,
             delta = request.delta,
             actor = principal(request.operator),
             note = request.note

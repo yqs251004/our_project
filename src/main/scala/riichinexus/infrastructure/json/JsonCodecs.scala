@@ -61,6 +61,8 @@ object JsonCodecs:
     stringEnumReadWriter(ClubMembershipApplicationStatus.valueOf, _.toString)
   given ReadWriter[ClubMembershipApplication] = macroRW
   given ReadWriter[ClubRankNode] = macroRW
+  given ReadWriter[ClubMemberContribution] = macroRW
+  given ReadWriter[ClubMemberPrivilegeSnapshot] = macroRW
   given ReadWriter[ClubTitleAssignment] = macroRW
   given ReadWriter[ClubRelationKind] =
     stringEnumReadWriter(ClubRelationKind.valueOf, _.toString)

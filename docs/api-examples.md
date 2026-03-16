@@ -265,10 +265,34 @@ curl -X POST http://localhost:8080/clubs/club-123/rank-tree   -H "Content-Type: 
     "operatorId": "player-club-admin",
     "ranks": [
       { "code": "rookie", "label": "Rookie", "minimumContribution": 0, "privileges": [] },
-      { "code": "elite", "label": "Elite", "minimumContribution": 1500, "privileges": ["priority-lineup"] }
+      { "code": "elite", "label": "Elite", "minimumContribution": 1500, "privileges": ["priority-lineup"] },
+      { "code": "officer", "label": "Officer", "minimumContribution": 2500, "privileges": ["approve-roster", "manage-bank"] }
     ],
     "note": "season refresh"
   }'
+```
+
+Adjust one member's club contribution so the rank tree starts granting effective privileges:
+
+```bash
+curl -X POST http://localhost:8080/clubs/club-123/member-contributions   -H "Content-Type: application/json"   -d '{
+    "operatorId": "player-club-admin",
+    "playerId": "player-member-1",
+    "delta": 2600,
+    "note": "season operations contribution"
+  }'
+```
+
+Inspect resolved member privileges after contribution and rank promotion:
+
+```bash
+curl http://localhost:8080/clubs/club-123/member-privileges/player-member-1
+```
+
+Or list only members who currently hold a delegated capability such as `manage-bank`:
+
+```bash
+curl "http://localhost:8080/clubs/club-123/member-privileges?privilege=manage-bank"
 ```
 
 Award or update a club honor:

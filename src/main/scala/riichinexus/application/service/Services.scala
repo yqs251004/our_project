@@ -340,10 +340,11 @@ final class ClubApplicationService(
       yield
         ensureClubActive(club)
         requireActivePlayer(player, s"Player ${playerId.value} cannot join club ${clubId.value}")
-        authorizationService.requirePermission(
-          actor,
-          Permission.ManageClubMembership,
-          clubId = Some(clubId)
+        requireClubCapability(
+          actor = actor,
+          club = club,
+          permission = Permission.ManageClubMembership,
+          delegatedPrivileges = Set(ClubPrivilege.ApproveRoster)
         )
 
         val savedPlayer = playerRepository.save(player.joinClub(clubId))
@@ -451,10 +452,11 @@ final class ClubApplicationService(
       yield
         ensureClubActive(club)
         requireActivePlayer(player, s"Player ${playerId.value} cannot be approved into a club")
-        authorizationService.requirePermission(
-          actor,
-          Permission.ManageClubMembership,
-          clubId = Some(clubId)
+        requireClubCapability(
+          actor = actor,
+          club = club,
+          permission = Permission.ManageClubMembership,
+          delegatedPrivileges = Set(ClubPrivilege.ApproveRoster)
         )
 
         val application = club
@@ -507,10 +509,11 @@ final class ClubApplicationService(
     transactionManager.inTransaction {
       clubRepository.findById(clubId).map { club =>
         ensureClubActive(club)
-        authorizationService.requirePermission(
-          actor,
-          Permission.ManageClubMembership,
-          clubId = Some(clubId)
+        requireClubCapability(
+          actor = actor,
+          club = club,
+          permission = Permission.ManageClubMembership,
+          delegatedPrivileges = Set(ClubPrivilege.ApproveRoster)
         )
 
         val application = club
@@ -620,10 +623,11 @@ final class ClubApplicationService(
       yield
         ensureClubActive(club)
         requireClubMember(club, playerId, "remove member")
-        authorizationService.requirePermission(
-          actor,
-          Permission.ManageClubMembership,
-          clubId = Some(clubId)
+        requireClubCapability(
+          actor = actor,
+          club = club,
+          permission = Permission.ManageClubMembership,
+          delegatedPrivileges = Set(ClubPrivilege.ApproveRoster)
         )
 
         if club.creator == playerId then
@@ -760,10 +764,11 @@ final class ClubApplicationService(
     transactionManager.inTransaction {
       clubRepository.findById(clubId).map { club =>
         ensureClubActive(club)
-        authorizationService.requirePermission(
-          actor,
-          Permission.ManageClubOperations,
-          clubId = Some(clubId)
+        requireClubCapability(
+          actor = actor,
+          club = club,
+          permission = Permission.ManageClubOperations,
+          delegatedPrivileges = Set(ClubPrivilege.ManageBank)
         )
 
         val updatedClub = clubRepository.save(club.adjustTreasury(delta))
@@ -796,10 +801,11 @@ final class ClubApplicationService(
     transactionManager.inTransaction {
       clubRepository.findById(clubId).map { club =>
         ensureClubActive(club)
-        authorizationService.requirePermission(
-          actor,
-          Permission.ManageClubOperations,
-          clubId = Some(clubId)
+        requireClubCapability(
+          actor = actor,
+          club = club,
+          permission = Permission.ManageClubOperations,
+          delegatedPrivileges = Set(ClubPrivilege.ManageBank)
         )
 
         val updatedClub = clubRepository.save(club.adjustPointPool(delta))
@@ -854,6 +860,78 @@ final class ClubApplicationService(
         updatedClub
       }
     }
+
+  def adjustMemberContribution(
+      clubId: ClubId,
+      playerId: PlayerId,
+      delta: Int,
+      actor: AccessPrincipal,
+      occurredAt: Instant = Instant.now(),
+      note: Option[String] = None
+  ): Option[Club] =
+    transactionManager.inTransaction {
+      for
+        club <- clubRepository.findById(clubId)
+        player <- playerRepository.findById(playerId)
+      yield
+        ensureClubActive(club)
+        requireActivePlayer(player, s"Player ${playerId.value} cannot receive club contribution updates")
+        requireClubMember(club, playerId, "adjust contribution")
+        authorizationService.requirePermission(
+          actor,
+          Permission.ManageClubOperations,
+          clubId = Some(clubId)
+        )
+
+        val updatedBy = actor.playerId.getOrElse(club.creator)
+        val nextContribution = club.contributionOf(playerId) + delta
+        require(nextContribution >= 0, s"Club member contribution for ${playerId.value} cannot be negative")
+
+        val updatedClub = clubRepository.save(
+          club.updateMemberContribution(
+            ClubMemberContribution(
+              playerId = playerId,
+              amount = nextContribution,
+              updatedAt = occurredAt,
+              updatedBy = updatedBy,
+              note = note
+            )
+          )
+        )
+        auditEventRepository.save(
+          AuditEventEntry(
+            id = IdGenerator.auditEventId(),
+            aggregateType = "club",
+            aggregateId = clubId.value,
+            eventType = "ClubMemberContributionAdjusted",
+            occurredAt = occurredAt,
+            actorId = actor.playerId,
+            details = Map(
+              "playerId" -> playerId.value,
+              "delta" -> delta.toString,
+              "contribution" -> nextContribution.toString,
+              "rankCode" -> updatedClub.rankFor(playerId).map(_.code).getOrElse("unknown")
+            ),
+            note = note
+          )
+        )
+        updatedClub
+    }
+
+  def memberPrivilegeSnapshot(
+      clubId: ClubId,
+      playerId: PlayerId
+  ): Option[ClubMemberPrivilegeSnapshot] =
+    clubRepository.findById(clubId).flatMap { club =>
+      ensureClubActive(club)
+      club.memberPrivilegeSnapshot(playerId)
+    }
+
+  def listMemberPrivilegeSnapshots(clubId: ClubId): Vector[ClubMemberPrivilegeSnapshot] =
+    clubRepository.findById(clubId).map { club =>
+      ensureClubActive(club)
+      club.memberPrivilegeSnapshots
+    }.getOrElse(throw NoSuchElementException(s"Club ${clubId.value} was not found"))
 
   def awardHonor(
       clubId: ClubId,
@@ -997,6 +1075,23 @@ final class ClubApplicationService(
     if !club.members.contains(playerId) then
       throw IllegalArgumentException(
         s"Player ${playerId.value} must be a club member to $action in club ${club.id.value}"
+      )
+
+  private def requireClubCapability(
+      actor: AccessPrincipal,
+      club: Club,
+      permission: Permission,
+      delegatedPrivileges: Set[String]
+  ): Unit =
+    val hasBasePermission = authorizationService.can(actor, permission, clubId = Some(club.id))
+    val hasDelegatedPrivilege = actor.playerId.exists { playerId =>
+      club.members.contains(playerId) &&
+      delegatedPrivileges.exists(privilege => club.hasPrivilege(playerId, privilege))
+    }
+
+    if !hasBasePermission && !hasDelegatedPrivilege then
+      throw AuthorizationFailure(
+        s"${actor.displayName} is not allowed to perform $permission in club ${club.id.value}"
       )
 
 final class TournamentApplicationService(
@@ -1342,24 +1437,6 @@ final class TournamentApplicationService(
     transactionManager.inTransaction {
       tournamentRepository.findById(tournamentId).map { tournament =>
         val stage = requireStage(tournament, stageId)
-        authorizationService.requirePermission(
-          actor,
-          Permission.SubmitTournamentLineup,
-          clubId = Some(submission.clubId)
-        )
-
-        if !actor.isSuperAdmin && actor.playerId.exists(_ != submission.submittedBy) then
-          throw AuthorizationFailure("Lineup submitter must match the acting principal")
-
-        val isClubRegistered =
-          tournament.participatingClubs.contains(submission.clubId) ||
-            tournament.whitelist.exists(_.clubId.contains(submission.clubId))
-
-        if !isClubRegistered then
-          throw IllegalArgumentException(
-            s"Club ${submission.clubId.value} is not whitelisted for tournament ${tournamentId.value}"
-          )
-
         val submissionPlayerIds = submission.seats.map(_.playerId).distinct
         val conflictingPlayers = stage.lineupSubmissions
           .filterNot(_.clubId == submission.clubId)
@@ -1382,6 +1459,19 @@ final class TournamentApplicationService(
           .findById(submission.clubId)
           .getOrElse(throw NoSuchElementException(s"Club ${submission.clubId.value} was not found"))
         ensureClubActive(club)
+        requireClubLineupCapability(actor, club)
+
+        if !actor.isSuperAdmin && actor.playerId.exists(_ != submission.submittedBy) then
+          throw AuthorizationFailure("Lineup submitter must match the acting principal")
+
+        val isClubRegistered =
+          tournament.participatingClubs.contains(submission.clubId) ||
+            tournament.whitelist.exists(_.clubId.contains(submission.clubId))
+
+        if !isClubRegistered then
+          throw IllegalArgumentException(
+            s"Club ${submission.clubId.value} is not whitelisted for tournament ${tournamentId.value}"
+          )
 
         submission.seats.foreach { seat =>
           val playerId = seat.playerId
@@ -1401,6 +1491,25 @@ final class TournamentApplicationService(
         )
       }
     }
+
+  private def requireClubLineupCapability(
+      actor: AccessPrincipal,
+      club: Club
+  ): Unit =
+    val hasBasePermission =
+      authorizationService.can(
+        actor,
+        Permission.SubmitTournamentLineup,
+        clubId = Some(club.id)
+      )
+    val hasDelegatedPrivilege = actor.playerId.exists { playerId =>
+      club.members.contains(playerId) && club.hasPrivilege(playerId, ClubPrivilege.PriorityLineup)
+    }
+
+    if !hasBasePermission && !hasDelegatedPrivilege then
+      throw AuthorizationFailure(
+        s"${actor.displayName} is not allowed to perform ${Permission.SubmitTournamentLineup} for club ${club.id.value}"
+      )
 
   def scheduleStageTables(
       tournamentId: TournamentId,

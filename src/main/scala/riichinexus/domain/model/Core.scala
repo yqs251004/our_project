@@ -339,6 +339,33 @@ final case class ClubRankNode(
     privileges: Vector[String] = Vector.empty
 ) derives CanEqual
 
+object ClubPrivilege:
+  val PriorityLineup = "priority-lineup"
+  val ApproveRoster = "approve-roster"
+  val ManageBank = "manage-bank"
+
+  def normalize(value: String): String =
+    value.trim.toLowerCase
+
+final case class ClubMemberContribution(
+    playerId: PlayerId,
+    amount: Int,
+    updatedAt: Instant,
+    updatedBy: PlayerId,
+    note: Option[String] = None
+) derives CanEqual:
+  require(amount >= 0, "Club member contribution cannot be negative")
+
+final case class ClubMemberPrivilegeSnapshot(
+    playerId: PlayerId,
+    contribution: Int,
+    rankCode: String,
+    rankLabel: String,
+    privileges: Vector[String],
+    isAdmin: Boolean,
+    internalTitle: Option[String] = None
+) derives CanEqual
+
 final case class ClubTitleAssignment(
     playerId: PlayerId,
     title: String,
@@ -389,6 +416,7 @@ final case class Club(
     treasuryBalance: Long = 0L,
     pointPool: Int = 0,
     rankTree: Vector[ClubRankNode] = Club.defaultRankTree,
+    memberContributions: Vector[ClubMemberContribution] = Vector.empty,
     titleAssignments: Vector[ClubTitleAssignment] = Vector.empty,
     powerRating: Double = 0.0,
     honors: Vector[ClubHonor] = Vector.empty,
@@ -405,6 +433,7 @@ final case class Club(
     copy(
       members = members.filterNot(_ == playerId),
       admins = admins.filterNot(_ == playerId),
+      memberContributions = memberContributions.filterNot(_.playerId == playerId),
       titleAssignments = titleAssignments.filterNot(_.playerId == playerId)
     )
 
@@ -472,25 +501,82 @@ final case class Club(
   def updatePowerRating(rating: Double): Club =
     copy(powerRating = rating)
 
+  def contributionOf(playerId: PlayerId): Int =
+    memberContributions.find(_.playerId == playerId).map(_.amount).getOrElse(0)
+
+  def rankFor(playerId: PlayerId): Option[ClubRankNode] =
+    Option.when(members.contains(playerId)) {
+      rankTree
+        .filter(_.minimumContribution <= contributionOf(playerId))
+        .lastOption
+        .getOrElse(rankTree.head)
+    }
+
+  def privilegesFor(playerId: PlayerId): Vector[String] =
+    rankFor(playerId).map(_.privileges).getOrElse(Vector.empty)
+
+  def hasPrivilege(playerId: PlayerId, privilege: String): Boolean =
+    privilegesFor(playerId).contains(ClubPrivilege.normalize(privilege))
+
+  def memberPrivilegeSnapshot(playerId: PlayerId): Option[ClubMemberPrivilegeSnapshot] =
+    rankFor(playerId).map { rank =>
+      ClubMemberPrivilegeSnapshot(
+        playerId = playerId,
+        contribution = contributionOf(playerId),
+        rankCode = rank.code,
+        rankLabel = rank.label,
+        privileges = rank.privileges,
+        isAdmin = admins.contains(playerId),
+        internalTitle = titleAssignments.find(_.playerId == playerId).map(_.title)
+      )
+    }
+
+  def memberPrivilegeSnapshots: Vector[ClubMemberPrivilegeSnapshot] =
+    members.flatMap(memberPrivilegeSnapshot).sortBy(snapshot =>
+      (-snapshot.contribution, snapshot.rankCode, snapshot.playerId.value)
+    )
+
+  def updateMemberContribution(contribution: ClubMemberContribution): Club =
+    require(
+      members.contains(contribution.playerId),
+      s"Player ${contribution.playerId.value} must be a club member to track contributions"
+    )
+    copy(
+      memberContributions =
+        memberContributions.filterNot(_.playerId == contribution.playerId) :+ contribution
+    )
+
   def updateRankTree(nodes: Vector[ClubRankNode]): Club =
     require(nodes.nonEmpty, "Club rank tree cannot be empty")
+    val normalizedNodes = nodes.map { node =>
+      val normalizedPrivileges = node.privileges
+        .map(ClubPrivilege.normalize)
+        .filter(_.nonEmpty)
+        .distinct
+        .sorted
+      node.copy(
+        code = node.code.trim,
+        label = node.label.trim,
+        privileges = normalizedPrivileges
+      )
+    }
     require(
-      nodes.map(_.code.trim.toLowerCase).distinct.size == nodes.size,
+      normalizedNodes.map(_.code.trim.toLowerCase).distinct.size == normalizedNodes.size,
       "Club rank node codes must be unique"
     )
     require(
-      nodes.map(_.label.trim.toLowerCase).distinct.size == nodes.size,
+      normalizedNodes.map(_.label.trim.toLowerCase).distinct.size == normalizedNodes.size,
       "Club rank node labels must be unique"
     )
     require(
-      nodes.forall(node => node.code.trim.nonEmpty && node.label.trim.nonEmpty),
+      normalizedNodes.forall(node => node.code.trim.nonEmpty && node.label.trim.nonEmpty),
       "Club rank node code and label cannot be empty"
     )
     require(
-      nodes.forall(_.minimumContribution >= 0),
+      normalizedNodes.forall(_.minimumContribution >= 0),
       "Club rank node minimum contribution cannot be negative"
     )
-    val normalized = nodes.sortBy(node => (node.minimumContribution, node.code.trim.toLowerCase))
+    val normalized = normalizedNodes.sortBy(node => (node.minimumContribution, node.code.trim.toLowerCase))
     require(
       normalized.head.minimumContribution == 0,
       "Club rank tree must start at minimum contribution 0"

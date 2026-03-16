@@ -130,6 +130,18 @@ final case class AdjustClubPointPoolRequest(
   def operator: PlayerId =
     PlayerId(operatorId)
 
+final case class AdjustClubMemberContributionRequest(
+    operatorId: String,
+    playerId: String,
+    delta: Int,
+    note: Option[String] = None
+):
+  def operator: PlayerId =
+    PlayerId(operatorId)
+
+  def player: PlayerId =
+    PlayerId(playerId)
+
 final case class ClubRankNodeRequest(
     code: String,
     label: String,
@@ -497,6 +509,7 @@ object ApiModels:
   given ReadWriter[ClearClubTitleRequest] = macroRW
   given ReadWriter[AdjustClubTreasuryRequest] = macroRW
   given ReadWriter[AdjustClubPointPoolRequest] = macroRW
+  given ReadWriter[AdjustClubMemberContributionRequest] = macroRW
   given ReadWriter[ClubRankNodeRequest] = macroRW
   given ReadWriter[UpdateClubRankTreeRequest] = macroRW
   given ReadWriter[AwardClubHonorRequest] = macroRW

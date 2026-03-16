@@ -638,6 +638,56 @@ class ApiServerSuite extends FunSuite:
     }
   }
 
+  test("club member privilege endpoints expose delegated rank capabilities") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-15T15:03:00Z")
+
+    val owner = app.playerService.registerPlayer("club-priv-owner", "ClubPrivOwner", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1800)
+    val delegate = app.playerService.registerPlayer("club-priv-delegate", "ClubPrivDelegate", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1700)
+    val club = app.clubService.createClub("Club Privileges", owner.id, now, owner.asPrincipal)
+    app.clubService.addMember(club.id, delegate.id, principalFor(app, owner.id))
+
+    withServer(app) { baseUrl =>
+      val rankTreeResponse = postJson(
+        s"$baseUrl/clubs/${club.id.value}/rank-tree",
+        write(
+          UpdateClubRankTreeRequest(
+            operatorId = owner.id.value,
+            ranks = Vector(
+              ClubRankNodeRequest("rookie", "Rookie", 0),
+              ClubRankNodeRequest("officer", "Officer", 100, Vector("manage-bank", "priority-lineup"))
+            )
+          )
+        )
+      )
+      assertEquals(rankTreeResponse.statusCode(), 200)
+
+      val contributionResponse = postJson(
+        s"$baseUrl/clubs/${club.id.value}/member-contributions",
+        write(AdjustClubMemberContributionRequest(owner.id.value, delegate.id.value, 120, Some("season contribution")))
+      )
+      assertEquals(contributionResponse.statusCode(), 200)
+
+      val detailResponse = get(s"$baseUrl/clubs/${club.id.value}/member-privileges/${delegate.id.value}")
+      assertEquals(detailResponse.statusCode(), 200)
+      val detail = read[ClubMemberPrivilegeSnapshot](detailResponse.body())
+      assertEquals(detail.rankCode, "officer")
+      assertEquals(detail.privileges, Vector("manage-bank", "priority-lineup"))
+
+      val listResponse = get(s"$baseUrl/clubs/${club.id.value}/member-privileges?privilege=manage-bank")
+      assertEquals(listResponse.statusCode(), 200)
+      val page = readPage[ClubMemberPrivilegeSnapshot](listResponse.body())
+      assertEquals(page.total, 1)
+      assertEquals(page.items.head.playerId, delegate.id)
+
+      val delegatedTreasury = postJson(
+        s"$baseUrl/clubs/${club.id.value}/treasury",
+        write(AdjustClubTreasuryRequest(delegate.id.value, 900L, Some("delegated bank access")))
+      )
+      assertEquals(delegatedTreasury.statusCode(), 200)
+      assertEquals(read[Club](delegatedTreasury.body()).treasuryBalance, 900L)
+    }
+  }
 
   test("club title API supports clearing assigned titles") {
     val app = ApplicationContext.inMemory()
