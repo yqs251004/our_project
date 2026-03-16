@@ -438,7 +438,7 @@ final case class SettleTournamentRequest(
     operatorId: String,
     finalStageId: String,
     prizePool: Long = 0L,
-    payoutRatios: Vector[Double] = Vector(0.5, 0.3, 0.2)
+    payoutRatios: Vector[Double] = Vector.empty
 ):
   def operator: PlayerId =
     PlayerId(operatorId)

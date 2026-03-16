@@ -66,9 +66,14 @@ object ApplicationContext:
       transactionManager
     )
     eventBus.register(
-      RatingProjectionSubscriber(playerRepository, PairwiseEloRatingService())
+      RatingProjectionSubscriber(
+        playerRepository,
+        PairwiseEloRatingService(DictionaryBackedRatingConfigProvider(globalDictionaryRepository))
+      )
     )
-    eventBus.register(ClubProjectionSubscriber(clubRepository, playerRepository))
+    eventBus.register(
+      ClubProjectionSubscriber(clubRepository, playerRepository, globalDictionaryRepository)
+    )
     eventBus.register(
       DashboardProjectionSubscriber(
         matchRecordRepository,
@@ -99,6 +104,7 @@ object ApplicationContext:
       clubService = ClubApplicationService(
         clubRepository,
         playerRepository,
+        globalDictionaryRepository,
         dashboardRepository,
         auditEventRepository,
         transactionManager,
@@ -108,6 +114,7 @@ object ApplicationContext:
         tournamentRepository,
         playerRepository,
         clubRepository,
+        globalDictionaryRepository,
         tableRepository,
         matchRecordRepository,
         tournamentSettlementRepository,
@@ -193,9 +200,14 @@ object ApplicationContext:
       transactionManager
     )
     eventBus.register(
-      RatingProjectionSubscriber(playerRepository, PairwiseEloRatingService())
+      RatingProjectionSubscriber(
+        playerRepository,
+        PairwiseEloRatingService(DictionaryBackedRatingConfigProvider(globalDictionaryRepository))
+      )
     )
-    eventBus.register(ClubProjectionSubscriber(clubRepository, playerRepository))
+    eventBus.register(
+      ClubProjectionSubscriber(clubRepository, playerRepository, globalDictionaryRepository)
+    )
     eventBus.register(
       DashboardProjectionSubscriber(
         matchRecordRepository,
@@ -226,6 +238,7 @@ object ApplicationContext:
       clubService = ClubApplicationService(
         clubRepository,
         playerRepository,
+        globalDictionaryRepository,
         dashboardRepository,
         auditEventRepository,
         transactionManager,
@@ -235,6 +248,7 @@ object ApplicationContext:
         tournamentRepository,
         playerRepository,
         clubRepository,
+        globalDictionaryRepository,
         tableRepository,
         matchRecordRepository,
         tournamentSettlementRepository,

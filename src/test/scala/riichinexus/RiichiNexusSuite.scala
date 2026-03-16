@@ -329,6 +329,149 @@ class RiichiNexusSuite extends FunSuite:
     assertEquals(reducedClub.powerRating, 1800.0)
   }
 
+  test("global dictionary can tune club power formula at runtime") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-16T12:00:00Z")
+
+    app.superAdminService.upsertDictionary(
+      key = "club.power.baseBonus",
+      value = "25",
+      actor = AccessPrincipal.system,
+      updatedAt = now
+    )
+
+    val owner = app.playerService.registerPlayer("dict-power-owner", "DictPowerOwner", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1800)
+    val member = app.playerService.registerPlayer("dict-power-member", "DictPowerMember", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
+
+    val club = app.clubService.createClub("Dictionary Power Club", owner.id, now, owner.asPrincipal)
+    assertEquals(app.clubRepository.findById(club.id).map(_.powerRating), Some(1825.0))
+
+    app.clubService.addMember(club.id, member.id, principalFor(app, owner.id))
+    assertEquals(app.clubRepository.findById(club.id).map(_.powerRating), Some(1725.0))
+  }
+
+  test("global dictionary can tune rating calculation at runtime") {
+    def winnerDeltaWith(kFactor: Option[Int]): Int =
+      val app = ApplicationContext.inMemory()
+      val now = Instant.parse("2026-03-16T12:10:00Z")
+
+      kFactor.foreach { value =>
+        app.superAdminService.upsertDictionary(
+          key = "rating.elo.kFactor",
+          value = value.toString,
+          actor = AccessPrincipal.system,
+          updatedAt = now
+        )
+      }
+
+      val players = Vector(
+        app.playerService.registerPlayer("dict-elo-a", "DictA", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600),
+        app.playerService.registerPlayer("dict-elo-b", "DictB", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1580),
+        app.playerService.registerPlayer("dict-elo-c", "DictC", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1560),
+        app.playerService.registerPlayer("dict-elo-d", "DictD", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1540)
+      )
+
+      val stage = TournamentStage(IdGenerator.stageId(), "Dictionary Elo Stage", StageFormat.Swiss, 1, 1)
+      val tournament = app.tournamentService.createTournament(
+        "Dictionary Elo Cup",
+        "QA",
+        now,
+        now.plusSeconds(3600),
+        Vector(stage)
+      )
+
+      players.foreach(player => app.tournamentService.registerPlayer(tournament.id, player.id))
+      app.tournamentService.publishTournament(tournament.id)
+
+      val table = app.tournamentService.scheduleStageTables(tournament.id, stage.id).head
+      val winnerId = table.seats.head.playerId
+      app.tableService.startTable(table.id, now.plusSeconds(60))
+      app.tableService.recordCompletedTable(
+        table.id,
+        demoPaifuForResult(
+          table,
+          tournament.id,
+          stage.id,
+          now.plusSeconds(120),
+          winner = winnerId,
+          target = table.seats(1).playerId
+        )
+      )
+
+      app.playerRepository.findById(winnerId).getOrElse(fail("winner missing")).elo -
+        players.find(_.id == winnerId).getOrElse(fail("baseline player missing")).elo
+
+    val baselineDelta = winnerDeltaWith(None)
+    val tunedDelta = winnerDeltaWith(Some(72))
+
+    assert(tunedDelta > baselineDelta)
+  }
+
+  test("global dictionary provides default tournament payout ratios") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-16T12:20:00Z")
+
+    app.superAdminService.upsertDictionary(
+      key = "settlement.defaultPayoutRatios",
+      value = "0.7,0.2,0.1",
+      actor = AccessPrincipal.system,
+      updatedAt = now
+    )
+
+    val admin = app.playerService.registerPlayer("dict-settle-admin", "DictSettleAdmin", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1800)
+    val players = Vector(
+      admin,
+      app.playerService.registerPlayer("dict-settle-b", "DictSettleB", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1700),
+      app.playerService.registerPlayer("dict-settle-c", "DictSettleC", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600),
+      app.playerService.registerPlayer("dict-settle-d", "DictSettleD", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1500)
+    )
+
+    val stage = TournamentStage(IdGenerator.stageId(), "Settlement Stage", StageFormat.Swiss, 1, 1)
+    val tournament = app.tournamentService.createTournament(
+      "Dictionary Settlement Cup",
+      "QA",
+      now,
+      now.plusSeconds(7200),
+      Vector(stage),
+      adminId = Some(admin.id)
+    )
+
+    players.foreach(player => app.tournamentService.registerPlayer(tournament.id, player.id, principalFor(app, admin.id)))
+    app.tournamentService.publishTournament(tournament.id, principalFor(app, admin.id))
+
+    val table = app.tournamentService.scheduleStageTables(tournament.id, stage.id, principalFor(app, admin.id)).head
+    app.tableService.startTable(table.id, now.plusSeconds(60), principalFor(app, admin.id))
+    app.tableService.recordCompletedTable(
+      table.id,
+      demoPaifuForResult(
+        table,
+        tournament.id,
+        stage.id,
+        now.plusSeconds(120),
+        winner = table.seats.head.playerId,
+        target = table.seats(1).playerId
+      ),
+      principalFor(app, admin.id)
+    )
+    app.tournamentService.completeStage(
+      tournament.id,
+      stage.id,
+      principalFor(app, admin.id),
+      now.plusSeconds(180)
+    )
+
+    val settlement = app.tournamentService.settleTournament(
+      tournamentId = tournament.id,
+      finalStageId = stage.id,
+      prizePool = 1000,
+      payoutRatios = Vector.empty,
+      actor = principalFor(app, admin.id),
+      settledAt = now.plusSeconds(240)
+    )
+
+    assertEquals(settlement.entries.take(3).map(_.awardAmount), Vector(700L, 200L, 100L))
+  }
+
   test("stage lineup preferred winds influence scheduled seats") {
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-13T13:00:00Z")

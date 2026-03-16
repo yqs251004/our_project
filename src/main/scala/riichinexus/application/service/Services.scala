@@ -8,6 +8,153 @@ import riichinexus.domain.event.*
 import riichinexus.domain.model.*
 import riichinexus.domain.service.*
 
+private object RuntimeDictionarySupport:
+  private val RatingKFactorKey = "rating.elo.kfactor"
+  private val RatingPlacementWeightKey = "rating.elo.placementweight"
+  private val RatingScoreWeightKey = "rating.elo.scoreweight"
+  private val RatingUmaWeightKey = "rating.elo.umaweight"
+  private val ClubPowerEloWeightKey = "club.power.eloweight"
+  private val ClubPowerPointWeightKey = "club.power.pointweight"
+  private val ClubPowerBaseBonusKey = "club.power.basebonus"
+  private val SettlementPayoutRatiosKey = "settlement.defaultpayoutratios"
+
+  final case class ClubPowerConfig(
+      eloWeight: Double = 1.0,
+      pointWeight: Double = 0.001,
+      baseBonus: Double = 0.0
+  )
+
+  def validateRuntimeEntry(
+      key: String,
+      value: String
+  ): Unit =
+    normalizedKey(key) match
+      case RatingKFactorKey =>
+        require(parseInt(value).exists(_ > 0), "rating.elo.kFactor must be a positive integer")
+      case RatingPlacementWeightKey | RatingScoreWeightKey | RatingUmaWeightKey =>
+        require(
+          parseDouble(value).exists(weight => weight >= 0.0 && weight <= 1.0),
+          s"$key must be a number between 0.0 and 1.0"
+        )
+      case ClubPowerEloWeightKey | ClubPowerPointWeightKey =>
+        require(parseDouble(value).exists(_ >= 0.0), s"$key must be a non-negative number")
+      case ClubPowerBaseBonusKey =>
+        require(parseDouble(value).nonEmpty, s"$key must be a valid number")
+      case SettlementPayoutRatiosKey =>
+        val ratios = parseDoubleVector(value)
+        require(ratios.nonEmpty, "settlement.defaultPayoutRatios must contain at least one ratio")
+        require(ratios.forall(_ >= 0.0), "settlement.defaultPayoutRatios cannot contain negative values")
+        require(ratios.exists(_ > 0.0), "settlement.defaultPayoutRatios must contain a positive ratio")
+      case _ =>
+        ()
+
+  def currentEloRatingConfig(
+      globalDictionaryRepository: GlobalDictionaryRepository
+  ): EloRatingConfig =
+    val defaultConfig = EloRatingConfig.default
+    val kFactor = readInt(globalDictionaryRepository, RatingKFactorKey).filter(_ > 0).getOrElse(defaultConfig.kFactor)
+    val rawPlacementWeight = readDouble(globalDictionaryRepository, RatingPlacementWeightKey).filter(_ >= 0.0).getOrElse(defaultConfig.placementWeight)
+    val rawScoreWeight = readDouble(globalDictionaryRepository, RatingScoreWeightKey).filter(_ >= 0.0).getOrElse(defaultConfig.scoreWeight)
+    val rawUmaWeight = readDouble(globalDictionaryRepository, RatingUmaWeightKey).filter(_ >= 0.0).getOrElse(defaultConfig.umaWeight)
+    val totalWeight = rawPlacementWeight + rawScoreWeight + rawUmaWeight
+    val normalizedWeights =
+      if totalWeight <= 0.0 then
+        (defaultConfig.placementWeight, defaultConfig.scoreWeight, defaultConfig.umaWeight)
+      else
+        (
+          rawPlacementWeight / totalWeight,
+          rawScoreWeight / totalWeight,
+          rawUmaWeight / totalWeight
+        )
+
+    EloRatingConfig(
+      kFactor = kFactor,
+      placementWeight = normalizedWeights._1,
+      scoreWeight = normalizedWeights._2,
+      umaWeight = normalizedWeights._3
+    )
+
+  def currentClubPowerConfig(
+      globalDictionaryRepository: GlobalDictionaryRepository
+  ): ClubPowerConfig =
+    ClubPowerConfig(
+      eloWeight = readDouble(globalDictionaryRepository, ClubPowerEloWeightKey).filter(_ >= 0.0).getOrElse(1.0),
+      pointWeight = readDouble(globalDictionaryRepository, ClubPowerPointWeightKey).filter(_ >= 0.0).getOrElse(0.001),
+      baseBonus = readDouble(globalDictionaryRepository, ClubPowerBaseBonusKey).getOrElse(0.0)
+    )
+
+  def currentSettlementPayoutRatios(
+      globalDictionaryRepository: GlobalDictionaryRepository
+  ): Vector[Double] =
+    readDoubleVector(globalDictionaryRepository, SettlementPayoutRatiosKey)
+      .filter(_ >= 0.0) match
+      case ratios if ratios.nonEmpty && ratios.exists(_ > 0.0) => ratios
+      case _                                                   => Vector(0.5, 0.3, 0.2)
+
+  def calculateClubPowerRating(
+      club: Club,
+      playerRepository: PlayerRepository,
+      globalDictionaryRepository: GlobalDictionaryRepository
+  ): Double =
+    val memberElos = club.members.flatMap(memberId => playerRepository.findById(memberId).map(_.elo))
+    val averageElo =
+      if memberElos.isEmpty then 0.0 else memberElos.sum.toDouble / memberElos.size.toDouble
+    val config = currentClubPowerConfig(globalDictionaryRepository)
+    round2(averageElo * config.eloWeight + club.totalPoints.toDouble * config.pointWeight + config.baseBonus)
+
+  private def readInt(
+      globalDictionaryRepository: GlobalDictionaryRepository,
+      key: String
+  ): Option[Int] =
+    readValue(globalDictionaryRepository, key).flatMap(parseInt)
+
+  private def readDouble(
+      globalDictionaryRepository: GlobalDictionaryRepository,
+      key: String
+  ): Option[Double] =
+    readValue(globalDictionaryRepository, key).flatMap(parseDouble)
+
+  private def readDoubleVector(
+      globalDictionaryRepository: GlobalDictionaryRepository,
+      key: String
+  ): Vector[Double] =
+    readValue(globalDictionaryRepository, key).map(parseDoubleVector).getOrElse(Vector.empty)
+
+  private def readValue(
+      globalDictionaryRepository: GlobalDictionaryRepository,
+      key: String
+  ): Option[String] =
+    globalDictionaryRepository.findAll()
+      .find(entry => normalizedKey(entry.key) == normalizedKey(key))
+      .map(_.value.trim)
+      .filter(_.nonEmpty)
+
+  private def parseInt(value: String): Option[Int] =
+    scala.util.Try(value.trim.toInt).toOption
+
+  private def parseDouble(value: String): Option[Double] =
+    scala.util.Try(value.trim.toDouble).toOption.filter(_.isFinite)
+
+  private def parseDoubleVector(value: String): Vector[Double] =
+    value
+      .split("[,;]+")
+      .toVector
+      .map(_.trim)
+      .filter(_.nonEmpty)
+      .flatMap(parseDouble)
+
+  private def normalizedKey(key: String): String =
+    key.trim.toLowerCase
+
+  private def round2(value: Double): Double =
+    BigDecimal(value).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble
+
+final class DictionaryBackedRatingConfigProvider(
+    globalDictionaryRepository: GlobalDictionaryRepository
+) extends RatingConfigProvider:
+  override def current(): EloRatingConfig =
+    RuntimeDictionarySupport.currentEloRatingConfig(globalDictionaryRepository)
+
 private object ProjectionSupport:
   def ensurePlayerDashboard(
       playerId: PlayerId,
@@ -21,22 +168,22 @@ private object ProjectionSupport:
   def refreshClubProjection(
       club: Club,
       playerRepository: PlayerRepository,
+      globalDictionaryRepository: GlobalDictionaryRepository,
       dashboardRepository: DashboardRepository,
       at: Instant
   ): Club =
-    val refreshedClub = recalculateClubPowerRating(club, playerRepository)
+    val refreshedClub = recalculateClubPowerRating(club, playerRepository, globalDictionaryRepository)
     dashboardRepository.save(buildClubDashboard(refreshedClub, dashboardRepository, at))
     refreshedClub
 
   private def recalculateClubPowerRating(
       club: Club,
-      playerRepository: PlayerRepository
+      playerRepository: PlayerRepository,
+      globalDictionaryRepository: GlobalDictionaryRepository
   ): Club =
-    val memberElos = club.members.flatMap(memberId => playerRepository.findById(memberId).map(_.elo))
-    val averageElo =
-      if memberElos.isEmpty then 0.0 else memberElos.sum.toDouble / memberElos.size.toDouble
-    val powerRating = averageElo + club.totalPoints.toDouble / 1000.0
-    club.updatePowerRating(round2(powerRating))
+    club.updatePowerRating(
+      RuntimeDictionarySupport.calculateClubPowerRating(club, playerRepository, globalDictionaryRepository)
+    )
 
   private def buildClubDashboard(
       club: Club,
@@ -278,6 +425,7 @@ final class PublicQueryService(
 final class ClubApplicationService(
     clubRepository: ClubRepository,
     playerRepository: PlayerRepository,
+    globalDictionaryRepository: GlobalDictionaryRepository,
     dashboardRepository: DashboardRepository,
     auditEventRepository: AuditEventRepository,
     transactionManager: TransactionManager = NoOpTransactionManager,
@@ -324,7 +472,13 @@ final class ClubApplicationService(
       val savedCreator = playerRepository.save(updatedCreator)
       ProjectionSupport.ensurePlayerDashboard(savedCreator.id, dashboardRepository, createdAt)
       clubRepository.save(
-        ProjectionSupport.refreshClubProjection(club, playerRepository, dashboardRepository, createdAt)
+        ProjectionSupport.refreshClubProjection(
+          club,
+          playerRepository,
+          globalDictionaryRepository,
+          dashboardRepository,
+          createdAt
+        )
       )
     }
 
@@ -353,6 +507,7 @@ final class ClubApplicationService(
           ProjectionSupport.refreshClubProjection(
             club.addMember(playerId),
             playerRepository,
+            globalDictionaryRepository,
             dashboardRepository,
             Instant.now()
           )
@@ -493,6 +648,7 @@ final class ClubApplicationService(
           ProjectionSupport.refreshClubProjection(
             updatedClub,
             playerRepository,
+            globalDictionaryRepository,
             dashboardRepository,
             approvedAt
           )
@@ -649,6 +805,7 @@ final class ClubApplicationService(
           ProjectionSupport.refreshClubProjection(
             club.removeMember(playerId),
             playerRepository,
+            globalDictionaryRepository,
             dashboardRepository,
             Instant.now()
           )
@@ -1098,6 +1255,7 @@ final class TournamentApplicationService(
     tournamentRepository: TournamentRepository,
     playerRepository: PlayerRepository,
     clubRepository: ClubRepository,
+    globalDictionaryRepository: GlobalDictionaryRepository,
     tableRepository: TableRepository,
     matchRecordRepository: MatchRecordRepository,
     tournamentSettlementRepository: TournamentSettlementRepository,
@@ -1749,7 +1907,7 @@ final class TournamentApplicationService(
       tournamentId: TournamentId,
       finalStageId: TournamentStageId,
       prizePool: Long,
-      payoutRatios: Vector[Double] = Vector(0.5, 0.3, 0.2),
+      payoutRatios: Vector[Double] = Vector.empty,
       actor: AccessPrincipal,
       settledAt: Instant = Instant.now()
   ): TournamentSettlementSnapshot =
@@ -1819,7 +1977,10 @@ final class TournamentApplicationService(
             )
         else ranking.entries.map(_.playerId)
 
-      val awards = allocatePrizePool(prizePool, payoutRatios, resolvedPlayers.size)
+      val effectivePayoutRatios =
+        if payoutRatios.nonEmpty then payoutRatios
+        else RuntimeDictionarySupport.currentSettlementPayoutRatios(globalDictionaryRepository)
+      val awards = allocatePrizePool(prizePool, effectivePayoutRatios, resolvedPlayers.size)
       val rankingByPlayer = ranking.entries.map(entry => entry.playerId -> entry).toMap
       val championId = resolvedPlayers.headOption.getOrElse {
         throw IllegalArgumentException(s"Stage ${finalStageId.value} does not contain any ranked players")
@@ -2621,6 +2782,9 @@ final class SuperAdminService(
   ): GlobalDictionaryEntry =
     transactionManager.inTransaction {
       authorizationService.requirePermission(actor, Permission.ManageGlobalDictionary)
+      require(key.trim.nonEmpty, "Dictionary key cannot be empty")
+      require(value.trim.nonEmpty, "Dictionary value cannot be empty")
+      RuntimeDictionarySupport.validateRuntimeEntry(key, value)
 
       val entry = GlobalDictionaryEntry(
         key = key,
@@ -2749,7 +2913,8 @@ final class RatingProjectionSubscriber(
 
 final class ClubProjectionSubscriber(
     clubRepository: ClubRepository,
-    playerRepository: PlayerRepository
+    playerRepository: PlayerRepository,
+    globalDictionaryRepository: GlobalDictionaryRepository
 ) extends DomainEventSubscriber:
   override def handle(event: DomainEvent): Unit =
     event match
@@ -2770,19 +2935,20 @@ final class ClubProjectionSubscriber(
 
         impactedClubIds.foreach { clubId =>
           clubRepository.findById(clubId).foreach { club =>
-            val memberElos = club.members.flatMap(memberId => playerRepository.findById(memberId).map(_.elo))
-            val averageElo =
-              if memberElos.isEmpty then 0.0 else memberElos.sum.toDouble / memberElos.size.toDouble
-            val powerRating = averageElo + club.totalPoints.toDouble / 1000.0
-            clubRepository.save(club.updatePowerRating(round2(powerRating)))
+            clubRepository.save(
+              club.updatePowerRating(
+                RuntimeDictionarySupport.calculateClubPowerRating(
+                  club,
+                  playerRepository,
+                  globalDictionaryRepository
+                )
+              )
+            )
           }
         }
 
       case _ =>
         ()
-
-  private def round2(value: Double): Double =
-    BigDecimal(value).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble
 
 final class DashboardProjectionSubscriber(
     matchRecordRepository: MatchRecordRepository,

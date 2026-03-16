@@ -527,6 +527,70 @@ class ApiServerSuite extends FunSuite:
     }
   }
 
+  test("dictionary API changes default tournament settlement ratios at runtime") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-15T13:05:00Z")
+
+    val root = app.playerService.registerPlayer("dict-api-root", "DictApiRoot", RankSnapshot(RankPlatform.Custom, "S"), now, 2100)
+    val superAdmin = app.playerRepository.save(root.grantRole(RoleGrant.superAdmin(now)))
+    val admin = app.playerService.registerPlayer("dict-api-admin", "DictApiAdmin", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1800)
+    val players = Vector(
+      admin,
+      app.playerService.registerPlayer("dict-api-b", "DictApiB", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1700),
+      app.playerService.registerPlayer("dict-api-c", "DictApiC", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600),
+      app.playerService.registerPlayer("dict-api-d", "DictApiD", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1500)
+    )
+
+    val stage = TournamentStage(IdGenerator.stageId(), "API Settlement Stage", StageFormat.Swiss, 1, 1)
+    val tournament = app.tournamentService.createTournament(
+      "API Dictionary Settlement Cup",
+      "QA",
+      now,
+      now.plusSeconds(7200),
+      Vector(stage),
+      adminId = Some(admin.id)
+    )
+
+    players.foreach(player => app.tournamentService.registerPlayer(tournament.id, player.id, principalFor(app, admin.id)))
+    app.tournamentService.publishTournament(tournament.id, principalFor(app, admin.id))
+    val table = app.tournamentService.scheduleStageTables(tournament.id, stage.id, principalFor(app, admin.id)).head
+    app.tableService.startTable(table.id, now.plusSeconds(60), principalFor(app, admin.id))
+    app.tableService.recordCompletedTable(
+      table.id,
+      demoPaifuForResult(
+        table,
+        tournament.id,
+        stage.id,
+        now.plusSeconds(120),
+        winner = table.seats.head.playerId,
+        target = table.seats(1).playerId
+      ),
+      principalFor(app, admin.id)
+    )
+    app.tournamentService.completeStage(
+      tournament.id,
+      stage.id,
+      principalFor(app, admin.id),
+      now.plusSeconds(180)
+    )
+
+    withServer(app) { baseUrl =>
+      val dictionaryResponse = postJson(
+        s"$baseUrl/admin/dictionary",
+        write(UpsertDictionaryRequest(superAdmin.id.value, "settlement.defaultPayoutRatios", "0.6,0.25,0.15", Some("runtime payout tuning")))
+      )
+      assertEquals(dictionaryResponse.statusCode(), 201)
+
+      val settleResponse = postJson(
+        s"$baseUrl/tournaments/${tournament.id.value}/settle",
+        write(SettleTournamentRequest(admin.id.value, stage.id.value, 1000))
+      )
+      assertEquals(settleResponse.statusCode(), 200)
+      val settlement = read[TournamentSettlementSnapshot](settleResponse.body())
+      assertEquals(settlement.entries.take(3).map(_.awardAmount), Vector(600L, 250L, 150L))
+    }
+  }
+
   test("club management endpoints revoke admin and remove member") {
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-15T13:00:00Z")

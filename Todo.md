@@ -7,16 +7,18 @@ Recently completed features such as guest sessions, club applications, club hono
 
 ## 1. Business Logic Still Not Fully Landed
 
-- [ ] Make the global dictionary actually drive runtime formulas and rule engines.
-  - Current state: dictionary CRUD, audit, and `GlobalDictionaryUpdated` publishing exist, but business services do not consume dictionary entries at runtime.
+- [ ] Extend the global dictionary beyond the runtime formulas already wired.
+  - Current state:
+    - dictionary entries now affect live ELO tuning, club power formula, and default tournament payout ratios
+    - rank conversion and tournament rule evaluation still do not consume dictionary entries
   - Evidence:
-    - `src/main/scala/riichinexus/application/service/Services.scala` in `SuperAdminService.upsertDictionary`
-    - `src/main/scala/riichinexus/api/ApiServer.scala` dictionary routes only read/write repository data
-    - `src/main/scala/riichinexus/domain/event/DomainEvents.scala` defines `GlobalDictionaryUpdated`, but there is no subscriber handling it
+    - runtime consumption is now wired in `src/main/scala/riichinexus/application/service/Services.scala`
+    - `src/main/scala/riichinexus/domain/service/RatingService.scala` now reads runtime ELO config through a provider
+    - there is still no rank-conversion engine or tournament-rule dictionary adapter
   - Suggested completion:
-    - Define supported dictionary keys
-    - Route keys into rating, rank conversion, settlement, club power formula, and tournament rule evaluation
-    - Add fallback/default behavior plus validation for unknown or malformed formulas
+    - define supported keys for rank conversion and rule templates
+    - route dictionary values into tournament rule evaluation and any future rank normalization service
+    - decide whether unknown keys remain free-form metadata or must move to a typed registry
 
 - [ ] Replace heuristic "advanced stats" proxies with a real Advanced Stats Board pipeline.
   - Current state: the dashboard model is being used as the advanced-stats surface, but `ukeireExpectation`, `defenseStability`, and related values are proxy calculations rather than real mahjong analytics.

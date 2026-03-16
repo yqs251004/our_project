@@ -13,22 +13,38 @@ trait RatingService:
       standings: Vector[MatchRecordSeatResult]
   ): Vector[RatingChange]
 
-final class PairwiseEloRatingService(
+final case class EloRatingConfig(
     kFactor: Int = 36,
     placementWeight: Double = 0.6,
     scoreWeight: Double = 0.3,
     umaWeight: Double = 0.1
-) extends RatingService:
+) derives CanEqual:
   require(kFactor > 0, "kFactor must be positive")
   require(
     math.abs((placementWeight + scoreWeight + umaWeight) - 1.0) <= 0.0001,
     "Rating weights must sum to 1.0"
   )
 
+object EloRatingConfig:
+  val default: EloRatingConfig = EloRatingConfig()
+
+trait RatingConfigProvider:
+  def current(): EloRatingConfig
+
+final case class StaticRatingConfigProvider(
+    config: EloRatingConfig = EloRatingConfig.default
+) extends RatingConfigProvider:
+  override def current(): EloRatingConfig =
+    config
+
+final class PairwiseEloRatingService(
+    configProvider: RatingConfigProvider = StaticRatingConfigProvider()
+) extends RatingService:
   override def calculateDeltas(
       players: Vector[Player],
       standings: Vector[MatchRecordSeatResult]
   ): Vector[RatingChange] =
+    val config = configProvider.current()
     require(players.nonEmpty, "Cannot calculate rating deltas without players")
     require(
       players.map(_.id).toSet == standings.map(_.playerId).toSet,
@@ -48,11 +64,11 @@ final class PairwiseEloRatingService(
         .sum / (players.size - 1).toDouble
 
       val actualScore =
-        placementWeight * placementPerformance(standing.placement, players.size) +
-          scoreWeight * scoreDeltaPerformance(standing.scoreDelta) +
-          umaWeight * umaPerformance(standing.uma + standing.oka)
+        config.placementWeight * placementPerformance(standing.placement, players.size) +
+          config.scoreWeight * scoreDeltaPerformance(standing.scoreDelta) +
+          config.umaWeight * umaPerformance(standing.uma + standing.oka)
 
-      player.id -> (kFactor * volatilityFactor * (actualScore - expectedScore))
+      player.id -> (config.kFactor * volatilityFactor * (actualScore - expectedScore))
     }
 
     val rounded = rawDeltas.map { case (playerId, delta) =>

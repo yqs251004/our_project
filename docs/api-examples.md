@@ -341,6 +341,50 @@ Paginated dictionary listing:
 curl "http://localhost:8080/dictionary?prefix=rank.&limit=20"
 ```
 
+Runtime-sensitive dictionary keys are now consumed by live services. The currently wired keys are:
+
+- `rating.elo.kFactor`
+- `rating.elo.placementWeight`
+- `rating.elo.scoreWeight`
+- `rating.elo.umaWeight`
+- `club.power.eloWeight`
+- `club.power.pointWeight`
+- `club.power.baseBonus`
+- `settlement.defaultPayoutRatios`
+
+For example, increase the live ELO k-factor without redeploying:
+
+```bash
+curl -X POST http://localhost:8080/admin/dictionary   -H "Content-Type: application/json"   -d '{
+    "operatorId": "player-super-admin",
+    "key": "rating.elo.kFactor",
+    "value": "48",
+    "note": "mid-season volatility bump"
+  }'
+```
+
+Tune the club power formula with a flat bonus:
+
+```bash
+curl -X POST http://localhost:8080/admin/dictionary   -H "Content-Type: application/json"   -d '{
+    "operatorId": "player-super-admin",
+    "key": "club.power.baseBonus",
+    "value": "25",
+    "note": "founder prestige bonus"
+  }'
+```
+
+Or set default tournament payout ratios that will be used when `/tournaments/:id/settle` omits `payoutRatios`:
+
+```bash
+curl -X POST http://localhost:8080/admin/dictionary   -H "Content-Type: application/json"   -d '{
+    "operatorId": "player-super-admin",
+    "key": "settlement.defaultPayoutRatios",
+    "value": "0.6,0.25,0.15",
+    "note": "major event payout profile"
+  }'
+```
+
 Audit aggregate lookup with RBAC-scoped operator:
 
 ```bash
