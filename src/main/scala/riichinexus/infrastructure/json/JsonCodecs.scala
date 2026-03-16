@@ -170,7 +170,10 @@ object JsonCodecs:
   given ReadWriter[AdvancedStatsBoard] = macroRW
   given ReadWriter[AdvancedStatsRecomputeTaskStatus] =
     stringEnumReadWriter(AdvancedStatsRecomputeTaskStatus.valueOf, _.toString)
+  given ReadWriter[AdvancedStatsBackfillMode] =
+    stringEnumReadWriter(AdvancedStatsBackfillMode.valueOf, _.toString)
   given ReadWriter[AdvancedStatsRecomputeTask] = macroRW
+  given ReadWriter[AdvancedStatsTaskQueueSummary] = macroRW
   given ReadWriter[EventCascadeConsumer] =
     stringEnumReadWriter(EventCascadeConsumer.valueOf, _.toString)
   given ReadWriter[EventCascadeStatus] =

@@ -4206,6 +4206,8 @@ final class AdvancedStatsPipelineService(
 ):
   import AdvancedStatsSupport.*
   private val drainInFlight = AtomicBoolean(false)
+  private val retryDelay = java.time.Duration.ofMinutes(5)
+  private val maxAttempts = 3
 
   def enqueueImpactedOwners(
       matchRecord: MatchRecord,
@@ -4239,6 +4241,21 @@ final class AdvancedStatsPipelineService(
 
     owners.distinct.map(owner => enqueueOwnerRecompute(owner, reason, requestedAt))
 
+  def enqueueBackfill(
+      mode: AdvancedStatsBackfillMode,
+      requestedAt: Instant = Instant.now(),
+      reason: String = "manual-backfill-recompute",
+      limit: Int = 500
+  ): Vector[AdvancedStatsRecomputeTask] =
+    val owners =
+      playerRepository.findAll().map(player => DashboardOwner.Player(player.id)) ++
+        clubRepository.findActive().map(club => DashboardOwner.Club(club.id))
+
+    owners.distinct
+      .filter(owner => shouldBackfillOwner(owner, mode))
+      .take(limit)
+      .map(owner => enqueueOwnerRecompute(owner, reason, requestedAt))
+
   def enqueueOwnerRecompute(
       owner: DashboardOwner,
       reason: String,
@@ -4267,7 +4284,7 @@ final class AdvancedStatsPipelineService(
       limit: Int = 50,
       processedAt: Instant = Instant.now()
   ): Vector[AdvancedStatsRecomputeTask] =
-    advancedStatsRecomputeTaskRepository.findPending(limit).map { task =>
+    advancedStatsRecomputeTaskRepository.findPending(limit, processedAt).map { task =>
       val processing = advancedStatsRecomputeTaskRepository.save(task.markProcessing(processedAt))
       try
         processing.owner match
@@ -4282,10 +4299,44 @@ final class AdvancedStatsPipelineService(
         advancedStatsRecomputeTaskRepository.save(processing.markCompleted(processedAt))
       catch
         case error: Throwable =>
-          advancedStatsRecomputeTaskRepository.save(
-            processing.markFailed(Option(error.getMessage).getOrElse(error.getClass.getSimpleName), processedAt)
-          )
+          val errorMessage = Option(error.getMessage).getOrElse(error.getClass.getSimpleName)
+          val failedTask =
+            if processing.attempts >= maxAttempts then
+              advancedStatsRecomputeTaskRepository.save(processing.markDeadLetter(errorMessage, processedAt))
+            else
+              val retryAt = processedAt.plus(retryDelay)
+              val scheduled = advancedStatsRecomputeTaskRepository.save(
+                processing.markRetryScheduled(errorMessage, processedAt, retryAt)
+              )
+              scheduleAsyncDrain(Some(retryAt))
+              scheduled
+          failedTask
     }
+
+  def taskQueueSummary(
+      asOf: Instant = Instant.now()
+  ): AdvancedStatsTaskQueueSummary =
+    val tasks = advancedStatsRecomputeTaskRepository.findAll()
+    AdvancedStatsTaskQueueSummary(
+      asOf = asOf,
+      runnablePendingCount = tasks.count(_.isRunnable(asOf)),
+      scheduledRetryCount = tasks.count(task =>
+        task.status == AdvancedStatsRecomputeTaskStatus.Pending &&
+          task.nextAttemptAt.exists(_.isAfter(asOf))
+      ),
+      processingCount = tasks.count(_.status == AdvancedStatsRecomputeTaskStatus.Processing),
+      completedCount = tasks.count(_.status == AdvancedStatsRecomputeTaskStatus.Completed),
+      failedCount = tasks.count(_.status == AdvancedStatsRecomputeTaskStatus.Failed),
+      deadLetterCount = tasks.count(_.status == AdvancedStatsRecomputeTaskStatus.DeadLetter),
+      oldestRunnableRequestedAt = tasks.filter(_.isRunnable(asOf)).map(_.requestedAt).sorted.headOption,
+      nextScheduledRetryAt = tasks
+        .filter(task => task.status == AdvancedStatsRecomputeTaskStatus.Pending)
+        .flatMap(_.nextAttemptAt)
+        .filter(_.isAfter(asOf))
+        .sorted
+        .headOption,
+      newestCompletedAt = tasks.flatMap(_.completedAt).sorted.lastOption
+    )
 
   def rebuildPlayerBoard(
       playerId: PlayerId,
@@ -4306,21 +4357,59 @@ final class AdvancedStatsPipelineService(
     }
     buildClubBoard(club, memberBoards, at)
 
-  private def scheduleAsyncDrain(): Unit =
+  private def scheduleAsyncDrain(notBefore: Option[Instant] = None): Unit =
     if drainInFlight.compareAndSet(false, true) then
       AdvancedStatsAsyncOutbox.submit {
-        try drainLoop()
+        try
+          notBefore.foreach { scheduledAt =>
+            val sleepMillis = java.time.Duration.between(Instant.now(), scheduledAt).toMillis
+            if sleepMillis > 0 then Thread.sleep(sleepMillis)
+          }
+          drainLoop()
         finally
           drainInFlight.set(false)
-          if advancedStatsRecomputeTaskRepository.findPending(1).nonEmpty then
+          val now = Instant.now()
+          if advancedStatsRecomputeTaskRepository.findPending(1, now).nonEmpty then
             scheduleAsyncDrain()
+          else
+            advancedStatsRecomputeTaskRepository.findAll()
+              .filter(task => task.status == AdvancedStatsRecomputeTaskStatus.Pending)
+              .flatMap(_.nextAttemptAt)
+              .filter(_.isAfter(now))
+              .sorted
+              .headOption
+              .foreach(nextAt => scheduleAsyncDrain(Some(nextAt)))
       }
 
   private def drainLoop(): Unit =
     var keepWorking = true
     while keepWorking do
-      val processed = processPending(limit = 25, processedAt = Instant.now())
-      keepWorking = processed.nonEmpty
+      val now = Instant.now()
+      val processed = processPending(limit = 25, processedAt = now)
+      if processed.nonEmpty then keepWorking = true
+      else
+        val nextRetryAt = advancedStatsRecomputeTaskRepository.findAll()
+          .filter(task => task.status == AdvancedStatsRecomputeTaskStatus.Pending)
+          .flatMap(_.nextAttemptAt)
+          .filter(_.isAfter(now))
+          .sorted
+          .headOption
+
+        nextRetryAt match
+          case Some(retryAt) if java.time.Duration.between(now, retryAt).compareTo(java.time.Duration.ofSeconds(10)) <= 0 =>
+            val sleepMillis = math.max(1L, java.time.Duration.between(now, retryAt).toMillis)
+            Thread.sleep(sleepMillis)
+            keepWorking = true
+          case _ =>
+            keepWorking = false
+
+  private def shouldBackfillOwner(owner: DashboardOwner, mode: AdvancedStatsBackfillMode): Boolean =
+    val board = advancedStatsBoardRepository.findByOwner(owner)
+    mode match
+      case AdvancedStatsBackfillMode.Full    => true
+      case AdvancedStatsBackfillMode.Missing => board.isEmpty
+      case AdvancedStatsBackfillMode.Stale =>
+        board.exists(_.calculatorVersion < AdvancedStatsBoard.CurrentCalculatorVersion)
 
 final class AdvancedStatsProjectionSubscriber(
     advancedStatsPipelineService: AdvancedStatsPipelineService

@@ -77,6 +77,12 @@ enum AdvancedStatsRecomputeTaskStatus derives CanEqual:
   case Processing
   case Completed
   case Failed
+  case DeadLetter
+
+enum AdvancedStatsBackfillMode derives CanEqual:
+  case Full
+  case Missing
+  case Stale
 
 final case class AdvancedStatsRecomputeTask(
     id: AdvancedStatsRecomputeTaskId,
@@ -88,32 +94,62 @@ final case class AdvancedStatsRecomputeTask(
     attempts: Int = 0,
     lastError: Option[String] = None,
     lastMatchRecordId: Option[MatchRecordId] = None,
+    nextAttemptAt: Option[Instant] = None,
     startedAt: Option[Instant] = None,
-    completedAt: Option[Instant] = None
+    completedAt: Option[Instant] = None,
+    deadLetteredAt: Option[Instant] = None
 ) derives CanEqual:
   require(reason.trim.nonEmpty, "Advanced stats recompute reason cannot be empty")
   require(attempts >= 0, "Advanced stats recompute attempts cannot be negative")
+
+  def isRunnable(asOf: Instant): Boolean =
+    status == AdvancedStatsRecomputeTaskStatus.Pending &&
+      nextAttemptAt.forall(!_.isAfter(asOf))
 
   def markProcessing(at: Instant): AdvancedStatsRecomputeTask =
     copy(
       status = AdvancedStatsRecomputeTaskStatus.Processing,
       attempts = attempts + 1,
+      nextAttemptAt = None,
       startedAt = Some(at),
       completedAt = None,
+      deadLetteredAt = None,
       lastError = None
     )
 
   def markCompleted(at: Instant): AdvancedStatsRecomputeTask =
     copy(
       status = AdvancedStatsRecomputeTaskStatus.Completed,
+      nextAttemptAt = None,
       completedAt = Some(at),
+      deadLetteredAt = None,
       lastError = None
+    )
+
+  def markRetryScheduled(error: String, failedAt: Instant, retryAt: Instant): AdvancedStatsRecomputeTask =
+    copy(
+      status = AdvancedStatsRecomputeTaskStatus.Pending,
+      nextAttemptAt = Some(retryAt),
+      completedAt = Some(failedAt),
+      deadLetteredAt = None,
+      lastError = Some(error)
     )
 
   def markFailed(error: String, at: Instant): AdvancedStatsRecomputeTask =
     copy(
       status = AdvancedStatsRecomputeTaskStatus.Failed,
+      nextAttemptAt = None,
       completedAt = Some(at),
+      deadLetteredAt = None,
+      lastError = Some(error)
+    )
+
+  def markDeadLetter(error: String, at: Instant): AdvancedStatsRecomputeTask =
+    copy(
+      status = AdvancedStatsRecomputeTaskStatus.DeadLetter,
+      nextAttemptAt = None,
+      completedAt = Some(at),
+      deadLetteredAt = Some(at),
       lastError = Some(error)
     )
 
@@ -134,6 +170,19 @@ object AdvancedStatsRecomputeTask:
       status = AdvancedStatsRecomputeTaskStatus.Pending,
       lastMatchRecordId = lastMatchRecordId
     )
+
+final case class AdvancedStatsTaskQueueSummary(
+    asOf: Instant,
+    runnablePendingCount: Int,
+    scheduledRetryCount: Int,
+    processingCount: Int,
+    completedCount: Int,
+    failedCount: Int,
+    deadLetterCount: Int,
+    oldestRunnableRequestedAt: Option[Instant],
+    nextScheduledRetryAt: Option[Instant],
+    newestCompletedAt: Option[Instant]
+) derives CanEqual
 
 final case class PublicScheduleView(
     tournamentId: TournamentId,

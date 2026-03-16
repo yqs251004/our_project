@@ -965,6 +965,11 @@ private final class ApiHandler(
         val tasks = app.advancedStatsRecomputeTaskRepository.findAll()
           .filter(task => statusFilter.forall(_ == task.status))
         sendPagedJson(exchange, tasks, activeFilters(exchange, "status"))
+      case ("GET", Vector("admin", "advanced-stats", "summary")) =>
+        val operator = queryPrincipal(exchange)
+        app.authorizationService.requirePermission(operator, Permission.ManageGlobalDictionary)
+        val asOf = queryParam(exchange, "asOf").filter(_.nonEmpty).map(Instant.parse).getOrElse(Instant.now())
+        sendJson(exchange, 200, app.advancedStatsPipelineService.taskQueueSummary(asOf))
       case ("GET", Vector("admin", "event-cascade-records")) =>
         val operator = queryPrincipal(exchange)
         app.authorizationService.requirePermission(operator, Permission.ManageGlobalDictionary)
@@ -1183,10 +1188,19 @@ private final class ApiHandler(
             case (Some(other), Some(_)) =>
               throw IllegalArgumentException(s"Unsupported advanced stats ownerType: $other")
             case _ =>
-              app.advancedStatsPipelineService.enqueueFullRecompute(
-                requestedAt = requestedAt,
-                reason = request.reason.getOrElse("manual-full-recompute")
-              )
+              request.parsedMode match
+                case AdvancedStatsBackfillMode.Full =>
+                  app.advancedStatsPipelineService.enqueueFullRecompute(
+                    requestedAt = requestedAt,
+                    reason = request.reason.getOrElse("manual-full-recompute")
+                  )
+                case mode =>
+                  app.advancedStatsPipelineService.enqueueBackfill(
+                    mode = mode,
+                    requestedAt = requestedAt,
+                    reason = request.reason.getOrElse(s"manual-${mode.toString.toLowerCase}-backfill"),
+                    limit = request.limit
+                  )
         sendJson(exchange, 202, tasks)
       case ("POST", Vector("admin", "advanced-stats", "process")) =>
         val request = readJsonBody[ProcessAdvancedStatsTasksRequest](exchange)

@@ -401,6 +401,43 @@ class ApiServerSuite extends FunSuite:
     }
   }
 
+  test("advanced stats admin endpoints expose summary and missing-only backfill") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-15T12:05:00Z")
+
+    val root = app.playerService.registerPlayer("adv-summary-root", "AdvSummaryRoot", RankSnapshot(RankPlatform.Custom, "S"), now, 2100)
+    val rootAdmin = app.playerRepository.save(root.grantRole(RoleGrant.superAdmin(now)))
+    val playerA = app.playerService.registerPlayer("adv-summary-a", "AdvSummaryA", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
+    val playerB = app.playerService.registerPlayer("adv-summary-b", "AdvSummaryB", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1580)
+    app.advancedStatsBoardRepository.save(AdvancedStatsBoard.empty(DashboardOwner.Player(playerA.id), now))
+
+    withServer(app) { baseUrl =>
+      val recomputeResponse = postJson(
+        s"$baseUrl/admin/advanced-stats/recompute",
+        write(
+          RecomputeAdvancedStatsRequest(
+            operatorId = rootAdmin.id.value,
+            mode = AdvancedStatsBackfillMode.Missing.toString,
+            reason = Some("missing-only-backfill"),
+            limit = 10
+          )
+        )
+      )
+      assertEquals(recomputeResponse.statusCode(), 202)
+      val tasks = read[Vector[AdvancedStatsRecomputeTask]](recomputeResponse.body())
+      assert(tasks.exists(_.owner == DashboardOwner.Player(playerB.id)))
+      assert(!tasks.exists(_.owner == DashboardOwner.Player(playerA.id)))
+
+      val summaryResponse = get(
+        s"$baseUrl/admin/advanced-stats/summary?operatorId=${rootAdmin.id.value}"
+      )
+      assertEquals(summaryResponse.statusCode(), 200)
+      val summary = read[AdvancedStatsTaskQueueSummary](summaryResponse.body())
+      assert(summary.runnablePendingCount + summary.processingCount + summary.completedCount > 0)
+      assertEquals(summary.deadLetterCount, 0)
+    }
+  }
+
   test("admin dictionary rejects unknown reserved runtime namespace keys") {
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-16T15:20:00Z")

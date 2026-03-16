@@ -613,6 +613,12 @@ List queued or completed recompute tasks as a super admin:
 curl "http://localhost:8080/admin/advanced-stats/tasks?operatorId=player-super-admin&status=Pending"
 ```
 
+Read the queue summary, including runnable pending work, delayed retries, and dead-letter totals:
+
+```bash
+curl "http://localhost:8080/admin/advanced-stats/summary?operatorId=player-super-admin"
+```
+
 Queue a targeted recompute:
 
 ```bash
@@ -621,6 +627,28 @@ curl -X POST http://localhost:8080/admin/advanced-stats/recompute   -H "Content-
     "ownerType": "player",
     "ownerId": "player-123",
     "reason": "calculator-v2-backfill"
+  }'
+```
+
+Queue a bulk backfill for owners whose advanced-stats boards are still missing:
+
+```bash
+curl -X POST http://localhost:8080/admin/advanced-stats/recompute   -H "Content-Type: application/json"   -d '{
+    "operatorId": "player-super-admin",
+    "mode": "Missing",
+    "reason": "historical-missing-board-backfill",
+    "limit": 500
+  }'
+```
+
+Queue a bulk backfill for stale calculator versions:
+
+```bash
+curl -X POST http://localhost:8080/admin/advanced-stats/recompute   -H "Content-Type: application/json"   -d '{
+    "operatorId": "player-super-admin",
+    "mode": "Stale",
+    "reason": "calculator-version-upgrade",
+    "limit": 500
   }'
 ```
 

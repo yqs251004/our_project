@@ -29,14 +29,14 @@ Recently completed features such as guest sessions, club applications, club hono
     - advanced metrics now flow through a dedicated repository/API surface with versioned calculator metadata
     - recomputation is now persisted as `AdvancedStatsRecomputeTask` outbox records and drained automatically in the background
     - exact tile-aware ukeire / riichi-pressure defense calculations now continue through meld/open-hand states when paifu actions provide `handTilesAfterAction` and `revealedTiles`
+    - the async pipeline now supports delayed retries, `DeadLetter` terminal handling, queue summary metrics, and `missing` / `stale` backfill orchestration through the admin API
   - Evidence:
-    - `src/main/scala/riichinexus/application/service/Services.scala` now contains `AdvancedStatsPipelineService`, async drain scheduling, and meld-aware exact calculation branches
+    - `src/main/scala/riichinexus/application/service/Services.scala` now contains `AdvancedStatsPipelineService`, async drain scheduling, retry/dead-letter handling, backfill orchestration, queue summaries, and meld-aware exact calculation branches
     - `src/main/scala/riichinexus/domain/model/Paifu.scala` now carries hand snapshots / revealed-tile action metadata
     - exact analytics still degrade to fallback mode when paifu lacks enough detail to reconstruct concealed-hand transitions with confidence
   - Suggested completion:
     - backfill richer paifu exports so historical data also benefits from meld-aware exact mode
-    - add retry policy, dead-letter handling, and operational metrics around the async outbox drain
-    - add bulk historical recalculation orchestration and observability for large dataset backfills
+    - add operator-facing dead-letter replay / ack flows and long-running batch progress tracking for very large historical backfills
 
 - [ ] Deepen tournament settlement beyond the current ranking-based prize split.
   - Current state: settlement is a single ranking snapshot plus a simple prize allocator; it does not model club/team splits, side awards, deductions, taxes/fees, or settlement revisions.

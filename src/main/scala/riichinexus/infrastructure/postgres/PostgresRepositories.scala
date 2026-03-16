@@ -1088,14 +1088,15 @@ final class PostgresAdvancedStatsRecomputeTaskRepository(
       "select payload from advanced_stats_recompute_tasks order by requested_at, id"
     )
 
-  override def findPending(limit: Int): Vector[AdvancedStatsRecomputeTask] =
+  override def findPending(limit: Int, asOf: java.time.Instant = java.time.Instant.now()): Vector[AdvancedStatsRecomputeTask] =
     readAll[AdvancedStatsRecomputeTask](
-      "select payload from advanced_stats_recompute_tasks where status = ? order by requested_at, id limit ?",
+      "select payload from advanced_stats_recompute_tasks where status = ? order by requested_at, id",
       { statement =>
         statement.setString(1, AdvancedStatsRecomputeTaskStatus.Pending.toString)
-        statement.setInt(2, limit)
       }
     )
+      .filter(_.isRunnable(asOf))
+      .take(limit)
 
   override def findActiveByOwner(
       owner: DashboardOwner,

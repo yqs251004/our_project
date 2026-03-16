@@ -194,6 +194,65 @@ class RiichiNexusSuite extends FunSuite:
     assert(board.exactDefenseSampleRate > 0.0)
   }
 
+  test("advanced stats pipeline retries failed tasks and dead-letters after max attempts") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.SECONDS)
+
+    val task = app.advancedStatsRecomputeTaskRepository.save(
+      AdvancedStatsRecomputeTask.create(
+        owner = DashboardOwner.Club(ClubId("missing-club")),
+        reason = "missing-club-backfill",
+        requestedAt = now
+      )
+    )
+
+    val firstAttempt = app.advancedStatsPipelineService.processPending(limit = 10, processedAt = now)
+    val firstState = app.advancedStatsRecomputeTaskRepository.findById(task.id).getOrElse(fail("missing first task state"))
+    assertEquals(firstAttempt.map(_.id), Vector(task.id))
+    assertEquals(firstState.status, AdvancedStatsRecomputeTaskStatus.Pending)
+    assertEquals(firstState.attempts, 1)
+    assertEquals(firstState.nextAttemptAt, Some(now.plusSeconds(300)))
+
+    val tooSoon = app.advancedStatsPipelineService.processPending(limit = 10, processedAt = now.plusSeconds(60))
+    assertEquals(tooSoon, Vector.empty)
+
+    app.advancedStatsPipelineService.processPending(limit = 10, processedAt = now.plusSeconds(300))
+    val secondState = app.advancedStatsRecomputeTaskRepository.findById(task.id).getOrElse(fail("missing second task state"))
+    assertEquals(secondState.status, AdvancedStatsRecomputeTaskStatus.Pending)
+    assertEquals(secondState.attempts, 2)
+    assertEquals(secondState.nextAttemptAt, Some(now.plusSeconds(600)))
+
+    app.advancedStatsPipelineService.processPending(limit = 10, processedAt = now.plusSeconds(600))
+    val finalState = app.advancedStatsRecomputeTaskRepository.findById(task.id).getOrElse(fail("missing final task state"))
+    assertEquals(finalState.status, AdvancedStatsRecomputeTaskStatus.DeadLetter)
+    assertEquals(finalState.attempts, 3)
+    assert(finalState.lastError.exists(_.contains("missing-club")))
+
+    val summary = app.advancedStatsPipelineService.taskQueueSummary(now.plusSeconds(600))
+    assertEquals(summary.deadLetterCount, 1)
+    assertEquals(summary.scheduledRetryCount, 0)
+    assertEquals(summary.runnablePendingCount, 0)
+  }
+
+  test("advanced stats backfill mode targets only missing boards") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-16T03:40:00Z")
+
+    val playerA = app.playerService.registerPlayer("backfill-a", "BackfillA", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
+    val playerB = app.playerService.registerPlayer("backfill-b", "BackfillB", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1580)
+    app.advancedStatsBoardRepository.save(AdvancedStatsBoard.empty(DashboardOwner.Player(playerA.id), now))
+
+    val tasks = app.advancedStatsPipelineService.enqueueBackfill(
+      mode = AdvancedStatsBackfillMode.Missing,
+      requestedAt = now.plusSeconds(30),
+      reason = "missing-only-backfill",
+      limit = 10
+    )
+
+    assert(tasks.exists(_.owner == DashboardOwner.Player(playerB.id)))
+    assert(!tasks.exists(_.owner == DashboardOwner.Player(playerA.id)))
+  }
+
   test("stage lineups preserve represented club for multi-club players") {
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-13T10:00:00Z")
