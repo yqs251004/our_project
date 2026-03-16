@@ -104,6 +104,7 @@ trait DictionaryNamespaceRepository:
 
 trait TournamentSettlementRepository:
   def save(snapshot: TournamentSettlementSnapshot): TournamentSettlementSnapshot
+  def findById(id: SettlementSnapshotId): Option[TournamentSettlementSnapshot]
   def findByTournamentAndStage(
       tournamentId: TournamentId,
       stageId: TournamentStageId

@@ -118,6 +118,9 @@ object JsonCodecs:
   given ReadWriter[KnockoutBracketMatch] = macroRW
   given ReadWriter[KnockoutBracketRound] = macroRW
   given ReadWriter[KnockoutBracketSnapshot] = macroRW
+  given ReadWriter[TournamentSettlementStatus] =
+    stringEnumReadWriter(TournamentSettlementStatus.valueOf, _.toString)
+  given ReadWriter[TournamentSettlementAdjustment] = macroRW
   given ReadWriter[TournamentSettlementEntry] = macroRW
   given ReadWriter[TournamentSettlementSnapshot] = macroRW
   given ReadWriter[Tournament] = macroRW

@@ -39,13 +39,17 @@ Recently completed features such as guest sessions, club applications, club hono
     - add operator-facing dead-letter replay / ack flows and long-running batch progress tracking for very large historical backfills
 
 - [ ] Deepen tournament settlement beyond the current ranking-based prize split.
-  - Current state: settlement is a single ranking snapshot plus a simple prize allocator; it does not model club/team splits, side awards, deductions, taxes/fees, or settlement revisions.
+  - Current state:
+    - settlement now supports `Draft` / `Finalized` / `Superseded` status, revision history, explicit finalization, house-fee deductions, per-player positive/negative adjustments, and club-share allocation
+    - `/tournaments/:id/settle` can now create draft or finalized revisions, and `/tournaments/:id/settlements/:settlementId/finalize` can promote a draft settlement later
+    - settlement history queries now preserve superseded revisions instead of overwriting the latest stage snapshot in place
   - Evidence:
-    - `src/main/scala/riichinexus/application/service/Services.scala` in `settleTournament`
-    - `src/main/scala/riichinexus/application/service/Services.scala` in `allocatePrizePool`
+    - `src/main/scala/riichinexus/domain/model/Competition.scala` now defines settlement status, adjustment, revision, fee, and club-share fields
+    - `src/main/scala/riichinexus/application/service/Services.scala` now supersedes prior revisions, computes net/base/adjusted awards, and exposes `finalizeTournamentSettlement`
+    - `src/main/scala/riichinexus/api/ApiServer.scala` now supports settlement status filters and explicit finalize operations
   - Suggested completion:
-    - Support configurable payout schemas, club/team settlement, side pots, and revision history
-    - Persist settlement status transitions instead of only a final snapshot
+    - if side pots or tax jurisdictions become real requirements, split generic `adjustments` into typed accounting buckets instead of a single free-form adjustment list
+    - expose export-ready club payout aggregates if downstream finance systems need per-club remittance ledgers
 
 - [ ] Enrich appeal handling into a real workflow, not just a verdict log plus table mutation.
   - Current state: appeal attachments are references only, and adjudication is limited to resolve/reject/escalate plus a coarse table resolution.

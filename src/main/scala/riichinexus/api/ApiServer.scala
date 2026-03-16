@@ -491,15 +491,20 @@ private final class ApiHandler(
               .forall(value => snapshot.stageId == TournamentStageId(value))
           )
           .filter(snapshot =>
+            queryParam(exchange, "status")
+              .filter(_.nonEmpty)
+              .forall(value => snapshot.status == TournamentSettlementStatus.valueOf(value))
+          )
+          .filter(snapshot =>
             queryParam(exchange, "championId")
               .filter(_.nonEmpty)
               .forall(value => snapshot.championId == PlayerId(value))
           )
-          .sortBy(_.generatedAt)
+          .sortBy(snapshot => (snapshot.generatedAt, snapshot.revision))
         sendPagedJson(
           exchange,
           settlements,
-          activeFilters(exchange, "stageId", "championId")
+          activeFilters(exchange, "stageId", "status", "championId")
         )
       case ("GET", Vector("tournaments", tournamentId, "settlements", stageId)) =>
         sendOption(
@@ -548,7 +553,23 @@ private final class ApiHandler(
             finalStageId = request.stageId,
             prizePool = request.prizePool,
             payoutRatios = request.payoutRatios,
+            houseFeeAmount = request.houseFeeAmount,
+            clubShareRatio = request.clubShareRatio,
+            adjustments = request.adjustments.map(_.adjustment),
+            finalize = request.finalizeSettlement,
+            note = request.note,
             actor = principal(request.operator)
+          )
+        )
+      case ("POST", Vector("tournaments", tournamentId, "settlements", settlementId, "finalize")) =>
+        val request = readJsonBody[FinalizeTournamentSettlementRequest](exchange)
+        sendOption(
+          exchange,
+          app.tournamentService.finalizeTournamentSettlement(
+            tournamentId = TournamentId(tournamentId),
+            settlementId = SettlementSnapshotId(settlementId),
+            actor = principal(request.operator),
+            note = request.note
           )
         )
       case ("POST", Vector("tournaments", tournamentId, "players", playerId)) =>

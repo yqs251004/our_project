@@ -1237,12 +1237,26 @@ final class PostgresTournamentSettlementRepository(
 
     snapshot
 
+  override def findById(id: SettlementSnapshotId): Option[TournamentSettlementSnapshot] =
+    readOne[TournamentSettlementSnapshot](
+      "select payload from tournament_settlements where id = ?",
+      { statement =>
+        statement.setString(1, id.value)
+      }
+    )
+
   override def findByTournamentAndStage(
       tournamentId: TournamentId,
       stageId: TournamentStageId
   ): Option[TournamentSettlementSnapshot] =
     readOne[TournamentSettlementSnapshot](
-      "select payload from tournament_settlements where tournament_id = ? and stage_id = ?",
+      """
+        |select payload
+        |from tournament_settlements
+        |where tournament_id = ? and stage_id = ?
+        |order by generated_at desc, id desc
+        |limit 1
+        |""".stripMargin,
       { statement =>
         statement.setString(1, tournamentId.value)
         statement.setString(2, stageId.value)

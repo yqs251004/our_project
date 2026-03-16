@@ -229,23 +229,30 @@ final class InMemoryDictionaryNamespaceRepository extends DictionaryNamespaceRep
     state.values.toVector.sortBy(_.namespacePrefix)
 
 final class InMemoryTournamentSettlementRepository extends TournamentSettlementRepository:
-  private val state = mutable.LinkedHashMap.empty[(TournamentId, TournamentStageId), TournamentSettlementSnapshot]
+  private val state = mutable.LinkedHashMap.empty[SettlementSnapshotId, TournamentSettlementSnapshot]
 
   override def save(snapshot: TournamentSettlementSnapshot): TournamentSettlementSnapshot =
-    state.update((snapshot.tournamentId, snapshot.stageId), snapshot)
+    state.update(snapshot.id, snapshot)
     snapshot
+
+  override def findById(id: SettlementSnapshotId): Option[TournamentSettlementSnapshot] =
+    state.get(id)
 
   override def findByTournamentAndStage(
       tournamentId: TournamentId,
       stageId: TournamentStageId
   ): Option[TournamentSettlementSnapshot] =
-    state.get((tournamentId, stageId))
+    state.values
+      .filter(snapshot => snapshot.tournamentId == tournamentId && snapshot.stageId == stageId)
+      .toVector
+      .sortBy(snapshot => (snapshot.revision, snapshot.generatedAt))
+      .lastOption
 
   override def findByTournament(tournamentId: TournamentId): Vector[TournamentSettlementSnapshot] =
-    state.values.filter(_.tournamentId == tournamentId).toVector
+    state.values.filter(_.tournamentId == tournamentId).toVector.sortBy(snapshot => (snapshot.generatedAt, snapshot.revision))
 
   override def findAll(): Vector[TournamentSettlementSnapshot] =
-    state.values.toVector
+    state.values.toVector.sortBy(snapshot => (snapshot.generatedAt, snapshot.revision))
 
 final class InMemoryEventCascadeRecordRepository extends EventCascadeRecordRepository:
   private val state = mutable.LinkedHashMap.empty[EventCascadeRecordId, EventCascadeRecord]

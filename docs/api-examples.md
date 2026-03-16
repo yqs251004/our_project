@@ -532,6 +532,40 @@ curl -X POST http://localhost:8080/admin/dictionary   -H "Content-Type: applicat
   }'
 ```
 
+Create a draft tournament settlement with house fee, club-share allocation, and explicit per-player adjustments:
+
+```bash
+curl -X POST http://localhost:8080/tournaments/tournament-123/settle   -H "Content-Type: application/json"   -d '{
+    "operatorId": "player-admin-1",
+    "finalStageId": "stage-finals",
+    "prizePool": 100000,
+    "payoutRatios": [0.6, 0.25, 0.15],
+    "houseFeeAmount": 5000,
+    "clubShareRatio": 0.2,
+    "adjustments": [
+      { "playerId": "player-b", "label": "sportsmanship-award", "amount": 3000 },
+      { "playerId": "player-c", "label": "late-penalty", "amount": -1000 }
+    ],
+    "finalizeSettlement": false,
+    "note": "initial finance draft"
+  }'
+```
+
+Finalize a previously drafted settlement revision:
+
+```bash
+curl -X POST http://localhost:8080/tournaments/tournament-123/settlements/settlement-123/finalize   -H "Content-Type: application/json"   -d '{
+    "operatorId": "player-admin-1",
+    "note": "finance approved"
+  }'
+```
+
+Inspect settlement history, including superseded revisions:
+
+```bash
+curl "http://localhost:8080/tournaments/tournament-123/settlements?stageId=stage-finals&status=Superseded"
+```
+
 Normalize cross-platform ranks for the public leaderboard:
 
 ```bash
