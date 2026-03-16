@@ -477,6 +477,27 @@ final case class UpdateTableSeatStateRequest(
   def operator: PlayerId =
     PlayerId(operatorId)
 
+final case class RequestDictionaryNamespaceRequest(
+    operatorId: String,
+    namespacePrefix: String,
+    ownerPlayerId: Option[String] = None,
+    note: Option[String] = None
+):
+  def operator: PlayerId =
+    PlayerId(operatorId)
+
+  def owner: Option[PlayerId] =
+    ownerPlayerId.map(PlayerId(_))
+
+final case class ReviewDictionaryNamespaceRequest(
+    operatorId: String,
+    namespacePrefix: String,
+    approve: Boolean,
+    note: Option[String] = None
+):
+  def operator: PlayerId =
+    PlayerId(operatorId)
+
 final case class UpsertDictionaryRequest(
     operatorId: String,
     key: String,
@@ -572,4 +593,6 @@ object ApiModels:
   given ReadWriter[DissolveClubRequest] = macroRW
   given ReadWriter[GrantSuperAdminRequest] = macroRW
   given ReadWriter[RecomputeAdvancedStatsRequest] = macroRW
+  given ReadWriter[RequestDictionaryNamespaceRequest] = macroRW
+  given ReadWriter[ReviewDictionaryNamespaceRequest] = macroRW
   given ReadWriter[ProcessAdvancedStatsTasksRequest] = macroRW

@@ -369,6 +369,44 @@ Inspect the typed runtime dictionary schema and the current unknown-key policy:
 curl "http://localhost:8080/dictionary/schema"
 ```
 
+Unknown keys outside reserved runtime namespaces are now treated as governed metadata families: they can be stored only after a namespace has been requested and approved. Unregistered keys inside reserved namespaces such as `rating.`, `club.power.`, `settlement.`, `rank.normalization.`, and `tournament.rule-template.` are still rejected until they are explicitly added to the registry.
+
+Request and review a metadata namespace before non-admin owners write free-form dictionary families:
+
+```bash
+curl -X POST http://localhost:8080/dictionary/namespaces   -H "Content-Type: application/json"   -d '{
+    "operatorId": "player-product-owner",
+    "namespacePrefix": "ui.banner",
+    "note": "frontend copy family"
+  }'
+```
+
+```bash
+curl -X POST http://localhost:8080/dictionary/namespaces/review   -H "Content-Type: application/json"   -d '{
+    "operatorId": "player-super-admin",
+    "namespacePrefix": "ui.banner",
+    "approve": true,
+    "note": "approved metadata family"
+  }'
+```
+
+Inspect namespace ownership and review status:
+
+```bash
+curl "http://localhost:8080/dictionary/namespaces?operatorId=player-super-admin&status=Approved"
+```
+
+Once approved, the namespace owner can update metadata keys under that prefix through the same dictionary write endpoint:
+
+```bash
+curl -X POST http://localhost:8080/admin/dictionary   -H "Content-Type: application/json"   -d '{
+    "operatorId": "player-product-owner",
+    "key": "ui.banner.message",
+    "value": "Spring finals this weekend",
+    "note": "owned metadata write"
+  }'
+```
+
 Runtime-sensitive dictionary keys are now consumed by live services. The currently wired keys are:
 
 - `rating.elo.kFactor`

@@ -7,18 +7,20 @@ Recently completed features such as guest sessions, club applications, club hono
 
 ## 1. Business Logic Still Not Fully Landed
 
-- [ ] Decide whether unknown dictionary keys should remain free-form metadata or move behind explicit registration.
+- [ ] Deepen dictionary namespace governance beyond the new ownership/review workflow.
   - Current state:
-    - the runtime-sensitive dictionary surface is now described by `GlobalDictionaryRegistry`, with typed schema entries exposed through `/dictionary/schema`
-    - registered keys now share centralized validation and parsing instead of scattered prefix checks
-    - unknown keys are still allowed, but are explicitly classified as metadata-only entries outside the live runtime schema
+    - metadata keys now require an approved namespace registration before they can be written
+    - namespace owners can write keys under their approved prefix through the existing dictionary upsert endpoint
+    - super admins can request/review namespaces, and `/dictionary/namespaces` exposes the current registrations
+    - reserved runtime namespaces still remain governed only by `GlobalDictionaryRegistry`
   - Evidence:
-    - `src/main/scala/riichinexus/domain/service/GlobalDictionaryRegistry.scala`
-    - `src/main/scala/riichinexus/application/service/Services.scala` now delegates validation and template parsing through the registry
-    - `src/main/scala/riichinexus/api/ApiServer.scala` now serves `/dictionary/schema`
+    - `src/main/scala/riichinexus/domain/model/Dictionary.scala` now defines `DictionaryNamespaceRegistration` and review status
+    - `src/main/scala/riichinexus/application/service/Services.scala` now enforces approved namespace ownership for metadata writes
+    - `src/main/scala/riichinexus/api/ApiServer.scala` now serves `/dictionary/namespaces` and `/dictionary/namespaces/review`
   - Suggested completion:
-    - decide whether metadata keys stay permanently open-ended or require registration namespaces
-    - if stricter governance is desired, add namespace ownership and reject unregistered production keys
+    - add namespace transfer / revocation flows when owners leave the platform or teams change
+    - add approval SLA, reviewer attribution filters, and operational queries for namespace backlog triage
+    - decide whether some metadata families should support multi-owner/editor policies instead of a single owner
 
 - [ ] Deepen the new Advanced Stats Board into fully rules-faithful mahjong analytics.
   - Current state:

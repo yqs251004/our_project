@@ -631,9 +631,14 @@ class RiichiNexusSuite extends FunSuite:
     assert(banRecord.metadata.getOrElse("repairedClubIds", "").contains(club.id.value))
   }
 
-  test("dictionary registry validates registered keys while allowing free-form metadata") {
+  test("dictionary namespace workflow governs metadata writes while runtime registry stays strict") {
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-16T15:00:00Z")
+
+    val root = app.playerService.registerPlayer("dict-root", "DictRoot", RankSnapshot(RankPlatform.Custom, "S"), now, 2000)
+    val owner = app.playerService.registerPlayer("dict-owner", "DictOwner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
+    val outsider = app.playerService.registerPlayer("dict-outsider", "DictOutsider", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1500)
+    val superAdmin = app.playerRepository.save(root.grantRole(RoleGrant.superAdmin(now)))
 
     intercept[IllegalArgumentException] {
       app.superAdminService.upsertDictionary(
@@ -644,12 +649,56 @@ class RiichiNexusSuite extends FunSuite:
       )
     }
 
+    intercept[IllegalArgumentException] {
+      app.superAdminService.upsertDictionary(
+        key = "rating.elo.experimentalFactor",
+        value = "72",
+        actor = principalFor(app, superAdmin.id),
+        updatedAt = now.plusSeconds(10)
+      )
+    }
+
+    val pendingNamespace = app.superAdminService.requestDictionaryNamespace(
+      namespacePrefix = "ui.banner",
+      actor = owner.asPrincipal,
+      requestedAt = now.plusSeconds(20),
+      note = Some("frontend banners")
+    )
+    assertEquals(pendingNamespace.status, DictionaryNamespaceReviewStatus.Pending)
+
+    intercept[IllegalArgumentException] {
+      app.superAdminService.upsertDictionary(
+        key = "ui.banner.message",
+        value = "Spring finals this weekend",
+        actor = owner.asPrincipal,
+        updatedAt = now.plusSeconds(30)
+      )
+    }
+
+    val approvedNamespace = app.superAdminService.reviewDictionaryNamespace(
+      namespacePrefix = "ui.banner",
+      approve = true,
+      actor = principalFor(app, superAdmin.id),
+      reviewedAt = now.plusSeconds(40),
+      note = Some("approved for product copy")
+    ).getOrElse(fail("namespace approval missing"))
+    assertEquals(approvedNamespace.status, DictionaryNamespaceReviewStatus.Approved)
+
     val metadata = app.superAdminService.upsertDictionary(
       key = "ui.banner.message",
       value = "Spring finals this weekend",
-      actor = AccessPrincipal.system,
-      updatedAt = now.plusSeconds(30)
+      actor = owner.asPrincipal,
+      updatedAt = now.plusSeconds(50)
     )
+
+    intercept[IllegalArgumentException] {
+      app.superAdminService.upsertDictionary(
+        key = "ui.banner.message",
+        value = "tampered",
+        actor = outsider.asPrincipal,
+        updatedAt = now.plusSeconds(60)
+      )
+    }
 
     assertEquals(metadata.key, "ui.banner.message")
     assertEquals(metadata.value, "Spring finals this weekend")

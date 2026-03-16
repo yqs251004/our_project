@@ -97,6 +97,11 @@ trait GlobalDictionaryRepository:
   def findByKey(key: String): Option[GlobalDictionaryEntry]
   def findAll(): Vector[GlobalDictionaryEntry]
 
+trait DictionaryNamespaceRepository:
+  def save(registration: DictionaryNamespaceRegistration): DictionaryNamespaceRegistration
+  def findByPrefix(prefix: String): Option[DictionaryNamespaceRegistration]
+  def findAll(): Vector[DictionaryNamespaceRegistration]
+
 trait TournamentSettlementRepository:
   def save(snapshot: TournamentSettlementSnapshot): TournamentSettlementSnapshot
   def findByTournamentAndStage(

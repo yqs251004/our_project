@@ -77,6 +77,9 @@ object JsonCodecs:
     stringEnumReadWriter(GlobalDictionaryValueType.valueOf, _.toString)
   given ReadWriter[GlobalDictionarySchemaEntry] = macroRW
   given ReadWriter[GlobalDictionarySchemaView] = macroRW
+  given ReadWriter[DictionaryNamespaceReviewStatus] =
+    stringEnumReadWriter(DictionaryNamespaceReviewStatus.valueOf, _.toString)
+  given ReadWriter[DictionaryNamespaceRegistration] = macroRW
   given ReadWriter[AuditEventEntry] = macroRW
   given ReadWriter[Club] = macroRW
 

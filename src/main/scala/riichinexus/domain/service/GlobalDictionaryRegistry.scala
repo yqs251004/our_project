@@ -15,8 +15,11 @@ object GlobalDictionaryRegistry:
   val SettlementPayoutRatiosKey = "settlement.defaultpayoutratios"
   val RankNormalizationPrefix = "rank.normalization."
   val TournamentRuleTemplatePrefix = "tournament.rule-template."
+  private val ReservedRuntimePrefixes =
+    Vector("rating.", "club.power.", "settlement.", RankNormalizationPrefix, TournamentRuleTemplatePrefix)
+
   val UnknownKeyPolicy =
-    "Unknown keys remain allowed as free-form metadata, but only registered patterns participate in runtime validation and live consumers."
+    "Unknown keys outside reserved runtime namespaces remain allowed as free-form metadata. Unregistered keys inside reserved namespaces are rejected until they are added to the dictionary registry."
 
   final case class StageRuleTemplate(
       ruleType: Option[AdvancementRuleType] = None,
@@ -181,6 +184,10 @@ object GlobalDictionaryRegistry:
           parseStageRuleTemplate(value)
           ()
         }
+      case _ if isReservedRuntimeNamespace(normalized) =>
+        throw IllegalArgumentException(
+          s"Dictionary key $key is inside a reserved runtime namespace and must match a registered schema entry"
+        )
       case _ =>
         MetadataResolvedKey(normalized)
 
@@ -198,6 +205,27 @@ object GlobalDictionaryRegistry:
 
   def stageRuleTemplateKey(templateKey: String): String =
     s"$TournamentRuleTemplatePrefix$templateKey"
+
+  def normalizeNamespacePrefix(prefix: String): String =
+    val normalized = normalizeKey(prefix).stripSuffix(".")
+    val segments = normalized.split("\\.").toVector.map(_.trim).filter(_.nonEmpty)
+    require(segments.nonEmpty, "Dictionary namespace prefix cannot be empty")
+    require(
+      segments.forall(segment => segment.matches("[a-z0-9-]+")),
+      "Dictionary namespace segments must contain only lowercase letters, digits, or dashes"
+    )
+    val result = segments.mkString(".") + "."
+    require(!isReservedRuntimeNamespace(result), "Reserved runtime namespaces cannot be claimed through metadata governance")
+    result
+
+  def metadataNamespacePrefixForKey(key: String): String =
+    val normalized = normalizeKey(key)
+    val segments = normalized.split("\\.").toVector.map(_.trim).filter(_.nonEmpty)
+    require(segments.size >= 2, "Metadata keys must contain at least two segments to derive a namespace prefix")
+    s"${segments.take(2).mkString(".")}."
+
+  def isMetadataKey(key: String): Boolean =
+    resolve(key).schemaEntry.valueType == GlobalDictionaryValueType.Metadata
 
   def parseStageRuleTemplate(value: String): StageRuleTemplate =
     val directives = value
@@ -230,6 +258,9 @@ object GlobalDictionaryRegistry:
   private def isRankNormalizationStarWeight(normalizedKey: String): Boolean =
     normalizedKey.startsWith(RankNormalizationPrefix) && normalizedKey.endsWith(".starweight")
 
+  private def isReservedRuntimeNamespace(normalizedKey: String): Boolean =
+    ReservedRuntimePrefixes.exists(prefix => normalizedKey.startsWith(prefix))
+
   private def known(
       schemaEntry: GlobalDictionarySchemaEntry,
       normalizedKey: String
@@ -261,3 +292,4 @@ object GlobalDictionaryRegistry:
   private def parseAdvancementRuleType(value: String): AdvancementRuleType =
     AdvancementRuleType.values.find(rule => normalizedToken(rule.toString) == normalizedToken(value))
       .getOrElse(throw IllegalArgumentException(s"Unsupported advancement rule type: $value"))
+

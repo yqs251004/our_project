@@ -2858,6 +2858,7 @@ final class SuperAdminService(
     playerRepository: PlayerRepository,
     clubRepository: ClubRepository,
     globalDictionaryRepository: GlobalDictionaryRepository,
+    dictionaryNamespaceRepository: DictionaryNamespaceRepository,
     auditEventRepository: AuditEventRepository,
     eventBus: DomainEventBus,
     transactionManager: TransactionManager = NoOpTransactionManager,
@@ -2891,6 +2892,95 @@ final class SuperAdminService(
       }
     }
 
+  def requestDictionaryNamespace(
+      namespacePrefix: String,
+      actor: AccessPrincipal,
+      ownerPlayerId: Option[PlayerId] = None,
+      note: Option[String] = None,
+      requestedAt: Instant = Instant.now()
+  ): DictionaryNamespaceRegistration =
+    transactionManager.inTransaction {
+      val requesterId = actor.playerId.getOrElse(
+        throw IllegalArgumentException("Dictionary namespace requests require a registered player identity")
+      )
+      val effectiveOwner = ownerPlayerId.getOrElse(requesterId)
+      if effectiveOwner != requesterId && !actor.isSuperAdmin then
+        throw IllegalArgumentException("Only super admins can request a namespace on behalf of another owner")
+
+      val normalizedPrefix = GlobalDictionaryRegistry.normalizeNamespacePrefix(namespacePrefix)
+      dictionaryNamespaceRepository.findByPrefix(normalizedPrefix) match
+        case Some(existing) if existing.status == DictionaryNamespaceReviewStatus.Approved && existing.ownerPlayerId == effectiveOwner =>
+          existing
+        case Some(existing) if existing.status == DictionaryNamespaceReviewStatus.Approved =>
+          throw IllegalArgumentException(s"Dictionary namespace $normalizedPrefix is already owned by ${existing.ownerPlayerId.value}")
+        case Some(existing) if existing.status == DictionaryNamespaceReviewStatus.Pending =>
+          throw IllegalArgumentException(s"Dictionary namespace $normalizedPrefix already has a pending review")
+        case _ =>
+          val registration = dictionaryNamespaceRepository.save(
+            DictionaryNamespaceRegistration(
+              namespacePrefix = normalizedPrefix,
+              ownerPlayerId = effectiveOwner,
+              requestedBy = requesterId,
+              requestedAt = requestedAt,
+              reviewNote = note
+            )
+          )
+          auditEventRepository.save(
+            AuditEventEntry(
+              id = IdGenerator.auditEventId(),
+              aggregateType = "dictionary-namespace",
+              aggregateId = normalizedPrefix,
+              eventType = "DictionaryNamespaceRequested",
+              occurredAt = requestedAt,
+              actorId = Some(requesterId),
+              details = Map("ownerPlayerId" -> effectiveOwner.value),
+              note = note
+            )
+          )
+          registration
+    }
+
+  def reviewDictionaryNamespace(
+      namespacePrefix: String,
+      approve: Boolean,
+      actor: AccessPrincipal,
+      note: Option[String] = None,
+      reviewedAt: Instant = Instant.now()
+  ): Option[DictionaryNamespaceRegistration] =
+    transactionManager.inTransaction {
+      authorizationService.requirePermission(actor, Permission.ManageGlobalDictionary)
+      val reviewer = actor.playerId.getOrElse(PlayerId("system"))
+      val normalizedPrefix = GlobalDictionaryRegistry.normalizeNamespacePrefix(namespacePrefix)
+      dictionaryNamespaceRepository.findByPrefix(normalizedPrefix).map { existing =>
+        val reviewed =
+          if approve then existing.approve(reviewer, reviewedAt, note)
+          else existing.reject(reviewer, reviewedAt, note)
+
+        dictionaryNamespaceRepository.save(reviewed)
+        auditEventRepository.save(
+          AuditEventEntry(
+            id = IdGenerator.auditEventId(),
+            aggregateType = "dictionary-namespace",
+            aggregateId = normalizedPrefix,
+            eventType = if approve then "DictionaryNamespaceApproved" else "DictionaryNamespaceRejected",
+            occurredAt = reviewedAt,
+            actorId = actor.playerId,
+            details = Map("ownerPlayerId" -> existing.ownerPlayerId.value),
+            note = note
+          )
+        )
+        reviewed
+      }
+    }
+
+  private def approvedMetadataNamespaceForKey(key: String): Option[DictionaryNamespaceRegistration] =
+    val normalizedKey = GlobalDictionaryRegistry.normalizeKey(key)
+    dictionaryNamespaceRepository.findAll()
+      .filter(_.status == DictionaryNamespaceReviewStatus.Approved)
+      .filter(registration => normalizedKey.startsWith(registration.namespacePrefix))
+      .sortBy(_.namespacePrefix.length)
+      .lastOption
+
   def upsertDictionary(
       key: String,
       value: String,
@@ -2899,10 +2989,25 @@ final class SuperAdminService(
       updatedAt: Instant = Instant.now()
   ): GlobalDictionaryEntry =
     transactionManager.inTransaction {
-      authorizationService.requirePermission(actor, Permission.ManageGlobalDictionary)
       require(key.trim.nonEmpty, "Dictionary key cannot be empty")
       require(value.trim.nonEmpty, "Dictionary value cannot be empty")
       RuntimeDictionarySupport.validateRuntimeEntry(key, value)
+
+      if GlobalDictionaryRegistry.isMetadataKey(key) then
+        val namespace = approvedMetadataNamespaceForKey(key).getOrElse(
+          throw IllegalArgumentException(
+            s"Metadata key $key requires an approved namespace registration such as ${GlobalDictionaryRegistry.metadataNamespacePrefixForKey(key)}"
+          )
+        )
+        val actorId = actor.playerId.getOrElse(
+          throw IllegalArgumentException("Metadata dictionary writes require a registered player identity")
+        )
+        if !actor.isSuperAdmin && actorId != namespace.ownerPlayerId then
+          throw IllegalArgumentException(
+            s"Metadata namespace ${namespace.namespacePrefix} is owned by ${namespace.ownerPlayerId.value}"
+          )
+      else
+        authorizationService.requirePermission(actor, Permission.ManageGlobalDictionary)
 
       val entry = GlobalDictionaryEntry(
         key = key,

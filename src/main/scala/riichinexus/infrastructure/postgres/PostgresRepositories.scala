@@ -477,6 +477,14 @@ final class PostgresSchemaInitializer(connectionFactory: JdbcConnectionFactory):
           |on conflict (version) do nothing
           |""".stripMargin
       )
+      execute(
+        connection,
+        """
+          |insert into schema_version(version, description)
+          |values (8, 'Added dictionary namespace governance schema')
+          |on conflict (version) do nothing
+          |""".stripMargin
+      )
     }
 
   private def execute(connection: Connection, sql: String): Unit =
@@ -1157,6 +1165,47 @@ final class PostgresGlobalDictionaryRepository(
   override def findAll(): Vector[GlobalDictionaryEntry] =
     readAll[GlobalDictionaryEntry]("select payload from global_dictionary order by key")
 
+final class PostgresDictionaryNamespaceRepository(
+    protected val connectionFactory: JdbcConnectionFactory
+) extends DictionaryNamespaceRepository
+    with JdbcRepositorySupport:
+  override def save(registration: DictionaryNamespaceRegistration): DictionaryNamespaceRegistration =
+    val sql =
+      """
+        |insert into dictionary_namespaces (namespace_prefix, owner_player_id, status, requested_at, payload, updated_at)
+        |values (?, ?, ?, ?, cast(? as jsonb), now())
+        |on conflict (namespace_prefix) do update set
+        |  owner_player_id = excluded.owner_player_id,
+        |  status = excluded.status,
+        |  requested_at = excluded.requested_at,
+        |  payload = excluded.payload,
+        |  updated_at = now()
+        |""".stripMargin
+
+    withConnection { connection =>
+      Using.resource(connection.prepareStatement(sql)) { statement =>
+        statement.setString(1, registration.namespacePrefix)
+        statement.setString(2, registration.ownerPlayerId.value)
+        statement.setString(3, registration.status.toString)
+        statement.setTimestamp(4, Timestamp.from(registration.requestedAt))
+        statement.setString(5, writeJson(registration))
+        statement.executeUpdate()
+      }
+    }
+
+    registration
+
+  override def findByPrefix(prefix: String): Option[DictionaryNamespaceRegistration] =
+    readOne[DictionaryNamespaceRegistration](
+      "select payload from dictionary_namespaces where namespace_prefix = ?",
+      { statement => statement.setString(1, prefix) }
+    )
+
+  override def findAll(): Vector[DictionaryNamespaceRegistration] =
+    readAll[DictionaryNamespaceRegistration](
+      "select payload from dictionary_namespaces order by namespace_prefix"
+    )
+
 final class PostgresTournamentSettlementRepository(
     protected val connectionFactory: JdbcConnectionFactory
 ) extends TournamentSettlementRepository
@@ -1325,6 +1374,7 @@ final class PostgresAdminService(connectionFactory: JdbcConnectionFactory):
       "advanced_stats_boards",
       "advanced_stats_recompute_tasks",
       "global_dictionary",
+      "dictionary_namespaces",
       "tournament_settlements",
       "event_cascade_records",
       "audit_events"
@@ -1360,6 +1410,7 @@ final class PostgresAdminService(connectionFactory: JdbcConnectionFactory):
         executeAdmin(connection, "truncate table tournament_settlements restart identity")
         executeAdmin(connection, "truncate table event_cascade_records restart identity")
         executeAdmin(connection, "truncate table global_dictionary restart identity")
+        executeAdmin(connection, "truncate table dictionary_namespaces restart identity")
         executeAdmin(connection, "truncate table advanced_stats_recompute_tasks restart identity")
         executeAdmin(connection, "truncate table dashboards restart identity")
         executeAdmin(connection, "truncate table advanced_stats_boards restart identity")

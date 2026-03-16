@@ -215,6 +215,19 @@ final class InMemoryGlobalDictionaryRepository extends GlobalDictionaryRepositor
   override def findAll(): Vector[GlobalDictionaryEntry] =
     state.values.toVector
 
+final class InMemoryDictionaryNamespaceRepository extends DictionaryNamespaceRepository:
+  private val state = mutable.LinkedHashMap.empty[String, DictionaryNamespaceRegistration]
+
+  override def save(registration: DictionaryNamespaceRegistration): DictionaryNamespaceRegistration =
+    state.update(registration.namespacePrefix, registration)
+    registration
+
+  override def findByPrefix(prefix: String): Option[DictionaryNamespaceRegistration] =
+    state.get(prefix)
+
+  override def findAll(): Vector[DictionaryNamespaceRegistration] =
+    state.values.toVector.sortBy(_.namespacePrefix)
+
 final class InMemoryTournamentSettlementRepository extends TournamentSettlementRepository:
   private val state = mutable.LinkedHashMap.empty[(TournamentId, TournamentStageId), TournamentSettlementSnapshot]
 

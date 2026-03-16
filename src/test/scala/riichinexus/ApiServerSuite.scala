@@ -401,6 +401,92 @@ class ApiServerSuite extends FunSuite:
     }
   }
 
+  test("admin dictionary rejects unknown reserved runtime namespace keys") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-16T15:20:00Z")
+
+    val root = app.playerService.registerPlayer("runtime-root", "RuntimeRoot", RankSnapshot(RankPlatform.Custom, "S"), now, 2000)
+    val admin = app.playerRepository.save(root.grantRole(RoleGrant.superAdmin(now)))
+
+    withServer(app) { baseUrl =>
+      val response = postJson(
+        s"$baseUrl/admin/dictionary",
+        write(
+          UpsertDictionaryRequest(
+            operatorId = admin.id.value,
+            key = "rating.elo.experimentalFactor",
+            value = "72",
+            note = Some("should fail until registered")
+          )
+        )
+      )
+      assertEquals(response.statusCode(), 400)
+      assert(response.body().contains("reserved runtime namespace"))
+    }
+  }
+
+  test("dictionary namespace workflow allows approved owners to write metadata keys") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-16T15:30:00Z")
+
+    val root = app.playerService.registerPlayer("ns-root", "NsRoot", RankSnapshot(RankPlatform.Custom, "S"), now, 2000)
+    val owner = app.playerService.registerPlayer("ns-owner", "NsOwner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
+    val superAdmin = app.playerRepository.save(root.grantRole(RoleGrant.superAdmin(now)))
+
+    withServer(app) { baseUrl =>
+      val requestResponse = postJson(
+        s"$baseUrl/dictionary/namespaces",
+        write(
+          RequestDictionaryNamespaceRequest(
+            operatorId = owner.id.value,
+            namespacePrefix = "ui.banner",
+            note = Some("frontend banners")
+          )
+        )
+      )
+      assertEquals(requestResponse.statusCode(), 201)
+      val pending = read[DictionaryNamespaceRegistration](requestResponse.body())
+      assertEquals(pending.status, DictionaryNamespaceReviewStatus.Pending)
+      assertEquals(pending.ownerPlayerId, owner.id)
+
+      val reviewResponse = postJson(
+        s"$baseUrl/dictionary/namespaces/review",
+        write(
+          ReviewDictionaryNamespaceRequest(
+            operatorId = superAdmin.id.value,
+            namespacePrefix = "ui.banner",
+            approve = true,
+            note = Some("approved")
+          )
+        )
+      )
+      assertEquals(reviewResponse.statusCode(), 200)
+      val approved = read[DictionaryNamespaceRegistration](reviewResponse.body())
+      assertEquals(approved.status, DictionaryNamespaceReviewStatus.Approved)
+
+      val upsertResponse = postJson(
+        s"$baseUrl/admin/dictionary",
+        write(
+          UpsertDictionaryRequest(
+            operatorId = owner.id.value,
+            key = "ui.banner.message",
+            value = "Spring finals this weekend",
+            note = Some("owned metadata")
+          )
+        )
+      )
+      assertEquals(upsertResponse.statusCode(), 201)
+      val metadata = read[GlobalDictionaryEntry](upsertResponse.body())
+      assertEquals(metadata.key, "ui.banner.message")
+
+      val listResponse = get(s"$baseUrl/dictionary/namespaces?operatorId=${owner.id.value}&status=Approved")
+      assertEquals(listResponse.statusCode(), 200)
+      val page = readPage[DictionaryNamespaceRegistration](listResponse.body())
+      assertEquals(page.total, 1)
+      assertEquals(page.items.head.namespacePrefix, "ui.banner.")
+    }
+  }
+
   test("dictionary key and audit aggregate endpoints return targeted admin data") {
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-15T12:00:00Z")
@@ -410,12 +496,26 @@ class ApiServerSuite extends FunSuite:
     val admin = app.playerRepository.save(root.grantRole(RoleGrant.superAdmin(now)))
     val adminPrincipal = principalFor(app, admin.id)
 
+    app.superAdminService.requestDictionaryNamespace(
+      namespacePrefix = "rank.formula",
+      actor = adminPrincipal,
+      note = Some("bootstrap metadata namespace"),
+      requestedAt = now
+    )
+    app.superAdminService.reviewDictionaryNamespace(
+      namespacePrefix = "rank.formula",
+      approve = true,
+      actor = adminPrincipal,
+      note = Some("bootstrap metadata namespace"),
+      reviewedAt = now.plusSeconds(1)
+    )
+
     val dictionaryEntry = app.superAdminService.upsertDictionary(
-      key = "rank.formula",
+      key = "rank.formula.current",
       value = "uma+oka-v2",
       actor = adminPrincipal,
       note = Some("season 2"),
-      updatedAt = now
+      updatedAt = now.plusSeconds(10)
     )
 
     withServer(app) { baseUrl =>
@@ -583,20 +683,60 @@ class ApiServerSuite extends FunSuite:
     val admin = app.playerRepository.save(root.grantRole(RoleGrant.superAdmin(now)))
     val adminPrincipal = principalFor(app, admin.id)
 
+    app.superAdminService.requestDictionaryNamespace(
+      namespacePrefix = "rank.formula",
+      actor = adminPrincipal,
+      note = Some("bootstrap metadata namespace"),
+      requestedAt = now
+    )
+    app.superAdminService.requestDictionaryNamespace(
+      namespacePrefix = "rank.scale",
+      actor = adminPrincipal,
+      note = Some("bootstrap metadata namespace"),
+      requestedAt = now.plusSeconds(2)
+    )
+    app.superAdminService.requestDictionaryNamespace(
+      namespacePrefix = "stage.schedulingpoolsize",
+      actor = adminPrincipal,
+      note = Some("bootstrap metadata namespace"),
+      requestedAt = now.plusSeconds(3)
+    )
+    app.superAdminService.reviewDictionaryNamespace(
+      namespacePrefix = "rank.formula",
+      approve = true,
+      actor = adminPrincipal,
+      note = Some("bootstrap metadata namespace"),
+      reviewedAt = now.plusSeconds(4)
+    )
+    app.superAdminService.reviewDictionaryNamespace(
+      namespacePrefix = "rank.scale",
+      approve = true,
+      actor = adminPrincipal,
+      note = Some("bootstrap metadata namespace"),
+      reviewedAt = now.plusSeconds(5)
+    )
+    app.superAdminService.reviewDictionaryNamespace(
+      namespacePrefix = "stage.schedulingpoolsize",
+      approve = true,
+      actor = adminPrincipal,
+      note = Some("bootstrap metadata namespace"),
+      reviewedAt = now.plusSeconds(6)
+    )
+
     val rankFormula = app.superAdminService.upsertDictionary(
-      key = "rank.formula",
+      key = "rank.formula.current",
       value = "uma+oka-v3",
       actor = adminPrincipal,
-      updatedAt = now
+      updatedAt = now.plusSeconds(10)
     )
     app.superAdminService.upsertDictionary(
-      key = "rank.scale",
+      key = "rank.scale.mode",
       value = "aggressive",
       actor = adminPrincipal,
       updatedAt = now.plusSeconds(60)
     )
     app.superAdminService.upsertDictionary(
-      key = "stage.pool",
+      key = "stage.schedulingpoolsize.default",
       value = "4",
       actor = adminPrincipal,
       updatedAt = now.plusSeconds(120)
@@ -608,7 +748,7 @@ class ApiServerSuite extends FunSuite:
       val dictionaryPage = readPage[GlobalDictionaryEntry](dictionaryResponse.body())
       assertEquals(dictionaryPage.total, 2)
       assertEquals(dictionaryPage.items.size, 1)
-      assertEquals(dictionaryPage.items.head.key, "rank.formula")
+      assertEquals(dictionaryPage.items.head.key, "rank.formula.current")
 
       val auditResponse = get(
         s"$baseUrl/audits?operatorId=${admin.id.value}&aggregateType=dictionary&actorId=${admin.id.value}&limit=1"

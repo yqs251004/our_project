@@ -992,6 +992,42 @@ private final class ApiHandler(
         sendPagedJson(exchange, entries, activeFilters(exchange, "prefix", "updatedBy"))
       case ("GET", Vector("dictionary", "schema")) =>
         sendJson(exchange, 200, GlobalDictionaryRegistry.schemaView)
+      case ("GET", Vector("dictionary", "namespaces")) =>
+        val operator = queryPrincipal(exchange)
+        val statusFilter = queryParam(exchange, "status").map(DictionaryNamespaceReviewStatus.valueOf)
+        val ownerFilter = queryParam(exchange, "ownerId").filter(_.nonEmpty).map(PlayerId(_))
+        val namespaces = app.dictionaryNamespaceRepository.findAll()
+          .filter(registration => statusFilter.forall(_ == registration.status))
+          .filter(registration => ownerFilter.forall(_ == registration.ownerPlayerId))
+          .filter(registration =>
+            operator.isSuperAdmin ||
+              operator.playerId.contains(registration.ownerPlayerId) ||
+              operator.playerId.contains(registration.requestedBy)
+          )
+        sendPagedJson(exchange, namespaces, activeFilters(exchange, "status", "ownerId"))
+      case ("POST", Vector("dictionary", "namespaces")) =>
+        val request = readJsonBody[RequestDictionaryNamespaceRequest](exchange)
+        sendJson(
+          exchange,
+          201,
+          app.superAdminService.requestDictionaryNamespace(
+            namespacePrefix = request.namespacePrefix,
+            actor = principal(request.operator),
+            ownerPlayerId = request.owner,
+            note = request.note
+          )
+        )
+      case ("POST", Vector("dictionary", "namespaces", "review")) =>
+        val request = readJsonBody[ReviewDictionaryNamespaceRequest](exchange)
+        sendOption(
+          exchange,
+          app.superAdminService.reviewDictionaryNamespace(
+            namespacePrefix = request.namespacePrefix,
+            approve = request.approve,
+            actor = principal(request.operator),
+            note = request.note
+          )
+        )
       case ("GET", Vector("dictionary", key)) =>
         sendOption(exchange, app.globalDictionaryRepository.findByKey(key))
       case ("POST", Vector("admin", "dictionary")) =>
