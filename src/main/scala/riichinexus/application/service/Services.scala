@@ -2,6 +2,9 @@ package riichinexus.application.service
 
 import java.time.Instant
 import java.util.NoSuchElementException
+import java.util.concurrent.Executors
+import java.util.concurrent.ThreadFactory
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable
 
@@ -3179,114 +3182,105 @@ private object AdvancedStatsSupport:
     )
 
   private def analyzeExactUkeire(round: KyokuRecord, playerId: PlayerId): Vector[Int] =
-    if round.actions.exists(action => isOpaqueCall(action.actionType)) then Vector.empty
-    else
-      round.initialHands.get(playerId).flatMap(parseHandCounts) match
-        case None => Vector.empty
-        case Some(initialCounts) if initialCounts.sum != 13 =>
-          Vector.empty
-        case Some(initialCounts) =>
-          val visibleKnown = initialCounts.clone()
-          val hand = initialCounts.clone()
-          val samples = Vector.newBuilder[Int]
-          var trackable = true
+    round.initialHands.get(playerId).flatMap(parseHandCounts) match
+      case None => Vector.empty
+      case Some(initialCounts) if initialCounts.sum != 13 =>
+        Vector.empty
+      case Some(initialCounts) =>
+        val visibleKnown = initialCounts.clone()
+        var hand = initialCounts.clone()
+        val samples = Vector.newBuilder[Int]
+        var trackable = true
 
-          round.actions.foreach { action =>
-            if trackable then
-              val parsedTile = action.tile.flatMap(parseTile)
-              action.actor match
-                case Some(actor) if actor == playerId =>
-                  action.actionType match
-                    case PaifuActionType.Draw =>
-                      parsedTile match
-                        case Some(tileIndex) =>
-                          hand(tileIndex) += 1
-                          visibleKnown(tileIndex) += 1
-                        case None =>
-                          trackable = false
-                    case PaifuActionType.Discard =>
-                      parsedTile match
-                        case Some(tileIndex) if hand(tileIndex) > 0 =>
-                          hand(tileIndex) -= 1
-                          if hand.sum == 13 then
-                            samples += calculateExactUkeire(hand.clone(), visibleKnown.clone())
-                        case _ =>
-                          trackable = false
-                    case PaifuActionType.Riichi =>
-                      parsedTile match
-                        case Some(tileIndex) if hand(tileIndex) > 0 =>
-                          hand(tileIndex) -= 1
-                          if hand.sum == 13 then
-                            samples += calculateExactUkeire(hand.clone(), visibleKnown.clone())
-                        case None =>
-                          ()
-                        case _ =>
-                          trackable = false
-                    case PaifuActionType.Chi | PaifuActionType.Pon | PaifuActionType.Kan |
-                        PaifuActionType.AddedKan | PaifuActionType.ClosedKan | PaifuActionType.OpenKan =>
-                      trackable = false
-                    case _ =>
-                      ()
-                case _ =>
-                  if isPublicExposure(action.actionType) then
-                    parsedTile.foreach { tileIndex =>
-                      visibleKnown(tileIndex) = math.min(4, visibleKnown(tileIndex) + 1)
-                    }
-          }
+        round.actions.foreach { action =>
+          if trackable then
+            action.actor match
+              case Some(actor) if actor == playerId =>
+                val snapshotCounts = action.handTilesAfterAction.flatMap(parseHandCounts)
+                snapshotCounts match
+                  case Some(snapshot) =>
+                    hand = snapshot
+                    updateVisibleKnown(visibleKnown, publiclyRevealedTiles(action))
+                    if hand.sum == 13 then
+                      samples += calculateExactUkeire(hand.clone(), visibleKnown.clone())
+                  case None =>
+                    action.actionType match
+                      case PaifuActionType.Draw =>
+                        action.tile.flatMap(parseTile) match
+                          case Some(tileIndex) =>
+                            hand(tileIndex) += 1
+                            visibleKnown(tileIndex) += 1
+                          case None =>
+                            trackable = false
+                      case PaifuActionType.Discard | PaifuActionType.Riichi =>
+                        action.tile.flatMap(parseTile) match
+                          case Some(tileIndex) if hand(tileIndex) > 0 =>
+                            hand(tileIndex) -= 1
+                            updateVisibleKnown(visibleKnown, publiclyRevealedTiles(action))
+                            if hand.sum == 13 then
+                              samples += calculateExactUkeire(hand.clone(), visibleKnown.clone())
+                          case None if action.actionType == PaifuActionType.Riichi =>
+                            updateVisibleKnown(visibleKnown, publiclyRevealedTiles(action))
+                          case _ =>
+                            trackable = false
+                      case callType if isMeldAction(callType) =>
+                        trackable = false
+                      case _ =>
+                        updateVisibleKnown(visibleKnown, publiclyRevealedTiles(action))
+              case _ =>
+                updateVisibleKnown(visibleKnown, publiclyRevealedTiles(action))
+        }
 
-          if trackable then samples.result() else Vector.empty
+        if trackable then samples.result() else Vector.empty
 
   private def analyzeExactDefense(round: KyokuRecord, playerId: PlayerId): ExactRoundStats =
-    if round.actions.exists(action => isOpaqueCall(action.actionType)) then
-      ExactRoundStats(false, Vector.empty, 0, 0, 0)
-    else
-      val riichiDiscards = mutable.Map.empty[PlayerId, mutable.Set[Int]]
-      var playerDeclaredRiichi = false
-      var postRiichiDiscardCount = 0
-      var safePostRiichiDiscardCount = 0
-      var foldDiscardCount = 0
-      val publicVisible = Array.fill(34)(0)
+    val riichiDiscards = mutable.Map.empty[PlayerId, mutable.Set[Int]]
+    var playerDeclaredRiichi = false
+    var postRiichiDiscardCount = 0
+    var safePostRiichiDiscardCount = 0
+    var foldDiscardCount = 0
+    val publicVisible = Array.fill(34)(0)
 
-      round.actions.foreach { action =>
-        val parsedTile = action.tile.flatMap(parseTile)
-        action.actor match
-          case Some(actor) if action.actionType == PaifuActionType.Riichi && actor != playerId =>
-            val discards = riichiDiscards.getOrElseUpdate(actor, mutable.Set.empty)
-            parsedTile.foreach { tileIndex =>
-              discards += tileIndex
-              publicVisible(tileIndex) = math.min(4, publicVisible(tileIndex) + 1)
-            }
-          case Some(actor) if action.actionType == PaifuActionType.Discard && actor != playerId =>
-            parsedTile.foreach { tileIndex =>
-              riichiDiscards.get(actor).foreach(_ += tileIndex)
-              publicVisible(tileIndex) = math.min(4, publicVisible(tileIndex) + 1)
-            }
-          case Some(actor) if actor == playerId && action.actionType == PaifuActionType.Riichi =>
-            playerDeclaredRiichi = true
-          case Some(actor) if actor == playerId && action.actionType == PaifuActionType.Discard && riichiDiscards.nonEmpty =>
-            parsedTile.foreach { tileIndex =>
-              postRiichiDiscardCount += 1
-              val genbutsuSafe = riichiDiscards.values.forall(_.contains(tileIndex))
-              val deadSafe = publicVisible(tileIndex) + 1 >= 4
-              if genbutsuSafe || deadSafe then
-                safePostRiichiDiscardCount += 1
-                if !playerDeclaredRiichi then foldDiscardCount += 1
-              publicVisible(tileIndex) = math.min(4, publicVisible(tileIndex) + 1)
-            }
-          case _ =>
-            if isPublicExposure(action.actionType) then
-              parsedTile.foreach { tileIndex =>
-                publicVisible(tileIndex) = math.min(4, publicVisible(tileIndex) + 1)
-              }
-      }
+    round.actions.foreach { action =>
+      action.actor match
+        case Some(actor) if action.actionType == PaifuActionType.Riichi && actor != playerId =>
+          val discards = riichiDiscards.getOrElseUpdate(actor, mutable.Set.empty)
+          publiclyRevealedTiles(action).foreach { tileIndex =>
+            discards += tileIndex
+          }
+          updateVisibleKnown(publicVisible, publiclyRevealedTiles(action))
+        case Some(actor) if action.actionType == PaifuActionType.Discard && actor != playerId =>
+          publiclyRevealedTiles(action).foreach { tileIndex =>
+            riichiDiscards.get(actor).foreach(_ += tileIndex)
+          }
+          updateVisibleKnown(publicVisible, publiclyRevealedTiles(action))
+        case Some(actor) if actor == playerId && action.actionType == PaifuActionType.Riichi =>
+          playerDeclaredRiichi = true
+          updateVisibleKnown(publicVisible, publiclyRevealedTiles(action))
+        case Some(actor) if actor == playerId && isPlayerExposureAction(action.actionType) && riichiDiscards.nonEmpty =>
+          val discardedTiles = publiclyRevealedTiles(action)
+          discardedTiles.foreach { tileIndex =>
+            postRiichiDiscardCount += 1
+            val genbutsuSafe = riichiDiscards.values.forall(_.contains(tileIndex))
+            val deadSafe = publicVisible(tileIndex) + 1 >= 4
+            if genbutsuSafe || deadSafe then
+              safePostRiichiDiscardCount += 1
+              if !playerDeclaredRiichi then foldDiscardCount += 1
+          }
+          updateVisibleKnown(publicVisible, discardedTiles)
+          if isMeldAction(action.actionType) then
+            updateVisibleKnown(publicVisible, meldExposureOnly(action))
+        case _ =>
+          updateVisibleKnown(publicVisible, publiclyRevealedTiles(action))
+    }
 
-      ExactRoundStats(
-        strictTileTrackable = postRiichiDiscardCount > 0,
-        ukeireSamples = Vector.empty,
-        postRiichiDiscardCount = postRiichiDiscardCount,
-        safePostRiichiDiscardCount = safePostRiichiDiscardCount,
-        foldDiscardCount = foldDiscardCount
-      )
+    ExactRoundStats(
+      strictTileTrackable = postRiichiDiscardCount > 0,
+      ukeireSamples = Vector.empty,
+      postRiichiDiscardCount = postRiichiDiscardCount,
+      safePostRiichiDiscardCount = safePostRiichiDiscardCount,
+      foldDiscardCount = foldDiscardCount
+    )
 
   private def calculateExactUkeire(
       handCounts: Array[Int],
@@ -3440,7 +3434,7 @@ private object AdvancedStatsSupport:
       case _ =>
         false
 
-  private def isOpaqueCall(actionType: PaifuActionType): Boolean =
+  private def isMeldAction(actionType: PaifuActionType): Boolean =
     actionType match
       case PaifuActionType.Chi | PaifuActionType.Pon | PaifuActionType.Kan |
           PaifuActionType.OpenKan | PaifuActionType.ClosedKan | PaifuActionType.AddedKan =>
@@ -3448,13 +3442,41 @@ private object AdvancedStatsSupport:
       case _ =>
         false
 
-  private def isPublicExposure(actionType: PaifuActionType): Boolean =
+  private def isPlayerExposureAction(actionType: PaifuActionType): Boolean =
     actionType match
-      case PaifuActionType.Discard | PaifuActionType.Riichi | PaifuActionType.DoraReveal |
-          PaifuActionType.Win | PaifuActionType.DrawGame =>
+      case PaifuActionType.Discard | PaifuActionType.Riichi | PaifuActionType.Chi |
+          PaifuActionType.Pon | PaifuActionType.Kan | PaifuActionType.OpenKan |
+          PaifuActionType.ClosedKan | PaifuActionType.AddedKan =>
         true
       case _ =>
         false
+
+  private def isPublicExposure(actionType: PaifuActionType): Boolean =
+    actionType match
+      case PaifuActionType.Discard | PaifuActionType.Riichi | PaifuActionType.DoraReveal |
+          PaifuActionType.Win | PaifuActionType.DrawGame | PaifuActionType.Chi |
+          PaifuActionType.Pon | PaifuActionType.Kan | PaifuActionType.OpenKan |
+          PaifuActionType.ClosedKan | PaifuActionType.AddedKan =>
+        true
+      case _ =>
+        false
+
+  private def publiclyRevealedTiles(action: PaifuAction): Vector[Int] =
+    val rawTiles =
+      if action.revealedTiles.nonEmpty then action.revealedTiles
+      else if isPublicExposure(action.actionType) then action.tile.toVector
+      else Vector.empty
+
+    rawTiles.flatMap(parseTile)
+
+  private def meldExposureOnly(action: PaifuAction): Vector[Int] =
+    if action.revealedTiles.nonEmpty then action.revealedTiles.flatMap(parseTile)
+    else Vector.empty
+
+  private def updateVisibleKnown(visibleKnown: Array[Int], tileIndices: Vector[Int]): Unit =
+    tileIndices.foreach { tileIndex =>
+      visibleKnown(tileIndex) = math.min(4, visibleKnown(tileIndex) + 1)
+    }
 
 final class DashboardProjectionSubscriber(
     matchRecordRepository: MatchRecordRepository,
@@ -3525,6 +3547,18 @@ final class DashboardProjectionSubscriber(
         lastUpdatedAt = at
       )
 
+private object AdvancedStatsAsyncOutbox:
+  private val executor =
+    Executors.newCachedThreadPool(new ThreadFactory:
+      override def newThread(runnable: Runnable): Thread =
+        val thread = Thread(runnable, "riichinexus-advanced-stats-outbox")
+        thread.setDaemon(true)
+        thread
+    )
+
+  def submit(task: => Unit): Unit =
+    executor.execute(() => task)
+
 final class AdvancedStatsPipelineService(
     paifuRepository: PaifuRepository,
     matchRecordRepository: MatchRecordRepository,
@@ -3535,6 +3569,7 @@ final class AdvancedStatsPipelineService(
     transactionManager: TransactionManager
 ):
   import AdvancedStatsSupport.*
+  private val drainInFlight = AtomicBoolean(false)
 
   def enqueueImpactedOwners(
       matchRecord: MatchRecord,
@@ -3574,7 +3609,7 @@ final class AdvancedStatsPipelineService(
       requestedAt: Instant = Instant.now(),
       lastMatchRecordId: Option[MatchRecordId] = None
   ): AdvancedStatsRecomputeTask =
-    transactionManager.inTransaction {
+    val task = transactionManager.inTransaction {
       advancedStatsRecomputeTaskRepository
         .findActiveByOwner(owner, AdvancedStatsBoard.CurrentCalculatorVersion)
         .getOrElse(
@@ -3589,6 +3624,8 @@ final class AdvancedStatsPipelineService(
           )
         )
     }
+    scheduleAsyncDrain()
+    task
 
   def processPending(
       limit: Int = 50,
@@ -3628,6 +3665,22 @@ final class AdvancedStatsPipelineService(
   ): AdvancedStatsBoard =
     val memberBoards = club.members.map(playerId => rebuildPlayerBoard(playerId, at))
     buildClubBoard(club, memberBoards, at)
+
+  private def scheduleAsyncDrain(): Unit =
+    if drainInFlight.compareAndSet(false, true) then
+      AdvancedStatsAsyncOutbox.submit {
+        try drainLoop()
+        finally
+          drainInFlight.set(false)
+          if advancedStatsRecomputeTaskRepository.findPending(1).nonEmpty then
+            scheduleAsyncDrain()
+      }
+
+  private def drainLoop(): Unit =
+    var keepWorking = true
+    while keepWorking do
+      val processed = processPending(limit = 25, processedAt = Instant.now())
+      keepWorking = processed.nonEmpty
 
 final class AdvancedStatsProjectionSubscriber(
     advancedStatsPipelineService: AdvancedStatsPipelineService

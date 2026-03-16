@@ -419,7 +419,9 @@ curl "http://localhost:8080/advanced-stats/players/player-123?operatorId=player-
 curl "http://localhost:8080/advanced-stats/clubs/club-123?operatorId=player-club-admin"
 ```
 
-List pending recompute tasks as a super admin:
+Advanced-stats recompute tasks are now outbox-backed and drained automatically in the background. The admin endpoints remain available for observability, manual backfill, and forced replays.
+
+List queued or completed recompute tasks as a super admin:
 
 ```bash
 curl "http://localhost:8080/admin/advanced-stats/tasks?operatorId=player-super-admin&status=Pending"
@@ -479,8 +481,8 @@ curl -X POST http://localhost:8080/tables/table-123/paifu \
           },
           "actions": [
             { "sequenceNo": 1, "actor": "player-a", "actionType": "Draw", "tile": "4m", "shantenAfterAction": 3, "note": null },
-            { "sequenceNo": 2, "actor": "player-a", "actionType": "Discard", "tile": "9p", "shantenAfterAction": 2, "note": null },
-            { "sequenceNo": 3, "actor": "player-b", "actionType": "Riichi", "tile": null, "shantenAfterAction": 0, "note": "closed riichi" },
+            { "sequenceNo": 2, "actor": "player-a", "actionType": "Discard", "tile": "9p", "shantenAfterAction": 2, "handTilesAfterAction": ["1m", "2m", "3m", "4m", "5m", "6m", "7m", "1p", "2p", "3p", "4p", "5p", "6p"], "revealedTiles": ["9p"], "note": null },
+            { "sequenceNo": 3, "actor": "player-b", "actionType": "Riichi", "tile": null, "shantenAfterAction": 0, "handTilesAfterAction": null, "revealedTiles": ["5s"], "note": "closed riichi" },
             { "sequenceNo": 4, "actor": "player-b", "actionType": "Win", "tile": "5s", "shantenAfterAction": -1, "note": null }
           ],
           "result": {

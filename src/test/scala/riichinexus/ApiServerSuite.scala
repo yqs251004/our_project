@@ -349,18 +349,31 @@ class ApiServerSuite extends FunSuite:
     )
 
     withServer(app) { baseUrl =>
-      val pendingTasks = get(
-        s"$baseUrl/admin/advanced-stats/tasks?operatorId=${rootAdmin.id.value}&status=Pending"
+      val taskIndex = get(
+        s"$baseUrl/admin/advanced-stats/tasks?operatorId=${rootAdmin.id.value}"
       )
-      assertEquals(pendingTasks.statusCode(), 200)
-      assert(readPage[AdvancedStatsRecomputeTask](pendingTasks.body()).total > 0)
+      assertEquals(taskIndex.statusCode(), 200)
+      assert(readPage[AdvancedStatsRecomputeTask](taskIndex.body()).total > 0)
+
+      val recomputeTasks = postJson(
+        s"$baseUrl/admin/advanced-stats/recompute",
+        write(
+          RecomputeAdvancedStatsRequest(
+            operatorId = rootAdmin.id.value,
+            ownerType = Some("player"),
+            ownerId = Some(owner.id.value),
+            reason = Some("api-test-backfill")
+          )
+        )
+      )
+      assertEquals(recomputeTasks.statusCode(), 202)
+      assert(read[Vector[AdvancedStatsRecomputeTask]](recomputeTasks.body()).nonEmpty)
 
       val processTasks = postJson(
         s"$baseUrl/admin/advanced-stats/process",
         write(ProcessAdvancedStatsTasksRequest(rootAdmin.id.value, 20))
       )
       assertEquals(processTasks.statusCode(), 200)
-      assert(read[Vector[AdvancedStatsRecomputeTask]](processTasks.body()).nonEmpty)
 
       val ownPlayerStats = get(
         s"$baseUrl/advanced-stats/players/${owner.id.value}?operatorId=${owner.id.value}"

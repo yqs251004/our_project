@@ -177,12 +177,17 @@ class RiichiNexusSuite extends FunSuite:
       detailedAnalyticsPaifu(table, tournament.id, stage.id, now.plusSeconds(60))
     )
 
-    val processed = app.advancedStatsPipelineService.processPending(limit = 20, processedAt = now.plusSeconds(90))
-    val board = app.advancedStatsBoardRepository.findByOwner(DashboardOwner.Player(targetPlayer)).getOrElse(
-      fail("expected advanced stats board")
-    )
+    val board = eventually("expected advanced stats board") {
+      app.advancedStatsBoardRepository.findByOwner(DashboardOwner.Player(targetPlayer))
+    }
+    val completedTask = eventually("expected advanced stats task completion") {
+      app.advancedStatsRecomputeTaskRepository.findAll().find(task =>
+        task.owner == DashboardOwner.Player(targetPlayer) &&
+          task.status == AdvancedStatsRecomputeTaskStatus.Completed
+      )
+    }
 
-    assert(processed.exists(task => task.owner == DashboardOwner.Player(targetPlayer)))
+    assertEquals(completedTask.status, AdvancedStatsRecomputeTaskStatus.Completed)
     assertEquals(board.calculatorVersion, AdvancedStatsBoard.CurrentCalculatorVersion)
     assert(board.strictRoundSampleSize > 0)
     assert(board.exactUkeireSampleRate > 0.0)
@@ -1534,6 +1539,16 @@ class RiichiNexusSuite extends FunSuite:
     }
   }
 
+private def eventually[A](message: String, attempts: Int = 40, sleepMillis: Long = 25)(check: => Option[A]): A =
+  var result = Option.empty[A]
+  var attempt = 1
+  while result.isEmpty && attempt <= attempts do
+    result = check
+    if result.isEmpty && attempt < attempts then Thread.sleep(sleepMillis)
+    attempt += 1
+
+  result.getOrElse(throw AssertionError(message))
+
 private def principalFor(app: ApplicationContext, playerId: PlayerId): AccessPrincipal =
   app.playerRepository.findById(playerId).get.asPrincipal
 
@@ -1564,17 +1579,41 @@ private def detailedAnalyticsPaifu(
       KyokuRecord(
         descriptor = KyokuDescriptor(SeatWind.East, 1, 0),
         initialHands = Map(
-          east -> Vector("1m", "2m", "3m", "4m", "5m", "6m", "7m", "2p", "3p", "4p", "6p", "1z", "1z"),
+          east -> Vector("1m", "2m", "4m", "5m", "6m", "7m", "2p", "3p", "4p", "6p", "1z", "1z", "9s"),
           south -> Vector("2m", "3m", "4m", "2p", "3p", "4p", "6p", "7p", "8p", "3s", "4s", "5s", "1z"),
           west -> Vector("3m", "4m", "5m", "4p", "5p", "6p", "4s", "5s", "6s", "2z", "3z", "4z", "7z"),
           north -> Vector("6m", "7m", "8m", "1p", "1p", "2p", "2p", "7s", "8s", "9s", "5z", "6z", "7z")
         ),
         actions = Vector(
           PaifuAction(1, Some(east), PaifuActionType.Draw, Some("5p"), Some(1)),
-          PaifuAction(2, Some(east), PaifuActionType.Discard, Some("1z"), Some(1)),
-          PaifuAction(3, Some(south), PaifuActionType.Riichi, Some("1z"), Some(0), Some("closed riichi")),
-          PaifuAction(4, Some(east), PaifuActionType.Draw, Some("9s"), Some(1)),
-          PaifuAction(5, Some(east), PaifuActionType.Discard, Some("1z"), Some(1)),
+          PaifuAction(
+            2,
+            Some(east),
+            PaifuActionType.Chi,
+            Some("3m"),
+            Some(0),
+            handTilesAfterAction = Some(Vector("4m", "5m", "6m", "7m", "2p", "3p", "4p", "5p", "6p", "1z", "1z", "9s", "9s")),
+            revealedTiles = Vector("1m", "2m", "3m")
+          ),
+          PaifuAction(
+            3,
+            Some(south),
+            PaifuActionType.Riichi,
+            Some("1z"),
+            Some(0),
+            revealedTiles = Vector("1z"),
+            note = Some("closed riichi")
+          ),
+          PaifuAction(4, Some(east), PaifuActionType.Draw, Some("9p"), Some(0)),
+          PaifuAction(
+            5,
+            Some(east),
+            PaifuActionType.Discard,
+            Some("1z"),
+            Some(0),
+            handTilesAfterAction = Some(Vector("4m", "5m", "6m", "7m", "2p", "3p", "4p", "5p", "6p", "9s", "9s", "9p", "1z")),
+            revealedTiles = Vector("1z")
+          ),
           PaifuAction(6, Some(south), PaifuActionType.Win, Some("5s"), Some(-1))
         ),
         result = AgariResult(
