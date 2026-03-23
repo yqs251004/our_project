@@ -15,7 +15,8 @@ final case class Dashboard(
     riichiRate: Double,
     averagePlacement: Double,
     topFinishRate: Double,
-    lastUpdatedAt: Instant
+    lastUpdatedAt: Instant,
+    version: Int = 0
 ) derives CanEqual
 
 object Dashboard:
@@ -47,7 +48,8 @@ final case class AdvancedStatsBoard(
     strictRoundSampleSize: Int,
     exactUkeireSampleRate: Double,
     exactDefenseSampleRate: Double,
-    lastUpdatedAt: Instant
+    lastUpdatedAt: Instant,
+    version: Int = 0
 ) derives CanEqual
 
 object AdvancedStatsBoard:
@@ -97,7 +99,8 @@ final case class AdvancedStatsRecomputeTask(
     nextAttemptAt: Option[Instant] = None,
     startedAt: Option[Instant] = None,
     completedAt: Option[Instant] = None,
-    deadLetteredAt: Option[Instant] = None
+    deadLetteredAt: Option[Instant] = None,
+    version: Int = 0
 ) derives CanEqual:
   require(reason.trim.nonEmpty, "Advanced stats recompute reason cannot be empty")
   require(attempts >= 0, "Advanced stats recompute attempts cannot be negative")

@@ -402,6 +402,28 @@ final class PostgresSchemaInitializer(connectionFactory: JdbcConnectionFactory):
       execute(
         connection,
         """
+          |create table if not exists domain_event_outbox (
+          |  id text primary key,
+          |  event_type text not null,
+          |  status text not null,
+          |  occurred_at timestamptz not null,
+          |  available_at timestamptz not null,
+          |  payload jsonb not null,
+          |  updated_at timestamptz not null default now()
+          |)
+          |""".stripMargin
+      )
+      execute(connection, "alter table domain_event_outbox add column if not exists event_type text")
+      execute(connection, "alter table domain_event_outbox add column if not exists status text")
+      execute(connection, "alter table domain_event_outbox add column if not exists occurred_at timestamptz")
+      execute(connection, "alter table domain_event_outbox add column if not exists available_at timestamptz")
+      execute(connection, "alter table domain_event_outbox add column if not exists payload jsonb")
+      execute(connection, "alter table domain_event_outbox add column if not exists updated_at timestamptz default now()")
+      execute(connection, "create index if not exists idx_domain_event_outbox_status on domain_event_outbox (status, available_at)")
+      execute(connection, "create index if not exists idx_domain_event_outbox_occurred_at on domain_event_outbox (occurred_at)")
+      execute(
+        connection,
+        """
           |create table if not exists audit_events (
           |  id text primary key,
           |  aggregate_type text not null,
@@ -485,6 +507,14 @@ final class PostgresSchemaInitializer(connectionFactory: JdbcConnectionFactory):
           |on conflict (version) do nothing
           |""".stripMargin
       )
+      execute(
+        connection,
+        """
+          |insert into schema_version(version, description)
+          |values (9, 'Added durable domain event outbox schema')
+          |on conflict (version) do nothing
+          |""".stripMargin
+      )
     }
 
   private def execute(connection: Connection, sql: String): Unit =
@@ -540,6 +570,24 @@ private trait JdbcRepositorySupport:
   protected def writeJson[T: Writer](value: T): String =
     write(value)
 
+  protected def payloadVersionSql(payloadColumn: String = "payload"): String =
+    s"cast($payloadColumn ->> 'version' as integer)"
+
+  protected def requireOptimisticUpdate(
+      rowsUpdated: Int,
+      aggregateType: String,
+      aggregateId: String,
+      expectedVersion: Int,
+      actualVersion: => Option[Int]
+  ): Unit =
+    if rowsUpdated == 0 then
+      throw OptimisticConcurrencyException(
+        aggregateType = aggregateType,
+        aggregateId = aggregateId,
+        expectedVersion = expectedVersion,
+        actualVersion = actualVersion
+      )
+
 final class PostgresPlayerRepository(
     protected val connectionFactory: JdbcConnectionFactory
 ) extends PlayerRepository
@@ -549,11 +597,12 @@ final class PostgresPlayerRepository(
     catch
       case error: SQLException if PostgresErrors.isUniqueViolation(error, "idx_players_user_id") =>
         val normalized = findByUserId(player.userId)
-          .map(existing => player.copy(id = existing.id, registeredAt = existing.registeredAt))
+          .map(existing => player.copy(id = existing.id, registeredAt = existing.registeredAt, version = existing.version))
           .getOrElse(throw error)
         persist(normalized)
 
   private def persist(player: Player): Player =
+    val persisted = player.copy(version = player.version + 1)
     val sql =
       """
         |insert into players (id, user_id, nickname, club_id, elo, payload, updated_at)
@@ -565,21 +614,24 @@ final class PostgresPlayerRepository(
         |  elo = excluded.elo,
         |  payload = excluded.payload,
         |  updated_at = now()
+        |where cast(players.payload ->> 'version' as integer) = ?
         |""".stripMargin
 
-    withConnection { connection =>
+    val rowsUpdated = withConnection { connection =>
       Using.resource(connection.prepareStatement(sql)) { statement =>
-        statement.setString(1, player.id.value)
-        statement.setString(2, player.userId)
-        statement.setString(3, player.nickname)
-        setNullableString(statement, 4, player.clubId.map(_.value))
-        statement.setInt(5, player.elo)
-        statement.setString(6, writeJson(player))
+        statement.setString(1, persisted.id.value)
+        statement.setString(2, persisted.userId)
+        statement.setString(3, persisted.nickname)
+        setNullableString(statement, 4, persisted.clubId.map(_.value))
+        statement.setInt(5, persisted.elo)
+        statement.setString(6, writeJson(persisted))
+        statement.setInt(7, player.version)
         statement.executeUpdate()
       }
     }
 
-    player
+    requireOptimisticUpdate(rowsUpdated, "player", persisted.id.value, player.version, findById(persisted.id).map(_.version))
+    persisted
 
   override def findById(id: PlayerId): Option[Player] =
     readOne[Player]("select payload from players where id = ?", { statement =>
@@ -599,6 +651,7 @@ final class PostgresGuestSessionRepository(
 ) extends GuestSessionRepository
     with JdbcRepositorySupport:
   override def save(session: GuestAccessSession): GuestAccessSession =
+    val persisted = session.copy(version = session.version + 1)
     val sql =
       """
         |insert into guest_sessions (id, created_at, display_name, payload, updated_at)
@@ -608,19 +661,22 @@ final class PostgresGuestSessionRepository(
         |  display_name = excluded.display_name,
         |  payload = excluded.payload,
         |  updated_at = now()
+        |where cast(guest_sessions.payload ->> 'version' as integer) = ?
         |""".stripMargin
 
-    withConnection { connection =>
+    val rowsUpdated = withConnection { connection =>
       Using.resource(connection.prepareStatement(sql)) { statement =>
-        statement.setString(1, session.id.value)
-        statement.setTimestamp(2, Timestamp.from(session.createdAt))
-        statement.setString(3, session.displayName)
-        statement.setString(4, writeJson(session))
+        statement.setString(1, persisted.id.value)
+        statement.setTimestamp(2, Timestamp.from(persisted.createdAt))
+        statement.setString(3, persisted.displayName)
+        statement.setString(4, writeJson(persisted))
+        statement.setInt(5, session.version)
         statement.executeUpdate()
       }
     }
 
-    session
+    requireOptimisticUpdate(rowsUpdated, "guest-session", persisted.id.value, session.version, findById(persisted.id).map(_.version))
+    persisted
 
   override def findById(id: GuestSessionId): Option[GuestAccessSession] =
     readOne[GuestAccessSession]("select payload from guest_sessions where id = ?", { statement =>
@@ -639,11 +695,12 @@ final class PostgresClubRepository(
     catch
       case error: SQLException if PostgresErrors.isUniqueViolation(error, "idx_clubs_name") =>
         val normalized = findByName(club.name)
-          .map(existing => club.copy(id = existing.id, creator = existing.creator, createdAt = existing.createdAt))
+          .map(existing => club.copy(id = existing.id, creator = existing.creator, createdAt = existing.createdAt, version = existing.version))
           .getOrElse(throw error)
         persist(normalized)
 
   private def persist(club: Club): Club =
+    val persisted = club.copy(version = club.version + 1)
     val sql =
       """
         |insert into clubs (id, name, creator_id, total_points, payload, updated_at)
@@ -654,20 +711,23 @@ final class PostgresClubRepository(
         |  total_points = excluded.total_points,
         |  payload = excluded.payload,
         |  updated_at = now()
+        |where cast(clubs.payload ->> 'version' as integer) = ?
         |""".stripMargin
 
-    withConnection { connection =>
+    val rowsUpdated = withConnection { connection =>
       Using.resource(connection.prepareStatement(sql)) { statement =>
-        statement.setString(1, club.id.value)
-        statement.setString(2, club.name)
-        statement.setString(3, club.creator.value)
-        statement.setInt(4, club.totalPoints)
-        statement.setString(5, writeJson(club))
+        statement.setString(1, persisted.id.value)
+        statement.setString(2, persisted.name)
+        statement.setString(3, persisted.creator.value)
+        statement.setInt(4, persisted.totalPoints)
+        statement.setString(5, writeJson(persisted))
+        statement.setInt(6, club.version)
         statement.executeUpdate()
       }
     }
 
-    club
+    requireOptimisticUpdate(rowsUpdated, "club", persisted.id.value, club.version, findById(persisted.id).map(_.version))
+    persisted
 
   override def findById(id: ClubId): Option[Club] =
     readOne[Club]("select payload from clubs where id = ?", { statement =>
@@ -691,11 +751,12 @@ final class PostgresTournamentRepository(
     catch
       case error: SQLException if PostgresErrors.isUniqueViolation(error, "idx_tournaments_name_start") =>
         val normalized = findByNameAndOrganizer(tournament.name, tournament.organizer)
-          .map(existing => tournament.copy(id = existing.id))
+          .map(existing => tournament.copy(id = existing.id, version = existing.version))
           .getOrElse(throw error)
         persist(normalized)
 
   private def persist(tournament: Tournament): Tournament =
+    val persisted = tournament.copy(version = tournament.version + 1)
     val sql =
       """
         |insert into tournaments (id, name, organizer, status, payload, updated_at)
@@ -706,20 +767,23 @@ final class PostgresTournamentRepository(
         |  status = excluded.status,
         |  payload = excluded.payload,
         |  updated_at = now()
+        |where cast(tournaments.payload ->> 'version' as integer) = ?
         |""".stripMargin
 
-    withConnection { connection =>
+    val rowsUpdated = withConnection { connection =>
       Using.resource(connection.prepareStatement(sql)) { statement =>
-        statement.setString(1, tournament.id.value)
-        statement.setString(2, tournament.name)
-        statement.setString(3, tournament.organizer)
-        statement.setString(4, tournament.status.toString)
-        statement.setString(5, writeJson(tournament))
+        statement.setString(1, persisted.id.value)
+        statement.setString(2, persisted.name)
+        statement.setString(3, persisted.organizer)
+        statement.setString(4, persisted.status.toString)
+        statement.setString(5, writeJson(persisted))
+        statement.setInt(6, tournament.version)
         statement.executeUpdate()
       }
     }
 
-    tournament
+    requireOptimisticUpdate(rowsUpdated, "tournament", persisted.id.value, tournament.version, findById(persisted.id).map(_.version))
+    persisted
 
   override def findById(id: TournamentId): Option[Tournament] =
     readOne[Tournament]("select payload from tournaments where id = ?", { statement =>
@@ -743,6 +807,7 @@ final class PostgresTableRepository(
 ) extends TableRepository
     with JdbcRepositorySupport:
   override def save(table: Table): Table =
+    val persisted = table.copy(version = table.version + 1)
     val sql =
       """
         |insert into tables (id, tournament_id, stage_id, table_no, status, payload, updated_at)
@@ -754,21 +819,24 @@ final class PostgresTableRepository(
         |  status = excluded.status,
         |  payload = excluded.payload,
         |  updated_at = now()
+        |where cast(tables.payload ->> 'version' as integer) = ?
         |""".stripMargin
 
-    withConnection { connection =>
+    val rowsUpdated = withConnection { connection =>
       Using.resource(connection.prepareStatement(sql)) { statement =>
-        statement.setString(1, table.id.value)
-        statement.setString(2, table.tournamentId.value)
-        statement.setString(3, table.stageId.value)
-        statement.setInt(4, table.tableNo)
-        statement.setString(5, table.status.toString)
-        statement.setString(6, writeJson(table))
+        statement.setString(1, persisted.id.value)
+        statement.setString(2, persisted.tournamentId.value)
+        statement.setString(3, persisted.stageId.value)
+        statement.setInt(4, persisted.tableNo)
+        statement.setString(5, persisted.status.toString)
+        statement.setString(6, writeJson(persisted))
+        statement.setInt(7, table.version)
         statement.executeUpdate()
       }
     }
 
-    table
+    requireOptimisticUpdate(rowsUpdated, "table", persisted.id.value, table.version, findById(persisted.id).map(_.version))
+    persisted
 
   override def delete(id: TableId): Unit =
     withConnection { connection =>
@@ -906,6 +974,7 @@ final class PostgresAppealTicketRepository(
 ) extends AppealTicketRepository
     with JdbcRepositorySupport:
   override def save(ticket: AppealTicket): AppealTicket =
+    val persisted = ticket.copy(version = ticket.version + 1)
     val sql =
       """
         |insert into appeal_tickets (id, table_id, tournament_id, stage_id, status, opened_by, payload, updated_at)
@@ -918,22 +987,25 @@ final class PostgresAppealTicketRepository(
         |  opened_by = excluded.opened_by,
         |  payload = excluded.payload,
         |  updated_at = now()
+        |where cast(appeal_tickets.payload ->> 'version' as integer) = ?
         |""".stripMargin
 
-    withConnection { connection =>
+    val rowsUpdated = withConnection { connection =>
       Using.resource(connection.prepareStatement(sql)) { statement =>
-        statement.setString(1, ticket.id.value)
-        statement.setString(2, ticket.tableId.value)
-        statement.setString(3, ticket.tournamentId.value)
-        statement.setString(4, ticket.stageId.value)
-        statement.setString(5, ticket.status.toString)
-        statement.setString(6, ticket.openedBy.value)
-        statement.setString(7, writeJson(ticket))
+        statement.setString(1, persisted.id.value)
+        statement.setString(2, persisted.tableId.value)
+        statement.setString(3, persisted.tournamentId.value)
+        statement.setString(4, persisted.stageId.value)
+        statement.setString(5, persisted.status.toString)
+        statement.setString(6, persisted.openedBy.value)
+        statement.setString(7, writeJson(persisted))
+        statement.setInt(8, ticket.version)
         statement.executeUpdate()
       }
     }
 
-    ticket
+    requireOptimisticUpdate(rowsUpdated, "appeal-ticket", persisted.id.value, ticket.version, findById(persisted.id).map(_.version))
+    persisted
 
   override def findById(id: AppealTicketId): Option[AppealTicket] =
     readOne[AppealTicket]("select payload from appeal_tickets where id = ?", { statement =>
@@ -948,6 +1020,7 @@ final class PostgresDashboardRepository(
 ) extends DashboardRepository
     with JdbcRepositorySupport:
   override def save(dashboard: Dashboard): Dashboard =
+    val persisted = dashboard.copy(version = dashboard.version + 1)
     val sql =
       """
         |insert into dashboards (owner_key, owner_type, payload, updated_at)
@@ -956,18 +1029,21 @@ final class PostgresDashboardRepository(
         |  owner_type = excluded.owner_type,
         |  payload = excluded.payload,
         |  updated_at = now()
+        |where cast(dashboards.payload ->> 'version' as integer) = ?
         |""".stripMargin
 
-    withConnection { connection =>
+    val rowsUpdated = withConnection { connection =>
       Using.resource(connection.prepareStatement(sql)) { statement =>
-        statement.setString(1, ownerKey(dashboard.owner))
-        statement.setString(2, ownerType(dashboard.owner))
-        statement.setString(3, writeJson(dashboard))
+        statement.setString(1, ownerKey(persisted.owner))
+        statement.setString(2, ownerType(persisted.owner))
+        statement.setString(3, writeJson(persisted))
+        statement.setInt(4, dashboard.version)
         statement.executeUpdate()
       }
     }
 
-    dashboard
+    requireOptimisticUpdate(rowsUpdated, "dashboard", ownerKey(persisted.owner), dashboard.version, findByOwner(persisted.owner).map(_.version))
+    persisted
 
   override def findByOwner(owner: DashboardOwner): Option[Dashboard] =
     readOne[Dashboard]("select payload from dashboards where owner_key = ?", { statement =>
@@ -992,6 +1068,7 @@ final class PostgresAdvancedStatsBoardRepository(
 ) extends AdvancedStatsBoardRepository
     with JdbcRepositorySupport:
   override def save(board: AdvancedStatsBoard): AdvancedStatsBoard =
+    val persisted = board.copy(version = board.version + 1)
     val sql =
       """
         |insert into advanced_stats_boards (owner_key, owner_type, payload, updated_at)
@@ -1000,18 +1077,21 @@ final class PostgresAdvancedStatsBoardRepository(
         |  owner_type = excluded.owner_type,
         |  payload = excluded.payload,
         |  updated_at = now()
+        |where cast(advanced_stats_boards.payload ->> 'version' as integer) = ?
         |""".stripMargin
 
-    withConnection { connection =>
+    val rowsUpdated = withConnection { connection =>
       Using.resource(connection.prepareStatement(sql)) { statement =>
-        statement.setString(1, ownerKey(board.owner))
-        statement.setString(2, ownerType(board.owner))
-        statement.setString(3, writeJson(board))
+        statement.setString(1, ownerKey(persisted.owner))
+        statement.setString(2, ownerType(persisted.owner))
+        statement.setString(3, writeJson(persisted))
+        statement.setInt(4, board.version)
         statement.executeUpdate()
       }
     }
 
-    board
+    requireOptimisticUpdate(rowsUpdated, "advanced-stats-board", ownerKey(persisted.owner), board.version, findByOwner(persisted.owner).map(_.version))
+    persisted
 
   override def findByOwner(owner: DashboardOwner): Option[AdvancedStatsBoard] =
     readOne[AdvancedStatsBoard]("select payload from advanced_stats_boards where owner_key = ?", {
@@ -1037,6 +1117,7 @@ final class PostgresAdvancedStatsRecomputeTaskRepository(
 ) extends AdvancedStatsRecomputeTaskRepository
     with JdbcRepositorySupport:
   override def save(task: AdvancedStatsRecomputeTask): AdvancedStatsRecomputeTask =
+    val persisted = task.copy(version = task.version + 1)
     val sql =
       """
         |insert into advanced_stats_recompute_tasks (
@@ -1058,22 +1139,25 @@ final class PostgresAdvancedStatsRecomputeTaskRepository(
         |  requested_at = excluded.requested_at,
         |  payload = excluded.payload,
         |  updated_at = now()
+        |where cast(advanced_stats_recompute_tasks.payload ->> 'version' as integer) = ?
         |""".stripMargin
 
-    withConnection { connection =>
+    val rowsUpdated = withConnection { connection =>
       Using.resource(connection.prepareStatement(sql)) { statement =>
-        statement.setString(1, task.id.value)
-        statement.setString(2, ownerKey(task.owner))
-        statement.setString(3, ownerType(task.owner))
-        statement.setString(4, task.status.toString)
-        statement.setInt(5, task.calculatorVersion)
-        statement.setTimestamp(6, Timestamp.from(task.requestedAt))
-        statement.setString(7, writeJson(task))
+        statement.setString(1, persisted.id.value)
+        statement.setString(2, ownerKey(persisted.owner))
+        statement.setString(3, ownerType(persisted.owner))
+        statement.setString(4, persisted.status.toString)
+        statement.setInt(5, persisted.calculatorVersion)
+        statement.setTimestamp(6, Timestamp.from(persisted.requestedAt))
+        statement.setString(7, writeJson(persisted))
+        statement.setInt(8, task.version)
         statement.executeUpdate()
       }
     }
 
-    task
+    requireOptimisticUpdate(rowsUpdated, "advanced-stats-task", persisted.id.value, task.version, findById(persisted.id).map(_.version))
+    persisted
 
   override def findById(id: AdvancedStatsRecomputeTaskId): Option[AdvancedStatsRecomputeTask] =
     readOne[AdvancedStatsRecomputeTask](
@@ -1135,6 +1219,7 @@ final class PostgresGlobalDictionaryRepository(
 ) extends GlobalDictionaryRepository
     with JdbcRepositorySupport:
   override def save(entry: GlobalDictionaryEntry): GlobalDictionaryEntry =
+    val persisted = entry.copy(version = entry.version + 1)
     val sql =
       """
         |insert into global_dictionary (key, updated_at, payload)
@@ -1142,18 +1227,21 @@ final class PostgresGlobalDictionaryRepository(
         |on conflict (key) do update set
         |  updated_at = excluded.updated_at,
         |  payload = excluded.payload
+        |where cast(global_dictionary.payload ->> 'version' as integer) = ?
         |""".stripMargin
 
-    withConnection { connection =>
+    val rowsUpdated = withConnection { connection =>
       Using.resource(connection.prepareStatement(sql)) { statement =>
-        statement.setString(1, entry.key)
-        statement.setTimestamp(2, Timestamp.from(entry.updatedAt))
-        statement.setString(3, writeJson(entry))
+        statement.setString(1, persisted.key)
+        statement.setTimestamp(2, Timestamp.from(persisted.updatedAt))
+        statement.setString(3, writeJson(persisted))
+        statement.setInt(4, entry.version)
         statement.executeUpdate()
       }
     }
 
-    entry
+    requireOptimisticUpdate(rowsUpdated, "global-dictionary-entry", persisted.key, entry.version, findByKey(persisted.key).map(_.version))
+    persisted
 
   override def findByKey(key: String): Option[GlobalDictionaryEntry] =
     readOne[GlobalDictionaryEntry](
@@ -1171,6 +1259,7 @@ final class PostgresDictionaryNamespaceRepository(
 ) extends DictionaryNamespaceRepository
     with JdbcRepositorySupport:
   override def save(registration: DictionaryNamespaceRegistration): DictionaryNamespaceRegistration =
+    val persisted = registration.copy(version = registration.version + 1)
     val sql =
       """
         |insert into dictionary_namespaces (namespace_prefix, owner_player_id, status, requested_at, payload, updated_at)
@@ -1181,20 +1270,23 @@ final class PostgresDictionaryNamespaceRepository(
         |  requested_at = excluded.requested_at,
         |  payload = excluded.payload,
         |  updated_at = now()
+        |where cast(dictionary_namespaces.payload ->> 'version' as integer) = ?
         |""".stripMargin
 
-    withConnection { connection =>
+    val rowsUpdated = withConnection { connection =>
       Using.resource(connection.prepareStatement(sql)) { statement =>
-        statement.setString(1, registration.namespacePrefix)
-        statement.setString(2, registration.ownerPlayerId.value)
-        statement.setString(3, registration.status.toString)
-        statement.setTimestamp(4, Timestamp.from(registration.requestedAt))
-        statement.setString(5, writeJson(registration))
+        statement.setString(1, persisted.namespacePrefix)
+        statement.setString(2, persisted.ownerPlayerId.value)
+        statement.setString(3, persisted.status.toString)
+        statement.setTimestamp(4, Timestamp.from(persisted.requestedAt))
+        statement.setString(5, writeJson(persisted))
+        statement.setInt(6, registration.version)
         statement.executeUpdate()
       }
     }
 
-    registration
+    requireOptimisticUpdate(rowsUpdated, "dictionary-namespace", persisted.namespacePrefix, registration.version, findByPrefix(persisted.namespacePrefix).map(_.version))
+    persisted
 
   override def findByPrefix(prefix: String): Option[DictionaryNamespaceRegistration] =
     readOne[DictionaryNamespaceRegistration](
@@ -1212,6 +1304,7 @@ final class PostgresTournamentSettlementRepository(
 ) extends TournamentSettlementRepository
     with JdbcRepositorySupport:
   override def save(snapshot: TournamentSettlementSnapshot): TournamentSettlementSnapshot =
+    val persisted = snapshot.copy(version = snapshot.version + 1)
     val sql =
       """
         |insert into tournament_settlements (id, tournament_id, stage_id, generated_at, payload, updated_at)
@@ -1222,20 +1315,23 @@ final class PostgresTournamentSettlementRepository(
         |  generated_at = excluded.generated_at,
         |  payload = excluded.payload,
         |  updated_at = now()
+        |where cast(tournament_settlements.payload ->> 'version' as integer) = ?
         |""".stripMargin
 
-    withConnection { connection =>
+    val rowsUpdated = withConnection { connection =>
       Using.resource(connection.prepareStatement(sql)) { statement =>
-        statement.setString(1, snapshot.id.value)
-        statement.setString(2, snapshot.tournamentId.value)
-        statement.setString(3, snapshot.stageId.value)
-        statement.setTimestamp(4, Timestamp.from(snapshot.generatedAt))
-        statement.setString(5, writeJson(snapshot))
+        statement.setString(1, persisted.id.value)
+        statement.setString(2, persisted.tournamentId.value)
+        statement.setString(3, persisted.stageId.value)
+        statement.setTimestamp(4, Timestamp.from(persisted.generatedAt))
+        statement.setString(5, writeJson(persisted))
+        statement.setInt(6, snapshot.version)
         statement.executeUpdate()
       }
     }
 
-    snapshot
+    requireOptimisticUpdate(rowsUpdated, "tournament-settlement", persisted.id.value, snapshot.version, findById(persisted.id).map(_.version))
+    persisted
 
   override def findById(id: SettlementSnapshotId): Option[TournamentSettlementSnapshot] =
     readOne[TournamentSettlementSnapshot](
@@ -1281,6 +1377,7 @@ final class PostgresEventCascadeRecordRepository(
 ) extends EventCascadeRecordRepository
     with JdbcRepositorySupport:
   override def save(record: EventCascadeRecord): EventCascadeRecord =
+    val persisted = record.copy(version = record.version + 1)
     val sql =
       """
         |insert into event_cascade_records (id, consumer, status, aggregate_type, aggregate_id, occurred_at, payload, updated_at)
@@ -1293,22 +1390,25 @@ final class PostgresEventCascadeRecordRepository(
         |  occurred_at = excluded.occurred_at,
         |  payload = excluded.payload,
         |  updated_at = now()
+        |where cast(event_cascade_records.payload ->> 'version' as integer) = ?
         |""".stripMargin
 
-    withConnection { connection =>
+    val rowsUpdated = withConnection { connection =>
       Using.resource(connection.prepareStatement(sql)) { statement =>
-        statement.setString(1, record.id.value)
-        statement.setString(2, record.consumer.toString)
-        statement.setString(3, record.status.toString)
-        statement.setString(4, record.aggregateType)
-        statement.setString(5, record.aggregateId)
-        statement.setTimestamp(6, Timestamp.from(record.occurredAt))
-        statement.setString(7, writeJson(record))
+        statement.setString(1, persisted.id.value)
+        statement.setString(2, persisted.consumer.toString)
+        statement.setString(3, persisted.status.toString)
+        statement.setString(4, persisted.aggregateType)
+        statement.setString(5, persisted.aggregateId)
+        statement.setTimestamp(6, Timestamp.from(persisted.occurredAt))
+        statement.setString(7, writeJson(persisted))
+        statement.setInt(8, record.version)
         statement.executeUpdate()
       }
     }
 
-    record
+    requireOptimisticUpdate(rowsUpdated, "event-cascade-record", persisted.id.value, record.version, findById(persisted.id).map(_.version))
+    persisted
 
   override def findById(id: EventCascadeRecordId): Option[EventCascadeRecord] =
     readOne[EventCascadeRecord](
@@ -1368,6 +1468,70 @@ final class PostgresAuditEventRepository(
   override def findAll(): Vector[AuditEventEntry] =
     readAll[AuditEventEntry]("select payload from audit_events order by occurred_at desc")
 
+final class PostgresDomainEventOutboxRepository(
+    protected val connectionFactory: JdbcConnectionFactory
+) extends DomainEventOutboxRepository
+    with JdbcRepositorySupport:
+  override def save(record: DomainEventOutboxRecord): DomainEventOutboxRecord =
+    val persisted = record.copy(version = record.version + 1)
+    val sql =
+      """
+        |insert into domain_event_outbox (id, event_type, status, occurred_at, available_at, payload, updated_at)
+        |values (?, ?, ?, ?, ?, cast(? as jsonb), now())
+        |on conflict (id) do update set
+        |  event_type = excluded.event_type,
+        |  status = excluded.status,
+        |  occurred_at = excluded.occurred_at,
+        |  available_at = excluded.available_at,
+        |  payload = excluded.payload,
+        |  updated_at = now()
+        |where cast(domain_event_outbox.payload ->> 'version' as integer) = ?
+        |""".stripMargin
+
+    val rowsUpdated = withConnection { connection =>
+      Using.resource(connection.prepareStatement(sql)) { statement =>
+        statement.setString(1, persisted.id.value)
+        statement.setString(2, persisted.eventType)
+        statement.setString(3, persisted.status.toString)
+        statement.setTimestamp(4, Timestamp.from(persisted.occurredAt))
+        statement.setTimestamp(5, Timestamp.from(persisted.availableAt))
+        statement.setString(6, writeJson(persisted))
+        statement.setInt(7, record.version)
+        statement.executeUpdate()
+      }
+    }
+
+    requireOptimisticUpdate(rowsUpdated, "domain-event-outbox-record", persisted.id.value, record.version, findById(persisted.id).map(_.version))
+    persisted
+
+  override def findById(id: DomainEventOutboxRecordId): Option[DomainEventOutboxRecord] =
+    readOne[DomainEventOutboxRecord](
+      "select payload from domain_event_outbox where id = ?",
+      { statement =>
+        statement.setString(1, id.value)
+      }
+    )
+
+  override def findAll(): Vector[DomainEventOutboxRecord] =
+    readAll[DomainEventOutboxRecord](
+      "select payload from domain_event_outbox order by occurred_at desc, id desc"
+    )
+
+  override def findPending(limit: Int, asOf: java.time.Instant = java.time.Instant.now()): Vector[DomainEventOutboxRecord] =
+    readAll[DomainEventOutboxRecord](
+      """
+        |select payload
+        |from domain_event_outbox
+        |where status = 'Pending' and available_at <= ?
+        |order by available_at asc, occurred_at asc, id asc
+        |limit ?
+        |""".stripMargin,
+      { statement =>
+        statement.setTimestamp(1, Timestamp.from(asOf))
+        statement.setInt(2, limit)
+      }
+    )
+
 final class JdbcTransactionManager(
     connectionFactory: JdbcConnectionFactory
 ) extends TransactionManager:
@@ -1392,6 +1556,7 @@ final class PostgresAdminService(connectionFactory: JdbcConnectionFactory):
       "dictionary_namespaces",
       "tournament_settlements",
       "event_cascade_records",
+      "domain_event_outbox",
       "audit_events"
     )
 
@@ -1422,6 +1587,7 @@ final class PostgresAdminService(connectionFactory: JdbcConnectionFactory):
     connectionFactory.inTransaction {
       connectionFactory.withConnection { connection =>
         executeAdmin(connection, "truncate table audit_events restart identity")
+        executeAdmin(connection, "truncate table domain_event_outbox restart identity")
         executeAdmin(connection, "truncate table tournament_settlements restart identity")
         executeAdmin(connection, "truncate table event_cascade_records restart identity")
         executeAdmin(connection, "truncate table global_dictionary restart identity")

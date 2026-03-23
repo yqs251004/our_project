@@ -126,6 +126,17 @@ trait EventCascadeRecordRepository:
   def findByAggregate(aggregateType: String, aggregateId: String): Vector[EventCascadeRecord] =
     findAll().filter(record => record.aggregateType == aggregateType && record.aggregateId == aggregateId)
 
+trait DomainEventOutboxRepository:
+  def save(record: DomainEventOutboxRecord): DomainEventOutboxRecord
+  def findById(id: DomainEventOutboxRecordId): Option[DomainEventOutboxRecord]
+  def findAll(): Vector[DomainEventOutboxRecord]
+
+  def findPending(limit: Int, asOf: java.time.Instant = java.time.Instant.now()): Vector[DomainEventOutboxRecord] =
+    findAll()
+      .filter(_.isRunnable(asOf))
+      .sortBy(_.occurredAt)
+      .take(limit)
+
 trait AuditEventRepository:
   def save(entry: AuditEventEntry): AuditEventEntry
   def findByAggregate(aggregateType: String, aggregateId: String): Vector[AuditEventEntry]

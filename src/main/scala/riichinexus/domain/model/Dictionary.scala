@@ -43,7 +43,8 @@ final case class DictionaryNamespaceRegistration(
     status: DictionaryNamespaceReviewStatus = DictionaryNamespaceReviewStatus.Pending,
     reviewedBy: Option[PlayerId] = None,
     reviewedAt: Option[java.time.Instant] = None,
-    reviewNote: Option[String] = None
+    reviewNote: Option[String] = None,
+    version: Int = 0
 ) derives CanEqual:
   require(namespacePrefix.trim.nonEmpty, "Dictionary namespace prefix cannot be empty")
   require(reminderCount >= 0, "Dictionary namespace reminderCount cannot be negative")

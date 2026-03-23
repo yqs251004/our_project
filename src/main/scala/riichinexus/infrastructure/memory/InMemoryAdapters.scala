@@ -6,12 +6,37 @@ import riichinexus.application.ports.*
 import riichinexus.domain.event.DomainEvent
 import riichinexus.domain.model.*
 
+private object InMemoryOptimisticLockSupport:
+  def nextVersion(
+      aggregateType: String,
+      aggregateId: String,
+      incomingVersion: Int,
+      currentVersion: Option[Int]
+  ): Int =
+    currentVersion match
+      case None =>
+        if incomingVersion != 0 then
+          throw OptimisticConcurrencyException(aggregateType, aggregateId, incomingVersion, None)
+        1
+      case Some(actual) =>
+        if actual != incomingVersion then
+          throw OptimisticConcurrencyException(aggregateType, aggregateId, incomingVersion, Some(actual))
+        actual + 1
+
 final class InMemoryPlayerRepository extends PlayerRepository:
   private val state = mutable.LinkedHashMap.empty[PlayerId, Player]
 
   override def save(player: Player): Player =
-    state.update(player.id, player)
-    player
+    val persisted = player.copy(
+      version = InMemoryOptimisticLockSupport.nextVersion(
+        "player",
+        player.id.value,
+        player.version,
+        state.get(player.id).map(_.version)
+      )
+    )
+    state.update(persisted.id, persisted)
+    persisted
 
   override def findById(id: PlayerId): Option[Player] =
     state.get(id)
@@ -26,8 +51,16 @@ final class InMemoryGuestSessionRepository extends GuestSessionRepository:
   private val state = mutable.LinkedHashMap.empty[GuestSessionId, GuestAccessSession]
 
   override def save(session: GuestAccessSession): GuestAccessSession =
-    state.update(session.id, session)
-    session
+    val persisted = session.copy(
+      version = InMemoryOptimisticLockSupport.nextVersion(
+        "guest-session",
+        session.id.value,
+        session.version,
+        state.get(session.id).map(_.version)
+      )
+    )
+    state.update(persisted.id, persisted)
+    persisted
 
   override def findById(id: GuestSessionId): Option[GuestAccessSession] =
     state.get(id)
@@ -39,8 +72,16 @@ final class InMemoryClubRepository extends ClubRepository:
   private val state = mutable.LinkedHashMap.empty[ClubId, Club]
 
   override def save(club: Club): Club =
-    state.update(club.id, club)
-    club
+    val persisted = club.copy(
+      version = InMemoryOptimisticLockSupport.nextVersion(
+        "club",
+        club.id.value,
+        club.version,
+        state.get(club.id).map(_.version)
+      )
+    )
+    state.update(persisted.id, persisted)
+    persisted
 
   override def findById(id: ClubId): Option[Club] =
     state.get(id)
@@ -55,8 +96,16 @@ final class InMemoryTournamentRepository extends TournamentRepository:
   private val state = mutable.LinkedHashMap.empty[TournamentId, Tournament]
 
   override def save(tournament: Tournament): Tournament =
-    state.update(tournament.id, tournament)
-    tournament
+    val persisted = tournament.copy(
+      version = InMemoryOptimisticLockSupport.nextVersion(
+        "tournament",
+        tournament.id.value,
+        tournament.version,
+        state.get(tournament.id).map(_.version)
+      )
+    )
+    state.update(persisted.id, persisted)
+    persisted
 
   override def findById(id: TournamentId): Option[Tournament] =
     state.get(id)
@@ -73,8 +122,16 @@ final class InMemoryTableRepository extends TableRepository:
   private val state = mutable.LinkedHashMap.empty[TableId, Table]
 
   override def save(table: Table): Table =
-    state.update(table.id, table)
-    table
+    val persisted = table.copy(
+      version = InMemoryOptimisticLockSupport.nextVersion(
+        "table",
+        table.id.value,
+        table.version,
+        state.get(table.id).map(_.version)
+      )
+    )
+    state.update(persisted.id, persisted)
+    persisted
 
   override def delete(id: TableId): Unit =
     state.remove(id)
@@ -126,8 +183,16 @@ final class InMemoryAppealTicketRepository extends AppealTicketRepository:
   private val state = mutable.LinkedHashMap.empty[AppealTicketId, AppealTicket]
 
   override def save(ticket: AppealTicket): AppealTicket =
-    state.update(ticket.id, ticket)
-    ticket
+    val persisted = ticket.copy(
+      version = InMemoryOptimisticLockSupport.nextVersion(
+        "appeal-ticket",
+        ticket.id.value,
+        ticket.version,
+        state.get(ticket.id).map(_.version)
+      )
+    )
+    state.update(persisted.id, persisted)
+    persisted
 
   override def findById(id: AppealTicketId): Option[AppealTicket] =
     state.get(id)
@@ -139,8 +204,17 @@ final class InMemoryDashboardRepository extends DashboardRepository:
   private val state = mutable.LinkedHashMap.empty[String, Dashboard]
 
   override def save(dashboard: Dashboard): Dashboard =
-    state.update(ownerKey(dashboard.owner), dashboard)
-    dashboard
+    val key = ownerKey(dashboard.owner)
+    val persisted = dashboard.copy(
+      version = InMemoryOptimisticLockSupport.nextVersion(
+        "dashboard",
+        key,
+        dashboard.version,
+        state.get(key).map(_.version)
+      )
+    )
+    state.update(key, persisted)
+    persisted
 
   override def findByOwner(owner: DashboardOwner): Option[Dashboard] =
     state.get(ownerKey(owner))
@@ -157,8 +231,17 @@ final class InMemoryAdvancedStatsBoardRepository extends AdvancedStatsBoardRepos
   private val state = mutable.LinkedHashMap.empty[String, AdvancedStatsBoard]
 
   override def save(board: AdvancedStatsBoard): AdvancedStatsBoard =
-    state.update(ownerKey(board.owner), board)
-    board
+    val key = ownerKey(board.owner)
+    val persisted = board.copy(
+      version = InMemoryOptimisticLockSupport.nextVersion(
+        "advanced-stats-board",
+        key,
+        board.version,
+        state.get(key).map(_.version)
+      )
+    )
+    state.update(key, persisted)
+    persisted
 
   override def findByOwner(owner: DashboardOwner): Option[AdvancedStatsBoard] =
     state.get(ownerKey(owner))
@@ -175,8 +258,16 @@ final class InMemoryAdvancedStatsRecomputeTaskRepository extends AdvancedStatsRe
   private val state = mutable.LinkedHashMap.empty[AdvancedStatsRecomputeTaskId, AdvancedStatsRecomputeTask]
 
   override def save(task: AdvancedStatsRecomputeTask): AdvancedStatsRecomputeTask =
-    state.update(task.id, task)
-    task
+    val persisted = task.copy(
+      version = InMemoryOptimisticLockSupport.nextVersion(
+        "advanced-stats-task",
+        task.id.value,
+        task.version,
+        state.get(task.id).map(_.version)
+      )
+    )
+    state.update(persisted.id, persisted)
+    persisted
 
   override def findById(id: AdvancedStatsRecomputeTaskId): Option[AdvancedStatsRecomputeTask] =
     state.get(id)
@@ -206,8 +297,16 @@ final class InMemoryGlobalDictionaryRepository extends GlobalDictionaryRepositor
   private val state = mutable.LinkedHashMap.empty[String, GlobalDictionaryEntry]
 
   override def save(entry: GlobalDictionaryEntry): GlobalDictionaryEntry =
-    state.update(entry.key, entry)
-    entry
+    val persisted = entry.copy(
+      version = InMemoryOptimisticLockSupport.nextVersion(
+        "global-dictionary-entry",
+        entry.key,
+        entry.version,
+        state.get(entry.key).map(_.version)
+      )
+    )
+    state.update(persisted.key, persisted)
+    persisted
 
   override def findByKey(key: String): Option[GlobalDictionaryEntry] =
     state.get(key)
@@ -219,8 +318,16 @@ final class InMemoryDictionaryNamespaceRepository extends DictionaryNamespaceRep
   private val state = mutable.LinkedHashMap.empty[String, DictionaryNamespaceRegistration]
 
   override def save(registration: DictionaryNamespaceRegistration): DictionaryNamespaceRegistration =
-    state.update(registration.namespacePrefix, registration)
-    registration
+    val persisted = registration.copy(
+      version = InMemoryOptimisticLockSupport.nextVersion(
+        "dictionary-namespace",
+        registration.namespacePrefix,
+        registration.version,
+        state.get(registration.namespacePrefix).map(_.version)
+      )
+    )
+    state.update(persisted.namespacePrefix, persisted)
+    persisted
 
   override def findByPrefix(prefix: String): Option[DictionaryNamespaceRegistration] =
     state.get(prefix)
@@ -232,8 +339,16 @@ final class InMemoryTournamentSettlementRepository extends TournamentSettlementR
   private val state = mutable.LinkedHashMap.empty[SettlementSnapshotId, TournamentSettlementSnapshot]
 
   override def save(snapshot: TournamentSettlementSnapshot): TournamentSettlementSnapshot =
-    state.update(snapshot.id, snapshot)
-    snapshot
+    val persisted = snapshot.copy(
+      version = InMemoryOptimisticLockSupport.nextVersion(
+        "tournament-settlement",
+        snapshot.id.value,
+        snapshot.version,
+        state.get(snapshot.id).map(_.version)
+      )
+    )
+    state.update(persisted.id, persisted)
+    persisted
 
   override def findById(id: SettlementSnapshotId): Option[TournamentSettlementSnapshot] =
     state.get(id)
@@ -258,13 +373,42 @@ final class InMemoryEventCascadeRecordRepository extends EventCascadeRecordRepos
   private val state = mutable.LinkedHashMap.empty[EventCascadeRecordId, EventCascadeRecord]
 
   override def save(record: EventCascadeRecord): EventCascadeRecord =
-    state.update(record.id, record)
-    record
+    val persisted = record.copy(
+      version = InMemoryOptimisticLockSupport.nextVersion(
+        "event-cascade-record",
+        record.id.value,
+        record.version,
+        state.get(record.id).map(_.version)
+      )
+    )
+    state.update(persisted.id, persisted)
+    persisted
 
   override def findById(id: EventCascadeRecordId): Option[EventCascadeRecord] =
     state.get(id)
 
   override def findAll(): Vector[EventCascadeRecord] =
+    state.values.toVector.sortBy(record => (record.occurredAt, record.id.value))
+
+final class InMemoryDomainEventOutboxRepository extends DomainEventOutboxRepository:
+  private val state = mutable.LinkedHashMap.empty[DomainEventOutboxRecordId, DomainEventOutboxRecord]
+
+  override def save(record: DomainEventOutboxRecord): DomainEventOutboxRecord =
+    val persisted = record.copy(
+      version = InMemoryOptimisticLockSupport.nextVersion(
+        "domain-event-outbox-record",
+        record.id.value,
+        record.version,
+        state.get(record.id).map(_.version)
+      )
+    )
+    state.update(persisted.id, persisted)
+    persisted
+
+  override def findById(id: DomainEventOutboxRecordId): Option[DomainEventOutboxRecord] =
+    state.get(id)
+
+  override def findAll(): Vector[DomainEventOutboxRecord] =
     state.values.toVector.sortBy(record => (record.occurredAt, record.id.value))
 
 final class InMemoryAuditEventRepository extends AuditEventRepository:

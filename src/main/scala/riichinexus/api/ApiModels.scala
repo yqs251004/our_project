@@ -404,10 +404,28 @@ final case class UpdateClubRelationRequest(
 final case class AppealAttachmentRequest(
     name: String,
     uri: String,
-    contentType: Option[String] = None
+    contentType: Option[String] = None,
+    storageKind: Option[String] = None,
+    mediaKind: Option[String] = None,
+    checksum: Option[String] = None,
+    checksumAlgorithm: Option[String] = None,
+    sizeBytes: Option[Long] = None,
+    uploadedAt: Option[Instant] = None,
+    retentionUntil: Option[Instant] = None
 ):
   def toAttachment: AppealAttachment =
-    AppealAttachment(name, uri, contentType)
+    AppealAttachment(
+      name = name,
+      uri = uri,
+      contentType = contentType,
+      storageKind = storageKind.map(AppealAttachmentStorageKind.valueOf).getOrElse(AppealAttachmentStorageKind.ExternalUrl),
+      mediaKind = mediaKind.map(AppealAttachmentMediaKind.valueOf).getOrElse(AppealAttachmentMediaKind.Other),
+      checksum = checksum,
+      checksumAlgorithm = checksumAlgorithm,
+      sizeBytes = sizeBytes,
+      uploadedAt = uploadedAt,
+      retentionUntil = retentionUntil
+    )
 
 final case class FileAppealRequest(
     playerId: String,

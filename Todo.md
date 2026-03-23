@@ -109,33 +109,42 @@ Recently completed features such as guest sessions, club applications, club hono
     - connect moderation inbox entries to assignees/SLA queues
     - connect settlement-export entries to real export sinks/webhooks
 
-- [ ] Replace synchronous in-process event dispatch with a durable async pipeline.
-  - Current state: the event bus is in-memory and synchronous; failures would happen inline and there is no outbox, retry, replay, or delivery auditing.
+- [x] Replace synchronous in-process event dispatch with a durable async pipeline.
+  - Current state:
+    - domain events are now written to a durable outbox before delivery
+    - background draining, retry scheduling, and dead-letter handling are now built into the default event bus
+    - both in-memory and PostgreSQL modes persist the outbox queue through a dedicated repository/table
   - Evidence:
-    - `src/main/scala/riichinexus/application/ports/EventBus.scala`
-    - `src/main/scala/riichinexus/infrastructure/memory/InMemoryAdapters.scala` `InMemoryDomainEventBus`
-  - Suggested completion:
-    - Introduce outbox persistence, background consumers, retries, dead-letter handling, and idempotency keys
+    - `src/main/scala/riichinexus/domain/model/Operations.scala` defines `DomainEventOutboxRecord`
+    - `src/main/scala/riichinexus/infrastructure/events/OutboxEventBus.scala` provides async draining plus retry/dead-letter logic
+    - `src/main/scala/riichinexus/infrastructure/postgres/PostgresRepositories.scala` now provisions `domain_event_outbox`
+  - Follow-up:
+    - add explicit idempotency keys / subscriber delivery cursors if multi-process consumers become a real deployment mode
 
-- [ ] Remove duplicated projection formulas and centralize them.
-  - Current state: club power rating and club dashboard aggregation logic are duplicated in both `ProjectionSupport` and subscriber implementations.
+- [x] Remove duplicated projection formulas and centralize them.
+  - Current state:
+    - `ProjectionSupport` is now the single entry for club power recalculation and club dashboard aggregation
+    - `ClubProjectionSubscriber` and `DashboardProjectionSubscriber` both delegate to the shared projection helpers instead of maintaining copy-pasted formulas
   - Evidence:
     - `src/main/scala/riichinexus/application/service/Services.scala` top-level `ProjectionSupport`
-    - `src/main/scala/riichinexus/application/service/Services.scala` `ClubProjectionSubscriber` and `DashboardProjectionSubscriber`
-  - Suggested completion:
-    - Extract reusable projection calculators
-    - Optionally drive formulas from the global dictionary
+    - `src/main/scala/riichinexus/application/service/Services.scala` `ClubProjectionSubscriber` now reuses `ProjectionSupport.recalculateClubPowerRating`
+    - `src/main/scala/riichinexus/application/service/Services.scala` `DashboardProjectionSubscriber` now reuses `ProjectionSupport.buildClubDashboard`
+  - Follow-up:
+    - Optionally drive club projection coefficients from the global dictionary if operators need runtime tuning beyond the existing power-rating weights
 
 ## 3. Infrastructure / Operational Depth Still Missing
 
-- [ ] Add stronger transactional guarantees and consistency protection.
-  - Current state: in-memory mode uses `NoOpTransactionManager`; there is no optimistic locking/version field on aggregates, so concurrent updates can silently overwrite each other.
+- [x] Add stronger transactional guarantees and consistency protection.
+  - Current state:
+    - major mutable aggregates now carry `version`
+    - in-memory and PostgreSQL repositories now enforce compare-and-swap semantics on save instead of silently overwriting stale state
+    - concurrent write conflicts now raise a dedicated `OptimisticConcurrencyException`
   - Evidence:
     - `src/main/scala/riichinexus/application/ports/TransactionManager.scala`
-    - aggregate models do not carry version numbers
-  - Suggested completion:
-    - Add aggregate versioning or compare-and-swap semantics
-    - Define retry behavior for concurrent writes
+    - `src/main/scala/riichinexus/domain/model/Core.scala`, `Competition.scala`, `Dictionary.scala`, `Dashboard.scala`, and `Operations.scala` now persist `version`
+    - `src/main/scala/riichinexus/infrastructure/memory/InMemoryAdapters.scala` and `src/main/scala/riichinexus/infrastructure/postgres/PostgresRepositories.scala` now perform optimistic CAS checks
+  - Follow-up:
+    - keep retry policy explicit at service boundaries for operations that are safe to replay, instead of blindly retrying every transaction block
 
 - [ ] Give public read models richer schedule and club views.
   - Current state: public schedule view is shallow and only exposes tournament window plus current table count; club directory is also summary-only.

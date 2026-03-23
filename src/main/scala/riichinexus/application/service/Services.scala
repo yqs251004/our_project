@@ -1,6 +1,7 @@
 package riichinexus.application.service
 
-import java.time.Instant
+import java.net.URI
+import java.time.{Duration, Instant}
 import java.util.NoSuchElementException
 import java.util.concurrent.Executors
 import java.util.concurrent.ThreadFactory
@@ -279,7 +280,7 @@ private object ProjectionSupport:
     dashboardRepository.save(buildClubDashboard(refreshedClub, playerRepository, dashboardRepository, at))
     refreshedClub
 
-  private def recalculateClubPowerRating(
+  def recalculateClubPowerRating(
       club: Club,
       playerRepository: PlayerRepository,
       globalDictionaryRepository: GlobalDictionaryRepository
@@ -288,17 +289,13 @@ private object ProjectionSupport:
       RuntimeDictionarySupport.calculateClubPowerRating(club, playerRepository, globalDictionaryRepository)
     )
 
-  private def buildClubDashboard(
+  def buildClubDashboard(
       club: Club,
       playerRepository: PlayerRepository,
       dashboardRepository: DashboardRepository,
       at: Instant
   ): Dashboard =
-    val memberDashboards = club.members.flatMap { playerId =>
-      playerRepository.findById(playerId)
-        .filter(_.status == PlayerStatus.Active)
-        .flatMap(_ => dashboardRepository.findByOwner(DashboardOwner.Player(playerId)))
-    }
+    val memberDashboards = activeMemberDashboards(club, playerRepository, dashboardRepository)
 
     if memberDashboards.isEmpty then Dashboard.empty(DashboardOwner.Club(club.id), at)
     else
@@ -313,6 +310,17 @@ private object ProjectionSupport:
         topFinishRate = weightedAverage(memberDashboards, _.topFinishRate),
         lastUpdatedAt = at
       )
+
+  private def activeMemberDashboards(
+      club: Club,
+      playerRepository: PlayerRepository,
+      dashboardRepository: DashboardRepository
+  ): Vector[Dashboard] =
+    club.members.flatMap { playerId =>
+      playerRepository.findById(playerId)
+        .filter(_.status == PlayerStatus.Active)
+        .flatMap(_ => dashboardRepository.findByOwner(DashboardOwner.Player(playerId)))
+    }
 
   private def weightedAverage(
       dashboards: Vector[Dashboard],
@@ -662,6 +670,134 @@ final class PublicQueryService(
       clubRepository.findById(clubId).toVector.flatMap(_.members)
     }
     (lineupPlayers ++ tournament.participatingPlayers ++ fallbackClubMembers).distinct.size
+
+private object AppealAttachmentPolicySupport:
+  private val MaxAttachmentCount = 12
+  private val MaxAttachmentNameLength = 160
+  private val MaxAttachmentUriLength = 2048
+  private val MaxAttachmentBytes = 150L * 1024L * 1024L
+  private val MaxRetentionWindow = Duration.ofDays(365)
+  private val AllowedSchemesByStorageKind: Map[AppealAttachmentStorageKind, Set[String]] = Map(
+    AppealAttachmentStorageKind.ExternalUrl -> Set("https", "http"),
+    AppealAttachmentStorageKind.ObjectStore -> Set("s3", "gs", "riichinexus-object"),
+    AppealAttachmentStorageKind.SignedUrl -> Set("https"),
+    AppealAttachmentStorageKind.InternalReference -> Set("riichinexus", "app")
+  )
+  private val AllowedContentTypesByMediaKind: Map[AppealAttachmentMediaKind, Set[String]] = Map(
+    AppealAttachmentMediaKind.Image -> Set("image/png", "image/jpeg", "image/webp", "image/gif"),
+    AppealAttachmentMediaKind.Video -> Set("video/mp4", "video/webm", "video/quicktime"),
+    AppealAttachmentMediaKind.Document -> Set("application/pdf", "text/plain", "text/markdown"),
+    AppealAttachmentMediaKind.Log -> Set("text/plain", "application/json", "text/csv"),
+    AppealAttachmentMediaKind.Archive -> Set("application/zip", "application/gzip", "application/x-7z-compressed"),
+    AppealAttachmentMediaKind.Other -> Set.empty
+  )
+  private val SupportedChecksumAlgorithms: Map[String, Int] = Map(
+    "sha-256" -> 64,
+    "sha-512" -> 128
+  )
+
+  def validate(
+      attachments: Vector[AppealAttachment],
+      createdAt: Instant
+  ): Vector[AppealAttachment] =
+    require(attachments.size <= MaxAttachmentCount, s"Appeals can carry at most $MaxAttachmentCount attachments")
+    attachments.zipWithIndex.map { case (attachment, index) =>
+      validateAttachment(attachment, createdAt, index + 1)
+    }
+
+  private def validateAttachment(
+      attachment: AppealAttachment,
+      createdAt: Instant,
+      position: Int
+  ): AppealAttachment =
+    val normalizedName = attachment.name.trim
+    val normalizedUri = attachment.uri.trim
+    val normalizedContentType = attachment.contentType.map(_.trim.toLowerCase).filter(_.nonEmpty)
+    val normalizedChecksum = attachment.checksum.map(_.trim.toLowerCase).filter(_.nonEmpty)
+    val normalizedAlgorithm = attachment.checksumAlgorithm.map(_.trim.toLowerCase).filter(_.nonEmpty)
+
+    require(normalizedName.nonEmpty, s"Appeal attachment #$position name cannot be empty")
+    require(normalizedName.length <= MaxAttachmentNameLength, s"Appeal attachment #$position name is too long")
+    require(normalizedUri.nonEmpty, s"Appeal attachment #$position uri cannot be empty")
+    require(normalizedUri.length <= MaxAttachmentUriLength, s"Appeal attachment #$position uri is too long")
+
+    val parsedUri =
+      try URI(normalizedUri)
+      catch
+        case _: IllegalArgumentException =>
+          throw IllegalArgumentException(s"Appeal attachment #$position uri is not a valid URI")
+
+    val scheme = Option(parsedUri.getScheme).map(_.trim.toLowerCase)
+      .getOrElse(throw IllegalArgumentException(s"Appeal attachment #$position uri must include a scheme"))
+    require(
+      AllowedSchemesByStorageKind.getOrElse(attachment.storageKind, Set.empty).contains(scheme),
+      s"Appeal attachment #$position scheme '$scheme' is not allowed for ${attachment.storageKind}"
+    )
+
+    attachment.sizeBytes.foreach { sizeBytes =>
+      require(sizeBytes <= MaxAttachmentBytes, s"Appeal attachment #$position exceeds $MaxAttachmentBytes bytes")
+    }
+
+    normalizedAlgorithm match
+      case Some(algorithm) =>
+        val expectedLength =
+          SupportedChecksumAlgorithms.getOrElse(
+            algorithm,
+            throw IllegalArgumentException(
+              s"Appeal attachment #$position checksum algorithm '$algorithm' is unsupported"
+            )
+          )
+        val checksum =
+          normalizedChecksum.getOrElse(
+            throw IllegalArgumentException(s"Appeal attachment #$position checksum is required")
+          )
+        require(checksum.forall(isHexChar), s"Appeal attachment #$position checksum must be hexadecimal")
+        require(
+          checksum.length == expectedLength,
+          s"Appeal attachment #$position checksum length does not match algorithm '$algorithm'"
+        )
+      case None =>
+        require(
+          normalizedChecksum.isEmpty,
+          s"Appeal attachment #$position checksumAlgorithm is required when checksum is provided"
+        )
+
+    normalizedContentType.foreach { contentType =>
+      val allowedContentTypes = AllowedContentTypesByMediaKind.getOrElse(attachment.mediaKind, Set.empty)
+      require(
+        allowedContentTypes.isEmpty || allowedContentTypes.contains(contentType),
+        s"Appeal attachment #$position contentType '$contentType' is not allowed for ${attachment.mediaKind}"
+      )
+    }
+
+    attachment.uploadedAt.foreach { uploadedAt =>
+      require(
+        !uploadedAt.isAfter(createdAt.plus(Duration.ofHours(1))),
+        s"Appeal attachment #$position uploadedAt cannot be unreasonably later than appeal creation"
+      )
+    }
+    attachment.retentionUntil.foreach { retentionUntil =>
+      require(
+        !retentionUntil.isBefore(createdAt),
+        s"Appeal attachment #$position retentionUntil cannot be earlier than appeal creation"
+      )
+      require(
+        !retentionUntil.isAfter(createdAt.plus(MaxRetentionWindow)),
+        s"Appeal attachment #$position retentionUntil exceeds the maximum retention window"
+      )
+    }
+
+    attachment.copy(
+      name = normalizedName,
+      uri = normalizedUri,
+      contentType = normalizedContentType,
+      checksum = normalizedChecksum,
+      checksumAlgorithm = normalizedAlgorithm
+    )
+
+  private def isHexChar(char: Char): Boolean =
+    (char >= '0' && char <= '9') ||
+      (char >= 'a' && char <= 'f')
 
 final class ClubApplicationService(
     clubRepository: ClubRepository,
@@ -2970,6 +3106,7 @@ final class AppealApplicationService(
             s"Table ${tableId.value} already has an active appeal ticket"
           )
 
+        val validatedAttachments = AppealAttachmentPolicySupport.validate(attachments, createdAt)
         val ticket = AppealTicket(
           id = IdGenerator.appealTicketId(),
           tableId = table.id,
@@ -2977,7 +3114,7 @@ final class AppealApplicationService(
           stageId = table.stageId,
           openedBy = openedBy,
           description = description,
-          attachments = attachments,
+          attachments = validatedAttachments,
           priority = priority,
           dueAt = dueAt,
           createdAt = createdAt,
@@ -2986,6 +3123,22 @@ final class AppealApplicationService(
 
         val savedTicket = appealTicketRepository.save(ticket)
         tableRepository.save(table.flagAppeal(savedTicket.id, Some(description)))
+        auditEventRepository.save(
+          AuditEventEntry(
+            id = IdGenerator.auditEventId(),
+            aggregateType = "appeal",
+            aggregateId = savedTicket.id.value,
+            eventType = "AppealTicketFiled",
+            occurredAt = createdAt,
+            actorId = Some(openedBy),
+            details = Map(
+              "tableId" -> tableId.value,
+              "attachmentCount" -> savedTicket.attachments.size.toString,
+              "attachmentStorageKinds" -> savedTicket.attachments.map(_.storageKind.toString).distinct.sorted.mkString(","),
+              "attachmentMediaKinds" -> savedTicket.attachments.map(_.mediaKind.toString).distinct.sorted.mkString(",")
+            )
+          )
+        )
         eventBus.publish(AppealTicketFiled(savedTicket, createdAt))
         savedTicket
       }
@@ -3925,12 +4078,10 @@ final class ClubProjectionSubscriber(
         impactedClubIds.foreach { clubId =>
           clubRepository.findById(clubId).foreach { club =>
             clubRepository.save(
-              club.updatePowerRating(
-                RuntimeDictionarySupport.calculateClubPowerRating(
-                  club,
-                  playerRepository,
-                  globalDictionaryRepository
-                )
+              ProjectionSupport.recalculateClubPowerRating(
+                club,
+                playerRepository,
+                globalDictionaryRepository
               )
             )
           }
@@ -4497,7 +4648,14 @@ final class DashboardProjectionSubscriber(
           .distinct
           .foreach { clubId =>
             clubRepository.findById(clubId).foreach { club =>
-              dashboardRepository.save(buildClubDashboard(club, occurredAt))
+              dashboardRepository.save(
+                ProjectionSupport.buildClubDashboard(
+                  club,
+                  playerRepository,
+                  dashboardRepository,
+                  occurredAt
+                )
+              )
             }
           }
 
@@ -4523,27 +4681,6 @@ final class DashboardProjectionSubscriber(
       topFinishRate = ratio(topFinishes, records.size),
       lastUpdatedAt = at
     )
-
-  private def buildClubDashboard(club: Club, at: Instant): Dashboard =
-    val memberDashboards = club.members.flatMap { playerId =>
-      playerRepository.findById(playerId)
-        .filter(_.status == PlayerStatus.Active)
-        .flatMap(_ => dashboardRepository.findByOwner(DashboardOwner.Player(playerId)))
-    }
-
-    if memberDashboards.isEmpty then Dashboard.empty(DashboardOwner.Club(club.id), at)
-    else
-      Dashboard(
-        owner = DashboardOwner.Club(club.id),
-        sampleSize = memberDashboards.map(_.sampleSize).sum,
-        dealInRate = weightedAverage(memberDashboards, _.sampleSize, _.dealInRate),
-        winRate = weightedAverage(memberDashboards, _.sampleSize, _.winRate),
-        averageWinPoints = weightedAverage(memberDashboards, _.sampleSize, _.averageWinPoints),
-        riichiRate = weightedAverage(memberDashboards, _.sampleSize, _.riichiRate),
-        averagePlacement = weightedAverage(memberDashboards, _.sampleSize, _.averagePlacement),
-        topFinishRate = weightedAverage(memberDashboards, _.sampleSize, _.topFinishRate),
-        lastUpdatedAt = at
-      )
 
 private object AdvancedStatsAsyncOutbox:
   private val executor =

@@ -340,7 +340,8 @@ final case class TournamentSettlementSnapshot(
     clubShareRatio: Double = 0.0,
     adjustments: Vector[TournamentSettlementAdjustment] = Vector.empty,
     entries: Vector[TournamentSettlementEntry],
-    summary: String
+    summary: String,
+    version: Int = 0
 ) derives CanEqual:
   require(revision > 0, "Tournament settlement revision must be positive")
   require(prizePool >= 0L, "Tournament settlement prize pool must be non-negative")
@@ -390,7 +391,8 @@ final case class Tournament(
     admins: Vector[PlayerId] = Vector.empty,
     whitelist: Vector[TournamentWhitelistEntry] = Vector.empty,
     stages: Vector[TournamentStage] = Vector.empty,
-    status: TournamentStatus = TournamentStatus.Draft
+    status: TournamentStatus = TournamentStatus.Draft,
+    version: Int = 0
 ) derives CanEqual:
   require(startsAt.isBefore(endsAt), "Tournament start time must be earlier than end time")
   require(stages.map(_.id).distinct.size == stages.size, "Tournament stages must have unique ids")
@@ -545,7 +547,8 @@ final case class Table(
     matchRecordId: Option[MatchRecordId] = None,
     appealTicketIds: Vector[AppealTicketId] = Vector.empty,
     resetCount: Int = 0,
-    operatorNotes: Vector[String] = Vector.empty
+    operatorNotes: Vector[String] = Vector.empty,
+    version: Int = 0
 ) derives CanEqual:
   require(seats.size == 4, "A riichi table must have exactly four seats")
   require(seats.map(_.seat).distinct.size == 4, "Seats must be unique")
@@ -765,11 +768,39 @@ object MatchRecord:
       notes = settlementNotes
     )
 
+enum AppealAttachmentStorageKind derives CanEqual:
+  case ExternalUrl
+  case ObjectStore
+  case SignedUrl
+  case InternalReference
+
+enum AppealAttachmentMediaKind derives CanEqual:
+  case Image
+  case Video
+  case Document
+  case Log
+  case Archive
+  case Other
+
 final case class AppealAttachment(
     name: String,
     uri: String,
-    contentType: Option[String] = None
-) derives CanEqual
+    contentType: Option[String] = None,
+    storageKind: AppealAttachmentStorageKind = AppealAttachmentStorageKind.ExternalUrl,
+    mediaKind: AppealAttachmentMediaKind = AppealAttachmentMediaKind.Other,
+    checksum: Option[String] = None,
+    checksumAlgorithm: Option[String] = None,
+    sizeBytes: Option[Long] = None,
+    uploadedAt: Option[Instant] = None,
+    retentionUntil: Option[Instant] = None
+) derives CanEqual:
+  require(name.trim.nonEmpty, "Appeal attachment name cannot be empty")
+  require(uri.trim.nonEmpty, "Appeal attachment uri cannot be empty")
+  require(sizeBytes.forall(_ > 0L), "Appeal attachment sizeBytes must be positive when provided")
+  require(
+    retentionUntil.forall(retention => uploadedAt.forall(!retention.isBefore(_))),
+    "Appeal attachment retentionUntil cannot be earlier than uploadedAt"
+  )
 
 final case class AppealDecisionLog(
     operatorId: PlayerId,
@@ -812,7 +843,8 @@ final case class AppealTicket(
     reopenCount: Int = 0,
     createdAt: Instant,
     updatedAt: Instant,
-    resolution: Option[String] = None
+    resolution: Option[String] = None,
+    version: Int = 0
 ) derives CanEqual:
   require(dueAt.forall(!_.isBefore(createdAt)), "Appeal dueAt cannot be earlier than createdAt")
 

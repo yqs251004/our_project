@@ -2,6 +2,7 @@ package riichinexus.infrastructure.json
 
 import java.time.Instant
 
+import riichinexus.domain.event.*
 import riichinexus.domain.model.*
 import upickle.default.*
 
@@ -45,6 +46,8 @@ object JsonCodecs:
     readwriter[String].bimap[AdvancedStatsRecomputeTaskId](_.value, AdvancedStatsRecomputeTaskId(_))
   given ReadWriter[EventCascadeRecordId] =
     readwriter[String].bimap[EventCascadeRecordId](_.value, EventCascadeRecordId(_))
+  given ReadWriter[DomainEventOutboxRecordId] =
+    readwriter[String].bimap[DomainEventOutboxRecordId](_.value, DomainEventOutboxRecordId(_))
 
   given ReadWriter[RoleKind] =
     stringEnumReadWriter(RoleKind.valueOf, _.toString)
@@ -135,6 +138,10 @@ object JsonCodecs:
   given ReadWriter[Table] = macroRW
   given ReadWriter[MatchRecordSeatResult] = macroRW
   given ReadWriter[MatchRecord] = macroRW
+  given ReadWriter[AppealAttachmentStorageKind] =
+    stringEnumReadWriter(AppealAttachmentStorageKind.valueOf, _.toString)
+  given ReadWriter[AppealAttachmentMediaKind] =
+    stringEnumReadWriter(AppealAttachmentMediaKind.valueOf, _.toString)
   given ReadWriter[AppealAttachment] = macroRW
   given ReadWriter[AppealDecisionLog] = macroRW
   given ReadWriter[AppealPriority] =
@@ -187,6 +194,20 @@ object JsonCodecs:
   given ReadWriter[EventCascadeStatus] =
     stringEnumReadWriter(EventCascadeStatus.valueOf, _.toString)
   given ReadWriter[EventCascadeRecord] = macroRW
+  given ReadWriter[DomainEventOutboxStatus] =
+    stringEnumReadWriter(DomainEventOutboxStatus.valueOf, _.toString)
+  given ReadWriter[DomainEventOutboxRecord] = macroRW
+  given ReadWriter[MatchRecordArchived] = macroRW
+  given ReadWriter[AppealTicketFiled] = macroRW
+  given ReadWriter[AppealTicketResolved] = macroRW
+  given ReadWriter[AppealTicketWorkflowUpdated] = macroRW
+  given ReadWriter[AppealTicketReopened] = macroRW
+  given ReadWriter[AppealTicketAdjudicated] = macroRW
+  given ReadWriter[TournamentSettlementRecorded] = macroRW
+  given ReadWriter[GlobalDictionaryUpdated] = macroRW
+  given ReadWriter[PlayerBanned] = macroRW
+  given ReadWriter[ClubDissolved] = macroRW
+  given ReadWriter[DomainEvent] = macroRW
   given ReadWriter[PublicScheduleView] = macroRW
   given ReadWriter[PublicClubDirectoryEntry] = macroRW
   given ReadWriter[PlayerLeaderboardEntry] = macroRW

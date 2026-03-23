@@ -18,6 +18,7 @@ final case class SettlementSnapshotId(value: String) derives CanEqual
 final case class AuditEventId(value: String) derives CanEqual
 final case class AdvancedStatsRecomputeTaskId(value: String) derives CanEqual
 final case class EventCascadeRecordId(value: String) derives CanEqual
+final case class DomainEventOutboxRecordId(value: String) derives CanEqual
 
 object IdGenerator:
   private def nextId(prefix: String): String =
@@ -41,6 +42,8 @@ object IdGenerator:
     AdvancedStatsRecomputeTaskId(nextId("advanced-stats-task"))
   def eventCascadeRecordId(): EventCascadeRecordId =
     EventCascadeRecordId(nextId("event-cascade"))
+  def domainEventOutboxRecordId(): DomainEventOutboxRecordId =
+    DomainEventOutboxRecordId(nextId("event-outbox"))
 
 enum RoleKind derives CanEqual:
   case Guest
@@ -148,7 +151,8 @@ final case class GuestAccessSession(
     revokedAt: Option[Instant] = None,
     revokedReason: Option[String] = None,
     deviceFingerprint: Option[String] = None,
-    upgradedToPlayerId: Option[PlayerId] = None
+    upgradedToPlayerId: Option[PlayerId] = None,
+    version: Int = 0
 ) derives CanEqual:
   require(displayName.trim.nonEmpty, "Guest session display name cannot be empty")
   require(!expiresAt.isBefore(createdAt), "Guest session expiry cannot be earlier than creation")
@@ -281,7 +285,8 @@ final case class Player(
     affiliatedClubIds: Vector[ClubId] = Vector.empty,
     status: PlayerStatus = PlayerStatus.Active,
     roleGrants: Vector[RoleGrant] = Vector.empty,
-    bannedReason: Option[String] = None
+    bannedReason: Option[String] = None,
+    version: Int = 0
 ) derives CanEqual:
   def boundClubIds: Vector[ClubId] =
     (clubId.toVector ++ affiliatedClubIds).distinct
@@ -527,7 +532,8 @@ final case class GlobalDictionaryEntry(
     value: String,
     updatedAt: Instant,
     updatedBy: PlayerId,
-    note: Option[String] = None
+    note: Option[String] = None,
+    version: Int = 0
 ) derives CanEqual
 
 final case class AuditEventEntry(
@@ -559,7 +565,8 @@ final case class Club(
     relations: Vector[ClubRelation] = Vector.empty,
     membershipApplications: Vector[ClubMembershipApplication] = Vector.empty,
     dissolvedAt: Option[Instant] = None,
-    dissolvedBy: Option[PlayerId] = None
+    dissolvedBy: Option[PlayerId] = None,
+    version: Int = 0
 ) derives CanEqual:
   def addMember(playerId: PlayerId): Club =
     if members.contains(playerId) then this

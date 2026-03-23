@@ -3,6 +3,7 @@ package riichinexus.bootstrap
 import riichinexus.application.ports.*
 import riichinexus.application.service.*
 import riichinexus.domain.service.*
+import riichinexus.infrastructure.events.*
 import riichinexus.infrastructure.memory.*
 import riichinexus.infrastructure.postgres.*
 
@@ -30,6 +31,7 @@ final case class ApplicationContext(
     dictionaryNamespaceRepository: DictionaryNamespaceRepository,
     tournamentSettlementRepository: TournamentSettlementRepository,
     eventCascadeRecordRepository: EventCascadeRecordRepository,
+    domainEventOutboxRepository: DomainEventOutboxRepository,
     auditEventRepository: AuditEventRepository,
     eventBus: DomainEventBus,
     authorizationService: AuthorizationService,
@@ -61,9 +63,10 @@ object ApplicationContext:
     val dictionaryNamespaceRepository = InMemoryDictionaryNamespaceRepository()
     val tournamentSettlementRepository = InMemoryTournamentSettlementRepository()
     val eventCascadeRecordRepository = InMemoryEventCascadeRecordRepository()
+    val domainEventOutboxRepository = InMemoryDomainEventOutboxRepository()
     val auditEventRepository = InMemoryAuditEventRepository()
 
-    val eventBus = InMemoryDomainEventBus()
+    val eventBus = OutboxBackedDomainEventBus(domainEventOutboxRepository, transactionManager)
     val tournamentRuleEngine = DefaultTournamentRuleEngine()
     val advancedStatsPipelineService = AdvancedStatsPipelineService(
       paifuRepository,
@@ -207,6 +210,7 @@ object ApplicationContext:
       dictionaryNamespaceRepository = dictionaryNamespaceRepository,
       tournamentSettlementRepository = tournamentSettlementRepository,
       eventCascadeRecordRepository = eventCascadeRecordRepository,
+      domainEventOutboxRepository = domainEventOutboxRepository,
       auditEventRepository = auditEventRepository,
       eventBus = eventBus,
       authorizationService = authorizationService,
@@ -234,9 +238,10 @@ object ApplicationContext:
     val dictionaryNamespaceRepository = PostgresDictionaryNamespaceRepository(connectionFactory)
     val tournamentSettlementRepository = PostgresTournamentSettlementRepository(connectionFactory)
     val eventCascadeRecordRepository = PostgresEventCascadeRecordRepository(connectionFactory)
+    val domainEventOutboxRepository = PostgresDomainEventOutboxRepository(connectionFactory)
     val auditEventRepository = PostgresAuditEventRepository(connectionFactory)
 
-    val eventBus = InMemoryDomainEventBus()
+    val eventBus = OutboxBackedDomainEventBus(domainEventOutboxRepository, transactionManager)
     val tournamentRuleEngine = DefaultTournamentRuleEngine()
     val advancedStatsPipelineService = AdvancedStatsPipelineService(
       paifuRepository,
@@ -380,6 +385,7 @@ object ApplicationContext:
       dictionaryNamespaceRepository = dictionaryNamespaceRepository,
       tournamentSettlementRepository = tournamentSettlementRepository,
       eventCascadeRecordRepository = eventCascadeRecordRepository,
+      domainEventOutboxRepository = domainEventOutboxRepository,
       auditEventRepository = auditEventRepository,
       eventBus = eventBus,
       authorizationService = authorizationService,
