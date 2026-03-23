@@ -2056,3 +2056,8 @@ org.eclipse.lsp4j.jsonrpc.ResponseErrorException: Request window/showMessageRequ
 2026.03.16 17:21:55 INFO  Memory monitor stopped
 2026.03.16 17:21:55 INFO  shutting down Metals
 2026.03.16 17:21:55 INFO  Exiting server
+2026.03.23 18:28:44 INFO  Started: Metals version 1.6.6 in folders 'D:\school\2026spring\front-back\our_project' for client Visual Studio Code 1.111.0.
+2026.03.23 18:28:44 INFO  Memory monitor started
+2026.03.23 18:28:45 WARN  Using H2 2.4.240 which is newer than the version Flyway has been verified with. The latest verified version of H2 is 2.3.232.
+3月 23, 2026 6:43:52 下午 org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
+信息: Unsupported notification method: $/setTrace
