@@ -453,6 +453,10 @@ final class PublicQueryService(
 
     tournamentRepository.findAll().filter(_.status != TournamentStatus.Draft).flatMap { tournament =>
       tournament.stages.map { stage =>
+        val stageTables = tableRepository.findByTournamentAndStage(tournament.id, stage.id)
+        val activeTableCount = stageTables.count(table =>
+          table.status != TableStatus.Archived
+        )
         PublicScheduleView(
           tournamentId = tournament.id,
           tournamentName = tournament.name,
@@ -460,9 +464,15 @@ final class PublicQueryService(
           stageId = stage.id,
           stageName = stage.name,
           stageStatus = stage.status,
+          currentRound = stage.currentRound,
+          roundCount = stage.roundCount,
           startsAt = tournament.startsAt,
           endsAt = tournament.endsAt,
-          tableCount = tableRepository.findByTournamentAndStage(tournament.id, stage.id).size
+          tableCount = stageTables.size,
+          activeTableCount = activeTableCount,
+          pendingTablePlanCount = stage.pendingTablePlans.size,
+          participantCount = publicParticipantCount(tournament, stage),
+          whitelistCount = tournament.whitelist.size
         )
       }
     }
@@ -471,13 +481,29 @@ final class PublicQueryService(
     authorizationService.requirePermission(guestPrincipal, Permission.ViewClubDirectory)
 
     clubRepository.findActive().sortBy(_.name).map { club =>
+      val activeMemberCount = club.members.count(playerId =>
+        playerRepository.findById(playerId).exists(_.status == PlayerStatus.Active)
+      )
+      val rivalryTargets = club.relations.filter(_.relation == ClubRelationKind.Rivalry)
+      val strongestRival = rivalryTargets
+        .flatMap(relation => clubRepository.findById(relation.targetClubId))
+        .sortBy(rival => (-rival.powerRating, rival.name))
+        .headOption
       PublicClubDirectoryEntry(
         clubId = club.id,
         name = club.name,
         memberCount = club.members.size,
+        activeMemberCount = activeMemberCount,
         adminCount = club.admins.size,
         powerRating = round2(club.powerRating),
         totalPoints = club.totalPoints,
+        treasuryBalance = club.treasuryBalance,
+        pointPool = club.pointPool,
+        allianceCount = club.relations.count(_.relation == ClubRelationKind.Alliance),
+        rivalryCount = rivalryTargets.size,
+        strongestRivalClubId = strongestRival.map(_.id),
+        strongestRivalPower = strongestRival.map(rival => round2(rival.powerRating)),
+        honorTitles = club.honors.map(_.title).sorted,
         relations = club.relations
       )
     }
@@ -526,6 +552,16 @@ final class PublicQueryService(
 
   private def round2(value: Double): Double =
     BigDecimal(value).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble
+
+  private def publicParticipantCount(
+      tournament: Tournament,
+      stage: TournamentStage
+  ): Int =
+    val lineupPlayers = StageLineupSupport.resolveEligiblePlayers(stage, playerRepository)
+    val fallbackClubMembers = tournament.participatingClubs.flatMap { clubId =>
+      clubRepository.findById(clubId).toVector.flatMap(_.members)
+    }
+    (lineupPlayers ++ tournament.participatingPlayers ++ fallbackClubMembers).distinct.size
 
 final class ClubApplicationService(
     clubRepository: ClubRepository,
@@ -2316,14 +2352,15 @@ final class TournamentApplicationService(
       history: Vector[MatchRecord],
       roundNumber: Int
   ): Vector[PlannedTable] =
+    val clubRelations = buildClubRelationIndex(clubRepository.findActive())
     stage.format match
       case StageFormat.RoundRobin =>
         buildRoundRobinTables(participants, stage, roundNumber)
       case StageFormat.Custom =>
         val selectedPlayers = selectCustomStageParticipants(tournament, stage, participants, history, roundNumber)
-        seatingPolicy.assignTables(selectedPlayers, stage, history)
+        seatingPolicy.assignTables(selectedPlayers, stage, history, clubRelations)
       case _ =>
-        seatingPolicy.assignTables(participants, stage, history)
+        seatingPolicy.assignTables(participants, stage, history, clubRelations)
 
   private def expectedTablesPerRound(
       tournament: Tournament,
@@ -2344,6 +2381,27 @@ final class TournamentApplicationService(
         selectedPlayers.size / 4
       case _ =>
         participants.size / 4
+
+  private def buildClubRelationIndex(
+      clubs: Vector[Club]
+  ): Map[(ClubId, ClubId), ClubRelationKind] =
+    clubs.flatMap { club =>
+      club.relations.collect {
+        case relation if relation.relation != ClubRelationKind.Neutral && relation.targetClubId != club.id =>
+          val pair =
+            if club.id.value <= relation.targetClubId.value then (club.id, relation.targetClubId)
+            else (relation.targetClubId, club.id)
+          pair -> relation.relation
+      }
+    }
+      .groupBy(_._1)
+      .view
+      .mapValues(_.map(_._2).sortBy {
+        case ClubRelationKind.Alliance => 0
+        case ClubRelationKind.Rivalry  => 1
+        case ClubRelationKind.Neutral  => 2
+      }.head)
+      .toMap
 
   private def selectCustomStageParticipants(
       tournament: Tournament,

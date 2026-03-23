@@ -11,14 +11,16 @@ trait SeatingPolicy:
   def assignTables(
       players: Vector[Player],
       stage: TournamentStage,
-      historicalRecords: Vector[MatchRecord] = Vector.empty
+      historicalRecords: Vector[MatchRecord] = Vector.empty,
+      clubRelations: Map[(ClubId, ClubId), ClubRelationKind] = Map.empty
   ): Vector[PlannedTable]
 
 final class BalancedEloSeatingPolicy extends SeatingPolicy:
   override def assignTables(
       players: Vector[Player],
       stage: TournamentStage,
-      historicalRecords: Vector[MatchRecord]
+      historicalRecords: Vector[MatchRecord],
+      clubRelations: Map[(ClubId, ClubId), ClubRelationKind]
   ): Vector[PlannedTable] =
     require(players.nonEmpty, s"Stage ${stage.name} needs players before scheduling")
     require(players.size % 4 == 0, "Player count must be divisible by 4 to schedule riichi tables")
@@ -40,14 +42,18 @@ final class BalancedEloSeatingPolicy extends SeatingPolicy:
 
     val opponentCounts = buildOpponentCounts(historicalRecords)
     val groupedPlayers = normalizedPairingMethod(stage) match
-      case "balanced-elo" => buildOptimalGroups(sortedPlayers, opponentCounts)
+      case "balanced-elo" =>
+        buildOptimalGroups(sortedPlayers, opponentCounts, representedClubByPlayer, clubRelations)
       case "snake"        => buildSnakeGroups(sortedPlayers)
       case method =>
         throw IllegalArgumentException(s"Unsupported swiss pairing method: $method")
 
     groupedPlayers.zipWithIndex
       .map { case (group, index) =>
-        val rotatedGroup = rotate(orderSeatsWithinTable(group, opponentCounts), index % group.size)
+        val rotatedGroup = rotate(
+          orderSeatsWithinTable(group, opponentCounts, representedClubByPlayer, clubRelations),
+          index % group.size
+        )
         PlannedTable(
           tableNo = index + 1,
           seats = assignSeats(rotatedGroup, preferredWindByPlayer, representedClubByPlayer)
@@ -76,7 +82,9 @@ final class BalancedEloSeatingPolicy extends SeatingPolicy:
 
   private def buildOptimalGroups(
       players: Vector[Player],
-      opponentCounts: Map[(PlayerId, PlayerId), Int]
+      opponentCounts: Map[(PlayerId, PlayerId), Int],
+      representedClubByPlayer: Map[PlayerId, ClubId],
+      clubRelations: Map[(ClubId, ClubId), ClubRelationKind]
   ): Vector[Vector[Player]] =
     val branchLimit =
       if players.size <= 8 then 12
@@ -96,14 +104,14 @@ final class BalancedEloSeatingPolicy extends SeatingPolicy:
           bestScore = currentScore
           bestGrouping = current
       else
-        val anchor = selectAnchor(remaining, opponentCounts)
+        val anchor = selectAnchor(remaining, opponentCounts, representedClubByPlayer, clubRelations)
         val rest = remaining.filterNot(_.id == anchor.id)
         val candidates = rest.combinations(3).map(combo => (anchor +: combo.toVector)).toVector
-          .sortBy(groupScore(_, opponentCounts))
+          .sortBy(groupScore(_, opponentCounts, representedClubByPlayer, clubRelations))
           .take(branchLimit)
 
         candidates.foreach { group =>
-          val penalty = groupScore(group, opponentCounts)
+          val penalty = groupScore(group, opponentCounts, representedClubByPlayer, clubRelations)
           val nextScore = currentScore + penalty
           if nextScore < bestScore then
             val groupedIds = group.map(_.id).toSet
@@ -118,22 +126,38 @@ final class BalancedEloSeatingPolicy extends SeatingPolicy:
 
   private def selectAnchor(
       players: Vector[Player],
-      opponentCounts: Map[(PlayerId, PlayerId), Int]
+      opponentCounts: Map[(PlayerId, PlayerId), Int],
+      representedClubByPlayer: Map[PlayerId, ClubId],
+      clubRelations: Map[(ClubId, ClubId), ClubRelationKind]
   ): Player =
     players.maxBy { player =>
-      val clubPressure = players.count(other => other.id != player.id && sameClub(player, other))
+      val clubPressure = players.count(other =>
+        other.id != player.id && sameClub(player, other, representedClubByPlayer)
+      )
+      val relationPressure = players.filterNot(_.id == player.id).count(other =>
+        relationBetween(player, other, representedClubByPlayer, clubRelations).nonEmpty
+      )
       val rematchPressure = players.filterNot(_.id == player.id).map(other => opponentCount(player.id, other.id, opponentCounts)).sum
       val flexibilityPenalty = player.boundClubIds.size
-      (clubPressure, rematchPressure, flexibilityPenalty, player.elo)
+      (clubPressure, relationPressure, rematchPressure, flexibilityPenalty, player.elo)
     }
 
   private def groupScore(
       group: Vector[Player],
-      opponentCounts: Map[(PlayerId, PlayerId), Int]
+      opponentCounts: Map[(PlayerId, PlayerId), Int],
+      representedClubByPlayer: Map[PlayerId, ClubId],
+      clubRelations: Map[(ClubId, ClubId), ClubRelationKind]
   ): Double =
     val clubPenalty = group.combinations(2).map {
       pair =>
-        if pair.size == 2 && sameClub(pair(0), pair(1)) then 120.0 else 0.0
+        if pair.size == 2 && sameClub(pair(0), pair(1), representedClubByPlayer) then 120.0 else 0.0
+    }.sum
+    val relationPenalty = group.combinations(2).map {
+      pair =>
+        relationBetween(pair(0), pair(1), representedClubByPlayer, clubRelations) match
+          case Some(ClubRelationKind.Alliance) => 70.0
+          case Some(ClubRelationKind.Rivalry)  => -18.0
+          case _                               => 0.0
     }.sum
     val rematchPenalty = group.combinations(2).map {
       pair =>
@@ -143,13 +167,13 @@ final class BalancedEloSeatingPolicy extends SeatingPolicy:
     val eloSpreadPenalty =
       if group.isEmpty then 0.0 else (group.map(_.elo).max - group.map(_.elo).min).toDouble / 50.0
     val clubConcentrationPenalty = group
-      .flatMap(player => player.boundClubIds.map(_ -> player.id))
+      .flatMap(player => representedClubs(player, representedClubByPlayer).map(_ -> player.id))
       .groupBy(_._1)
       .values
       .map(entries => math.pow(entries.map(_._2).distinct.size - 1, 2) * 12.0)
       .sum
 
-    clubPenalty + rematchPenalty + eloSpreadPenalty + clubConcentrationPenalty
+    clubPenalty + relationPenalty + rematchPenalty + eloSpreadPenalty + clubConcentrationPenalty
 
   private def buildOpponentCounts(
       historicalRecords: Vector[MatchRecord]
@@ -163,19 +187,56 @@ final class BalancedEloSeatingPolicy extends SeatingPolicy:
 
   private def orderSeatsWithinTable(
       group: Vector[Player],
-      opponentCounts: Map[(PlayerId, PlayerId), Int]
+      opponentCounts: Map[(PlayerId, PlayerId), Int],
+      representedClubByPlayer: Map[PlayerId, ClubId],
+      clubRelations: Map[(ClubId, ClubId), ClubRelationKind]
   ): Vector[Player] =
     group.sortBy(player =>
       (
-        group.count(other => other.id != player.id && sameClub(player, other)),
+        group.count(other => other.id != player.id && sameClub(player, other, representedClubByPlayer)),
+        group.count(other =>
+          other.id != player.id &&
+            relationBetween(player, other, representedClubByPlayer, clubRelations).contains(ClubRelationKind.Alliance)
+        ),
         group.filterNot(_.id == player.id).map(other => opponentCount(player.id, other.id, opponentCounts)).sum,
         -player.elo,
         player.nickname
       )
     )
 
-  private def sameClub(left: Player, right: Player): Boolean =
-    left.boundClubIds.intersect(right.boundClubIds).nonEmpty
+  private def sameClub(
+      left: Player,
+      right: Player,
+      representedClubByPlayer: Map[PlayerId, ClubId]
+  ): Boolean =
+    representedClubs(left, representedClubByPlayer).intersect(representedClubs(right, representedClubByPlayer)).nonEmpty
+
+  private def representedClubs(
+      player: Player,
+      representedClubByPlayer: Map[PlayerId, ClubId]
+  ): Vector[ClubId] =
+    representedClubByPlayer.get(player.id).toVector ++
+      player.boundClubIds.filterNot(representedClubByPlayer.get(player.id).contains)
+
+  private def relationBetween(
+      left: Player,
+      right: Player,
+      representedClubByPlayer: Map[PlayerId, ClubId],
+      clubRelations: Map[(ClubId, ClubId), ClubRelationKind]
+  ): Option[ClubRelationKind] =
+    representedClubs(left, representedClubByPlayer)
+      .flatMap(leftClub =>
+        representedClubs(right, representedClubByPlayer).flatMap { rightClub =>
+          if leftClub == rightClub then None
+          else clubRelations.get(clubPairKey(leftClub, rightClub))
+        }
+      )
+      .sortBy {
+        case ClubRelationKind.Alliance => 0
+        case ClubRelationKind.Rivalry  => 1
+        case ClubRelationKind.Neutral  => 2
+      }
+      .headOption
 
   private def opponentCount(
       left: PlayerId,
@@ -185,6 +246,9 @@ final class BalancedEloSeatingPolicy extends SeatingPolicy:
     opponentCounts.getOrElse(pairKey(left, right), 0)
 
   private def pairKey(left: PlayerId, right: PlayerId): (PlayerId, PlayerId) =
+    if left.value <= right.value then (left, right) else (right, left)
+
+  private def clubPairKey(left: ClubId, right: ClubId): (ClubId, ClubId) =
     if left.value <= right.value then (left, right) else (right, left)
 
   private def representativeClubMap(stage: TournamentStage): Map[PlayerId, ClubId] =

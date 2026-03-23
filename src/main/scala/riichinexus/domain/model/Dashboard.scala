@@ -191,18 +191,32 @@ final case class PublicScheduleView(
     stageId: TournamentStageId,
     stageName: String,
     stageStatus: StageStatus,
+    currentRound: Int,
+    roundCount: Int,
     startsAt: Instant,
     endsAt: Instant,
-    tableCount: Int
+    tableCount: Int,
+    activeTableCount: Int,
+    pendingTablePlanCount: Int,
+    participantCount: Int,
+    whitelistCount: Int
 ) derives CanEqual
 
 final case class PublicClubDirectoryEntry(
     clubId: ClubId,
     name: String,
     memberCount: Int,
+    activeMemberCount: Int,
     adminCount: Int,
     powerRating: Double,
     totalPoints: Int,
+    treasuryBalance: Long,
+    pointPool: Int,
+    allianceCount: Int,
+    rivalryCount: Int,
+    strongestRivalClubId: Option[ClubId],
+    strongestRivalPower: Option[Double],
+    honorTitles: Vector[String],
     relations: Vector[ClubRelation]
 ) derives CanEqual
 

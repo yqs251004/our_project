@@ -2049,3 +2049,10 @@ org.eclipse.lsp4j.jsonrpc.ResponseErrorException: Request window/showMessageRequ
 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:614)
 	at java.lang.Thread.run(Thread.java:1474)
 
+2026.03.16 16:50:29 INFO  Started: Metals version 1.6.6 in folders 'D:\school\2026spring\front-back\our_project' for client Visual Studio Code 1.111.0.
+2026.03.16 16:50:29 INFO  Memory monitor started
+2026.03.16 16:50:30 WARN  Using H2 2.4.240 which is newer than the version Flyway has been verified with. The latest verified version of H2 is 2.3.232.
+2026.03.16 17:21:55 INFO  Shutting down server
+2026.03.16 17:21:55 INFO  Memory monitor stopped
+2026.03.16 17:21:55 INFO  shutting down Metals
+2026.03.16 17:21:55 INFO  Exiting server
