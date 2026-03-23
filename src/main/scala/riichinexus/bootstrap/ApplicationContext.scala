@@ -17,6 +17,7 @@ final case class ApplicationContext(
     appealService: AppealApplicationService,
     superAdminService: SuperAdminService,
     advancedStatsPipelineService: AdvancedStatsPipelineService,
+    domainEventOperationsService: DomainEventOperationsService,
     playerRepository: PlayerRepository,
     clubRepository: ClubRepository,
     tournamentRepository: TournamentRepository,
@@ -95,30 +96,22 @@ object ApplicationContext:
       tournamentRuleEngine,
       transactionManager
     )
-    eventBus.register(
+    val domainEventSubscribers = Vector[DomainEventSubscriber](
       RatingProjectionSubscriber(
         playerRepository,
         PairwiseEloRatingService(DictionaryBackedRatingConfigProvider(globalDictionaryRepository))
-      )
-    )
-    eventBus.register(
-      ClubProjectionSubscriber(clubRepository, playerRepository, globalDictionaryRepository)
-    )
-    eventBus.register(
+      ),
+      ClubProjectionSubscriber(clubRepository, playerRepository, globalDictionaryRepository),
       DashboardProjectionSubscriber(
         matchRecordRepository,
         paifuRepository,
         playerRepository,
         clubRepository,
         dashboardRepository
-      )
-    )
-    eventBus.register(
+      ),
       AdvancedStatsProjectionSubscriber(
         advancedStatsPipelineService
-      )
-    )
-    eventBus.register(
+      ),
       EventCascadeProjectionSubscriber(
         playerRepository,
         clubRepository,
@@ -128,6 +121,13 @@ object ApplicationContext:
         advancedStatsPipelineService,
         globalDictionaryRepository
       )
+    )
+    domainEventSubscribers.foreach(eventBus.register)
+    val domainEventOperationsService = DomainEventOperationsService(
+      domainEventOutboxRepository,
+      domainEventDeliveryReceiptRepository,
+      domainEventSubscriberCursorRepository,
+      domainEventSubscribers
     )
 
     ApplicationContext(
@@ -205,6 +205,7 @@ object ApplicationContext:
         authorizationService
       ),
       advancedStatsPipelineService = advancedStatsPipelineService,
+      domainEventOperationsService = domainEventOperationsService,
       playerRepository = playerRepository,
       clubRepository = clubRepository,
       tournamentRepository = tournamentRepository,
@@ -279,30 +280,22 @@ object ApplicationContext:
       tournamentRuleEngine,
       transactionManager
     )
-    eventBus.register(
+    val domainEventSubscribers = Vector[DomainEventSubscriber](
       RatingProjectionSubscriber(
         playerRepository,
         PairwiseEloRatingService(DictionaryBackedRatingConfigProvider(globalDictionaryRepository))
-      )
-    )
-    eventBus.register(
-      ClubProjectionSubscriber(clubRepository, playerRepository, globalDictionaryRepository)
-    )
-    eventBus.register(
+      ),
+      ClubProjectionSubscriber(clubRepository, playerRepository, globalDictionaryRepository),
       DashboardProjectionSubscriber(
         matchRecordRepository,
         paifuRepository,
         playerRepository,
         clubRepository,
         dashboardRepository
-      )
-    )
-    eventBus.register(
+      ),
       AdvancedStatsProjectionSubscriber(
         advancedStatsPipelineService
-      )
-    )
-    eventBus.register(
+      ),
       EventCascadeProjectionSubscriber(
         playerRepository,
         clubRepository,
@@ -312,6 +305,13 @@ object ApplicationContext:
         advancedStatsPipelineService,
         globalDictionaryRepository
       )
+    )
+    domainEventSubscribers.foreach(eventBus.register)
+    val domainEventOperationsService = DomainEventOperationsService(
+      domainEventOutboxRepository,
+      domainEventDeliveryReceiptRepository,
+      domainEventSubscriberCursorRepository,
+      domainEventSubscribers
     )
 
     ApplicationContext(
@@ -389,6 +389,7 @@ object ApplicationContext:
         authorizationService
       ),
       advancedStatsPipelineService = advancedStatsPipelineService,
+      domainEventOperationsService = domainEventOperationsService,
       playerRepository = playerRepository,
       clubRepository = clubRepository,
       tournamentRepository = tournamentRepository,

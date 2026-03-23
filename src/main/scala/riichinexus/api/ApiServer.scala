@@ -1105,6 +1105,82 @@ private final class ApiHandler(
         app.authorizationService.requirePermission(operator, Permission.ManageGlobalDictionary)
         val asOf = queryParam(exchange, "asOf").filter(_.nonEmpty).map(Instant.parse).getOrElse(Instant.now())
         sendJson(exchange, 200, app.advancedStatsPipelineService.taskQueueSummary(asOf))
+      case ("GET", Vector("admin", "domain-events", "summary")) =>
+        val operator = queryPrincipal(exchange)
+        app.authorizationService.requirePermission(operator, Permission.ManageGlobalDictionary)
+        val asOf = queryParam(exchange, "asOf").filter(_.nonEmpty).map(Instant.parse).getOrElse(Instant.now())
+        sendJson(exchange, 200, app.domainEventOperationsService.summary(asOf))
+      case ("GET", Vector("admin", "domain-events", "outbox")) =>
+        val operator = queryPrincipal(exchange)
+        app.authorizationService.requirePermission(operator, Permission.ManageGlobalDictionary)
+        val asOf = queryParam(exchange, "asOf").filter(_.nonEmpty).map(Instant.parse).getOrElse(Instant.now())
+        val statusFilter = queryParam(exchange, "status").map(DomainEventOutboxStatus.valueOf)
+        val eventTypeFilter = queryParam(exchange, "eventType").filter(_.nonEmpty)
+        val aggregateTypeFilter = queryParam(exchange, "aggregateType").filter(_.nonEmpty)
+        val aggregateIdFilter = queryParam(exchange, "aggregateId").filter(_.nonEmpty)
+        val subscriberIdFilter = queryParam(exchange, "subscriberId").filter(_.nonEmpty)
+        val partitionKeyFilter = queryParam(exchange, "partitionKey").filter(_.nonEmpty)
+        val deliveredFilter = queryBooleanParam(exchange, "delivered")
+        val blockedOnly = queryBooleanParam(exchange, "blockedOnly").getOrElse(false)
+        require(subscriberIdFilter.nonEmpty || deliveredFilter.isEmpty, "Query parameter delivered requires subscriberId")
+        require(subscriberIdFilter.nonEmpty || partitionKeyFilter.isEmpty, "Query parameter partitionKey requires subscriberId")
+        require(subscriberIdFilter.nonEmpty || !blockedOnly, "Query parameter blockedOnly requires subscriberId")
+        val records = app.domainEventOperationsService.outboxRecords(
+          asOf = asOf,
+          status = statusFilter,
+          eventType = eventTypeFilter,
+          aggregateType = aggregateTypeFilter,
+          aggregateId = aggregateIdFilter,
+          subscriberId = subscriberIdFilter,
+          partitionKey = partitionKeyFilter,
+          delivered = deliveredFilter,
+          blockedOnly = blockedOnly
+        )
+        sendPagedJson(
+          exchange,
+          records,
+          activeFilters(
+            exchange,
+            "asOf",
+            "status",
+            "eventType",
+            "aggregateType",
+            "aggregateId",
+            "subscriberId",
+            "partitionKey",
+            "delivered",
+            "blockedOnly"
+          )
+        )
+      case ("GET", Vector("admin", "domain-events", "subscribers")) =>
+        val operator = queryPrincipal(exchange)
+        app.authorizationService.requirePermission(operator, Permission.ManageGlobalDictionary)
+        val asOf = queryParam(exchange, "asOf").filter(_.nonEmpty).map(Instant.parse).getOrElse(Instant.now())
+        val subscriberIdFilter = queryParam(exchange, "subscriberId").filter(_.nonEmpty)
+        val subscribers = app.domainEventOperationsService.subscriberStatuses(
+          asOf = asOf,
+          subscriberId = subscriberIdFilter
+        )
+        sendPagedJson(exchange, subscribers, activeFilters(exchange, "asOf", "subscriberId"))
+      case ("GET", Vector("admin", "domain-events", "subscribers", subscriberId, "partitions")) =>
+        val operator = queryPrincipal(exchange)
+        app.authorizationService.requirePermission(operator, Permission.ManageGlobalDictionary)
+        val asOf = queryParam(exchange, "asOf").filter(_.nonEmpty).map(Instant.parse).getOrElse(Instant.now())
+        val lagOnly = queryBooleanParam(exchange, "lagOnly").getOrElse(false)
+        val blockedOnly = queryBooleanParam(exchange, "blockedOnly").getOrElse(false)
+        val partitionKeyFilter = queryParam(exchange, "partitionKey").filter(_.nonEmpty)
+        val partitions = app.domainEventOperationsService.subscriberPartitionStatuses(
+          subscriberId = subscriberId,
+          asOf = asOf,
+          lagOnly = lagOnly,
+          blockedOnly = blockedOnly,
+          partitionKey = partitionKeyFilter
+        )
+        sendPagedJson(
+          exchange,
+          partitions,
+          activeFilters(exchange, "asOf", "lagOnly", "blockedOnly", "partitionKey")
+        )
       case ("GET", Vector("admin", "event-cascade-records")) =>
         val operator = queryPrincipal(exchange)
         app.authorizationService.requirePermission(operator, Permission.ManageGlobalDictionary)

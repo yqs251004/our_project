@@ -246,3 +246,60 @@ object DomainEventSubscriberCursor:
       lastDeliveredSequenceNo = sequenceNo,
       advancedAt = advancedAt
     )
+
+final case class DomainEventBusSummary(
+    asOf: Instant,
+    registeredSubscriberCount: Int,
+    cursorCount: Int,
+    pendingCount: Int,
+    scheduledPendingCount: Int,
+    processingCount: Int,
+    completedCount: Int,
+    deadLetterCount: Int,
+    highestAssignedSequenceNo: Option[Long],
+    nextRunnableSequenceNo: Option[Long],
+    oldestPendingOccurredAt: Option[Instant],
+    oldestDeadLetterOccurredAt: Option[Instant],
+    blockedSubscriberCount: Int
+) derives CanEqual
+
+final case class DomainEventSubscriberStatus(
+    subscriberId: String,
+    partitionStrategy: String,
+    partitionCount: Int,
+    laggingPartitionCount: Int,
+    blockedPartitionCount: Int,
+    totalUndeliveredCount: Int,
+    deadLetterUndeliveredCount: Int,
+    readyUndeliveredCount: Int,
+    maxSequenceLag: Long,
+    oldestUndeliveredOccurredAt: Option[Instant],
+    lastDeliveredAt: Option[Instant]
+) derives CanEqual:
+  require(subscriberId.trim.nonEmpty, "Domain event subscriber status subscriberId cannot be empty")
+  require(partitionStrategy.trim.nonEmpty, "Domain event subscriber status partitionStrategy cannot be empty")
+
+final case class DomainEventSubscriberPartitionStatus(
+    subscriberId: String,
+    partitionStrategy: String,
+    partitionKey: String,
+    cursor: Option[DomainEventSubscriberCursor],
+    lastDeliveredAt: Option[Instant],
+    lastDeliveredSequenceNo: Option[Long],
+    undeliveredCount: Int,
+    deadLetterUndeliveredCount: Int,
+    readyUndeliveredCount: Int,
+    nextUndeliveredRecordId: Option[DomainEventOutboxRecordId],
+    nextUndeliveredSequenceNo: Option[Long],
+    nextUndeliveredEventType: Option[String],
+    nextUndeliveredStatus: Option[DomainEventOutboxStatus],
+    nextUndeliveredOccurredAt: Option[Instant],
+    nextUndeliveredAvailableAt: Option[Instant],
+    blockedByDeadLetter: Boolean,
+    blockedByRetryDelay: Boolean,
+    blockedByInFlightProcessing: Boolean,
+    blockedBySequenceGap: Boolean
+) derives CanEqual:
+  require(subscriberId.trim.nonEmpty, "Domain event subscriber partition status subscriberId cannot be empty")
+  require(partitionStrategy.trim.nonEmpty, "Domain event subscriber partition status partitionStrategy cannot be empty")
+  require(partitionKey.trim.nonEmpty, "Domain event subscriber partition status partitionKey cannot be empty")
