@@ -1152,6 +1152,40 @@ private final class ApiHandler(
             "blockedOnly"
           )
         )
+      case ("POST", Vector("admin", "domain-events", "outbox", recordId, "replay")) =>
+        val request = readJsonBody[ReplayDomainEventOutboxRequest](exchange)
+        sendJson(
+          exchange,
+          200,
+          app.domainEventOperationsService.replayOutboxRecord(
+            recordId = DomainEventOutboxRecordId(recordId),
+            actor = principal(request.operator),
+            replayAt = request.replayAtInstant.getOrElse(Instant.now()),
+            note = request.note
+          )
+        )
+      case ("POST", Vector("admin", "domain-events", "outbox", recordId, "ack")) =>
+        val request = readJsonBody[AcknowledgeDomainEventOutboxRequest](exchange)
+        sendJson(
+          exchange,
+          200,
+          app.domainEventOperationsService.acknowledgeOutboxRecord(
+            recordId = DomainEventOutboxRecordId(recordId),
+            actor = principal(request.operator),
+            note = request.note
+          )
+        )
+      case ("POST", Vector("admin", "domain-events", "outbox", recordId, "quarantine")) =>
+        val request = readJsonBody[QuarantineDomainEventOutboxRequest](exchange)
+        sendJson(
+          exchange,
+          200,
+          app.domainEventOperationsService.quarantineOutboxRecord(
+            recordId = DomainEventOutboxRecordId(recordId),
+            actor = principal(request.operator),
+            reason = request.reason
+          )
+        )
       case ("GET", Vector("admin", "domain-events", "subscribers")) =>
         val operator = queryPrincipal(exchange)
         app.authorizationService.requirePermission(operator, Permission.ManageGlobalDictionary)

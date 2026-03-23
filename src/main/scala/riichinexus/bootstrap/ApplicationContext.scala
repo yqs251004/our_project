@@ -127,7 +127,10 @@ object ApplicationContext:
       domainEventOutboxRepository,
       domainEventDeliveryReceiptRepository,
       domainEventSubscriberCursorRepository,
-      domainEventSubscribers
+      domainEventSubscribers,
+      auditEventRepository,
+      transactionManager,
+      authorizationService
     )
 
     ApplicationContext(
@@ -311,7 +314,10 @@ object ApplicationContext:
       domainEventOutboxRepository,
       domainEventDeliveryReceiptRepository,
       domainEventSubscriberCursorRepository,
-      domainEventSubscribers
+      domainEventSubscribers,
+      auditEventRepository,
+      transactionManager,
+      authorizationService
     )
 
     ApplicationContext(

@@ -122,6 +122,7 @@ Recently completed features such as guest sessions, club applications, club hono
     - subscriber delivery receipts are now persisted per outbox record and subscriber, so retries and multi-process drainers can skip already-completed deliveries safely
     - subscriber delivery now also advances per-partition cursors against a persisted outbox sequence, with `Global` / `EventType` / `AggregateRoot` partition strategies available for ordered consumption
     - admin monitoring APIs now expose outbox summary, subscriber lag snapshots, and per-partition blockage details for runtime observability
+    - administrators can now replay, acknowledge, or quarantine dead-letter/quarantined outbox records through dedicated management APIs with audit entries
 
 - [x] Remove duplicated projection formulas and centralize them.
   - Current state:

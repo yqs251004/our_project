@@ -17,6 +17,7 @@ enum DomainEventOutboxStatus derives CanEqual:
   case Processing
   case Completed
   case DeadLetter
+  case Quarantined
 
 final case class EventCascadeRecord(
     id: EventCascadeRecordId,
@@ -127,6 +128,7 @@ final case class DomainEventOutboxRecord(
   def markCompleted(at: Instant): DomainEventOutboxRecord =
     copy(
       status = DomainEventOutboxStatus.Completed,
+      claimedAt = None,
       processedAt = Some(at),
       lastError = None
     )
@@ -152,8 +154,27 @@ final case class DomainEventOutboxRecord(
   def markDeadLetter(error: String, at: Instant): DomainEventOutboxRecord =
     copy(
       status = DomainEventOutboxStatus.DeadLetter,
+      claimedAt = None,
       processedAt = Some(at),
       lastError = Some(error)
+    )
+
+  def markQuarantined(reason: String, at: Instant): DomainEventOutboxRecord =
+    copy(
+      status = DomainEventOutboxStatus.Quarantined,
+      claimedAt = None,
+      processedAt = Some(at),
+      lastError = Some(reason)
+    )
+
+  def markReplayed(replayAt: Instant): DomainEventOutboxRecord =
+    copy(
+      status = DomainEventOutboxStatus.Pending,
+      attempts = 0,
+      availableAt = replayAt,
+      claimedAt = None,
+      processedAt = None,
+      lastError = None
     )
 
 object DomainEventOutboxRecord:
@@ -256,10 +277,12 @@ final case class DomainEventBusSummary(
     processingCount: Int,
     completedCount: Int,
     deadLetterCount: Int,
+    quarantinedCount: Int,
     highestAssignedSequenceNo: Option[Long],
     nextRunnableSequenceNo: Option[Long],
     oldestPendingOccurredAt: Option[Instant],
     oldestDeadLetterOccurredAt: Option[Instant],
+    oldestQuarantinedOccurredAt: Option[Instant],
     blockedSubscriberCount: Int
 ) derives CanEqual
 
@@ -271,6 +294,7 @@ final case class DomainEventSubscriberStatus(
     blockedPartitionCount: Int,
     totalUndeliveredCount: Int,
     deadLetterUndeliveredCount: Int,
+    quarantinedUndeliveredCount: Int,
     readyUndeliveredCount: Int,
     maxSequenceLag: Long,
     oldestUndeliveredOccurredAt: Option[Instant],
@@ -288,6 +312,7 @@ final case class DomainEventSubscriberPartitionStatus(
     lastDeliveredSequenceNo: Option[Long],
     undeliveredCount: Int,
     deadLetterUndeliveredCount: Int,
+    quarantinedUndeliveredCount: Int,
     readyUndeliveredCount: Int,
     nextUndeliveredRecordId: Option[DomainEventOutboxRecordId],
     nextUndeliveredSequenceNo: Option[Long],
@@ -296,6 +321,7 @@ final case class DomainEventSubscriberPartitionStatus(
     nextUndeliveredOccurredAt: Option[Instant],
     nextUndeliveredAvailableAt: Option[Instant],
     blockedByDeadLetter: Boolean,
+    blockedByQuarantine: Boolean,
     blockedByRetryDelay: Boolean,
     blockedByInFlightProcessing: Boolean,
     blockedBySequenceGap: Boolean

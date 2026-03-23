@@ -732,6 +732,31 @@ final case class ProcessAdvancedStatsTasksRequest(
   def operator: PlayerId =
     PlayerId(operatorId)
 
+final case class ReplayDomainEventOutboxRequest(
+    operatorId: String,
+    replayAt: Option[String] = None,
+    note: Option[String] = None
+):
+  def operator: PlayerId =
+    PlayerId(operatorId)
+
+  def replayAtInstant: Option[Instant] =
+    replayAt.map(Instant.parse)
+
+final case class AcknowledgeDomainEventOutboxRequest(
+    operatorId: String,
+    note: Option[String] = None
+):
+  def operator: PlayerId =
+    PlayerId(operatorId)
+
+final case class QuarantineDomainEventOutboxRequest(
+    operatorId: String,
+    reason: String
+):
+  def operator: PlayerId =
+    PlayerId(operatorId)
+
 object ApiModels:
   given ReadWriter[ApiError] = macroRW
   given ReadWriter[ApiMessage] = macroRW
@@ -793,3 +818,6 @@ object ApiModels:
   given ReadWriter[RevokeDictionaryNamespaceRequest] = macroRW
   given ReadWriter[ProcessDictionaryNamespaceRemindersRequest] = macroRW
   given ReadWriter[ProcessAdvancedStatsTasksRequest] = macroRW
+  given ReadWriter[ReplayDomainEventOutboxRequest] = macroRW
+  given ReadWriter[AcknowledgeDomainEventOutboxRequest] = macroRW
+  given ReadWriter[QuarantineDomainEventOutboxRequest] = macroRW

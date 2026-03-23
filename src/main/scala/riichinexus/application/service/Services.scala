@@ -675,9 +675,128 @@ final class DomainEventOperationsService(
     outboxRepository: DomainEventOutboxRepository,
     deliveryReceiptRepository: DomainEventDeliveryReceiptRepository,
     subscriberCursorRepository: DomainEventSubscriberCursorRepository,
-    subscribers: Vector[DomainEventSubscriber]
+    subscribers: Vector[DomainEventSubscriber],
+    auditEventRepository: AuditEventRepository,
+    transactionManager: TransactionManager = NoOpTransactionManager,
+    authorizationService: AuthorizationService = NoOpAuthorizationService
 ):
   private val subscriberIndex = subscribers.map(subscriber => subscriber.subscriberId -> subscriber).toMap
+
+  def replayOutboxRecord(
+      recordId: DomainEventOutboxRecordId,
+      actor: AccessPrincipal,
+      replayAt: Instant = Instant.now(),
+      note: Option[String] = None,
+      at: Instant = Instant.now()
+  ): DomainEventOutboxRecord =
+    transactionManager.inTransaction {
+      authorizationService.requirePermission(actor, Permission.ManageGlobalDictionary)
+      val record = outboxRepository.findById(recordId)
+        .getOrElse(throw NoSuchElementException(s"Domain event outbox record ${recordId.value} was not found"))
+      require(
+        Set(DomainEventOutboxStatus.DeadLetter, DomainEventOutboxStatus.Quarantined).contains(record.status),
+        s"Only DeadLetter or Quarantined outbox records can be replayed, but ${recordId.value} is ${record.status}"
+      )
+
+      val replayed = outboxRepository.save(record.markReplayed(replayAt))
+      auditEventRepository.save(
+        AuditEventEntry(
+          id = IdGenerator.auditEventId(),
+          aggregateType = "domain-event-outbox-record",
+          aggregateId = recordId.value,
+          eventType = "DomainEventOutboxReplayed",
+          occurredAt = at,
+          actorId = actor.playerId,
+          details = Map(
+            "priorStatus" -> record.status.toString,
+            "replayAt" -> replayAt.toString,
+            "eventType" -> record.eventType,
+            "aggregateType" -> record.aggregateType,
+            "aggregateId" -> record.aggregateId
+          ),
+          note = note
+        )
+      )
+      replayed
+    }
+
+  def acknowledgeOutboxRecord(
+      recordId: DomainEventOutboxRecordId,
+      actor: AccessPrincipal,
+      note: Option[String] = None,
+      at: Instant = Instant.now()
+  ): DomainEventOutboxRecord =
+    transactionManager.inTransaction {
+      authorizationService.requirePermission(actor, Permission.ManageGlobalDictionary)
+      val record = outboxRepository.findById(recordId)
+        .getOrElse(throw NoSuchElementException(s"Domain event outbox record ${recordId.value} was not found"))
+      require(
+        Set(DomainEventOutboxStatus.DeadLetter, DomainEventOutboxStatus.Quarantined).contains(record.status),
+        s"Only DeadLetter or Quarantined outbox records can be acknowledged, but ${recordId.value} is ${record.status}"
+      )
+
+      val acknowledged = outboxRepository.save(record.markCompleted(at))
+      auditEventRepository.save(
+        AuditEventEntry(
+          id = IdGenerator.auditEventId(),
+          aggregateType = "domain-event-outbox-record",
+          aggregateId = recordId.value,
+          eventType = "DomainEventOutboxAcknowledged",
+          occurredAt = at,
+          actorId = actor.playerId,
+          details = Map(
+            "priorStatus" -> record.status.toString,
+            "eventType" -> record.eventType,
+            "aggregateType" -> record.aggregateType,
+            "aggregateId" -> record.aggregateId
+          ),
+          note = note
+        )
+      )
+      acknowledged
+    }
+
+  def quarantineOutboxRecord(
+      recordId: DomainEventOutboxRecordId,
+      actor: AccessPrincipal,
+      reason: String,
+      at: Instant = Instant.now()
+  ): DomainEventOutboxRecord =
+    transactionManager.inTransaction {
+      authorizationService.requirePermission(actor, Permission.ManageGlobalDictionary)
+      val normalizedReason = reason.trim
+      require(normalizedReason.nonEmpty, "Quarantine reason cannot be empty")
+      val record = outboxRepository.findById(recordId)
+        .getOrElse(throw NoSuchElementException(s"Domain event outbox record ${recordId.value} was not found"))
+      require(
+        record.status != DomainEventOutboxStatus.Completed,
+        s"Completed outbox record ${recordId.value} cannot be quarantined"
+      )
+      require(
+        record.status != DomainEventOutboxStatus.Quarantined,
+        s"Outbox record ${recordId.value} is already quarantined"
+      )
+
+      val quarantined = outboxRepository.save(record.markQuarantined(normalizedReason, at))
+      auditEventRepository.save(
+        AuditEventEntry(
+          id = IdGenerator.auditEventId(),
+          aggregateType = "domain-event-outbox-record",
+          aggregateId = recordId.value,
+          eventType = "DomainEventOutboxQuarantined",
+          occurredAt = at,
+          actorId = actor.playerId,
+          details = Map(
+            "priorStatus" -> record.status.toString,
+            "eventType" -> record.eventType,
+            "aggregateType" -> record.aggregateType,
+            "aggregateId" -> record.aggregateId
+          ),
+          note = Some(normalizedReason)
+        )
+      )
+      quarantined
+    }
 
   def summary(asOf: Instant = Instant.now()): DomainEventBusSummary =
     val records = sortedOutboxRecords()
@@ -693,10 +812,12 @@ final class DomainEventOperationsService(
       processingCount = records.count(_.status == DomainEventOutboxStatus.Processing),
       completedCount = records.count(_.status == DomainEventOutboxStatus.Completed),
       deadLetterCount = records.count(_.status == DomainEventOutboxStatus.DeadLetter),
+      quarantinedCount = records.count(_.status == DomainEventOutboxStatus.Quarantined),
       highestAssignedSequenceNo = records.lastOption.map(_.sequenceNo),
       nextRunnableSequenceNo = records.find(_.isRunnable(asOf)).map(_.sequenceNo),
       oldestPendingOccurredAt = records.find(_.status == DomainEventOutboxStatus.Pending).map(_.occurredAt),
       oldestDeadLetterOccurredAt = records.find(_.status == DomainEventOutboxStatus.DeadLetter).map(_.occurredAt),
+      oldestQuarantinedOccurredAt = records.find(_.status == DomainEventOutboxStatus.Quarantined).map(_.occurredAt),
       blockedSubscriberCount = subscriberStatuses.count(_.blockedPartitionCount > 0)
     )
 
@@ -762,7 +883,7 @@ final class DomainEventOperationsService(
       .filter(status => partitionKey.forall(_ == status.partitionKey))
       .filter(status => !lagOnly || status.undeliveredCount > 0)
       .filter(status =>
-        !blockedOnly || status.blockedByDeadLetter || status.blockedByRetryDelay ||
+        !blockedOnly || status.blockedByDeadLetter || status.blockedByQuarantine || status.blockedByRetryDelay ||
           status.blockedByInFlightProcessing || status.blockedBySequenceGap
       )
       .sortBy(status => (status.partitionKey, status.nextUndeliveredSequenceNo.getOrElse(Long.MaxValue)))
@@ -781,11 +902,12 @@ final class DomainEventOperationsService(
       partitionCount = partitions.size,
       laggingPartitionCount = partitions.count(_.undeliveredCount > 0),
       blockedPartitionCount = partitions.count(status =>
-        status.blockedByDeadLetter || status.blockedByRetryDelay ||
+        status.blockedByDeadLetter || status.blockedByQuarantine || status.blockedByRetryDelay ||
           status.blockedByInFlightProcessing || status.blockedBySequenceGap
       ),
       totalUndeliveredCount = partitions.map(_.undeliveredCount).sum,
       deadLetterUndeliveredCount = partitions.map(_.deadLetterUndeliveredCount).sum,
+      quarantinedUndeliveredCount = partitions.map(_.quarantinedUndeliveredCount).sum,
       readyUndeliveredCount = partitions.map(_.readyUndeliveredCount).sum,
       maxSequenceLag = partitions.map(sequenceLag).foldLeft(0L)(math.max),
       oldestUndeliveredOccurredAt = oldestUndeliveredOccurredAt,
@@ -829,6 +951,7 @@ final class DomainEventOperationsService(
             .orElse(lastDeliveredReceipt.flatMap(receipt => recordsById.get(receipt.outboxRecordId).map(_.sequenceNo))),
         undeliveredCount = undeliveredRecords.size,
         deadLetterUndeliveredCount = undeliveredRecords.count(_.status == DomainEventOutboxStatus.DeadLetter),
+        quarantinedUndeliveredCount = undeliveredRecords.count(_.status == DomainEventOutboxStatus.Quarantined),
         readyUndeliveredCount = undeliveredRecords.count(record =>
           record.status == DomainEventOutboxStatus.Pending && !record.availableAt.isAfter(asOf)
         ),
@@ -839,6 +962,7 @@ final class DomainEventOperationsService(
         nextUndeliveredOccurredAt = nextUndelivered.map(_.occurredAt),
         nextUndeliveredAvailableAt = nextUndelivered.map(_.availableAt),
         blockedByDeadLetter = nextUndelivered.exists(_.status == DomainEventOutboxStatus.DeadLetter),
+        blockedByQuarantine = nextUndelivered.exists(_.status == DomainEventOutboxStatus.Quarantined),
         blockedByRetryDelay = nextUndelivered.exists(record =>
           record.status == DomainEventOutboxStatus.Pending && record.availableAt.isAfter(asOf)
         ),
@@ -858,7 +982,7 @@ final class DomainEventOperationsService(
       .find(_.partitionKey == subscriber.partitionStrategy.partitionKey(record))
       .exists(status =>
         status.nextUndeliveredRecordId.contains(record.id) &&
-          (status.blockedByDeadLetter || status.blockedByRetryDelay ||
+          (status.blockedByDeadLetter || status.blockedByQuarantine || status.blockedByRetryDelay ||
             status.blockedByInFlightProcessing || status.blockedBySequenceGap)
       )
 
