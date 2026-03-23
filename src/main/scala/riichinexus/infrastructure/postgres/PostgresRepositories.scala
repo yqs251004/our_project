@@ -404,7 +404,10 @@ final class PostgresSchemaInitializer(connectionFactory: JdbcConnectionFactory):
         """
           |create table if not exists domain_event_outbox (
           |  id text primary key,
+          |  sequence_no bigint not null,
           |  event_type text not null,
+          |  aggregate_type text not null,
+          |  aggregate_id text not null,
           |  status text not null,
           |  occurred_at timestamptz not null,
           |  available_at timestamptz not null,
@@ -413,14 +416,112 @@ final class PostgresSchemaInitializer(connectionFactory: JdbcConnectionFactory):
           |)
           |""".stripMargin
       )
+      execute(connection, "create sequence if not exists domain_event_outbox_sequence start 1")
+      execute(connection, "alter table domain_event_outbox add column if not exists sequence_no bigint")
       execute(connection, "alter table domain_event_outbox add column if not exists event_type text")
+      execute(connection, "alter table domain_event_outbox add column if not exists aggregate_type text")
+      execute(connection, "alter table domain_event_outbox add column if not exists aggregate_id text")
       execute(connection, "alter table domain_event_outbox add column if not exists status text")
       execute(connection, "alter table domain_event_outbox add column if not exists occurred_at timestamptz")
       execute(connection, "alter table domain_event_outbox add column if not exists available_at timestamptz")
       execute(connection, "alter table domain_event_outbox add column if not exists payload jsonb")
       execute(connection, "alter table domain_event_outbox add column if not exists updated_at timestamptz default now()")
-      execute(connection, "create index if not exists idx_domain_event_outbox_status on domain_event_outbox (status, available_at)")
+      execute(
+        connection,
+        """
+          |update domain_event_outbox
+          |set sequence_no = numbered.sequence_no
+          |from (
+          |  select id, row_number() over(order by occurred_at asc, id asc) as sequence_no
+          |  from domain_event_outbox
+          |) as numbered
+          |where domain_event_outbox.id = numbered.id
+          |  and domain_event_outbox.sequence_no is null
+          |""".stripMargin
+      )
+      execute(connection, "update domain_event_outbox set aggregate_type = coalesce(aggregate_type, 'domain-event')")
+      execute(connection, "update domain_event_outbox set aggregate_id = coalesce(aggregate_id, id)")
+      execute(
+        connection,
+        """
+          |update domain_event_outbox
+          |set payload =
+          |  jsonb_set(
+          |    jsonb_set(
+          |      jsonb_set(payload, '{sequenceNo}', to_jsonb(sequence_no), true),
+          |      '{aggregateType}',
+          |      to_jsonb(aggregate_type),
+          |      true
+          |    ),
+          |    '{aggregateId}',
+          |    to_jsonb(aggregate_id),
+          |    true
+          |  )
+          |where not (payload ? 'sequenceNo')
+          |   or not (payload ? 'aggregateType')
+          |   or not (payload ? 'aggregateId')
+          |""".stripMargin
+      )
+      execute(connection, "create unique index if not exists idx_domain_event_outbox_sequence on domain_event_outbox (sequence_no)")
+      execute(connection, "create index if not exists idx_domain_event_outbox_status on domain_event_outbox (status, available_at, sequence_no)")
       execute(connection, "create index if not exists idx_domain_event_outbox_occurred_at on domain_event_outbox (occurred_at)")
+      execute(connection, "create index if not exists idx_domain_event_outbox_aggregate on domain_event_outbox (aggregate_type, aggregate_id, sequence_no)")
+      execute(
+        connection,
+        """
+          |select case
+          |  when exists(select 1 from domain_event_outbox)
+          |    then setval('domain_event_outbox_sequence', (select max(sequence_no) from domain_event_outbox), true)
+          |  else setval('domain_event_outbox_sequence', 1, false)
+          |end
+          |""".stripMargin
+      )
+      execute(
+        connection,
+        """
+          |create table if not exists domain_event_delivery_receipts (
+          |  id text primary key,
+          |  outbox_record_id text not null,
+          |  subscriber_id text not null,
+          |  event_type text not null,
+          |  delivered_at timestamptz not null,
+          |  payload jsonb not null,
+          |  updated_at timestamptz not null default now()
+          |)
+          |""".stripMargin
+      )
+      execute(connection, "alter table domain_event_delivery_receipts add column if not exists outbox_record_id text")
+      execute(connection, "alter table domain_event_delivery_receipts add column if not exists subscriber_id text")
+      execute(connection, "alter table domain_event_delivery_receipts add column if not exists event_type text")
+      execute(connection, "alter table domain_event_delivery_receipts add column if not exists delivered_at timestamptz")
+      execute(connection, "alter table domain_event_delivery_receipts add column if not exists payload jsonb")
+      execute(connection, "alter table domain_event_delivery_receipts add column if not exists updated_at timestamptz default now()")
+      execute(connection, "create unique index if not exists idx_domain_event_delivery_receipts_unique on domain_event_delivery_receipts (outbox_record_id, subscriber_id)")
+      execute(connection, "create index if not exists idx_domain_event_delivery_receipts_outbox on domain_event_delivery_receipts (outbox_record_id, delivered_at)")
+      execute(
+        connection,
+        """
+          |create table if not exists domain_event_subscriber_cursors (
+          |  id text primary key,
+          |  subscriber_id text not null,
+          |  partition_key text not null,
+          |  last_outbox_record_id text not null,
+          |  last_sequence_no bigint not null,
+          |  advanced_at timestamptz not null,
+          |  payload jsonb not null,
+          |  updated_at timestamptz not null default now()
+          |)
+          |""".stripMargin
+      )
+      execute(connection, "alter table domain_event_subscriber_cursors add column if not exists subscriber_id text")
+      execute(connection, "alter table domain_event_subscriber_cursors add column if not exists partition_key text")
+      execute(connection, "alter table domain_event_subscriber_cursors add column if not exists last_outbox_record_id text")
+      execute(connection, "alter table domain_event_subscriber_cursors add column if not exists last_sequence_no bigint")
+      execute(connection, "alter table domain_event_subscriber_cursors add column if not exists advanced_at timestamptz")
+      execute(connection, "alter table domain_event_subscriber_cursors add column if not exists payload jsonb")
+      execute(connection, "alter table domain_event_subscriber_cursors add column if not exists updated_at timestamptz default now()")
+      execute(connection, "create unique index if not exists idx_domain_event_subscriber_cursors_unique on domain_event_subscriber_cursors (subscriber_id, partition_key)")
+      execute(connection, "create index if not exists idx_domain_event_subscriber_cursors_advanced_at on domain_event_subscriber_cursors (advanced_at)")
       execute(
         connection,
         """
@@ -512,6 +613,22 @@ final class PostgresSchemaInitializer(connectionFactory: JdbcConnectionFactory):
         """
           |insert into schema_version(version, description)
           |values (9, 'Added durable domain event outbox schema')
+          |on conflict (version) do nothing
+          |""".stripMargin
+      )
+      execute(
+        connection,
+        """
+          |insert into schema_version(version, description)
+          |values (10, 'Added domain event delivery receipt schema')
+          |on conflict (version) do nothing
+          |""".stripMargin
+      )
+      execute(
+        connection,
+        """
+          |insert into schema_version(version, description)
+          |values (11, 'Added subscriber ordering cursor and partitioned outbox schema')
           |on conflict (version) do nothing
           |""".stripMargin
       )
@@ -1473,13 +1590,32 @@ final class PostgresDomainEventOutboxRepository(
 ) extends DomainEventOutboxRepository
     with JdbcRepositorySupport:
   override def save(record: DomainEventOutboxRecord): DomainEventOutboxRecord =
-    val persisted = record.copy(version = record.version + 1)
+    val persisted = record.copy(
+      sequenceNo =
+        if record.sequenceNo > 0L then record.sequenceNo
+        else nextSequenceNo(),
+      version = record.version + 1
+    )
     val sql =
       """
-        |insert into domain_event_outbox (id, event_type, status, occurred_at, available_at, payload, updated_at)
-        |values (?, ?, ?, ?, ?, cast(? as jsonb), now())
+        |insert into domain_event_outbox (
+        |  id,
+        |  sequence_no,
+        |  event_type,
+        |  aggregate_type,
+        |  aggregate_id,
+        |  status,
+        |  occurred_at,
+        |  available_at,
+        |  payload,
+        |  updated_at
+        |)
+        |values (?, ?, ?, ?, ?, ?, ?, ?, cast(? as jsonb), now())
         |on conflict (id) do update set
+        |  sequence_no = excluded.sequence_no,
         |  event_type = excluded.event_type,
+        |  aggregate_type = excluded.aggregate_type,
+        |  aggregate_id = excluded.aggregate_id,
         |  status = excluded.status,
         |  occurred_at = excluded.occurred_at,
         |  available_at = excluded.available_at,
@@ -1491,12 +1627,15 @@ final class PostgresDomainEventOutboxRepository(
     val rowsUpdated = withConnection { connection =>
       Using.resource(connection.prepareStatement(sql)) { statement =>
         statement.setString(1, persisted.id.value)
-        statement.setString(2, persisted.eventType)
-        statement.setString(3, persisted.status.toString)
-        statement.setTimestamp(4, Timestamp.from(persisted.occurredAt))
-        statement.setTimestamp(5, Timestamp.from(persisted.availableAt))
-        statement.setString(6, writeJson(persisted))
-        statement.setInt(7, record.version)
+        statement.setLong(2, persisted.sequenceNo)
+        statement.setString(3, persisted.eventType)
+        statement.setString(4, persisted.aggregateType)
+        statement.setString(5, persisted.aggregateId)
+        statement.setString(6, persisted.status.toString)
+        statement.setTimestamp(7, Timestamp.from(persisted.occurredAt))
+        statement.setTimestamp(8, Timestamp.from(persisted.availableAt))
+        statement.setString(9, writeJson(persisted))
+        statement.setInt(10, record.version)
         statement.executeUpdate()
       }
     }
@@ -1514,7 +1653,7 @@ final class PostgresDomainEventOutboxRepository(
 
   override def findAll(): Vector[DomainEventOutboxRecord] =
     readAll[DomainEventOutboxRecord](
-      "select payload from domain_event_outbox order by occurred_at desc, id desc"
+      "select payload from domain_event_outbox order by sequence_no asc"
     )
 
   override def findPending(limit: Int, asOf: java.time.Instant = java.time.Instant.now()): Vector[DomainEventOutboxRecord] =
@@ -1523,12 +1662,176 @@ final class PostgresDomainEventOutboxRepository(
         |select payload
         |from domain_event_outbox
         |where status = 'Pending' and available_at <= ?
-        |order by available_at asc, occurred_at asc, id asc
+        |order by sequence_no asc
         |limit ?
         |""".stripMargin,
       { statement =>
         statement.setTimestamp(1, Timestamp.from(asOf))
         statement.setInt(2, limit)
+      }
+    )
+
+  private def nextSequenceNo(): Long =
+    withConnection { connection =>
+      Using.resource(connection.prepareStatement("select nextval('domain_event_outbox_sequence') as sequence_no")) {
+        statement =>
+          Using.resource(statement.executeQuery()) { resultSet =>
+            resultSet.next()
+            resultSet.getLong("sequence_no")
+          }
+      }
+    }
+
+final class PostgresDomainEventDeliveryReceiptRepository(
+    protected val connectionFactory: JdbcConnectionFactory
+) extends DomainEventDeliveryReceiptRepository
+    with JdbcRepositorySupport:
+  override def save(receipt: DomainEventDeliveryReceipt): DomainEventDeliveryReceipt =
+    val persisted = receipt.copy(version = receipt.version + 1)
+    val sql =
+      """
+        |insert into domain_event_delivery_receipts (
+        |  id,
+        |  outbox_record_id,
+        |  subscriber_id,
+        |  event_type,
+        |  delivered_at,
+        |  payload,
+        |  updated_at
+        |)
+        |values (?, ?, ?, ?, ?, cast(? as jsonb), now())
+        |on conflict (outbox_record_id, subscriber_id) do update set
+        |  event_type = domain_event_delivery_receipts.event_type,
+        |  delivered_at = domain_event_delivery_receipts.delivered_at,
+        |  payload = domain_event_delivery_receipts.payload,
+        |  updated_at = domain_event_delivery_receipts.updated_at
+        |returning payload
+        |""".stripMargin
+
+    withConnection { connection =>
+      Using.resource(connection.prepareStatement(sql)) { statement =>
+        statement.setString(1, persisted.id.value)
+        statement.setString(2, persisted.outboxRecordId.value)
+        statement.setString(3, persisted.subscriberId)
+        statement.setString(4, persisted.eventType)
+        statement.setTimestamp(5, Timestamp.from(persisted.deliveredAt))
+        statement.setString(6, writeJson(persisted))
+        Using.resource(statement.executeQuery()) { resultSet =>
+          resultSet.next()
+          read[DomainEventDeliveryReceipt](resultSet.getString("payload"))
+        }
+      }
+    }
+
+  override def findById(id: DomainEventDeliveryReceiptId): Option[DomainEventDeliveryReceipt] =
+    readOne[DomainEventDeliveryReceipt](
+      "select payload from domain_event_delivery_receipts where id = ?",
+      { statement =>
+        statement.setString(1, id.value)
+      }
+    )
+
+  override def findAll(): Vector[DomainEventDeliveryReceipt] =
+    readAll[DomainEventDeliveryReceipt](
+      "select payload from domain_event_delivery_receipts order by delivered_at desc, id desc"
+    )
+
+  override def findByOutboxRecordAndSubscriber(
+      outboxRecordId: DomainEventOutboxRecordId,
+      subscriberId: String
+  ): Option[DomainEventDeliveryReceipt] =
+    readOne[DomainEventDeliveryReceipt](
+      """
+        |select payload
+        |from domain_event_delivery_receipts
+        |where outbox_record_id = ? and subscriber_id = ?
+        |limit 1
+        |""".stripMargin,
+      { statement =>
+        statement.setString(1, outboxRecordId.value)
+        statement.setString(2, subscriberId)
+      }
+    )
+
+final class PostgresDomainEventSubscriberCursorRepository(
+    protected val connectionFactory: JdbcConnectionFactory
+) extends DomainEventSubscriberCursorRepository
+    with JdbcRepositorySupport:
+  override def save(cursor: DomainEventSubscriberCursor): DomainEventSubscriberCursor =
+    val persisted = cursor.copy(version = cursor.version + 1)
+    val sql =
+      """
+        |insert into domain_event_subscriber_cursors (
+        |  id,
+        |  subscriber_id,
+        |  partition_key,
+        |  last_outbox_record_id,
+        |  last_sequence_no,
+        |  advanced_at,
+        |  payload,
+        |  updated_at
+        |)
+        |values (?, ?, ?, ?, ?, ?, cast(? as jsonb), now())
+        |on conflict (subscriber_id, partition_key) do update set
+        |  last_outbox_record_id = excluded.last_outbox_record_id,
+        |  last_sequence_no = excluded.last_sequence_no,
+        |  advanced_at = excluded.advanced_at,
+        |  payload = excluded.payload,
+        |  updated_at = now()
+        |where cast(domain_event_subscriber_cursors.payload ->> 'version' as integer) = ?
+        |returning payload
+        |""".stripMargin
+
+    withConnection { connection =>
+      Using.resource(connection.prepareStatement(sql)) { statement =>
+        statement.setString(1, persisted.id.value)
+        statement.setString(2, persisted.subscriberId)
+        statement.setString(3, persisted.partitionKey)
+        statement.setString(4, persisted.lastDeliveredOutboxRecordId.value)
+        statement.setLong(5, persisted.lastDeliveredSequenceNo)
+        statement.setTimestamp(6, Timestamp.from(persisted.advancedAt))
+        statement.setString(7, writeJson(persisted))
+        statement.setInt(8, cursor.version)
+        Using.resource(statement.executeQuery()) { resultSet =>
+          if resultSet.next() then read[DomainEventSubscriberCursor](resultSet.getString("payload"))
+          else
+            throw OptimisticConcurrencyException(
+              aggregateType = "domain-event-subscriber-cursor",
+              aggregateId = s"${cursor.subscriberId}:${cursor.partitionKey}",
+              expectedVersion = cursor.version,
+              actualVersion = findBySubscriberAndPartition(cursor.subscriberId, cursor.partitionKey).map(_.version)
+            )
+        }
+      }
+    }
+
+  override def findById(id: DomainEventSubscriberCursorId): Option[DomainEventSubscriberCursor] =
+    readOne[DomainEventSubscriberCursor](
+      "select payload from domain_event_subscriber_cursors where id = ?",
+      { statement =>
+        statement.setString(1, id.value)
+      }
+    )
+
+  override def findAll(): Vector[DomainEventSubscriberCursor] =
+    readAll[DomainEventSubscriberCursor](
+      "select payload from domain_event_subscriber_cursors order by subscriber_id asc, partition_key asc"
+    )
+
+  override def findBySubscriberAndPartition(
+      subscriberId: String,
+      partitionKey: String
+  ): Option[DomainEventSubscriberCursor] =
+    readOne[DomainEventSubscriberCursor](
+      """
+        |select payload
+        |from domain_event_subscriber_cursors
+        |where subscriber_id = ? and partition_key = ?
+        |limit 1
+        |""".stripMargin,
+      { statement =>
+        statement.setString(1, subscriberId)
+        statement.setString(2, partitionKey)
       }
     )
 
@@ -1557,6 +1860,8 @@ final class PostgresAdminService(connectionFactory: JdbcConnectionFactory):
       "tournament_settlements",
       "event_cascade_records",
       "domain_event_outbox",
+      "domain_event_delivery_receipts",
+      "domain_event_subscriber_cursors",
       "audit_events"
     )
 
@@ -1587,7 +1892,10 @@ final class PostgresAdminService(connectionFactory: JdbcConnectionFactory):
     connectionFactory.inTransaction {
       connectionFactory.withConnection { connection =>
         executeAdmin(connection, "truncate table audit_events restart identity")
+        executeAdmin(connection, "truncate table domain_event_subscriber_cursors restart identity")
+        executeAdmin(connection, "truncate table domain_event_delivery_receipts restart identity")
         executeAdmin(connection, "truncate table domain_event_outbox restart identity")
+        executeAdmin(connection, "select setval('domain_event_outbox_sequence', 1, false)")
         executeAdmin(connection, "truncate table tournament_settlements restart identity")
         executeAdmin(connection, "truncate table event_cascade_records restart identity")
         executeAdmin(connection, "truncate table global_dictionary restart identity")

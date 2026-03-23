@@ -32,6 +32,8 @@ final case class ApplicationContext(
     tournamentSettlementRepository: TournamentSettlementRepository,
     eventCascadeRecordRepository: EventCascadeRecordRepository,
     domainEventOutboxRepository: DomainEventOutboxRepository,
+    domainEventDeliveryReceiptRepository: DomainEventDeliveryReceiptRepository,
+    domainEventSubscriberCursorRepository: DomainEventSubscriberCursorRepository,
     auditEventRepository: AuditEventRepository,
     eventBus: DomainEventBus,
     authorizationService: AuthorizationService,
@@ -64,9 +66,16 @@ object ApplicationContext:
     val tournamentSettlementRepository = InMemoryTournamentSettlementRepository()
     val eventCascadeRecordRepository = InMemoryEventCascadeRecordRepository()
     val domainEventOutboxRepository = InMemoryDomainEventOutboxRepository()
+    val domainEventDeliveryReceiptRepository = InMemoryDomainEventDeliveryReceiptRepository()
+    val domainEventSubscriberCursorRepository = InMemoryDomainEventSubscriberCursorRepository()
     val auditEventRepository = InMemoryAuditEventRepository()
 
-    val eventBus = OutboxBackedDomainEventBus(domainEventOutboxRepository, transactionManager)
+    val eventBus = OutboxBackedDomainEventBus(
+      domainEventOutboxRepository,
+      domainEventDeliveryReceiptRepository,
+      domainEventSubscriberCursorRepository,
+      transactionManager
+    )
     val tournamentRuleEngine = DefaultTournamentRuleEngine()
     val advancedStatsPipelineService = AdvancedStatsPipelineService(
       paifuRepository,
@@ -211,6 +220,8 @@ object ApplicationContext:
       tournamentSettlementRepository = tournamentSettlementRepository,
       eventCascadeRecordRepository = eventCascadeRecordRepository,
       domainEventOutboxRepository = domainEventOutboxRepository,
+      domainEventDeliveryReceiptRepository = domainEventDeliveryReceiptRepository,
+      domainEventSubscriberCursorRepository = domainEventSubscriberCursorRepository,
       auditEventRepository = auditEventRepository,
       eventBus = eventBus,
       authorizationService = authorizationService,
@@ -239,9 +250,16 @@ object ApplicationContext:
     val tournamentSettlementRepository = PostgresTournamentSettlementRepository(connectionFactory)
     val eventCascadeRecordRepository = PostgresEventCascadeRecordRepository(connectionFactory)
     val domainEventOutboxRepository = PostgresDomainEventOutboxRepository(connectionFactory)
+    val domainEventDeliveryReceiptRepository = PostgresDomainEventDeliveryReceiptRepository(connectionFactory)
+    val domainEventSubscriberCursorRepository = PostgresDomainEventSubscriberCursorRepository(connectionFactory)
     val auditEventRepository = PostgresAuditEventRepository(connectionFactory)
 
-    val eventBus = OutboxBackedDomainEventBus(domainEventOutboxRepository, transactionManager)
+    val eventBus = OutboxBackedDomainEventBus(
+      domainEventOutboxRepository,
+      domainEventDeliveryReceiptRepository,
+      domainEventSubscriberCursorRepository,
+      transactionManager
+    )
     val tournamentRuleEngine = DefaultTournamentRuleEngine()
     val advancedStatsPipelineService = AdvancedStatsPipelineService(
       paifuRepository,
@@ -386,6 +404,8 @@ object ApplicationContext:
       tournamentSettlementRepository = tournamentSettlementRepository,
       eventCascadeRecordRepository = eventCascadeRecordRepository,
       domainEventOutboxRepository = domainEventOutboxRepository,
+      domainEventDeliveryReceiptRepository = domainEventDeliveryReceiptRepository,
+      domainEventSubscriberCursorRepository = domainEventSubscriberCursorRepository,
       auditEventRepository = auditEventRepository,
       eventBus = eventBus,
       authorizationService = authorizationService,

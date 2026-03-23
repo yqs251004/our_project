@@ -392,9 +392,16 @@ final class InMemoryEventCascadeRecordRepository extends EventCascadeRecordRepos
 
 final class InMemoryDomainEventOutboxRepository extends DomainEventOutboxRepository:
   private val state = mutable.LinkedHashMap.empty[DomainEventOutboxRecordId, DomainEventOutboxRecord]
+  private var nextSequenceNo: Long = 1L
 
   override def save(record: DomainEventOutboxRecord): DomainEventOutboxRecord =
     val persisted = record.copy(
+      sequenceNo =
+        if record.sequenceNo > 0L then record.sequenceNo
+        else
+          val allocated = nextSequenceNo
+          nextSequenceNo += 1L
+          allocated,
       version = InMemoryOptimisticLockSupport.nextVersion(
         "domain-event-outbox-record",
         record.id.value,
@@ -409,7 +416,75 @@ final class InMemoryDomainEventOutboxRepository extends DomainEventOutboxReposit
     state.get(id)
 
   override def findAll(): Vector[DomainEventOutboxRecord] =
-    state.values.toVector.sortBy(record => (record.occurredAt, record.id.value))
+    state.values.toVector.sortBy(_.sequenceNo)
+
+final class InMemoryDomainEventDeliveryReceiptRepository extends DomainEventDeliveryReceiptRepository:
+  private val state = mutable.LinkedHashMap.empty[String, DomainEventDeliveryReceipt]
+
+  override def save(receipt: DomainEventDeliveryReceipt): DomainEventDeliveryReceipt =
+    val key = compositeKey(receipt.outboxRecordId, receipt.subscriberId)
+    state.get(key) match
+      case Some(existing) => existing
+      case None =>
+        val persisted = receipt.copy(
+          version = InMemoryOptimisticLockSupport.nextVersion(
+            "domain-event-delivery-receipt",
+            receipt.id.value,
+            receipt.version,
+            None
+          )
+        )
+        state.update(key, persisted)
+        persisted
+
+  override def findById(id: DomainEventDeliveryReceiptId): Option[DomainEventDeliveryReceipt] =
+    state.values.find(_.id == id)
+
+  override def findAll(): Vector[DomainEventDeliveryReceipt] =
+    state.values.toVector.sortBy(receipt => (receipt.deliveredAt, receipt.subscriberId, receipt.id.value))
+
+  override def findByOutboxRecordAndSubscriber(
+      outboxRecordId: DomainEventOutboxRecordId,
+      subscriberId: String
+  ): Option[DomainEventDeliveryReceipt] =
+    state.get(compositeKey(outboxRecordId, subscriberId))
+
+  private def compositeKey(
+      outboxRecordId: DomainEventOutboxRecordId,
+      subscriberId: String
+  ): String =
+    s"${outboxRecordId.value}::$subscriberId"
+
+final class InMemoryDomainEventSubscriberCursorRepository extends DomainEventSubscriberCursorRepository:
+  private val state = mutable.LinkedHashMap.empty[String, DomainEventSubscriberCursor]
+
+  override def save(cursor: DomainEventSubscriberCursor): DomainEventSubscriberCursor =
+    val key = compositeKey(cursor.subscriberId, cursor.partitionKey)
+    val persisted = cursor.copy(
+      version = InMemoryOptimisticLockSupport.nextVersion(
+        "domain-event-subscriber-cursor",
+        cursor.id.value,
+        cursor.version,
+        state.get(key).map(_.version)
+      )
+    )
+    state.update(key, persisted)
+    persisted
+
+  override def findById(id: DomainEventSubscriberCursorId): Option[DomainEventSubscriberCursor] =
+    state.values.find(_.id == id)
+
+  override def findAll(): Vector[DomainEventSubscriberCursor] =
+    state.values.toVector.sortBy(cursor => (cursor.subscriberId, cursor.partitionKey))
+
+  override def findBySubscriberAndPartition(
+      subscriberId: String,
+      partitionKey: String
+  ): Option[DomainEventSubscriberCursor] =
+    state.get(compositeKey(subscriberId, partitionKey))
+
+  private def compositeKey(subscriberId: String, partitionKey: String): String =
+    s"$subscriberId::$partitionKey"
 
 final class InMemoryAuditEventRepository extends AuditEventRepository:
   private val state = mutable.ArrayBuffer.empty[AuditEventEntry]

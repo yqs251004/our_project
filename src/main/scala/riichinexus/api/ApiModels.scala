@@ -7,7 +7,9 @@ import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.*
 
 final case class ApiError(
-    message: String
+    message: String,
+    code: String = "internal_error",
+    details: Map[String, String] = Map.empty
 )
 
 final case class ApiMessage(

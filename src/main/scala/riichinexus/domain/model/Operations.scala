@@ -91,9 +91,12 @@ object EventCascadeRecord:
 final case class DomainEventOutboxRecord(
     id: DomainEventOutboxRecordId,
     eventType: String,
+    aggregateType: String,
+    aggregateId: String,
     payload: String,
     occurredAt: Instant,
     status: DomainEventOutboxStatus,
+    sequenceNo: Long = 0L,
     attempts: Int = 0,
     availableAt: Instant,
     claimedAt: Option[Instant] = None,
@@ -102,7 +105,10 @@ final case class DomainEventOutboxRecord(
     version: Int = 0
 ) derives CanEqual:
   require(eventType.trim.nonEmpty, "Domain event outbox eventType cannot be empty")
+  require(aggregateType.trim.nonEmpty, "Domain event outbox aggregateType cannot be empty")
+  require(aggregateId.trim.nonEmpty, "Domain event outbox aggregateId cannot be empty")
   require(payload.trim.nonEmpty, "Domain event outbox payload cannot be empty")
+  require(sequenceNo >= 0L, "Domain event outbox sequenceNo cannot be negative")
   require(attempts >= 0, "Domain event outbox attempts cannot be negative")
   require(!availableAt.isBefore(occurredAt), "Domain event outbox availableAt cannot be earlier than occurredAt")
 
@@ -129,8 +135,18 @@ final case class DomainEventOutboxRecord(
     copy(
       status = DomainEventOutboxStatus.Pending,
       availableAt = availableAt,
+      claimedAt = None,
       processedAt = None,
       lastError = Some(error)
+    )
+
+  def markDeferred(availableAt: Instant, reason: String): DomainEventOutboxRecord =
+    copy(
+      status = DomainEventOutboxStatus.Pending,
+      availableAt = availableAt,
+      claimedAt = None,
+      processedAt = None,
+      lastError = Some(reason)
     )
 
   def markDeadLetter(error: String, at: Instant): DomainEventOutboxRecord =
@@ -143,6 +159,8 @@ final case class DomainEventOutboxRecord(
 object DomainEventOutboxRecord:
   def pending(
       eventType: String,
+      aggregateType: String,
+      aggregateId: String,
       payload: String,
       occurredAt: Instant,
       availableAt: Instant
@@ -150,8 +168,81 @@ object DomainEventOutboxRecord:
     DomainEventOutboxRecord(
       id = IdGenerator.domainEventOutboxRecordId(),
       eventType = eventType,
+      aggregateType = aggregateType.trim,
+      aggregateId = aggregateId.trim,
       payload = payload,
       occurredAt = occurredAt,
       status = DomainEventOutboxStatus.Pending,
       availableAt = availableAt
+    )
+
+final case class DomainEventDeliveryReceipt(
+    id: DomainEventDeliveryReceiptId,
+    outboxRecordId: DomainEventOutboxRecordId,
+    subscriberId: String,
+    eventType: String,
+    deliveredAt: Instant,
+    attemptNo: Int,
+    version: Int = 0
+) derives CanEqual:
+  require(subscriberId.trim.nonEmpty, "Domain event delivery receipt subscriberId cannot be empty")
+  require(eventType.trim.nonEmpty, "Domain event delivery receipt eventType cannot be empty")
+  require(attemptNo > 0, "Domain event delivery receipt attemptNo must be positive")
+
+object DomainEventDeliveryReceipt:
+  def delivered(
+      outboxRecordId: DomainEventOutboxRecordId,
+      subscriberId: String,
+      eventType: String,
+      deliveredAt: Instant,
+      attemptNo: Int
+  ): DomainEventDeliveryReceipt =
+    DomainEventDeliveryReceipt(
+      id = IdGenerator.domainEventDeliveryReceiptId(),
+      outboxRecordId = outboxRecordId,
+      subscriberId = subscriberId.trim,
+      eventType = eventType.trim,
+      deliveredAt = deliveredAt,
+      attemptNo = attemptNo
+    )
+
+final case class DomainEventSubscriberCursor(
+    id: DomainEventSubscriberCursorId,
+    subscriberId: String,
+    partitionKey: String,
+    lastDeliveredOutboxRecordId: DomainEventOutboxRecordId,
+    lastDeliveredSequenceNo: Long,
+    advancedAt: Instant,
+    version: Int = 0
+) derives CanEqual:
+  require(subscriberId.trim.nonEmpty, "Domain event subscriber cursor subscriberId cannot be empty")
+  require(partitionKey.trim.nonEmpty, "Domain event subscriber cursor partitionKey cannot be empty")
+  require(lastDeliveredSequenceNo > 0L, "Domain event subscriber cursor lastDeliveredSequenceNo must be positive")
+
+  def advance(
+      outboxRecordId: DomainEventOutboxRecordId,
+      sequenceNo: Long,
+      at: Instant
+  ): DomainEventSubscriberCursor =
+    copy(
+      lastDeliveredOutboxRecordId = outboxRecordId,
+      lastDeliveredSequenceNo = sequenceNo,
+      advancedAt = at
+    )
+
+object DomainEventSubscriberCursor:
+  def advanced(
+      subscriberId: String,
+      partitionKey: String,
+      outboxRecordId: DomainEventOutboxRecordId,
+      sequenceNo: Long,
+      advancedAt: Instant
+  ): DomainEventSubscriberCursor =
+    DomainEventSubscriberCursor(
+      id = IdGenerator.domainEventSubscriberCursorId(),
+      subscriberId = subscriberId.trim,
+      partitionKey = partitionKey.trim,
+      lastDeliveredOutboxRecordId = outboxRecordId,
+      lastDeliveredSequenceNo = sequenceNo,
+      advancedAt = advancedAt
     )

@@ -134,8 +134,34 @@ trait DomainEventOutboxRepository:
   def findPending(limit: Int, asOf: java.time.Instant = java.time.Instant.now()): Vector[DomainEventOutboxRecord] =
     findAll()
       .filter(_.isRunnable(asOf))
-      .sortBy(_.occurredAt)
+      .sortBy(_.sequenceNo)
       .take(limit)
+
+trait DomainEventDeliveryReceiptRepository:
+  def save(receipt: DomainEventDeliveryReceipt): DomainEventDeliveryReceipt
+  def findById(id: DomainEventDeliveryReceiptId): Option[DomainEventDeliveryReceipt]
+  def findAll(): Vector[DomainEventDeliveryReceipt]
+
+  def findByOutboxRecordAndSubscriber(
+      outboxRecordId: DomainEventOutboxRecordId,
+      subscriberId: String
+  ): Option[DomainEventDeliveryReceipt] =
+    findAll().find(receipt =>
+      receipt.outboxRecordId == outboxRecordId && receipt.subscriberId == subscriberId
+    )
+
+trait DomainEventSubscriberCursorRepository:
+  def save(cursor: DomainEventSubscriberCursor): DomainEventSubscriberCursor
+  def findById(id: DomainEventSubscriberCursorId): Option[DomainEventSubscriberCursor]
+  def findAll(): Vector[DomainEventSubscriberCursor]
+
+  def findBySubscriberAndPartition(
+      subscriberId: String,
+      partitionKey: String
+  ): Option[DomainEventSubscriberCursor] =
+    findAll().find(cursor =>
+      cursor.subscriberId == subscriberId && cursor.partitionKey == partitionKey
+    )
 
 trait AuditEventRepository:
   def save(entry: AuditEventEntry): AuditEventEntry

@@ -4035,6 +4035,9 @@ final class RatingProjectionSubscriber(
     playerRepository: PlayerRepository,
     ratingService: RatingService
 ) extends DomainEventSubscriber:
+  override def partitionStrategy: DomainEventSubscriberPartitionStrategy =
+    DomainEventSubscriberPartitionStrategy.AggregateRoot
+
   override def handle(event: DomainEvent): Unit =
     event match
       case MatchRecordArchived(_, _, _, matchRecord, _, _) =>
@@ -4058,6 +4061,9 @@ final class ClubProjectionSubscriber(
     playerRepository: PlayerRepository,
     globalDictionaryRepository: GlobalDictionaryRepository
 ) extends DomainEventSubscriber:
+  override def partitionStrategy: DomainEventSubscriberPartitionStrategy =
+    DomainEventSubscriberPartitionStrategy.AggregateRoot
+
   override def handle(event: DomainEvent): Unit =
     event match
       case MatchRecordArchived(_, _, _, matchRecord, _, _) =>
@@ -4634,6 +4640,9 @@ final class DashboardProjectionSubscriber(
 ) extends DomainEventSubscriber:
   import AdvancedStatsSupport.*
 
+  override def partitionStrategy: DomainEventSubscriberPartitionStrategy =
+    DomainEventSubscriberPartitionStrategy.AggregateRoot
+
   override def handle(event: DomainEvent): Unit =
     event match
       case MatchRecordArchived(_, _, _, matchRecord, _, occurredAt) =>
@@ -4913,6 +4922,9 @@ final class AdvancedStatsPipelineService(
 final class AdvancedStatsProjectionSubscriber(
     advancedStatsPipelineService: AdvancedStatsPipelineService
 ) extends DomainEventSubscriber:
+  override def partitionStrategy: DomainEventSubscriberPartitionStrategy =
+    DomainEventSubscriberPartitionStrategy.AggregateRoot
+
   override def handle(event: DomainEvent): Unit =
     event match
       case MatchRecordArchived(_, _, _, matchRecord, _, occurredAt) =>
@@ -4931,6 +4943,9 @@ final class EventCascadeProjectionSubscriber(
     advancedStatsPipelineService: AdvancedStatsPipelineService,
     globalDictionaryRepository: GlobalDictionaryRepository
 ) extends DomainEventSubscriber:
+  override def partitionStrategy: DomainEventSubscriberPartitionStrategy =
+    DomainEventSubscriberPartitionStrategy.AggregateRoot
+
   override def handle(event: DomainEvent): Unit =
     event match
       case AppealTicketFiled(ticket, occurredAt) =>

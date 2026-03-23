@@ -14,6 +14,7 @@ import com.sun.net.httpserver.HttpServer
 import scala.util.Try
 import scala.util.Using
 
+import riichinexus.application.ports.OptimisticConcurrencyException
 import riichinexus.api.ApiModels.given
 import riichinexus.bootstrap.ApplicationContext
 import riichinexus.domain.model.*
@@ -65,17 +66,68 @@ private final class ApiHandler(
   override def handle(exchange: HttpExchange): Unit =
     try
       route(exchange)
-    catch
-      case error: AuthorizationFailure =>
-        sendJson(exchange, 403, ApiError(error.getMessage))
-      case error: IllegalArgumentException =>
-        sendJson(exchange, 400, ApiError(error.getMessage))
-      case error: NoSuchElementException =>
-        sendJson(exchange, 404, ApiError(error.getMessage))
-      case error: ujson.ParseException =>
-        sendJson(exchange, 400, ApiError(s"Invalid JSON body: ${error.getMessage}"))
-      case error: Throwable =>
-        sendJson(exchange, 500, ApiError(Option(error.getMessage).getOrElse("Internal server error")))
+    catch handleApiError(exchange)
+
+  private def handleApiError(exchange: HttpExchange): PartialFunction[Throwable, Unit] =
+    case error: OptimisticConcurrencyException =>
+      sendJson(
+        exchange,
+        409,
+        ApiError(
+          message = error.getMessage,
+          code = "optimistic_concurrency_conflict",
+          details = Map(
+            "aggregateType" -> error.aggregateType,
+            "aggregateId" -> error.aggregateId,
+            "expectedVersion" -> error.expectedVersion.toString
+          ) ++ error.actualVersion.map(version => "actualVersion" -> version.toString)
+        )
+      )
+    case error: AuthorizationFailure =>
+      sendJson(
+        exchange,
+        403,
+        ApiError(
+          message = error.getMessage,
+          code = "authorization_failed"
+        )
+      )
+    case error: IllegalArgumentException =>
+      sendJson(
+        exchange,
+        400,
+        ApiError(
+          message = error.getMessage,
+          code = "invalid_request"
+        )
+      )
+    case error: NoSuchElementException =>
+      sendJson(
+        exchange,
+        404,
+        ApiError(
+          message = error.getMessage,
+          code = "not_found"
+        )
+      )
+    case error: ujson.ParseException =>
+      sendJson(
+        exchange,
+        400,
+        ApiError(
+          message = s"Invalid JSON body: ${error.getMessage}",
+          code = "invalid_json"
+        )
+      )
+    case error: Throwable =>
+      sendJson(
+        exchange,
+        500,
+        ApiError(
+          message = Option(error.getMessage).getOrElse("Internal server error"),
+          code = "internal_error"
+        )
+      )
 
   private def route(exchange: HttpExchange): Unit =
     val method = exchange.getRequestMethod.toUpperCase
@@ -1421,7 +1473,15 @@ private final class ApiHandler(
   private def sendOption[T: Writer](exchange: HttpExchange, value: Option[T]): Unit =
     value match
       case Some(actual) => sendJson(exchange, 200, actual)
-      case None         => sendJson(exchange, 404, ApiError("Resource not found"))
+      case None =>
+        sendJson(
+          exchange,
+          404,
+          ApiError(
+            message = "Resource not found",
+            code = "not_found"
+          )
+        )
 
   private def sendJson[T: Writer](exchange: HttpExchange, statusCode: Int, payload: T): Unit =
     val json = write(payload, indent = 2)

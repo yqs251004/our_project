@@ -119,7 +119,8 @@ Recently completed features such as guest sessions, club applications, club hono
     - `src/main/scala/riichinexus/infrastructure/events/OutboxEventBus.scala` provides async draining plus retry/dead-letter logic
     - `src/main/scala/riichinexus/infrastructure/postgres/PostgresRepositories.scala` now provisions `domain_event_outbox`
   - Follow-up:
-    - add explicit idempotency keys / subscriber delivery cursors if multi-process consumers become a real deployment mode
+    - subscriber delivery receipts are now persisted per outbox record and subscriber, so retries and multi-process drainers can skip already-completed deliveries safely
+    - subscriber delivery now also advances per-partition cursors against a persisted outbox sequence, with `Global` / `EventType` / `AggregateRoot` partition strategies available for ordered consumption
 
 - [x] Remove duplicated projection formulas and centralize them.
   - Current state:

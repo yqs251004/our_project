@@ -48,6 +48,10 @@ object JsonCodecs:
     readwriter[String].bimap[EventCascadeRecordId](_.value, EventCascadeRecordId(_))
   given ReadWriter[DomainEventOutboxRecordId] =
     readwriter[String].bimap[DomainEventOutboxRecordId](_.value, DomainEventOutboxRecordId(_))
+  given ReadWriter[DomainEventDeliveryReceiptId] =
+    readwriter[String].bimap[DomainEventDeliveryReceiptId](_.value, DomainEventDeliveryReceiptId(_))
+  given ReadWriter[DomainEventSubscriberCursorId] =
+    readwriter[String].bimap[DomainEventSubscriberCursorId](_.value, DomainEventSubscriberCursorId(_))
 
   given ReadWriter[RoleKind] =
     stringEnumReadWriter(RoleKind.valueOf, _.toString)
@@ -197,6 +201,8 @@ object JsonCodecs:
   given ReadWriter[DomainEventOutboxStatus] =
     stringEnumReadWriter(DomainEventOutboxStatus.valueOf, _.toString)
   given ReadWriter[DomainEventOutboxRecord] = macroRW
+  given ReadWriter[DomainEventDeliveryReceipt] = macroRW
+  given ReadWriter[DomainEventSubscriberCursor] = macroRW
   given ReadWriter[MatchRecordArchived] = macroRW
   given ReadWriter[AppealTicketFiled] = macroRW
   given ReadWriter[AppealTicketResolved] = macroRW
