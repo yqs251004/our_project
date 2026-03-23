@@ -1,6 +1,6 @@
 package riichinexus.domain.model
 
-import java.time.Instant
+import java.time.{Duration, Instant}
 import java.util.UUID
 
 final case class PlayerId(value: String) derives CanEqual
@@ -142,8 +142,77 @@ object RoleGrant:
 final case class GuestAccessSession(
     id: GuestSessionId,
     createdAt: Instant,
-    displayName: String = "guest"
-) derives CanEqual
+    displayName: String = "guest",
+    expiresAt: Instant,
+    lastSeenAt: Option[Instant] = None,
+    revokedAt: Option[Instant] = None,
+    revokedReason: Option[String] = None,
+    deviceFingerprint: Option[String] = None,
+    upgradedToPlayerId: Option[PlayerId] = None
+) derives CanEqual:
+  require(displayName.trim.nonEmpty, "Guest session display name cannot be empty")
+  require(!expiresAt.isBefore(createdAt), "Guest session expiry cannot be earlier than creation")
+
+  def isRevoked: Boolean =
+    revokedAt.nonEmpty
+
+  def isExpired(asOf: Instant = Instant.now()): Boolean =
+    !expiresAt.isAfter(asOf)
+
+  def isUpgraded: Boolean =
+    upgradedToPlayerId.nonEmpty
+
+  def canAuthenticate(asOf: Instant = Instant.now()): Boolean =
+    !isRevoked && !isExpired(asOf) && !isUpgraded
+
+  def touch(at: Instant): GuestAccessSession =
+    copy(
+      lastSeenAt = Some(
+        lastSeenAt match
+          case Some(existing) if existing.isAfter(at) => existing
+          case _                                      => at
+      )
+    )
+
+  def revoke(reason: String, at: Instant): GuestAccessSession =
+    val normalizedReason = reason.trim
+    require(normalizedReason.nonEmpty, "Guest session revocation reason cannot be empty")
+    copy(
+      revokedAt = Some(at),
+      revokedReason = Some(normalizedReason)
+    )
+
+  def upgrade(playerId: PlayerId, at: Instant): GuestAccessSession =
+    copy(
+      lastSeenAt = Some(
+        lastSeenAt match
+          case Some(existing) if existing.isAfter(at) => existing
+          case _                                      => at
+      ),
+      upgradedToPlayerId = Some(playerId)
+    )
+
+object GuestAccessSession:
+  private val DefaultTtl: Duration = Duration.ofDays(30)
+
+  def create(
+      id: GuestSessionId = IdGenerator.guestSessionId(),
+      createdAt: Instant = Instant.now(),
+      displayName: String = "guest",
+      ttl: Duration = DefaultTtl,
+      deviceFingerprint: Option[String] = None
+  ): GuestAccessSession =
+    require(!ttl.isNegative && !ttl.isZero, "Guest session TTL must be positive")
+    GuestAccessSession(
+      id = id,
+      createdAt = createdAt,
+      displayName = displayName.trim,
+      expiresAt = createdAt.plus(ttl),
+      deviceFingerprint = deviceFingerprint.map(_.trim).filter(_.nonEmpty)
+    )
+
+  def ephemeral(createdAt: Instant = Instant.now()): GuestAccessSession =
+    create(createdAt = createdAt, ttl = Duration.ofMinutes(5))
 
 final case class AccessPrincipal(
     principalId: String,
@@ -169,7 +238,7 @@ final case class AccessPrincipal(
     )
 
 object AccessPrincipal:
-  def guest(session: GuestAccessSession = GuestAccessSession(IdGenerator.guestSessionId(), Instant.now())): AccessPrincipal =
+  def guest(session: GuestAccessSession = GuestAccessSession.ephemeral()): AccessPrincipal =
     AccessPrincipal(
       principalId = session.id.value,
       displayName = session.displayName,
@@ -345,13 +414,74 @@ final case class ClubRankNode(
     privileges: Vector[String] = Vector.empty
 ) derives CanEqual
 
-object ClubPrivilege:
-  val PriorityLineup = "priority-lineup"
-  val ApproveRoster = "approve-roster"
-  val ManageBank = "manage-bank"
+enum ClubPrivilegeCode derives CanEqual:
+  case PriorityLineup
+  case ApproveRoster
+  case ManageBank
+
+final case class ClubPrivilegeDefinition(
+    code: String,
+    label: String,
+    description: String,
+    delegatedPermissions: Vector[Permission] = Vector.empty
+) derives CanEqual
+
+object ClubPrivilegeRegistry:
+  private val definitionsByCode: Map[ClubPrivilegeCode, ClubPrivilegeDefinition] = Map(
+    ClubPrivilegeCode.PriorityLineup ->
+      ClubPrivilegeDefinition(
+        code = "priority-lineup",
+        label = "Priority Lineup",
+        description = "Allows the member to claim protected lineup priority when stage seats are limited."
+      ),
+    ClubPrivilegeCode.ApproveRoster ->
+      ClubPrivilegeDefinition(
+        code = "approve-roster",
+        label = "Approve Roster",
+        description = "Allows the member to approve roster-style club operations delegated by club admins.",
+        delegatedPermissions = Vector(Permission.ManageClubMembership)
+      ),
+    ClubPrivilegeCode.ManageBank ->
+      ClubPrivilegeDefinition(
+        code = "manage-bank",
+        label = "Manage Bank",
+        description = "Allows the member to adjust treasury and point-pool operations delegated by club admins.",
+        delegatedPermissions = Vector(Permission.ManageClubOperations)
+      )
+  )
+
+  val definitions: Vector[ClubPrivilegeDefinition] =
+    ClubPrivilegeCode.values.toVector.map(definitionsByCode)
+
+  private val definitionsByNormalizedCode: Map[String, ClubPrivilegeDefinition] =
+    definitions.map(definition => normalize(definition.code) -> definition).toMap
 
   def normalize(value: String): String =
     value.trim.toLowerCase
+
+  def definitionFor(code: String): Option[ClubPrivilegeDefinition] =
+    definitionsByNormalizedCode.get(normalize(code))
+
+  def requireSupported(code: String): String =
+    val normalized = normalize(code)
+    definitionFor(normalized)
+      .map(_.code)
+      .getOrElse(
+        throw IllegalArgumentException(
+          s"Unsupported club privilege code '$code'. Supported codes: ${supportedCodes.mkString(", ")}"
+        )
+      )
+
+  def supportedCodes: Vector[String] =
+    definitions.map(_.code)
+
+object ClubPrivilege:
+  val PriorityLineup: String = ClubPrivilegeRegistry.requireSupported("priority-lineup")
+  val ApproveRoster: String = ClubPrivilegeRegistry.requireSupported("approve-roster")
+  val ManageBank: String = ClubPrivilegeRegistry.requireSupported("manage-bank")
+
+  def normalize(value: String): String =
+    ClubPrivilegeRegistry.normalize(value)
 
 final case class ClubMemberContribution(
     playerId: PlayerId,
@@ -556,7 +686,7 @@ final case class Club(
     require(nodes.nonEmpty, "Club rank tree cannot be empty")
     val normalizedNodes = nodes.map { node =>
       val normalizedPrivileges = node.privileges
-        .map(ClubPrivilege.normalize)
+        .map(ClubPrivilegeRegistry.requireSupported)
         .filter(_.nonEmpty)
         .distinct
         .sorted

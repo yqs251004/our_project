@@ -125,7 +125,9 @@ object ApplicationContext:
         transactionManager
       ),
       guestSessionService = GuestSessionApplicationService(
+        playerRepository,
         guestSessionRepository,
+        auditEventRepository,
         transactionManager
       ),
       publicQueryService = PublicQueryService(
@@ -296,7 +298,9 @@ object ApplicationContext:
         transactionManager
       ),
       guestSessionService = GuestSessionApplicationService(
+        playerRepository,
         guestSessionRepository,
+        auditEventRepository,
         transactionManager
       ),
       publicQueryService = PublicQueryService(

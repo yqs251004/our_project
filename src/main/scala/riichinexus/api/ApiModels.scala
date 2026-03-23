@@ -48,8 +48,21 @@ final case class CreateClubRequest(
     PlayerId(creatorId)
 
 final case class CreateGuestSessionRequest(
-    displayName: Option[String] = None
+    displayName: Option[String] = None,
+    ttlHours: Option[Int] = None,
+    deviceFingerprint: Option[String] = None
+):
+  ttlHours.foreach(hours => require(hours > 0, "Guest session ttlHours must be positive"))
+
+final case class RevokeGuestSessionRequest(
+    reason: Option[String] = None
 )
+
+final case class UpgradeGuestSessionRequest(
+    playerId: String
+):
+  def player: PlayerId =
+    PlayerId(playerId)
 
 final case class AddClubMemberRequest(
     playerId: String,
@@ -708,6 +721,8 @@ object ApiModels:
   given ReadWriter[CreatePlayerRequest] = macroRW
   given ReadWriter[CreateClubRequest] = macroRW
   given ReadWriter[CreateGuestSessionRequest] = macroRW
+  given ReadWriter[RevokeGuestSessionRequest] = macroRW
+  given ReadWriter[UpgradeGuestSessionRequest] = macroRW
   given ReadWriter[AddClubMemberRequest] = macroRW
   given ReadWriter[ClubMembershipApplicationRequest] = macroRW
   given ReadWriter[ApproveClubApplicationRequest] = macroRW

@@ -160,21 +160,42 @@ private final class ApiHandler(
         sendJson(exchange, 201, player)
 
       case ("GET", Vector("guest-sessions")) =>
-        val sessions = app.guestSessionRepository.findAll().sortBy(session =>
-          (session.createdAt, session.id.value)
-        )
-        sendPagedJson(exchange, sessions, activeFilters(exchange))
+        val activeOnly = queryBooleanParam(exchange, "activeOnly")
+        val sessions = app.guestSessionRepository.findAll()
+          .filter(session => activeOnly.forall(flag => !flag || session.canAuthenticate(Instant.now())))
+          .sortBy(session => (session.createdAt, session.id.value))
+        sendPagedJson(exchange, sessions, activeFilters(exchange, "activeOnly"))
       case ("POST", Vector("guest-sessions")) =>
         val request = readOptionalJsonBody[CreateGuestSessionRequest](exchange)
         sendJson(
           exchange,
           201,
           app.guestSessionService.createSession(
-            displayName = request.flatMap(_.displayName).getOrElse("guest")
+            displayName = request.flatMap(_.displayName).getOrElse("guest"),
+            ttl = java.time.Duration.ofHours(request.flatMap(_.ttlHours).getOrElse(24 * 30).toLong),
+            deviceFingerprint = request.flatMap(_.deviceFingerprint)
           )
         )
       case ("GET", Vector("guest-sessions", sessionId)) =>
         sendOption(exchange, app.guestSessionService.findSession(GuestSessionId(sessionId)))
+      case ("POST", Vector("guest-sessions", sessionId, "revoke")) =>
+        val request = readOptionalJsonBody[RevokeGuestSessionRequest](exchange)
+        sendOption(
+          exchange,
+          app.guestSessionService.revokeSession(
+            GuestSessionId(sessionId),
+            request.flatMap(_.reason).filter(_.trim.nonEmpty).getOrElse("revoked-by-operator")
+          )
+        )
+      case ("POST", Vector("guest-sessions", sessionId, "upgrade")) =>
+        val request = readJsonBody[UpgradeGuestSessionRequest](exchange)
+        sendOption(
+          exchange,
+          app.guestSessionService.upgradeSession(GuestSessionId(sessionId), request.player)
+        )
+
+      case ("GET", Vector("club-privileges")) =>
+        sendJson(exchange, 200, ClubPrivilegeRegistry.definitions)
 
       case ("GET", Vector("clubs")) =>
         val activeOnly = queryBooleanParam(exchange, "activeOnly")
@@ -202,7 +223,7 @@ private final class ApiHandler(
         sendPagedJson(exchange, members, activeFilters(exchange, "status", "nickname"))
       case ("GET", Vector("clubs", clubId, "member-privileges")) =>
         val playerIdFilter = queryParam(exchange, "playerId").filter(_.nonEmpty).map(PlayerId(_))
-        val privilegeFilter = queryParam(exchange, "privilege").filter(_.nonEmpty).map(_.trim.toLowerCase)
+        val privilegeFilter = queryParam(exchange, "privilege").filter(_.nonEmpty).map(ClubPrivilegeRegistry.requireSupported)
         val rankCodeFilter = queryParam(exchange, "rankCode").filter(_.nonEmpty).map(_.trim.toLowerCase)
         val snapshots = app.clubService.listMemberPrivilegeSnapshots(ClubId(clubId))
           .filter(snapshot => playerIdFilter.forall(_ == snapshot.playerId))
@@ -1284,8 +1305,8 @@ private final class ApiHandler(
       .getOrElse(throw NoSuchElementException(s"Player ${playerId.value} was not found"))
 
   private def guestPrincipal(sessionId: GuestSessionId): AccessPrincipal =
-    app.guestSessionRepository
-      .findById(sessionId)
+    app.guestSessionService
+      .touchActiveSession(sessionId)
       .map(AccessPrincipal.guest)
       .getOrElse(throw NoSuchElementException(s"Guest session ${sessionId.value} was not found"))
 
