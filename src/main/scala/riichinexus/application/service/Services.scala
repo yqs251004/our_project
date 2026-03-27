@@ -671,6 +671,362 @@ final class PublicQueryService(
     }
     (lineupPlayers ++ tournament.participatingPlayers ++ fallbackClubMembers).distinct.size
 
+final class DemoScenarioService(
+    playerService: PlayerApplicationService,
+    guestSessionService: GuestSessionApplicationService,
+    clubService: ClubApplicationService,
+    tournamentService: TournamentApplicationService,
+    tableService: TableLifecycleService,
+    playerRepository: PlayerRepository,
+    guestSessionRepository: GuestSessionRepository,
+    clubRepository: ClubRepository,
+    tournamentRepository: TournamentRepository,
+    tableRepository: TableRepository,
+    matchRecordRepository: MatchRecordRepository
+):
+  private val SeededAt = Instant.parse("2026-03-13T09:00:00Z")
+  private val DemoTournamentName = "RiichiNexus Spring Demo"
+  private val DemoOrganizer = "Frontend Demo"
+  private val DemoStageId = TournamentStageId("stage-demo-swiss")
+  private val DemoStageName = "Swiss Stage 1"
+  private val DemoGuestDisplayName = "demo-guest"
+
+  private final case class DemoPlayerSeed(
+      userId: String,
+      nickname: String,
+      rank: RankSnapshot,
+      initialElo: Int
+  )
+
+  private val PlayerSeeds = Vector(
+    DemoPlayerSeed("demo-alice", "Alice", RankSnapshot(RankPlatform.Tenhou, "4-dan"), 1610),
+    DemoPlayerSeed("demo-bob", "Bob", RankSnapshot(RankPlatform.MahjongSoul, "Expert-3"), 1540),
+    DemoPlayerSeed("demo-charlie", "Charlie", RankSnapshot(RankPlatform.Tenhou, "3-dan"), 1490),
+    DemoPlayerSeed("demo-diana", "Diana", RankSnapshot(RankPlatform.MahjongSoul, "Master-1"), 1580),
+    DemoPlayerSeed("demo-eve", "Eve", RankSnapshot(RankPlatform.Tenhou, "5-dan"), 1650),
+    DemoPlayerSeed("demo-frank", "Frank", RankSnapshot(RankPlatform.MahjongSoul, "Adept-2"), 1470),
+    DemoPlayerSeed("demo-grace", "Grace", RankSnapshot(RankPlatform.Tenhou, "2-dan"), 1450),
+    DemoPlayerSeed("demo-heidi", "Heidi", RankSnapshot(RankPlatform.MahjongSoul, "Master-2"), 1600)
+  )
+
+  def currentScenario(): Option[DemoScenarioSnapshot] =
+    for
+      alice <- playerRepository.findByUserId("demo-alice")
+      tournament <- tournamentRepository.findByNameAndOrganizer(DemoTournamentName, DemoOrganizer)
+      stage <- tournament.stages.find(_.id == DemoStageId)
+    yield buildScenarioSnapshot(alice.id, tournament, stage)
+
+  def bootstrapBasicScenario(): DemoScenarioSnapshot =
+    val players = PlayerSeeds.map(seed =>
+      playerService.registerPlayer(
+        userId = seed.userId,
+        nickname = seed.nickname,
+        rank = seed.rank,
+        registeredAt = SeededAt,
+        initialElo = seed.initialElo
+      )
+    )
+
+    val playerByUserId = players.map(player => player.userId -> player).toMap
+    val alice = playerByUserId("demo-alice")
+    val bob = playerByUserId("demo-bob")
+    val charlie = playerByUserId("demo-charlie")
+    val diana = playerByUserId("demo-diana")
+    val eve = playerByUserId("demo-eve")
+    val frank = playerByUserId("demo-frank")
+    val grace = playerByUserId("demo-grace")
+    val heidi = playerByUserId("demo-heidi")
+
+    ensureSuperAdmin(alice.id)
+
+    val eastWindClub = clubService.createClub(
+      name = "EastWind Club",
+      creatorId = alice.id,
+      createdAt = SeededAt,
+      actor = principalFor(alice.id)
+    )
+    ensureClubMember(eastWindClub.id, bob.id, alice.id)
+    ensureClubMember(eastWindClub.id, charlie.id, alice.id)
+
+    val southWindClub = clubService.createClub(
+      name = "SouthWind Club",
+      creatorId = eve.id,
+      createdAt = SeededAt,
+      actor = principalFor(eve.id)
+    )
+    ensureClubMember(southWindClub.id, frank.id, eve.id)
+    ensureClubMember(southWindClub.id, grace.id, eve.id)
+
+    val stage = TournamentStage(
+      id = DemoStageId,
+      name = DemoStageName,
+      format = StageFormat.Swiss,
+      order = 1,
+      roundCount = 1
+    )
+    val tournament = tournamentService.createTournament(
+      name = DemoTournamentName,
+      organizer = DemoOrganizer,
+      startsAt = SeededAt.plusSeconds(3600),
+      endsAt = SeededAt.plusSeconds(10800),
+      stages = Vector(stage),
+      adminId = Some(alice.id),
+      actor = AccessPrincipal.system
+    )
+
+    val admin = principalFor(alice.id)
+    ensureTournamentClub(tournament.id, eastWindClub.id, admin)
+    ensureTournamentClub(tournament.id, southWindClub.id, admin)
+    ensureTournamentPlayer(tournament.id, diana.id, admin)
+    ensureTournamentPlayer(tournament.id, heidi.id, admin)
+    ensureTournamentPublished(tournament.id, admin)
+    ensureTournamentStarted(tournament.id, admin)
+
+    val tables = tournamentService.scheduleStageTables(tournament.id, DemoStageId, admin)
+    seedArchivedTableIfNeeded(tournament.id, DemoStageId, tables, admin)
+    ensureDemoGuestSession()
+
+    val refreshedTournament = tournamentRepository.findById(tournament.id).getOrElse(tournament)
+    val refreshedStage = refreshedTournament.stages.find(_.id == DemoStageId).getOrElse(stage)
+    buildScenarioSnapshot(alice.id, refreshedTournament, refreshedStage)
+
+  private def ensureSuperAdmin(playerId: PlayerId): Player =
+    val player = playerRepository.findById(playerId)
+      .getOrElse(throw NoSuchElementException(s"Player ${playerId.value} was not found"))
+    if player.roleGrants.exists(_.role == RoleKind.SuperAdmin) then player
+    else playerRepository.save(player.grantRole(RoleGrant.superAdmin(SeededAt, None)))
+
+  private def principalFor(playerId: PlayerId): AccessPrincipal =
+    val player = playerRepository.findById(playerId)
+      .getOrElse(throw NoSuchElementException(s"Player ${playerId.value} was not found"))
+    AccessPrincipal(
+      principalId = player.id.value,
+      displayName = player.nickname,
+      playerId = Some(player.id),
+      roleGrants = player.roleGrants
+    )
+
+  private def ensureClubMember(clubId: ClubId, playerId: PlayerId, operatorId: PlayerId): Unit =
+    val club = clubRepository.findById(clubId)
+      .getOrElse(throw NoSuchElementException(s"Club ${clubId.value} was not found"))
+    if !club.members.contains(playerId) then
+      clubService.addMember(clubId, playerId, principalFor(operatorId))
+      ()
+
+  private def ensureTournamentClub(
+      tournamentId: TournamentId,
+      clubId: ClubId,
+      actor: AccessPrincipal
+  ): Unit =
+    val tournament = tournamentRepository.findById(tournamentId)
+      .getOrElse(throw NoSuchElementException(s"Tournament ${tournamentId.value} was not found"))
+    if !tournament.participatingClubs.contains(clubId) then
+      tournamentService.registerClub(tournamentId, clubId, actor)
+      ()
+
+  private def ensureTournamentPlayer(
+      tournamentId: TournamentId,
+      playerId: PlayerId,
+      actor: AccessPrincipal
+  ): Unit =
+    val tournament = tournamentRepository.findById(tournamentId)
+      .getOrElse(throw NoSuchElementException(s"Tournament ${tournamentId.value} was not found"))
+    if !tournament.participatingPlayers.contains(playerId) then
+      tournamentService.registerPlayer(tournamentId, playerId, actor)
+      ()
+
+  private def ensureTournamentPublished(
+      tournamentId: TournamentId,
+      actor: AccessPrincipal
+  ): Unit =
+    tournamentRepository.findById(tournamentId).foreach { tournament =>
+      if tournament.status == TournamentStatus.Draft then
+        tournamentService.publishTournament(tournamentId, actor)
+        ()
+    }
+
+  private def ensureTournamentStarted(
+      tournamentId: TournamentId,
+      actor: AccessPrincipal
+  ): Unit =
+    tournamentRepository.findById(tournamentId).foreach { tournament =>
+      if tournament.status == TournamentStatus.RegistrationOpen || tournament.status == TournamentStatus.Scheduled then
+        tournamentService.startTournament(tournamentId, actor)
+        ()
+    }
+
+  private def seedArchivedTableIfNeeded(
+      tournamentId: TournamentId,
+      stageId: TournamentStageId,
+      tables: Vector[Table],
+      actor: AccessPrincipal
+  ): Unit =
+    val stageTables =
+      if tables.nonEmpty then tables
+      else tableRepository.findByTournamentAndStage(tournamentId, stageId)
+    val firstTable = stageTables.sortBy(table => (table.tableNo, table.id.value)).headOption
+
+    firstTable.foreach { table =>
+      if matchRecordRepository.findByTable(table.id).isEmpty then
+        val readyTable =
+          if table.status == TableStatus.Pending then
+            tableService.startTable(table.id, SeededAt.plusSeconds(3900), actor).getOrElse(table)
+          else table
+        tableService.recordCompletedTable(
+          readyTable.id,
+          demoPaifu(readyTable, tournamentId, stageId, SeededAt.plusSeconds(5400)),
+          actor
+        )
+        ()
+    }
+
+  private def ensureDemoGuestSession(): GuestAccessSession =
+    guestSessionRepository.findAll()
+      .find(_.displayName == DemoGuestDisplayName)
+      .getOrElse(
+        guestSessionService.createSession(
+          displayName = DemoGuestDisplayName,
+          ttl = java.time.Duration.ofDays(30),
+          createdAt = SeededAt
+        )
+      )
+
+  private def buildScenarioSnapshot(
+      recommendedOperatorId: PlayerId,
+      tournament: Tournament,
+      stage: TournamentStage
+  ): DemoScenarioSnapshot =
+    val tables = tableRepository.findByTournamentAndStage(tournament.id, stage.id)
+      .sortBy(table => (table.stageRoundNumber, table.tableNo, table.id.value))
+    val demoPlayers = PlayerSeeds.flatMap(seed => playerRepository.findByUserId(seed.userId))
+      .sortBy(player => (player.nickname, player.id.value))
+      .map { player =>
+        DemoScenarioPlayerView(
+          playerId = player.id,
+          userId = player.userId,
+          nickname = player.nickname,
+          elo = player.elo,
+          clubIds = player.boundClubIds,
+          isSuperAdmin = player.roleGrants.exists(_.role == RoleKind.SuperAdmin),
+          isTournamentAdmin = player.roleGrants.exists(_.role == RoleKind.TournamentAdmin),
+          isClubAdmin = player.roleGrants.exists(_.role == RoleKind.ClubAdmin)
+        )
+      }
+    val clubs = clubRepository.findAll()
+      .filter(club => Set("EastWind Club", "SouthWind Club").contains(club.name))
+      .sortBy(_.name)
+      .map(club =>
+        DemoScenarioClubView(
+          clubId = club.id,
+          name = club.name,
+          memberIds = club.members,
+          adminIds = club.admins
+        )
+      )
+    val guestSession = guestSessionRepository.findAll()
+      .find(_.displayName == DemoGuestDisplayName)
+
+    DemoScenarioSnapshot(
+      seededAt = SeededAt,
+      guestSessionId = guestSession.map(_.id),
+      recommendedOperatorId = recommendedOperatorId,
+      players = demoPlayers,
+      clubs = clubs,
+      tournament = DemoScenarioTournamentView(
+        tournamentId = tournament.id,
+        name = tournament.name,
+        status = tournament.status,
+        stageId = stage.id,
+        stageName = stage.name,
+        tableIds = tables.map(_.id),
+        archivedTableIds = tables.filter(_.status == TableStatus.Archived).map(_.id)
+      )
+    )
+
+  private def demoPaifu(
+      table: Table,
+      tournamentId: TournamentId,
+      stageId: TournamentStageId,
+      recordedAt: Instant
+  ): Paifu =
+    val seatByWind = table.seats.map(seat => seat.seat -> seat.playerId).toMap
+    val east = seatByWind(SeatWind.East)
+    val south = seatByWind(SeatWind.South)
+    val west = seatByWind(SeatWind.West)
+    val north = seatByWind(SeatWind.North)
+
+    val firstRound = KyokuRecord(
+      descriptor = KyokuDescriptor(SeatWind.East, handNumber = 1, honba = 0),
+      initialHands = table.seats.map(seat => seat.playerId -> Vector("1m", "2m", "3m")).toMap,
+      actions = Vector(
+        PaifuAction(1, Some(east), PaifuActionType.Draw, Some("4m"), Some(3)),
+        PaifuAction(2, Some(east), PaifuActionType.Discard, Some("9p"), Some(2)),
+        PaifuAction(3, Some(south), PaifuActionType.Riichi, note = Some("closed riichi")),
+        PaifuAction(4, Some(south), PaifuActionType.Discard, Some("5s"), Some(1)),
+        PaifuAction(5, Some(south), PaifuActionType.Win, Some("3p"), Some(0))
+      ),
+      result = AgariResult(
+        outcome = HandOutcome.Ron,
+        winner = Some(south),
+        target = Some(west),
+        han = Some(3),
+        fu = Some(40),
+        yaku = Vector(Yaku("Riichi", 1), Yaku("Pinfu", 1), Yaku("Ippatsu", 1)),
+        points = 7700,
+        scoreChanges = Vector(
+          ScoreChange(east, 0),
+          ScoreChange(south, 7700),
+          ScoreChange(west, -7700),
+          ScoreChange(north, 0)
+        )
+      )
+    )
+
+    val secondRound = KyokuRecord(
+      descriptor = KyokuDescriptor(SeatWind.East, handNumber = 2, honba = 0),
+      initialHands = table.seats.map(seat => seat.playerId -> Vector("4p", "5p", "6p")).toMap,
+      actions = Vector(
+        PaifuAction(1, Some(north), PaifuActionType.Draw, Some("7m"), Some(2)),
+        PaifuAction(2, Some(north), PaifuActionType.Discard, Some("7m"), Some(2)),
+        PaifuAction(3, Some(east), PaifuActionType.Riichi, note = Some("pressure riichi")),
+        PaifuAction(4, Some(east), PaifuActionType.Win, Some("2s"), Some(0))
+      ),
+      result = AgariResult(
+        outcome = HandOutcome.Tsumo,
+        winner = Some(east),
+        target = None,
+        han = Some(2),
+        fu = Some(30),
+        yaku = Vector(Yaku("Riichi", 1), Yaku("Tsumo", 1)),
+        points = 2000,
+        scoreChanges = Vector(
+          ScoreChange(east, 4000),
+          ScoreChange(south, -1000),
+          ScoreChange(west, -1000),
+          ScoreChange(north, -2000)
+        )
+      )
+    )
+
+    Paifu(
+      id = IdGenerator.paifuId(),
+      metadata = PaifuMetadata(
+        recordedAt = recordedAt,
+        source = "demo-seed",
+        tableId = table.id,
+        tournamentId = tournamentId,
+        stageId = stageId,
+        seats = table.seats
+      ),
+      rounds = Vector(firstRound, secondRound),
+      finalStandings = Vector(
+        FinalStanding(south, SeatWind.South, 31700, 1),
+        FinalStanding(east, SeatWind.East, 29000, 2),
+        FinalStanding(north, SeatWind.North, 23000, 3),
+        FinalStanding(west, SeatWind.West, 16300, 4)
+      )
+    )
+
 final class DomainEventOperationsService(
     outboxRepository: DomainEventOutboxRepository,
     deliveryReceiptRepository: DomainEventDeliveryReceiptRepository,

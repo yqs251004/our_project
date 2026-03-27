@@ -17,6 +17,7 @@ final case class ApplicationContext(
     appealService: AppealApplicationService,
     superAdminService: SuperAdminService,
     advancedStatsPipelineService: AdvancedStatsPipelineService,
+    demoScenarioService: DemoScenarioService,
     domainEventOperationsService: DomainEventOperationsService,
     playerRepository: PlayerRepository,
     clubRepository: ClubRepository,
@@ -132,6 +133,59 @@ object ApplicationContext:
       transactionManager,
       authorizationService
     )
+    val demoScenarioService = DemoScenarioService(
+      playerService = PlayerApplicationService(
+        playerRepository,
+        dashboardRepository,
+        transactionManager
+      ),
+      guestSessionService = GuestSessionApplicationService(
+        playerRepository,
+        guestSessionRepository,
+        auditEventRepository,
+        transactionManager
+      ),
+      clubService = ClubApplicationService(
+        clubRepository,
+        playerRepository,
+        globalDictionaryRepository,
+        dashboardRepository,
+        auditEventRepository,
+        transactionManager,
+        authorizationService
+      ),
+      tournamentService = TournamentApplicationService(
+        tournamentRepository,
+        playerRepository,
+        clubRepository,
+        globalDictionaryRepository,
+        tableRepository,
+        matchRecordRepository,
+        tournamentSettlementRepository,
+        auditEventRepository,
+        BalancedEloSeatingPolicy(),
+        tournamentRuleEngine,
+        knockoutStageCoordinator,
+        eventBus,
+        transactionManager,
+        authorizationService
+      ),
+      tableService = TableLifecycleService(
+        tableRepository,
+        paifuRepository,
+        matchRecordRepository,
+        knockoutStageCoordinator,
+        eventBus,
+        transactionManager,
+        authorizationService
+      ),
+      playerRepository = playerRepository,
+      guestSessionRepository = guestSessionRepository,
+      clubRepository = clubRepository,
+      tournamentRepository = tournamentRepository,
+      tableRepository = tableRepository,
+      matchRecordRepository = matchRecordRepository
+    )
 
     ApplicationContext(
       playerService = PlayerApplicationService(
@@ -208,6 +262,7 @@ object ApplicationContext:
         authorizationService
       ),
       advancedStatsPipelineService = advancedStatsPipelineService,
+      demoScenarioService = demoScenarioService,
       domainEventOperationsService = domainEventOperationsService,
       playerRepository = playerRepository,
       clubRepository = clubRepository,
@@ -319,6 +374,59 @@ object ApplicationContext:
       transactionManager,
       authorizationService
     )
+    val demoScenarioService = DemoScenarioService(
+      playerService = PlayerApplicationService(
+        playerRepository,
+        dashboardRepository,
+        transactionManager
+      ),
+      guestSessionService = GuestSessionApplicationService(
+        playerRepository,
+        guestSessionRepository,
+        auditEventRepository,
+        transactionManager
+      ),
+      clubService = ClubApplicationService(
+        clubRepository,
+        playerRepository,
+        globalDictionaryRepository,
+        dashboardRepository,
+        auditEventRepository,
+        transactionManager,
+        authorizationService
+      ),
+      tournamentService = TournamentApplicationService(
+        tournamentRepository,
+        playerRepository,
+        clubRepository,
+        globalDictionaryRepository,
+        tableRepository,
+        matchRecordRepository,
+        tournamentSettlementRepository,
+        auditEventRepository,
+        BalancedEloSeatingPolicy(),
+        tournamentRuleEngine,
+        knockoutStageCoordinator,
+        eventBus,
+        transactionManager,
+        authorizationService
+      ),
+      tableService = TableLifecycleService(
+        tableRepository,
+        paifuRepository,
+        matchRecordRepository,
+        knockoutStageCoordinator,
+        eventBus,
+        transactionManager,
+        authorizationService
+      ),
+      playerRepository = playerRepository,
+      guestSessionRepository = guestSessionRepository,
+      clubRepository = clubRepository,
+      tournamentRepository = tournamentRepository,
+      tableRepository = tableRepository,
+      matchRecordRepository = matchRecordRepository
+    )
 
     ApplicationContext(
       playerService = PlayerApplicationService(
@@ -395,6 +503,7 @@ object ApplicationContext:
         authorizationService
       ),
       advancedStatsPipelineService = advancedStatsPipelineService,
+      demoScenarioService = demoScenarioService,
       domainEventOperationsService = domainEventOperationsService,
       playerRepository = playerRepository,
       clubRepository = clubRepository,

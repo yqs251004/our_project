@@ -240,3 +240,40 @@ final case class ClubLeaderboardEntry(
     totalPoints: Int,
     memberCount: Int
 ) derives CanEqual
+
+final case class DemoScenarioPlayerView(
+    playerId: PlayerId,
+    userId: String,
+    nickname: String,
+    elo: Int,
+    clubIds: Vector[ClubId],
+    isSuperAdmin: Boolean,
+    isTournamentAdmin: Boolean,
+    isClubAdmin: Boolean
+) derives CanEqual
+
+final case class DemoScenarioClubView(
+    clubId: ClubId,
+    name: String,
+    memberIds: Vector[PlayerId],
+    adminIds: Vector[PlayerId]
+) derives CanEqual
+
+final case class DemoScenarioTournamentView(
+    tournamentId: TournamentId,
+    name: String,
+    status: TournamentStatus,
+    stageId: TournamentStageId,
+    stageName: String,
+    tableIds: Vector[TableId],
+    archivedTableIds: Vector[TableId]
+) derives CanEqual
+
+final case class DemoScenarioSnapshot(
+    seededAt: Instant,
+    guestSessionId: Option[GuestSessionId],
+    recommendedOperatorId: PlayerId,
+    players: Vector[DemoScenarioPlayerView],
+    clubs: Vector[DemoScenarioClubView],
+    tournament: DemoScenarioTournamentView
+) derives CanEqual

@@ -25,7 +25,8 @@ import upickle.default.*
 final case class ApiServerConfig(
     host: String,
     port: Int,
-    storageLabel: String
+    storageLabel: String,
+    corsAllowOrigin: String
 )
 
 object ApiServerConfig:
@@ -36,7 +37,8 @@ object ApiServerConfig:
       storageLabel =
         env.get("RIICHI_STORAGE").map(_.trim.toLowerCase).getOrElse {
           if env.contains("RIICHI_DB_URL") then "postgres" else "memory"
-        }
+        },
+      corsAllowOrigin = env.getOrElse("RIICHI_CORS_ALLOW_ORIGIN", "*")
     )
 
 final class RiichiNexusApiServer(
@@ -64,8 +66,10 @@ private final class ApiHandler(
   private final case class PageQuery(limit: Int, offset: Int)
 
   override def handle(exchange: HttpExchange): Unit =
+    applyDefaultHeaders(exchange)
     try
-      route(exchange)
+      if exchange.getRequestMethod.equalsIgnoreCase("OPTIONS") then sendEmpty(exchange, 204)
+      else route(exchange)
     catch handleApiError(exchange)
 
   private def handleApiError(exchange: HttpExchange): PartialFunction[Throwable, Unit] =
@@ -135,6 +139,10 @@ private final class ApiHandler(
     val segments = path.split("/").toVector.filter(_.nonEmpty)
 
     (method, segments) match
+      case ("GET", Vector("demo", "summary")) =>
+        sendOption(exchange, app.demoScenarioService.currentScenario())
+      case ("POST", Vector("demo", "bootstrap")) =>
+        sendJson(exchange, 200, app.demoScenarioService.bootstrapBasicScenario())
       case ("GET", Vector()) | ("GET", Vector("health")) =>
         sendJson(
           exchange,
@@ -1645,4 +1653,15 @@ private final class ApiHandler(
     Using.resource(exchange.getResponseBody) { output =>
       output.write(bytes)
     }
+
+  private def sendEmpty(exchange: HttpExchange, statusCode: Int): Unit =
+    exchange.sendResponseHeaders(statusCode, -1)
+    exchange.close()
+
+  private def applyDefaultHeaders(exchange: HttpExchange): Unit =
+    val headers = exchange.getResponseHeaders
+    headers.set("Access-Control-Allow-Origin", config.corsAllowOrigin)
+    headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+    headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+    headers.set("Access-Control-Max-Age", "600")
 
