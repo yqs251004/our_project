@@ -140,9 +140,43 @@ private final class ApiHandler(
 
     (method, segments) match
       case ("GET", Vector("demo", "summary")) =>
-        sendOption(exchange, app.demoScenarioService.currentScenario())
+        val bootstrapIfMissing = queryBooleanParam(exchange, "bootstrapIfMissing").getOrElse(false)
+        val refreshDerived = queryBooleanParam(exchange, "refreshDerived").getOrElse(true)
+        val summary = app.demoScenarioService.currentScenario(refreshDerived = refreshDerived)
+          .orElse {
+            if bootstrapIfMissing then Some(app.demoScenarioService.bootstrapBasicScenario(refreshDerived = refreshDerived))
+            else None
+          }
+        sendOption(exchange, summary)
+      case ("GET", Vector("demo", "readiness")) =>
+        val bootstrapIfMissing = queryBooleanParam(exchange, "bootstrapIfMissing").getOrElse(false)
+        val refreshDerived = queryBooleanParam(exchange, "refreshDerived").getOrElse(true)
+        sendOption(
+          exchange,
+          app.demoScenarioService.currentReadiness(
+            bootstrapIfMissing = bootstrapIfMissing,
+            refreshDerived = refreshDerived
+          )
+        )
+      case ("GET", Vector("demo", "guide")) =>
+        val bootstrapIfMissing = queryBooleanParam(exchange, "bootstrapIfMissing").getOrElse(true)
+        val refreshDerived = queryBooleanParam(exchange, "refreshDerived").getOrElse(true)
+        sendOption(
+          exchange,
+          app.demoScenarioService.guide(
+            bootstrapIfMissing = bootstrapIfMissing,
+            refreshDerived = refreshDerived
+          )
+        )
       case ("POST", Vector("demo", "bootstrap")) =>
-        sendJson(exchange, 200, app.demoScenarioService.bootstrapBasicScenario())
+        val refreshDerived = queryBooleanParam(exchange, "refreshDerived").getOrElse(true)
+        sendJson(exchange, 200, app.demoScenarioService.bootstrapBasicScenario(refreshDerived = refreshDerived))
+      case ("POST", Vector("demo", "refresh")) =>
+        val bootstrapIfMissing = queryBooleanParam(exchange, "bootstrapIfMissing").getOrElse(true)
+        sendOption(
+          exchange,
+          app.demoScenarioService.refreshScenario(bootstrapIfMissing = bootstrapIfMissing)
+        )
       case ("GET", Vector()) | ("GET", Vector("health")) =>
         sendJson(
           exchange,

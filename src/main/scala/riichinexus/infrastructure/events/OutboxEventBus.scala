@@ -80,7 +80,7 @@ final class OutboxBackedDomainEventBus(
     )
 
   executor.scheduleWithFixedDelay(
-    () => drainPending(),
+    () => scheduleDrain(),
     pollInterval.toMillis,
     pollInterval.toMillis,
     TimeUnit.MILLISECONDS
@@ -100,7 +100,7 @@ final class OutboxBackedDomainEventBus(
         )
       )
     }
-    drainPending()
+    scheduleDrain()
 
   override def register(subscriber: DomainEventSubscriber): Unit =
     require(
@@ -108,6 +108,9 @@ final class OutboxBackedDomainEventBus(
       s"Duplicate domain event subscriberId registered: ${subscriber.subscriberId}"
     )
     subscribers += subscriber
+
+  override def drainPendingNow(limit: Int = 100, processedAt: Instant = Instant.now()): Int =
+    processPending(limit, processedAt)
 
   def processPending(limit: Int = 100, processedAt: Instant = Instant.now()): Int =
     if !drainInFlight.compareAndSet(false, true) then 0
@@ -119,7 +122,7 @@ final class OutboxBackedDomainEventBus(
       finally
         drainInFlight.set(false)
 
-  private def drainPending(): Unit =
+  private def scheduleDrain(): Unit =
     executor.execute(() => processPending())
 
   private def processRecord(record: DomainEventOutboxRecord, processedAt: Instant): Unit =

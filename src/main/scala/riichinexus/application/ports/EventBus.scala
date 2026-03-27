@@ -1,5 +1,7 @@
 package riichinexus.application.ports
 
+import java.time.Instant
+
 import riichinexus.domain.event.DomainEvent
 import riichinexus.domain.model.DomainEventOutboxRecord
 
@@ -26,3 +28,4 @@ trait DomainEventSubscriber:
 trait DomainEventBus:
   def publish(event: DomainEvent): Unit
   def register(subscriber: DomainEventSubscriber): Unit
+  def drainPendingNow(limit: Int = 100, processedAt: Instant = Instant.now()): Int = 0

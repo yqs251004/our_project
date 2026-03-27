@@ -224,7 +224,15 @@ object JsonCodecs:
   given ReadWriter[PublicClubDirectoryEntry] = macroRW
   given ReadWriter[PlayerLeaderboardEntry] = macroRW
   given ReadWriter[ClubLeaderboardEntry] = macroRW
+  given ReadWriter[DemoScenarioDashboardSummary] = macroRW
+  given ReadWriter[DemoScenarioAdvancedStatsSummary] = macroRW
   given ReadWriter[DemoScenarioPlayerView] = macroRW
   given ReadWriter[DemoScenarioClubView] = macroRW
+  given ReadWriter[DemoScenarioTableSeatView] = macroRW
+  given ReadWriter[DemoScenarioTableView] = macroRW
   given ReadWriter[DemoScenarioTournamentView] = macroRW
+  given ReadWriter[DemoScenarioReadiness] = macroRW
+  given ReadWriter[DemoScenarioApiRequest] = macroRW
+  given ReadWriter[DemoScenarioGuideStep] = macroRW
+  given ReadWriter[DemoScenarioGuide] = macroRW
   given ReadWriter[DemoScenarioSnapshot] = macroRW

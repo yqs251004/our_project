@@ -241,22 +241,79 @@ final case class ClubLeaderboardEntry(
     memberCount: Int
 ) derives CanEqual
 
+final case class DemoScenarioDashboardSummary(
+    sampleSize: Int,
+    dealInRate: Double,
+    winRate: Double,
+    averageWinPoints: Double,
+    riichiRate: Double,
+    averagePlacement: Double,
+    topFinishRate: Double,
+    lastUpdatedAt: Instant
+) derives CanEqual
+
+final case class DemoScenarioAdvancedStatsSummary(
+    sampleSize: Int,
+    defenseStability: Double,
+    ukeireExpectation: Double,
+    averageShantenImprovement: Double,
+    callAggressionRate: Double,
+    riichiConversionRate: Double,
+    pressureDefenseRate: Double,
+    postRiichiFoldRate: Double,
+    lastUpdatedAt: Instant
+) derives CanEqual
+
 final case class DemoScenarioPlayerView(
     playerId: PlayerId,
     userId: String,
     nickname: String,
+    currentRank: RankSnapshot,
     elo: Int,
+    status: PlayerStatus,
     clubIds: Vector[ClubId],
     isSuperAdmin: Boolean,
     isTournamentAdmin: Boolean,
-    isClubAdmin: Boolean
+    isClubAdmin: Boolean,
+    dashboard: Option[DemoScenarioDashboardSummary],
+    advancedStats: Option[DemoScenarioAdvancedStatsSummary]
 ) derives CanEqual
 
 final case class DemoScenarioClubView(
     clubId: ClubId,
     name: String,
     memberIds: Vector[PlayerId],
-    adminIds: Vector[PlayerId]
+    adminIds: Vector[PlayerId],
+    powerRating: Double,
+    totalPoints: Int,
+    treasuryBalance: Long,
+    pointPool: Int,
+    honorTitles: Vector[String],
+    dashboard: Option[DemoScenarioDashboardSummary],
+    advancedStats: Option[DemoScenarioAdvancedStatsSummary]
+) derives CanEqual
+
+final case class DemoScenarioTableSeatView(
+    seat: SeatWind,
+    playerId: PlayerId,
+    nickname: String,
+    clubId: Option[ClubId],
+    initialPoints: Int,
+    ready: Boolean,
+    disconnected: Boolean
+) derives CanEqual
+
+final case class DemoScenarioTableView(
+    tableId: TableId,
+    tableNo: Int,
+    stageRoundNumber: Int,
+    status: TableStatus,
+    startedAt: Option[Instant],
+    endedAt: Option[Instant],
+    hasMatchRecord: Boolean,
+    hasPaifu: Boolean,
+    hasAppeal: Boolean,
+    seats: Vector[DemoScenarioTableSeatView]
 ) derives CanEqual
 
 final case class DemoScenarioTournamentView(
@@ -266,7 +323,39 @@ final case class DemoScenarioTournamentView(
     stageId: TournamentStageId,
     stageName: String,
     tableIds: Vector[TableId],
-    archivedTableIds: Vector[TableId]
+    archivedTableIds: Vector[TableId],
+    tables: Vector[DemoScenarioTableView]
+) derives CanEqual
+
+final case class DemoScenarioReadiness(
+    dashboardOwnersExpected: Int,
+    dashboardOwnersReady: Int,
+    advancedStatsOwnersExpected: Int,
+    advancedStatsOwnersReady: Int,
+    pendingOutboxCount: Int,
+    deadLetterOutboxCount: Int,
+    pendingAdvancedStatsTaskCount: Int,
+    deadLetterAdvancedStatsTaskCount: Int
+) derives CanEqual
+
+final case class DemoScenarioApiRequest(
+    method: String,
+    path: String,
+    description: String
+) derives CanEqual
+
+final case class DemoScenarioGuideStep(
+    title: String,
+    description: String,
+    request: Option[DemoScenarioApiRequest] = None
+) derives CanEqual
+
+final case class DemoScenarioGuide(
+    title: String,
+    summary: String,
+    steps: Vector[DemoScenarioGuideStep],
+    frontendSections: Vector[String],
+    presenterNotes: Vector[String]
 ) derives CanEqual
 
 final case class DemoScenarioSnapshot(
@@ -275,5 +364,11 @@ final case class DemoScenarioSnapshot(
     recommendedOperatorId: PlayerId,
     players: Vector[DemoScenarioPlayerView],
     clubs: Vector[DemoScenarioClubView],
-    tournament: DemoScenarioTournamentView
+    tournament: DemoScenarioTournamentView,
+    publicSchedules: Vector[PublicScheduleView],
+    publicClubDirectory: Vector[PublicClubDirectoryEntry],
+    playerLeaderboard: Vector[PlayerLeaderboardEntry],
+    clubLeaderboard: Vector[ClubLeaderboardEntry],
+    recommendedRequests: Vector[DemoScenarioApiRequest],
+    readiness: DemoScenarioReadiness
 ) derives CanEqual
