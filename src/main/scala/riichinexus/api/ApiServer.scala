@@ -1152,6 +1152,50 @@ private final class ApiHandler(
             "blockedOnly"
           )
         )
+      case ("POST", Vector("admin", "domain-events", "outbox", "replay")) =>
+        val request = readJsonBody[BatchReplayDomainEventOutboxRequest](exchange)
+        sendJson(
+          exchange,
+          200,
+          app.domainEventOperationsService.replayOutboxRecords(
+            recordIds = request.records,
+            actor = principal(request.operator),
+            replayAt = request.replayAtInstant.getOrElse(Instant.now()),
+            note = request.note
+          )
+        )
+      case ("POST", Vector("admin", "domain-events", "outbox", "ack")) =>
+        val request = readJsonBody[BatchAcknowledgeDomainEventOutboxRequest](exchange)
+        sendJson(
+          exchange,
+          200,
+          app.domainEventOperationsService.acknowledgeOutboxRecords(
+            recordIds = request.records,
+            actor = principal(request.operator),
+            note = request.note
+          )
+        )
+      case ("POST", Vector("admin", "domain-events", "outbox", "quarantine")) =>
+        val request = readJsonBody[BatchQuarantineDomainEventOutboxRequest](exchange)
+        sendJson(
+          exchange,
+          200,
+          app.domainEventOperationsService.quarantineOutboxRecords(
+            recordIds = request.records,
+            actor = principal(request.operator),
+            reason = request.reason
+          )
+        )
+      case ("GET", Vector("admin", "domain-events", "outbox", recordId, "history")) =>
+        val operator = queryPrincipal(exchange)
+        sendJson(
+          exchange,
+          200,
+          app.domainEventOperationsService.outboxHistory(
+            recordId = DomainEventOutboxRecordId(recordId),
+            actor = operator
+          )
+        )
       case ("POST", Vector("admin", "domain-events", "outbox", recordId, "replay")) =>
         val request = readJsonBody[ReplayDomainEventOutboxRequest](exchange)
         sendJson(

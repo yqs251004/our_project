@@ -682,6 +682,23 @@ final class DomainEventOperationsService(
 ):
   private val subscriberIndex = subscribers.map(subscriber => subscriber.subscriberId -> subscriber).toMap
 
+  def outboxHistory(
+      recordId: DomainEventOutboxRecordId,
+      actor: AccessPrincipal
+  ): DomainEventOutboxHistoryView =
+    authorizationService.requirePermission(actor, Permission.ManageGlobalDictionary)
+    val record = outboxRepository.findById(recordId)
+      .getOrElse(throw NoSuchElementException(s"Domain event outbox record ${recordId.value} was not found"))
+    DomainEventOutboxHistoryView(
+      record = record,
+      auditTrail = auditEventRepository
+        .findByAggregate("domain-event-outbox-record", recordId.value)
+        .sortBy(entry => (entry.occurredAt, entry.id.value)),
+      deliveryReceipts = deliveryReceiptRepository.findAll()
+        .filter(_.outboxRecordId == recordId)
+        .sortBy(receipt => (receipt.deliveredAt, receipt.subscriberId, receipt.id.value))
+    )
+
   def replayOutboxRecord(
       recordId: DomainEventOutboxRecordId,
       actor: AccessPrincipal,
@@ -796,6 +813,49 @@ final class DomainEventOperationsService(
         )
       )
       quarantined
+    }
+
+  def replayOutboxRecords(
+      recordIds: Vector[DomainEventOutboxRecordId],
+      actor: AccessPrincipal,
+      replayAt: Instant = Instant.now(),
+      note: Option[String] = None,
+      at: Instant = Instant.now()
+  ): DomainEventOutboxBatchOperationResult =
+    runBatchOperation(
+      action = "replay",
+      recordIds = recordIds,
+      processedAt = at
+    ) { recordId =>
+      replayOutboxRecord(recordId, actor, replayAt, note, at)
+    }
+
+  def acknowledgeOutboxRecords(
+      recordIds: Vector[DomainEventOutboxRecordId],
+      actor: AccessPrincipal,
+      note: Option[String] = None,
+      at: Instant = Instant.now()
+  ): DomainEventOutboxBatchOperationResult =
+    runBatchOperation(
+      action = "ack",
+      recordIds = recordIds,
+      processedAt = at
+    ) { recordId =>
+      acknowledgeOutboxRecord(recordId, actor, note, at)
+    }
+
+  def quarantineOutboxRecords(
+      recordIds: Vector[DomainEventOutboxRecordId],
+      actor: AccessPrincipal,
+      reason: String,
+      at: Instant = Instant.now()
+  ): DomainEventOutboxBatchOperationResult =
+    runBatchOperation(
+      action = "quarantine",
+      recordIds = recordIds,
+      processedAt = at
+    ) { recordId =>
+      quarantineOutboxRecord(recordId, actor, reason, at)
     }
 
   def summary(asOf: Instant = Instant.now()): DomainEventBusSummary =
@@ -1001,6 +1061,40 @@ final class DomainEventOperationsService(
     subscriberIndex.getOrElse(
       subscriberId,
       throw NoSuchElementException(s"Domain event subscriber $subscriberId was not registered")
+    )
+
+  private def runBatchOperation(
+      action: String,
+      recordIds: Vector[DomainEventOutboxRecordId],
+      processedAt: Instant
+  )(
+      operation: DomainEventOutboxRecordId => DomainEventOutboxRecord
+  ): DomainEventOutboxBatchOperationResult =
+    val normalizedIds = recordIds.distinct
+    require(normalizedIds.nonEmpty, s"Domain event outbox batch $action requires at least one recordId")
+
+    val failures = Vector.newBuilder[DomainEventOutboxOperationFailure]
+    val succeededIds = Vector.newBuilder[DomainEventOutboxRecordId]
+
+    normalizedIds.foreach { recordId =>
+      try
+        operation(recordId)
+        succeededIds += recordId
+      catch
+        case error: IllegalArgumentException =>
+          failures += DomainEventOutboxOperationFailure(recordId, error.getMessage)
+        case error: NoSuchElementException =>
+          failures += DomainEventOutboxOperationFailure(recordId, error.getMessage)
+        case error: IllegalStateException =>
+          failures += DomainEventOutboxOperationFailure(recordId, error.getMessage)
+    }
+
+    DomainEventOutboxBatchOperationResult(
+      action = action,
+      processedAt = processedAt,
+      requestedCount = normalizedIds.size,
+      succeededRecordIds = succeededIds.result(),
+      failures = failures.result()
     )
 
 private object AppealAttachmentPolicySupport:

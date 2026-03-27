@@ -206,6 +206,9 @@ object JsonCodecs:
   given ReadWriter[DomainEventBusSummary] = macroRW
   given ReadWriter[DomainEventSubscriberStatus] = macroRW
   given ReadWriter[DomainEventSubscriberPartitionStatus] = macroRW
+  given ReadWriter[DomainEventOutboxOperationFailure] = macroRW
+  given ReadWriter[DomainEventOutboxBatchOperationResult] = macroRW
+  given ReadWriter[DomainEventOutboxHistoryView] = macroRW
   given ReadWriter[MatchRecordArchived] = macroRW
   given ReadWriter[AppealTicketFiled] = macroRW
   given ReadWriter[AppealTicketResolved] = macroRW

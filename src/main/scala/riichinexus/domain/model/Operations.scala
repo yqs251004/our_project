@@ -329,3 +329,30 @@ final case class DomainEventSubscriberPartitionStatus(
   require(subscriberId.trim.nonEmpty, "Domain event subscriber partition status subscriberId cannot be empty")
   require(partitionStrategy.trim.nonEmpty, "Domain event subscriber partition status partitionStrategy cannot be empty")
   require(partitionKey.trim.nonEmpty, "Domain event subscriber partition status partitionKey cannot be empty")
+
+final case class DomainEventOutboxOperationFailure(
+    recordId: DomainEventOutboxRecordId,
+    message: String
+) derives CanEqual:
+  require(message.trim.nonEmpty, "Domain event outbox operation failure message cannot be empty")
+
+final case class DomainEventOutboxBatchOperationResult(
+    action: String,
+    processedAt: Instant,
+    requestedCount: Int,
+    succeededRecordIds: Vector[DomainEventOutboxRecordId],
+    failures: Vector[DomainEventOutboxOperationFailure]
+) derives CanEqual:
+  require(action.trim.nonEmpty, "Domain event outbox batch action cannot be empty")
+
+  def succeededCount: Int =
+    succeededRecordIds.size
+
+  def failedCount: Int =
+    failures.size
+
+final case class DomainEventOutboxHistoryView(
+    record: DomainEventOutboxRecord,
+    auditTrail: Vector[AuditEventEntry],
+    deliveryReceipts: Vector[DomainEventDeliveryReceipt]
+) derives CanEqual

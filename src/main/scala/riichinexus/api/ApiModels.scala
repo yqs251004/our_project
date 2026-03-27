@@ -757,6 +757,49 @@ final case class QuarantineDomainEventOutboxRequest(
   def operator: PlayerId =
     PlayerId(operatorId)
 
+final case class BatchReplayDomainEventOutboxRequest(
+    operatorId: String,
+    recordIds: Vector[String],
+    replayAt: Option[String] = None,
+    note: Option[String] = None
+):
+  require(recordIds.nonEmpty, "Batch replay requires at least one recordId")
+
+  def operator: PlayerId =
+    PlayerId(operatorId)
+
+  def records: Vector[DomainEventOutboxRecordId] =
+    recordIds.map(DomainEventOutboxRecordId(_)).distinct
+
+  def replayAtInstant: Option[Instant] =
+    replayAt.map(Instant.parse)
+
+final case class BatchAcknowledgeDomainEventOutboxRequest(
+    operatorId: String,
+    recordIds: Vector[String],
+    note: Option[String] = None
+):
+  require(recordIds.nonEmpty, "Batch acknowledge requires at least one recordId")
+
+  def operator: PlayerId =
+    PlayerId(operatorId)
+
+  def records: Vector[DomainEventOutboxRecordId] =
+    recordIds.map(DomainEventOutboxRecordId(_)).distinct
+
+final case class BatchQuarantineDomainEventOutboxRequest(
+    operatorId: String,
+    recordIds: Vector[String],
+    reason: String
+):
+  require(recordIds.nonEmpty, "Batch quarantine requires at least one recordId")
+
+  def operator: PlayerId =
+    PlayerId(operatorId)
+
+  def records: Vector[DomainEventOutboxRecordId] =
+    recordIds.map(DomainEventOutboxRecordId(_)).distinct
+
 object ApiModels:
   given ReadWriter[ApiError] = macroRW
   given ReadWriter[ApiMessage] = macroRW
@@ -821,3 +864,6 @@ object ApiModels:
   given ReadWriter[ReplayDomainEventOutboxRequest] = macroRW
   given ReadWriter[AcknowledgeDomainEventOutboxRequest] = macroRW
   given ReadWriter[QuarantineDomainEventOutboxRequest] = macroRW
+  given ReadWriter[BatchReplayDomainEventOutboxRequest] = macroRW
+  given ReadWriter[BatchAcknowledgeDomainEventOutboxRequest] = macroRW
+  given ReadWriter[BatchQuarantineDomainEventOutboxRequest] = macroRW
