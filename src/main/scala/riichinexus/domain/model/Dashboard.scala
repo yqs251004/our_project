@@ -246,6 +246,13 @@ enum DemoScenarioVariant derives CanEqual:
   case Leaderboard
   case Appeal
 
+enum DemoScenarioActionCode derives CanEqual:
+  case RefreshScenario
+  case ResetScenario
+  case ArchiveNextTable
+  case FileOpenAppeal
+  case ResolveOldestAppeal
+
 final case class DemoScenarioDashboardSummary(
     sampleSize: Int,
     dealInRate: Double,
@@ -349,6 +356,48 @@ final case class DemoScenarioApiRequest(
     description: String
 ) derives CanEqual
 
+final case class DemoScenarioWidgetMetric(
+    key: String,
+    label: String,
+    value: Double,
+    formattedValue: String
+) derives CanEqual
+
+final case class DemoScenarioWidgetCount(
+    key: String,
+    label: String,
+    count: Int
+) derives CanEqual
+
+final case class DemoScenarioWidgets(
+    variant: DemoScenarioVariant,
+    generatedAt: Instant,
+    headlineMetrics: Vector[DemoScenarioWidgetMetric],
+    playerEloSeries: Vector[DemoScenarioWidgetMetric],
+    clubPowerSeries: Vector[DemoScenarioWidgetMetric],
+    playerLeaderboardPreview: Vector[DemoScenarioWidgetMetric],
+    clubLeaderboardPreview: Vector[DemoScenarioWidgetMetric],
+    tableStatusBreakdown: Vector[DemoScenarioWidgetCount],
+    readinessBreakdown: Vector[DemoScenarioWidgetCount]
+) derives CanEqual
+
+final case class DemoScenarioActionSpec(
+    code: DemoScenarioActionCode,
+    label: String,
+    description: String,
+    method: String,
+    path: String,
+    enabled: Boolean
+) derives CanEqual
+
+final case class DemoScenarioActionResult(
+    variant: DemoScenarioVariant,
+    action: DemoScenarioActionCode,
+    message: String,
+    snapshot: DemoScenarioSnapshot,
+    widgets: DemoScenarioWidgets
+) derives CanEqual
+
 final case class DemoScenarioGuideStep(
     title: String,
     description: String,
@@ -377,5 +426,6 @@ final case class DemoScenarioSnapshot(
     playerLeaderboard: Vector[PlayerLeaderboardEntry],
     clubLeaderboard: Vector[ClubLeaderboardEntry],
     recommendedRequests: Vector[DemoScenarioApiRequest],
+    availableActions: Vector[DemoScenarioActionSpec],
     readiness: DemoScenarioReadiness
 ) derives CanEqual

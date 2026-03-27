@@ -229,6 +229,11 @@ object JsonCodecs:
       _.toString,
       DemoScenarioVariant.valueOf
     )
+  given ReadWriter[DemoScenarioActionCode] =
+    readwriter[String].bimap[DemoScenarioActionCode](
+      _.toString,
+      DemoScenarioActionCode.valueOf
+    )
   given ReadWriter[DemoScenarioDashboardSummary] = macroRW
   given ReadWriter[DemoScenarioAdvancedStatsSummary] = macroRW
   given ReadWriter[DemoScenarioPlayerView] = macroRW
@@ -238,6 +243,11 @@ object JsonCodecs:
   given ReadWriter[DemoScenarioTournamentView] = macroRW
   given ReadWriter[DemoScenarioReadiness] = macroRW
   given ReadWriter[DemoScenarioApiRequest] = macroRW
+  given ReadWriter[DemoScenarioWidgetMetric] = macroRW
+  given ReadWriter[DemoScenarioWidgetCount] = macroRW
+  given ReadWriter[DemoScenarioWidgets] = macroRW
+  given ReadWriter[DemoScenarioActionSpec] = macroRW
+  given ReadWriter[DemoScenarioActionResult] = macroRW
   given ReadWriter[DemoScenarioGuideStep] = macroRW
   given ReadWriter[DemoScenarioGuide] = macroRW
   given ReadWriter[DemoScenarioSnapshot] = macroRW

@@ -776,6 +776,79 @@ final class DemoScenarioService(
 
     snapshot.map(buildGuide)
 
+  def widgets(
+      variant: DemoScenarioVariant = DemoScenarioVariant.Basic,
+      bootstrapIfMissing: Boolean = true,
+      refreshDerived: Boolean = true
+  ): Option[DemoScenarioWidgets] =
+    val snapshot =
+      if refreshDerived then refreshScenario(variant = variant, bootstrapIfMissing = bootstrapIfMissing)
+      else
+        currentScenario(variant = variant, refreshDerived = false)
+          .orElse {
+            if bootstrapIfMissing then Some(bootstrapScenario(variant = variant, refreshDerived = false))
+            else None
+          }
+
+    snapshot.map(buildWidgets)
+
+  def actionCatalog(
+      variant: DemoScenarioVariant = DemoScenarioVariant.Basic,
+      bootstrapIfMissing: Boolean = true,
+      refreshDerived: Boolean = true
+  ): Option[Vector[DemoScenarioActionSpec]] =
+    val snapshot =
+      if refreshDerived then refreshScenario(variant = variant, bootstrapIfMissing = bootstrapIfMissing)
+      else
+        currentScenario(variant = variant, refreshDerived = false)
+          .orElse {
+            if bootstrapIfMissing then Some(bootstrapScenario(variant = variant, refreshDerived = false))
+            else None
+          }
+
+    snapshot.map(buildActionCatalog)
+
+  def executeAction(
+      variant: DemoScenarioVariant = DemoScenarioVariant.Basic,
+      action: DemoScenarioActionCode,
+      bootstrapIfMissing: Boolean = true
+  ): Option[DemoScenarioActionResult] =
+    val scenario =
+      findScenario(variant).orElse {
+        if bootstrapIfMissing then
+          bootstrapScenario(variant = variant, refreshDerived = true)
+          findScenario(variant)
+        else None
+      }
+
+    scenario.map { case (config, recommendedOperatorId, tournament, stage) =>
+      val actor = principalFor(recommendedOperatorId)
+      val message =
+        action match
+          case DemoScenarioActionCode.RefreshScenario =>
+            flushDerivedViews()
+            s"Refreshed ${config.variant} demo scenario."
+          case DemoScenarioActionCode.ResetScenario =>
+            bootstrapScenario(variant = variant, refreshDerived = true)
+            s"Reset ${config.variant} demo scenario to seeded baseline."
+          case DemoScenarioActionCode.ArchiveNextTable =>
+            archiveNextRunnableTable(config, tournament.id, stage.id, actor)
+          case DemoScenarioActionCode.FileOpenAppeal =>
+            createDemoAppeal(config, tournament.id, stage.id)
+          case DemoScenarioActionCode.ResolveOldestAppeal =>
+            resolveOldestDemoAppeal(config, tournament.id, stage.id, actor)
+
+      val refreshedSnapshot = refreshScenario(variant = variant, bootstrapIfMissing = true)
+        .getOrElse(throw NoSuchElementException(s"Demo scenario ${config.variant} was not found after action"))
+      DemoScenarioActionResult(
+        variant = config.variant,
+        action = action,
+        message = message,
+        snapshot = refreshedSnapshot,
+        widgets = buildWidgets(refreshedSnapshot)
+      )
+    }
+
   def bootstrapBasicScenario(refreshDerived: Boolean = true): DemoScenarioSnapshot =
     bootstrapScenario(DemoScenarioVariant.Basic, refreshDerived)
 
@@ -1134,6 +1207,16 @@ final class DemoScenarioService(
         description = "Read derived-view readiness without loading the entire scenario payload"
       ),
       DemoScenarioApiRequest(
+        method = "GET",
+        path = s"/demo/widgets?variant=${config.variant.toString}&bootstrapIfMissing=true&refreshDerived=true",
+        description = "Chart-friendly widget payload for the frontend dashboard and overview panels"
+      ),
+      DemoScenarioApiRequest(
+        method = "GET",
+        path = s"/demo/actions?variant=${config.variant.toString}&bootstrapIfMissing=true&refreshDerived=true",
+        description = "Variant-aware interactive demo actions for presenter buttons and scripted state changes"
+      ),
+      DemoScenarioApiRequest(
         method = "POST",
         path = s"/demo/reset?variant=${config.variant.toString}&refreshDerived=true",
         description = "Reset the selected demo variant back to its seeded baseline"
@@ -1191,7 +1274,7 @@ final class DemoScenarioService(
         )
       )
 
-    DemoScenarioSnapshot(
+    val snapshot = DemoScenarioSnapshot(
       variant = config.variant,
       seededAt = SeededAt,
       guestSessionId = guestSession.map(_.id),
@@ -1213,6 +1296,7 @@ final class DemoScenarioService(
       playerLeaderboard = playerLeaderboard,
       clubLeaderboard = clubLeaderboard,
       recommendedRequests = recommendedRequests,
+      availableActions = Vector.empty,
       readiness = DemoScenarioReadiness(
         dashboardOwnersExpected = expectedDashboardOwners.size,
         dashboardOwnersReady = expectedDashboardOwners.count(owner => dashboardRepository.findByOwner(owner).nonEmpty),
@@ -1226,6 +1310,7 @@ final class DemoScenarioService(
         deadLetterAdvancedStatsTaskCount = advancedStatsTasks.count(_.status == AdvancedStatsRecomputeTaskStatus.DeadLetter)
       )
     )
+    snapshot.copy(availableActions = buildActionCatalog(snapshot))
 
   private def scenarioConfig(
       variant: DemoScenarioVariant
@@ -1286,6 +1371,8 @@ final class DemoScenarioService(
 
   private def buildGuide(snapshot: DemoScenarioSnapshot): DemoScenarioGuide =
     val summaryRequest = snapshot.recommendedRequests.find(_.path.startsWith("/demo/summary"))
+    val widgetsRequest = snapshot.recommendedRequests.find(_.path.startsWith("/demo/widgets"))
+    val actionsRequest = snapshot.recommendedRequests.find(_.path.startsWith("/demo/actions"))
     val schedulesRequest = snapshot.recommendedRequests.find(_.path == "/public/schedules")
     val clubsRequest = snapshot.recommendedRequests.find(_.path == "/public/clubs")
     val playerLeaderboardRequest = snapshot.recommendedRequests.find(_.path == "/public/leaderboards/players")
@@ -1308,8 +1395,8 @@ final class DemoScenarioService(
         ),
         DemoScenarioGuideStep(
           title = "Show the public competition widgets",
-          description = "Use public schedules and leaderboards to demonstrate the read-only visitor experience.",
-          request = schedulesRequest.orElse(playerLeaderboardRequest)
+          description = "Use the widget payload together with schedules and leaderboards to demonstrate the read-only visitor experience.",
+          request = widgetsRequest.orElse(schedulesRequest).orElse(playerLeaderboardRequest)
         ),
         DemoScenarioGuideStep(
           title = "Open the detailed table area",
@@ -1320,6 +1407,11 @@ final class DemoScenarioService(
           title = "Demonstrate club browsing",
           description = "Use the public club directory for club cards, honors, and rivalry/alliance context.",
           request = clubsRequest
+        ),
+        DemoScenarioGuideStep(
+          title = "Trigger interactive demo actions",
+          description = "Use the action catalog to archive the next table, create an appeal, or reset the scenario during the live demo.",
+          request = actionsRequest
         )
       ),
       frontendSections = Vector(
@@ -1328,16 +1420,288 @@ final class DemoScenarioService(
         "club-cards",
         "table-grid",
         "leaderboard-strip",
-        "public-schedule-panel"
+        "public-schedule-panel",
+        "demo-action-bar"
       ),
       presenterNotes = Vector(
         s"Recommended operator id: ${snapshot.recommendedOperatorId.value}",
         s"Guest session available: ${snapshot.guestSessionId.map(_.value).getOrElse("none")}",
         s"Archived demo tables: ${snapshot.tournament.archivedTableIds.size}",
+        s"Available interactive demo actions: ${snapshot.availableActions.count(_.enabled)}/${snapshot.availableActions.size}",
         s"Readiness pending outbox count: ${snapshot.readiness.pendingOutboxCount}",
         s"Readiness pending advanced-stats tasks: ${snapshot.readiness.pendingAdvancedStatsTaskCount}"
       )
     )
+
+  private def buildWidgets(snapshot: DemoScenarioSnapshot): DemoScenarioWidgets =
+    val headlineMetrics = Vector(
+      DemoScenarioWidgetMetric(
+        key = "players",
+        label = "Players",
+        value = snapshot.players.size.toDouble,
+        formattedValue = snapshot.players.size.toString
+      ),
+      DemoScenarioWidgetMetric(
+        key = "clubs",
+        label = "Clubs",
+        value = snapshot.clubs.size.toDouble,
+        formattedValue = snapshot.clubs.size.toString
+      ),
+      DemoScenarioWidgetMetric(
+        key = "tables",
+        label = "Tables",
+        value = snapshot.tournament.tables.size.toDouble,
+        formattedValue = snapshot.tournament.tables.size.toString
+      ),
+      DemoScenarioWidgetMetric(
+        key = "archivedTables",
+        label = "Archived Tables",
+        value = snapshot.tournament.archivedTableIds.size.toDouble,
+        formattedValue = snapshot.tournament.archivedTableIds.size.toString
+      )
+    )
+
+    val playerEloSeries = snapshot.players
+      .sortBy(player => (-player.elo, player.nickname))
+      .map(player =>
+        DemoScenarioWidgetMetric(
+          key = player.playerId.value,
+          label = player.nickname,
+          value = player.elo.toDouble,
+          formattedValue = player.elo.toString
+        )
+      )
+
+    val clubPowerSeries = snapshot.clubs
+      .sortBy(club => (-club.powerRating, club.name))
+      .map(club =>
+        DemoScenarioWidgetMetric(
+          key = club.clubId.value,
+          label = club.name,
+          value = club.powerRating,
+          formattedValue = f"${club.powerRating}%.2f"
+        )
+      )
+
+    val playerLeaderboardPreview = snapshot.playerLeaderboard
+      .take(5)
+      .map(entry =>
+        DemoScenarioWidgetMetric(
+          key = entry.playerId.value,
+          label = entry.nickname,
+          value = entry.elo.toDouble,
+          formattedValue = s"ELO ${entry.elo}"
+        )
+      )
+
+    val clubLeaderboardPreview = snapshot.clubLeaderboard
+      .take(5)
+      .map(entry =>
+        DemoScenarioWidgetMetric(
+          key = entry.clubId.value,
+          label = entry.name,
+          value = entry.powerRating,
+          formattedValue = f"${entry.powerRating}%.2f"
+        )
+      )
+
+    val tableStatusBreakdown = snapshot.tournament.tables
+      .groupBy(_.status)
+      .toVector
+      .sortBy(_._1.toString)
+      .map { case (status, tables) =>
+        DemoScenarioWidgetCount(
+          key = status.toString,
+          label = status.toString,
+          count = tables.size
+        )
+      }
+
+    val readinessBreakdown = Vector(
+      DemoScenarioWidgetCount(
+        key = "dashboardReady",
+        label = "Dashboard Ready",
+        count = snapshot.readiness.dashboardOwnersReady
+      ),
+      DemoScenarioWidgetCount(
+        key = "dashboardExpected",
+        label = "Dashboard Expected",
+        count = snapshot.readiness.dashboardOwnersExpected
+      ),
+      DemoScenarioWidgetCount(
+        key = "advancedStatsReady",
+        label = "Advanced Stats Ready",
+        count = snapshot.readiness.advancedStatsOwnersReady
+      ),
+      DemoScenarioWidgetCount(
+        key = "advancedStatsExpected",
+        label = "Advanced Stats Expected",
+        count = snapshot.readiness.advancedStatsOwnersExpected
+      ),
+      DemoScenarioWidgetCount(
+        key = "pendingOutbox",
+        label = "Pending Outbox",
+        count = snapshot.readiness.pendingOutboxCount
+      ),
+      DemoScenarioWidgetCount(
+        key = "pendingAdvancedStatsTasks",
+        label = "Pending Advanced Stats Tasks",
+        count = snapshot.readiness.pendingAdvancedStatsTaskCount
+      )
+    )
+
+    DemoScenarioWidgets(
+      variant = snapshot.variant,
+      generatedAt = Instant.now(),
+      headlineMetrics = headlineMetrics,
+      playerEloSeries = playerEloSeries,
+      clubPowerSeries = clubPowerSeries,
+      playerLeaderboardPreview = playerLeaderboardPreview,
+      clubLeaderboardPreview = clubLeaderboardPreview,
+      tableStatusBreakdown = tableStatusBreakdown,
+      readinessBreakdown = readinessBreakdown
+    )
+
+  private def buildActionCatalog(
+      snapshot: DemoScenarioSnapshot
+  ): Vector[DemoScenarioActionSpec] =
+    val archiveEnabled = snapshot.tournament.tables.exists(table =>
+      table.status == TableStatus.WaitingPreparation || table.status == TableStatus.InProgress
+    )
+    val activeAppealCount = snapshot.tournament.tables.count(_.hasAppeal)
+    val canCreateAppeal =
+      snapshot.tournament.tables.exists(table =>
+        table.status != TableStatus.Archived && !table.hasAppeal
+      )
+    val canResolveAppeal = activeAppealCount > 0
+
+    Vector(
+      DemoScenarioActionSpec(
+        code = DemoScenarioActionCode.RefreshScenario,
+        label = "Refresh",
+        description = "Recompute derived demo views without reseeding data.",
+        method = "POST",
+        path = s"/demo/actions/RefreshScenario?variant=${snapshot.variant.toString}",
+        enabled = true
+      ),
+      DemoScenarioActionSpec(
+        code = DemoScenarioActionCode.ResetScenario,
+        label = "Reset",
+        description = "Replay the seeded baseline for the selected demo variant.",
+        method = "POST",
+        path = s"/demo/actions/ResetScenario?variant=${snapshot.variant.toString}",
+        enabled = true
+      ),
+      DemoScenarioActionSpec(
+        code = DemoScenarioActionCode.ArchiveNextTable,
+        label = "Archive Next Table",
+        description = "Move the next runnable table through start/archive for demo progression.",
+        method = "POST",
+        path = s"/demo/actions/ArchiveNextTable?variant=${snapshot.variant.toString}",
+        enabled = archiveEnabled
+      ),
+      DemoScenarioActionSpec(
+        code = DemoScenarioActionCode.FileOpenAppeal,
+        label = "Create Appeal",
+        description = "Create a moderator-facing appeal on the next eligible non-archived table.",
+        method = "POST",
+        path = s"/demo/actions/FileOpenAppeal?variant=${snapshot.variant.toString}",
+        enabled = canCreateAppeal
+      ),
+      DemoScenarioActionSpec(
+        code = DemoScenarioActionCode.ResolveOldestAppeal,
+        label = "Resolve Appeal",
+        description = "Resolve the oldest active appeal in the selected demo variant.",
+        method = "POST",
+        path = s"/demo/actions/ResolveOldestAppeal?variant=${snapshot.variant.toString}",
+        enabled = canResolveAppeal
+      )
+    )
+
+  private def archiveNextRunnableTable(
+      config: DemoScenarioConfig,
+      tournamentId: TournamentId,
+      stageId: TournamentStageId,
+      actor: AccessPrincipal
+  ): String =
+    val candidate = tableRepository.findByTournamentAndStage(tournamentId, stageId)
+      .sortBy(table => (table.tableNo, table.id.value))
+      .find(table =>
+        matchRecordRepository.findByTable(table.id).isEmpty &&
+          (table.status == TableStatus.WaitingPreparation || table.status == TableStatus.InProgress)
+      )
+      .getOrElse(throw IllegalArgumentException(s"No runnable tables remain in ${config.variant} demo scenario"))
+
+    val startedTable =
+      if candidate.status == TableStatus.WaitingPreparation then
+        tableService.startTable(candidate.id, Instant.now(), actor).getOrElse(candidate)
+      else candidate
+
+    tableService.recordCompletedTable(
+      startedTable.id,
+      demoPaifu(startedTable, tournamentId, stageId, Instant.now()),
+      actor
+    )
+    s"Archived table ${startedTable.id.value} for ${config.variant} demo scenario."
+
+  private def createDemoAppeal(
+      config: DemoScenarioConfig,
+      tournamentId: TournamentId,
+      stageId: TournamentStageId
+  ): String =
+    val table = tableRepository.findByTournamentAndStage(tournamentId, stageId)
+      .sortBy(table => (table.tableNo, table.id.value))
+      .find(table =>
+        table.status != TableStatus.Archived &&
+          !appealTicketRepository.findAll().exists(ticket =>
+            ticket.tableId == table.id &&
+              (ticket.status == AppealStatus.Open ||
+                ticket.status == AppealStatus.UnderReview ||
+                ticket.status == AppealStatus.Escalated)
+          )
+      )
+      .getOrElse(throw IllegalArgumentException(s"No eligible tables remain for new appeals in ${config.variant} demo scenario"))
+
+    val openedBy = table.seats.head.playerId
+    appealService.fileAppeal(
+      tableId = table.id,
+      openedBy = openedBy,
+      description = s"Demo action appeal filed for ${config.variant} scenario.",
+      priority = AppealPriority.High,
+      dueAt = Some(Instant.now().plus(Duration.ofHours(2))),
+      actor = principalFor(openedBy),
+      createdAt = Instant.now()
+    )
+    s"Filed a demo appeal on table ${table.id.value}."
+
+  private def resolveOldestDemoAppeal(
+      config: DemoScenarioConfig,
+      tournamentId: TournamentId,
+      stageId: TournamentStageId,
+      actor: AccessPrincipal
+  ): String =
+    val ticket = appealTicketRepository.findAll()
+      .filter(ticket =>
+        ticket.tournamentId == tournamentId &&
+          ticket.stageId == stageId &&
+          (ticket.status == AppealStatus.Open ||
+            ticket.status == AppealStatus.UnderReview ||
+            ticket.status == AppealStatus.Escalated)
+      )
+      .sortBy(ticket => (ticket.createdAt, ticket.id.value))
+      .headOption
+      .getOrElse(throw IllegalArgumentException(s"No active appeals remain in ${config.variant} demo scenario"))
+
+    appealService.adjudicateAppeal(
+      ticketId = ticket.id,
+      decision = AppealDecisionType.Resolve,
+      verdict = "Demo action resolved the appeal and restored the table flow.",
+      actor = actor,
+      adjudicatedAt = Instant.now(),
+      tableResolution = Some(AppealTableResolution.RestorePriorState),
+      note = Some("demo-action-resolve")
+    )
+    s"Resolved appeal ${ticket.id.value}."
 
   private def flushDerivedViews(): Unit =
     var pass = 0

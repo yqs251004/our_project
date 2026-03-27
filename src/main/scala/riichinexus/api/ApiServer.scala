@@ -173,6 +173,41 @@ private final class ApiHandler(
             refreshDerived = refreshDerived
           )
         )
+      case ("GET", Vector("demo", "widgets")) =>
+        val variant = queryDemoScenarioVariant(exchange)
+        val bootstrapIfMissing = queryBooleanParam(exchange, "bootstrapIfMissing").getOrElse(true)
+        val refreshDerived = queryBooleanParam(exchange, "refreshDerived").getOrElse(true)
+        sendOption(
+          exchange,
+          app.demoScenarioService.widgets(
+            variant = variant,
+            bootstrapIfMissing = bootstrapIfMissing,
+            refreshDerived = refreshDerived
+          )
+        )
+      case ("GET", Vector("demo", "actions")) =>
+        val variant = queryDemoScenarioVariant(exchange)
+        val bootstrapIfMissing = queryBooleanParam(exchange, "bootstrapIfMissing").getOrElse(true)
+        val refreshDerived = queryBooleanParam(exchange, "refreshDerived").getOrElse(true)
+        sendOption(
+          exchange,
+          app.demoScenarioService.actionCatalog(
+            variant = variant,
+            bootstrapIfMissing = bootstrapIfMissing,
+            refreshDerived = refreshDerived
+          )
+        )
+      case ("POST", Vector("demo", "actions", actionCode)) =>
+        val variant = queryDemoScenarioVariant(exchange)
+        val bootstrapIfMissing = queryBooleanParam(exchange, "bootstrapIfMissing").getOrElse(true)
+        sendOption(
+          exchange,
+          app.demoScenarioService.executeAction(
+            variant = variant,
+            action = parseEnum("action", actionCode)(DemoScenarioActionCode.valueOf),
+            bootstrapIfMissing = bootstrapIfMissing
+          )
+        )
       case ("POST", Vector("demo", "bootstrap")) =>
         val variant = queryDemoScenarioVariant(exchange)
         val refreshDerived = queryBooleanParam(exchange, "refreshDerived").getOrElse(true)
