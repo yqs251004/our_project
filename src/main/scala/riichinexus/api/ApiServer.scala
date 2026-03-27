@@ -140,42 +140,57 @@ private final class ApiHandler(
 
     (method, segments) match
       case ("GET", Vector("demo", "summary")) =>
+        val variant = queryDemoScenarioVariant(exchange)
         val bootstrapIfMissing = queryBooleanParam(exchange, "bootstrapIfMissing").getOrElse(false)
         val refreshDerived = queryBooleanParam(exchange, "refreshDerived").getOrElse(true)
-        val summary = app.demoScenarioService.currentScenario(refreshDerived = refreshDerived)
+        val summary = app.demoScenarioService.currentScenario(variant = variant, refreshDerived = refreshDerived)
           .orElse {
-            if bootstrapIfMissing then Some(app.demoScenarioService.bootstrapBasicScenario(refreshDerived = refreshDerived))
+            if bootstrapIfMissing then Some(app.demoScenarioService.bootstrapScenario(variant = variant, refreshDerived = refreshDerived))
             else None
           }
         sendOption(exchange, summary)
       case ("GET", Vector("demo", "readiness")) =>
+        val variant = queryDemoScenarioVariant(exchange)
         val bootstrapIfMissing = queryBooleanParam(exchange, "bootstrapIfMissing").getOrElse(false)
         val refreshDerived = queryBooleanParam(exchange, "refreshDerived").getOrElse(true)
         sendOption(
           exchange,
           app.demoScenarioService.currentReadiness(
+            variant = variant,
             bootstrapIfMissing = bootstrapIfMissing,
             refreshDerived = refreshDerived
           )
         )
       case ("GET", Vector("demo", "guide")) =>
+        val variant = queryDemoScenarioVariant(exchange)
         val bootstrapIfMissing = queryBooleanParam(exchange, "bootstrapIfMissing").getOrElse(true)
         val refreshDerived = queryBooleanParam(exchange, "refreshDerived").getOrElse(true)
         sendOption(
           exchange,
           app.demoScenarioService.guide(
+            variant = variant,
             bootstrapIfMissing = bootstrapIfMissing,
             refreshDerived = refreshDerived
           )
         )
       case ("POST", Vector("demo", "bootstrap")) =>
+        val variant = queryDemoScenarioVariant(exchange)
         val refreshDerived = queryBooleanParam(exchange, "refreshDerived").getOrElse(true)
-        sendJson(exchange, 200, app.demoScenarioService.bootstrapBasicScenario(refreshDerived = refreshDerived))
+        sendJson(exchange, 200, app.demoScenarioService.bootstrapScenario(variant = variant, refreshDerived = refreshDerived))
       case ("POST", Vector("demo", "refresh")) =>
+        val variant = queryDemoScenarioVariant(exchange)
         val bootstrapIfMissing = queryBooleanParam(exchange, "bootstrapIfMissing").getOrElse(true)
         sendOption(
           exchange,
-          app.demoScenarioService.refreshScenario(bootstrapIfMissing = bootstrapIfMissing)
+          app.demoScenarioService.refreshScenario(variant = variant, bootstrapIfMissing = bootstrapIfMissing)
+        )
+      case ("POST", Vector("demo", "reset")) =>
+        val variant = queryDemoScenarioVariant(exchange)
+        val refreshDerived = queryBooleanParam(exchange, "refreshDerived").getOrElse(true)
+        sendJson(
+          exchange,
+          200,
+          app.demoScenarioService.bootstrapScenario(variant = variant, refreshDerived = refreshDerived)
         )
       case ("GET", Vector()) | ("GET", Vector("health")) =>
         sendJson(
@@ -1574,6 +1589,12 @@ private final class ApiHandler(
       .map(PlayerId(_))
       .getOrElse(throw IllegalArgumentException("Query parameter operatorId is required"))
     principal(operatorId)
+
+  private def queryDemoScenarioVariant(exchange: HttpExchange): DemoScenarioVariant =
+    queryParam(exchange, "variant")
+      .filter(_.nonEmpty)
+      .map(parseEnum("variant", _)(DemoScenarioVariant.valueOf))
+      .getOrElse(DemoScenarioVariant.Basic)
 
   private def queryParam(exchange: HttpExchange, key: String): Option[String] =
     val rawQuery = Option(exchange.getRequestURI.getRawQuery).getOrElse("")

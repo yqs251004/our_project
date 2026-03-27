@@ -224,6 +224,11 @@ object JsonCodecs:
   given ReadWriter[PublicClubDirectoryEntry] = macroRW
   given ReadWriter[PlayerLeaderboardEntry] = macroRW
   given ReadWriter[ClubLeaderboardEntry] = macroRW
+  given ReadWriter[DemoScenarioVariant] =
+    readwriter[String].bimap[DemoScenarioVariant](
+      _.toString,
+      DemoScenarioVariant.valueOf
+    )
   given ReadWriter[DemoScenarioDashboardSummary] = macroRW
   given ReadWriter[DemoScenarioAdvancedStatsSummary] = macroRW
   given ReadWriter[DemoScenarioPlayerView] = macroRW

@@ -678,11 +678,13 @@ final class DemoScenarioService(
     clubService: ClubApplicationService,
     tournamentService: TournamentApplicationService,
     tableService: TableLifecycleService,
+    appealService: AppealApplicationService,
     dashboardRepository: DashboardRepository,
     advancedStatsBoardRepository: AdvancedStatsBoardRepository,
     advancedStatsRecomputeTaskRepository: AdvancedStatsRecomputeTaskRepository,
     advancedStatsPipelineService: AdvancedStatsPipelineService,
     domainEventOutboxRepository: DomainEventOutboxRepository,
+    appealTicketRepository: AppealTicketRepository,
     eventBus: DomainEventBus,
     playerRepository: PlayerRepository,
     guestSessionRepository: GuestSessionRepository,
@@ -692,13 +694,17 @@ final class DemoScenarioService(
     matchRecordRepository: MatchRecordRepository
 ):
   private val SeededAt = Instant.parse("2026-03-13T09:00:00Z")
-  private val DemoTournamentName = "RiichiNexus Spring Demo"
-  private val DemoOrganizer = "Frontend Demo"
-  private val DemoStageId = TournamentStageId("stage-demo-swiss")
-  private val DemoStageName = "Swiss Stage 1"
-  private val DemoGuestDisplayName = "demo-guest"
   private val DemoClubNames = Set("EastWind Club", "SouthWind Club")
   private val DemoDerivedFlushPassLimit = 8
+
+  private final case class DemoScenarioConfig(
+      variant: DemoScenarioVariant,
+      tournamentName: String,
+      organizer: String,
+      stageId: TournamentStageId,
+      stageName: String,
+      guestDisplayName: String
+  )
 
   private final case class DemoPlayerSeed(
       userId: String,
@@ -718,53 +724,66 @@ final class DemoScenarioService(
     DemoPlayerSeed("demo-heidi", "Heidi", RankSnapshot(RankPlatform.MahjongSoul, "Master-2"), 1600)
   )
 
-  def currentScenario(refreshDerived: Boolean = true): Option[DemoScenarioSnapshot] =
-    findScenario().map { case (recommendedOperatorId, tournament, stage) =>
+  def currentScenario(
+      variant: DemoScenarioVariant = DemoScenarioVariant.Basic,
+      refreshDerived: Boolean = true
+  ): Option[DemoScenarioSnapshot] =
+    findScenario(variant).map { case (config, recommendedOperatorId, tournament, stage) =>
       if refreshDerived then flushDerivedViews()
       val refreshedTournament = tournamentRepository.findById(tournament.id).getOrElse(tournament)
-      val refreshedStage = refreshedTournament.stages.find(_.id == DemoStageId).getOrElse(stage)
-      buildScenarioSnapshot(recommendedOperatorId, refreshedTournament, refreshedStage)
+      val refreshedStage = refreshedTournament.stages.find(_.id == config.stageId).getOrElse(stage)
+      buildScenarioSnapshot(config, recommendedOperatorId, refreshedTournament, refreshedStage)
     }
 
   def refreshScenario(
+      variant: DemoScenarioVariant = DemoScenarioVariant.Basic,
       bootstrapIfMissing: Boolean = true
   ): Option[DemoScenarioSnapshot] =
-    currentScenario(refreshDerived = true)
+    currentScenario(variant = variant, refreshDerived = true)
       .orElse {
-        if bootstrapIfMissing then Some(bootstrapBasicScenario(refreshDerived = true))
+        if bootstrapIfMissing then Some(bootstrapScenario(variant = variant, refreshDerived = true))
         else None
       }
 
   def currentReadiness(
+      variant: DemoScenarioVariant = DemoScenarioVariant.Basic,
       bootstrapIfMissing: Boolean = false,
       refreshDerived: Boolean = true
   ): Option[DemoScenarioReadiness] =
     val snapshot =
-      if refreshDerived then refreshScenario(bootstrapIfMissing = bootstrapIfMissing)
+      if refreshDerived then refreshScenario(variant = variant, bootstrapIfMissing = bootstrapIfMissing)
       else
-        currentScenario(refreshDerived = false)
+        currentScenario(variant = variant, refreshDerived = false)
           .orElse {
-            if bootstrapIfMissing then Some(bootstrapBasicScenario(refreshDerived = false))
+            if bootstrapIfMissing then Some(bootstrapScenario(variant = variant, refreshDerived = false))
             else None
           }
     snapshot.map(_.readiness)
 
   def guide(
+      variant: DemoScenarioVariant = DemoScenarioVariant.Basic,
       bootstrapIfMissing: Boolean = true,
       refreshDerived: Boolean = true
   ): Option[DemoScenarioGuide] =
     val snapshot =
-      if refreshDerived then refreshScenario(bootstrapIfMissing = bootstrapIfMissing)
+      if refreshDerived then refreshScenario(variant = variant, bootstrapIfMissing = bootstrapIfMissing)
       else
-        currentScenario(refreshDerived = false)
+        currentScenario(variant = variant, refreshDerived = false)
           .orElse {
-            if bootstrapIfMissing then Some(bootstrapBasicScenario(refreshDerived = false))
+            if bootstrapIfMissing then Some(bootstrapScenario(variant = variant, refreshDerived = false))
             else None
           }
 
     snapshot.map(buildGuide)
 
   def bootstrapBasicScenario(refreshDerived: Boolean = true): DemoScenarioSnapshot =
+    bootstrapScenario(DemoScenarioVariant.Basic, refreshDerived)
+
+  def bootstrapScenario(
+      variant: DemoScenarioVariant = DemoScenarioVariant.Basic,
+      refreshDerived: Boolean = true
+  ): DemoScenarioSnapshot =
+    val config = scenarioConfig(variant)
     val players = PlayerSeeds.map(seed =>
       playerService.registerPlayer(
         userId = seed.userId,
@@ -806,15 +825,15 @@ final class DemoScenarioService(
     ensureClubMember(southWindClub.id, grace.id, eve.id)
 
     val stage = TournamentStage(
-      id = DemoStageId,
-      name = DemoStageName,
+      id = config.stageId,
+      name = config.stageName,
       format = StageFormat.Swiss,
       order = 1,
       roundCount = 1
     )
     val tournament = tournamentService.createTournament(
-      name = DemoTournamentName,
-      organizer = DemoOrganizer,
+      name = config.tournamentName,
+      organizer = config.organizer,
       startsAt = SeededAt.plusSeconds(3600),
       endsAt = SeededAt.plusSeconds(10800),
       stages = Vector(stage),
@@ -830,21 +849,24 @@ final class DemoScenarioService(
     ensureTournamentPublished(tournament.id, admin)
     ensureTournamentStarted(tournament.id, admin)
 
-    val tables = tournamentService.scheduleStageTables(tournament.id, DemoStageId, admin)
-    seedArchivedTableIfNeeded(tournament.id, DemoStageId, tables, admin)
-    ensureDemoGuestSession()
+    val tables = tournamentService.scheduleStageTables(tournament.id, config.stageId, admin)
+    applyVariantScenario(config, tournament.id, config.stageId, tables, admin)
+    ensureDemoGuestSession(config)
     if refreshDerived then flushDerivedViews()
 
     val refreshedTournament = tournamentRepository.findById(tournament.id).getOrElse(tournament)
-    val refreshedStage = refreshedTournament.stages.find(_.id == DemoStageId).getOrElse(stage)
-    buildScenarioSnapshot(alice.id, refreshedTournament, refreshedStage)
+    val refreshedStage = refreshedTournament.stages.find(_.id == config.stageId).getOrElse(stage)
+    buildScenarioSnapshot(config, alice.id, refreshedTournament, refreshedStage)
 
-  private def findScenario(): Option[(PlayerId, Tournament, TournamentStage)] =
+  private def findScenario(
+      variant: DemoScenarioVariant
+  ): Option[(DemoScenarioConfig, PlayerId, Tournament, TournamentStage)] =
+    val config = scenarioConfig(variant)
     for
       alice <- playerRepository.findByUserId("demo-alice")
-      tournament <- tournamentRepository.findByNameAndOrganizer(DemoTournamentName, DemoOrganizer)
-      stage <- tournament.stages.find(_.id == DemoStageId)
-    yield (alice.id, tournament, stage)
+      tournament <- tournamentRepository.findByNameAndOrganizer(config.tournamentName, config.organizer)
+      stage <- tournament.stages.find(_.id == config.stageId)
+    yield (config, alice.id, tournament, stage)
 
   private def ensureSuperAdmin(playerId: PlayerId): Player =
     val player = playerRepository.findById(playerId)
@@ -911,18 +933,36 @@ final class DemoScenarioService(
         ()
     }
 
-  private def seedArchivedTableIfNeeded(
+  private def applyVariantScenario(
+      config: DemoScenarioConfig,
       tournamentId: TournamentId,
       stageId: TournamentStageId,
       tables: Vector[Table],
       actor: AccessPrincipal
   ): Unit =
+    config.variant match
+      case DemoScenarioVariant.Basic =>
+        seedArchivedTablesIfNeeded(tournamentId, stageId, tables, archiveCount = 1, actor = actor)
+      case DemoScenarioVariant.Leaderboard =>
+        seedArchivedTablesIfNeeded(tournamentId, stageId, tables, archiveCount = 2, actor = actor)
+      case DemoScenarioVariant.Appeal =>
+        seedArchivedTablesIfNeeded(tournamentId, stageId, tables, archiveCount = 1, actor = actor)
+        ensureOpenAppealScenario(tournamentId, stageId, actor)
+
+  private def seedArchivedTablesIfNeeded(
+      tournamentId: TournamentId,
+      stageId: TournamentStageId,
+      tables: Vector[Table],
+      archiveCount: Int,
+      actor: AccessPrincipal
+  ): Unit =
     val stageTables =
       if tables.nonEmpty then tables
       else tableRepository.findByTournamentAndStage(tournamentId, stageId)
-    val firstTable = stageTables.sortBy(table => (table.tableNo, table.id.value)).headOption
-
-    firstTable.foreach { table =>
+    stageTables
+      .sortBy(table => (table.tableNo, table.id.value))
+      .take(math.max(1, archiveCount))
+      .foreach { table =>
       if matchRecordRepository.findByTable(table.id).isEmpty then
         val readyTable =
           if table.status == TableStatus.Pending then
@@ -930,24 +970,59 @@ final class DemoScenarioService(
           else table
         tableService.recordCompletedTable(
           readyTable.id,
-          demoPaifu(readyTable, tournamentId, stageId, SeededAt.plusSeconds(5400)),
+          demoPaifu(
+            readyTable,
+            tournamentId,
+            stageId,
+            SeededAt.plusSeconds(5400 + (table.tableNo.toLong - 1L) * 900L)
+          ),
           actor
         )
         ()
     }
 
-  private def ensureDemoGuestSession(): GuestAccessSession =
+  private def ensureOpenAppealScenario(
+      tournamentId: TournamentId,
+      stageId: TournamentStageId,
+      actor: AccessPrincipal
+  ): Unit =
+    tableRepository.findByTournamentAndStage(tournamentId, stageId)
+      .sortBy(table => (table.tableNo, table.id.value))
+      .find(table => table.status != TableStatus.Archived)
+      .foreach { table =>
+        val existingAppeal = appealTicketRepository.findAll().find(ticket =>
+          ticket.tableId == table.id &&
+            (ticket.status == AppealStatus.Open ||
+              ticket.status == AppealStatus.UnderReview ||
+              ticket.status == AppealStatus.Escalated)
+        )
+        if existingAppeal.isEmpty then
+          val openedBy = table.seats.head.playerId
+          appealService.fileAppeal(
+            tableId = table.id,
+            openedBy = openedBy,
+            description = "Demo appeal: player reported an abnormal table condition for moderator review.",
+            priority = AppealPriority.High,
+            dueAt = Some(SeededAt.plusSeconds(7200)),
+            actor = principalFor(openedBy),
+            createdAt = SeededAt.plusSeconds(6300)
+          )
+          ()
+      }
+
+  private def ensureDemoGuestSession(config: DemoScenarioConfig): GuestAccessSession =
     guestSessionRepository.findAll()
-      .find(_.displayName == DemoGuestDisplayName)
+      .find(_.displayName == config.guestDisplayName)
       .getOrElse(
         guestSessionService.createSession(
-          displayName = DemoGuestDisplayName,
+          displayName = config.guestDisplayName,
           ttl = java.time.Duration.ofDays(30),
           createdAt = SeededAt
         )
       )
 
   private def buildScenarioSnapshot(
+      config: DemoScenarioConfig,
       recommendedOperatorId: PlayerId,
       tournament: Tournament,
       stage: TournamentStage
@@ -1000,7 +1075,7 @@ final class DemoScenarioService(
         )
       }
     val guestSession = guestSessionRepository.findAll()
-      .find(_.displayName == DemoGuestDisplayName)
+      .find(_.displayName == config.guestDisplayName)
     val clubIds = clubs.map(_.clubId).toSet
     val playerIds = demoPlayers.map(_.playerId).toSet
     val publicSchedules = publicQueryService.publicSchedules()
@@ -1045,8 +1120,23 @@ final class DemoScenarioService(
     val recommendedRequests = Vector(
       DemoScenarioApiRequest(
         method = "GET",
-        path = "/demo/summary?bootstrapIfMissing=true",
+        path = s"/demo/summary?variant=${config.variant.toString}&bootstrapIfMissing=true",
         description = "One-call bootstrap plus all demo cards, tables, public lists and readiness state"
+      ),
+      DemoScenarioApiRequest(
+        method = "GET",
+        path = s"/demo/guide?variant=${config.variant.toString}&bootstrapIfMissing=true&refreshDerived=true",
+        description = "Structured walkthrough for presenter notes and frontend section ordering"
+      ),
+      DemoScenarioApiRequest(
+        method = "GET",
+        path = s"/demo/readiness?variant=${config.variant.toString}&bootstrapIfMissing=true&refreshDerived=true",
+        description = "Read derived-view readiness without loading the entire scenario payload"
+      ),
+      DemoScenarioApiRequest(
+        method = "POST",
+        path = s"/demo/reset?variant=${config.variant.toString}&refreshDerived=true",
+        description = "Reset the selected demo variant back to its seeded baseline"
       ),
       DemoScenarioApiRequest(
         method = "GET",
@@ -1077,16 +1167,32 @@ final class DemoScenarioService(
         method = "GET",
         path = s"/dashboards/players/${recommendedOperatorId.value}?operatorId=${recommendedOperatorId.value}",
         description = "Operator-scoped player dashboard detail for the recommended demo admin"
-      )
-    ) ++ guestSession.toVector.map(session =>
+      ),
       DemoScenarioApiRequest(
         method = "GET",
-        path = s"/guest-sessions/${session.id.value}",
-        description = "Guest session detail for anonymous-flow demos"
+        path = s"/advanced-stats/players/${recommendedOperatorId.value}?operatorId=${recommendedOperatorId.value}",
+        description = "Operator-scoped advanced stats board for charts and deeper player analytics"
       )
-    )
+    ) ++ (
+      if config.variant == DemoScenarioVariant.Appeal then
+        Vector(
+          DemoScenarioApiRequest(
+            method = "GET",
+            path = "/appeals?status=Open&limit=20",
+            description = "Appeal work queue for the appeal-focused demo variant"
+          )
+        )
+      else Vector.empty
+    ) ++ guestSession.toVector.map(session =>
+        DemoScenarioApiRequest(
+          method = "GET",
+          path = s"/guest-sessions/${session.id.value}",
+          description = "Guest session detail for anonymous-flow demos"
+        )
+      )
 
     DemoScenarioSnapshot(
+      variant = config.variant,
       seededAt = SeededAt,
       guestSessionId = guestSession.map(_.id),
       recommendedOperatorId = recommendedOperatorId,
@@ -1121,6 +1227,38 @@ final class DemoScenarioService(
       )
     )
 
+  private def scenarioConfig(
+      variant: DemoScenarioVariant
+  ): DemoScenarioConfig =
+    variant match
+      case DemoScenarioVariant.Basic =>
+        DemoScenarioConfig(
+          variant = variant,
+          tournamentName = "RiichiNexus Spring Demo",
+          organizer = "Frontend Demo",
+          stageId = TournamentStageId("stage-demo-swiss"),
+          stageName = "Swiss Stage 1",
+          guestDisplayName = "demo-guest-basic"
+        )
+      case DemoScenarioVariant.Leaderboard =>
+        DemoScenarioConfig(
+          variant = variant,
+          tournamentName = "RiichiNexus Leaderboard Demo",
+          organizer = "Frontend Demo",
+          stageId = TournamentStageId("stage-demo-leaderboard"),
+          stageName = "Swiss Stage Leaderboard",
+          guestDisplayName = "demo-guest-leaderboard"
+        )
+      case DemoScenarioVariant.Appeal =>
+        DemoScenarioConfig(
+          variant = variant,
+          tournamentName = "RiichiNexus Appeal Demo",
+          organizer = "Frontend Demo",
+          stageId = TournamentStageId("stage-demo-appeal"),
+          stageName = "Swiss Stage Appeal",
+          guestDisplayName = "demo-guest-appeal"
+        )
+
   private def toDemoDashboardSummary(dashboard: Dashboard): DemoScenarioDashboardSummary =
     DemoScenarioDashboardSummary(
       sampleSize = dashboard.sampleSize,
@@ -1154,6 +1292,7 @@ final class DemoScenarioService(
     val tableRequest = snapshot.recommendedRequests.find(_.path.contains("/tables"))
 
     DemoScenarioGuide(
+      variant = snapshot.variant,
       title = "RiichiNexus Demo Walkthrough",
       summary = "Use the demo summary as the single bootstrap source, then drill into public schedules, clubs, leaderboards, and table state for the frontend presentation.",
       steps = Vector(

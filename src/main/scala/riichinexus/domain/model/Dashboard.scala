@@ -241,6 +241,11 @@ final case class ClubLeaderboardEntry(
     memberCount: Int
 ) derives CanEqual
 
+enum DemoScenarioVariant derives CanEqual:
+  case Basic
+  case Leaderboard
+  case Appeal
+
 final case class DemoScenarioDashboardSummary(
     sampleSize: Int,
     dealInRate: Double,
@@ -351,6 +356,7 @@ final case class DemoScenarioGuideStep(
 ) derives CanEqual
 
 final case class DemoScenarioGuide(
+    variant: DemoScenarioVariant,
     title: String,
     summary: String,
     steps: Vector[DemoScenarioGuideStep],
@@ -359,6 +365,7 @@ final case class DemoScenarioGuide(
 ) derives CanEqual
 
 final case class DemoScenarioSnapshot(
+    variant: DemoScenarioVariant,
     seededAt: Instant,
     guestSessionId: Option[GuestSessionId],
     recommendedOperatorId: PlayerId,
