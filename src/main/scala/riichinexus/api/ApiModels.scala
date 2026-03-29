@@ -206,6 +206,27 @@ final case class RevokeClubHonorRequest(
   def operator: PlayerId =
     PlayerId(operatorId)
 
+final case class UpdateClubRecruitmentPolicyRequest(
+    operatorId: String,
+    applicationsOpen: Boolean,
+    requirementsText: Option[String] = None,
+    expectedReviewSlaHours: Option[Int] = None,
+    note: Option[String] = None
+):
+  expectedReviewSlaHours.foreach(hours =>
+    require(hours > 0, "Recruitment policy expectedReviewSlaHours must be positive")
+  )
+
+  def operator: PlayerId =
+    PlayerId(operatorId)
+
+  def policy: ClubRecruitmentPolicy =
+    ClubRecruitmentPolicy(
+      applicationsOpen = applicationsOpen,
+      requirementsText = requirementsText.map(_.trim).filter(_.nonEmpty),
+      expectedReviewSlaHours = expectedReviewSlaHours
+    )
+
 final case class CreateTournamentStageRequest(
     id: Option[String],
     name: String,
@@ -374,6 +395,18 @@ final case class RejectClubApplicationRequest(
 ):
   def operator: PlayerId =
     PlayerId(operatorId)
+
+final case class ReviewClubApplicationRequest(
+    operatorId: String,
+    decision: String,
+    playerId: Option[String] = None,
+    note: Option[String] = None
+):
+  def operator: PlayerId =
+    PlayerId(operatorId)
+
+  def player: Option[PlayerId] =
+    playerId.map(PlayerId(_))
 
 final case class WithdrawClubApplicationRequest(
     guestSessionId: Option[String] = None,
@@ -824,6 +857,7 @@ object ApiModels:
   given ReadWriter[UpdateClubRankTreeRequest] = macroRW
   given ReadWriter[AwardClubHonorRequest] = macroRW
   given ReadWriter[RevokeClubHonorRequest] = macroRW
+  given ReadWriter[UpdateClubRecruitmentPolicyRequest] = macroRW
   given ReadWriter[CreateTournamentStageRequest] = macroRW
   given ReadWriter[CreateTournamentRequest] = macroRW
   given ReadWriter[ConfigureStageRulesRequest] = macroRW
@@ -832,6 +866,7 @@ object ApiModels:
   given ReadWriter[AssignTournamentAdminRequest] = macroRW
   given ReadWriter[OperatorRequest] = macroRW
   given ReadWriter[RejectClubApplicationRequest] = macroRW
+  given ReadWriter[ReviewClubApplicationRequest] = macroRW
   given ReadWriter[WithdrawClubApplicationRequest] = macroRW
   given ReadWriter[UpdateClubRelationRequest] = macroRW
   given ReadWriter[AppealAttachmentRequest] = macroRW

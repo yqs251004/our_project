@@ -418,6 +418,18 @@ final case class ClubMembershipApplication(
       withdrawnByPrincipalId = Some(byPrincipalId)
     )
 
+  def bindRegisteredApplicant(
+      userId: String,
+      updatedDisplayName: String
+  ): ClubMembershipApplication =
+    require(isPending, "Only pending applications can be rebound to a registered applicant")
+    require(userId.trim.nonEmpty, "Bound applicant userId cannot be empty")
+    require(updatedDisplayName.trim.nonEmpty, "Bound applicant display name cannot be empty")
+    copy(
+      applicantUserId = Some(userId.trim),
+      displayName = updatedDisplayName.trim
+    )
+
 final case class ClubRankNode(
     code: String,
     label: String,
@@ -533,6 +545,18 @@ final case class ClubRelation(
     note: Option[String] = None
 ) derives CanEqual
 
+final case class ClubRecruitmentPolicy(
+    applicationsOpen: Boolean = true,
+    requirementsText: Option[String] = Some("Open to guest or registered applicants; final approval is handled manually by club admins."),
+    expectedReviewSlaHours: Option[Int] = Some(72)
+) derives CanEqual:
+  requirementsText.foreach(text =>
+    require(text.trim.nonEmpty, "Club recruitment requirements text cannot be empty")
+  )
+  expectedReviewSlaHours.foreach(hours =>
+    require(hours > 0, "Club recruitment expected review SLA must be positive")
+  )
+
 final case class GlobalDictionaryEntry(
     key: String,
     value: String,
@@ -569,6 +593,7 @@ final case class Club(
     powerRating: Double = 0.0,
     honors: Vector[ClubHonor] = Vector.empty,
     relations: Vector[ClubRelation] = Vector.empty,
+    recruitmentPolicy: ClubRecruitmentPolicy = ClubRecruitmentPolicy(),
     membershipApplications: Vector[ClubMembershipApplication] = Vector.empty,
     dissolvedAt: Option[Instant] = None,
     dissolvedBy: Option[PlayerId] = None,
@@ -627,6 +652,9 @@ final case class Club(
     copy(
       titleAssignments = titleAssignments.filterNot(_.playerId == playerId)
     )
+
+  def updateRecruitmentPolicy(policy: ClubRecruitmentPolicy): Club =
+    copy(recruitmentPolicy = policy)
 
   def submitApplication(application: ClubMembershipApplication): Club =
     copy(

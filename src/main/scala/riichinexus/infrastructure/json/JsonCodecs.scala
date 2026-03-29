@@ -81,6 +81,7 @@ object JsonCodecs:
   given ReadWriter[ClubRelationKind] =
     stringEnumReadWriter(ClubRelationKind.valueOf, _.toString)
   given ReadWriter[ClubRelation] = macroRW
+  given ReadWriter[ClubRecruitmentPolicy] = macroRW
   given ReadWriter[ClubHonor] = macroRW
   given ReadWriter[GlobalDictionaryEntry] = macroRW
   given ReadWriter[GlobalDictionaryValueType] =
@@ -224,6 +225,24 @@ object JsonCodecs:
   given ReadWriter[PublicClubDirectoryEntry] = macroRW
   given ReadWriter[PlayerLeaderboardEntry] = macroRW
   given ReadWriter[ClubLeaderboardEntry] = macroRW
+  given ReadWriter[SessionPrincipalKind] =
+    readwriter[String].bimap[SessionPrincipalKind](
+      _.toString,
+      SessionPrincipalKind.valueOf
+    )
+  given ReadWriter[CurrentSessionRoleFlags] = macroRW
+  given ReadWriter[CurrentSessionView] = macroRW
+  given ReadWriter[ClubMembershipApplicantView] = macroRW
+  given ReadWriter[ClubMembershipApplicationView] = macroRW
+  given ReadWriter[ClubApplicationPolicyView] = macroRW
+  given ReadWriter[PublicClubLineupMemberView] = macroRW
+  given ReadWriter[PublicClubRecentMatchSeatView] = macroRW
+  given ReadWriter[PublicClubRecentMatchView] = macroRW
+  given ReadWriter[PublicClubDetailView] = macroRW
+  given ReadWriter[TournamentStageDirectoryEntry] = macroRW
+  given ReadWriter[PublicTournamentSummaryView] = macroRW
+  given ReadWriter[PublicTournamentStageView] = macroRW
+  given ReadWriter[PublicTournamentDetailView] = macroRW
   given ReadWriter[DemoScenarioVariant] =
     readwriter[String].bimap[DemoScenarioVariant](
       _.toString,

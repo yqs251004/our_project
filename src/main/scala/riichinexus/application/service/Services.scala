@@ -295,9 +295,10 @@ private object ProjectionSupport:
       dashboardRepository: DashboardRepository,
       at: Instant
   ): Dashboard =
+    val existingVersion = dashboardRepository.findByOwner(DashboardOwner.Club(club.id)).map(_.version).getOrElse(0)
     val memberDashboards = activeMemberDashboards(club, playerRepository, dashboardRepository)
 
-    if memberDashboards.isEmpty then Dashboard.empty(DashboardOwner.Club(club.id), at)
+    if memberDashboards.isEmpty then Dashboard.empty(DashboardOwner.Club(club.id), at).copy(version = existingVersion)
     else
       Dashboard(
         owner = DashboardOwner.Club(club.id),
@@ -308,7 +309,8 @@ private object ProjectionSupport:
         riichiRate = weightedAverage(memberDashboards, _.riichiRate),
         averagePlacement = weightedAverage(memberDashboards, _.averagePlacement),
         topFinishRate = weightedAverage(memberDashboards, _.topFinishRate),
-        lastUpdatedAt = at
+        lastUpdatedAt = at,
+        version = existingVersion
       )
 
   private def activeMemberDashboards(
@@ -425,6 +427,7 @@ final class PlayerApplicationService(
 final class GuestSessionApplicationService(
     playerRepository: PlayerRepository,
     guestSessionRepository: GuestSessionRepository,
+    clubRepository: ClubRepository,
     auditEventRepository: AuditEventRepository,
     transactionManager: TransactionManager = NoOpTransactionManager
 ):
@@ -521,6 +524,7 @@ final class GuestSessionApplicationService(
         )
 
         val updated = guestSessionRepository.save(session.upgrade(playerId, upgradedAt))
+        reconcileGuestApplications(session.id, player)
         auditEventRepository.save(
           AuditEventEntry(
             id = IdGenerator.auditEventId(),
@@ -534,6 +538,22 @@ final class GuestSessionApplicationService(
         )
         updated
       }
+    }
+
+  private def reconcileGuestApplications(
+      sessionId: GuestSessionId,
+      player: Player
+  ): Unit =
+    val guestApplicantId = s"guest:${sessionId.value}"
+    clubRepository.findAll().foreach { club =>
+      val updatedApplications = club.membershipApplications.map { application =>
+        if application.isPending && application.applicantUserId.contains(guestApplicantId) then
+          application.bindRegisteredApplicant(player.userId, player.nickname)
+        else application
+      }
+
+      if updatedApplications != club.membershipApplications then
+        clubRepository.save(club.copy(membershipApplications = updatedApplications))
     }
 
   private def inactiveSessionMessage(session: GuestAccessSession, at: Instant): String =
@@ -2458,6 +2478,10 @@ final class ClubApplicationService(
 
       clubRepository.findById(clubId).map { club =>
         ensureClubActive(club)
+        require(
+          club.recruitmentPolicy.applicationsOpen,
+          s"Club ${clubId.value} is not currently accepting membership applications"
+        )
         require(displayName.trim.nonEmpty, "Membership application display name cannot be empty")
 
         applicantUserId.foreach { userId =>
@@ -2563,7 +2587,10 @@ final class ClubApplicationService(
             s"Player ${playerId.value} is already a member of club ${clubId.value}"
           )
 
-        if application.applicantUserId.exists(_ != player.userId) then
+        if application.applicantUserId.exists(applicantUserId =>
+            !applicantUserId.startsWith("guest:") && applicantUserId != player.userId
+          )
+        then
           throw IllegalArgumentException(
             s"Membership application ${applicationId.value} does not belong to player ${playerId.value}"
           )
@@ -3083,6 +3110,44 @@ final class ClubApplicationService(
             occurredAt = occurredAt,
             actorId = actor.playerId,
             details = Map("title" -> title),
+            note = note
+          )
+        )
+        updatedClub
+      }
+    }
+
+  def updateRecruitmentPolicy(
+      clubId: ClubId,
+      policy: ClubRecruitmentPolicy,
+      actor: AccessPrincipal,
+      occurredAt: Instant = Instant.now(),
+      note: Option[String] = None
+  ): Option[Club] =
+    transactionManager.inTransaction {
+      clubRepository.findById(clubId).map { club =>
+        ensureClubActive(club)
+        requireClubCapability(
+          actor = actor,
+          club = club,
+          permission = Permission.ManageClubMembership,
+          delegatedPrivileges = Set(ClubPrivilege.ApproveRoster)
+        )
+
+        val updatedClub = clubRepository.save(club.updateRecruitmentPolicy(policy))
+        auditEventRepository.save(
+          AuditEventEntry(
+            id = IdGenerator.auditEventId(),
+            aggregateType = "club",
+            aggregateId = clubId.value,
+            eventType = "ClubRecruitmentPolicyUpdated",
+            occurredAt = occurredAt,
+            actorId = actor.playerId,
+            details = Map(
+              "applicationsOpen" -> policy.applicationsOpen.toString,
+              "requirementsText" -> policy.requirementsText.getOrElse("none"),
+              "expectedReviewSlaHours" -> policy.expectedReviewSlaHours.map(_.toString).getOrElse("none")
+            ),
             note = note
           )
         )
@@ -5482,12 +5547,14 @@ final class SuperAdminService(
       else
         authorizationService.requirePermission(actor, Permission.ManageGlobalDictionary)
 
+      val existingVersion = globalDictionaryRepository.findByKey(key).map(_.version).getOrElse(0)
       val entry = GlobalDictionaryEntry(
         key = key,
         value = value,
         updatedAt = updatedAt,
         updatedBy = actor.playerId.getOrElse(PlayerId("system")),
-        note = note
+        note = note,
+        version = existingVersion
       )
 
       val saved = globalDictionaryRepository.save(entry)

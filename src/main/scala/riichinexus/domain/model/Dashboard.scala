@@ -241,6 +241,167 @@ final case class ClubLeaderboardEntry(
     memberCount: Int
 ) derives CanEqual
 
+enum SessionPrincipalKind derives CanEqual:
+  case Anonymous
+  case Guest
+  case RegisteredPlayer
+
+final case class CurrentSessionRoleFlags(
+    isGuest: Boolean,
+    isRegisteredPlayer: Boolean,
+    isClubAdmin: Boolean,
+    isTournamentAdmin: Boolean,
+    isSuperAdmin: Boolean
+) derives CanEqual
+
+final case class CurrentSessionView(
+    principalKind: SessionPrincipalKind,
+    principalId: String,
+    displayName: String,
+    authenticated: Boolean,
+    roles: CurrentSessionRoleFlags,
+    player: Option[Player] = None,
+    guestSession: Option[GuestAccessSession] = None
+) derives CanEqual
+
+final case class ClubMembershipApplicantView(
+    playerId: Option[PlayerId],
+    applicantUserId: Option[String],
+    displayName: String,
+    playerStatus: Option[PlayerStatus],
+    currentRank: Option[RankSnapshot],
+    elo: Option[Int],
+    clubIds: Vector[ClubId]
+) derives CanEqual
+
+final case class ClubMembershipApplicationView(
+    applicationId: MembershipApplicationId,
+    clubId: ClubId,
+    clubName: String,
+    applicant: ClubMembershipApplicantView,
+    submittedAt: Instant,
+    message: Option[String],
+    status: ClubMembershipApplicationStatus,
+    reviewedBy: Option[PlayerId],
+    reviewedByDisplayName: Option[String],
+    reviewedAt: Option[Instant],
+    reviewNote: Option[String],
+    withdrawnByPrincipalId: Option[String],
+    canReview: Boolean,
+    canWithdraw: Boolean
+) derives CanEqual
+
+final case class ClubApplicationPolicyView(
+    applicationsOpen: Boolean,
+    requirementsText: Option[String],
+    expectedReviewSlaHours: Option[Int],
+    pendingApplicationCount: Int
+) derives CanEqual
+
+final case class PublicClubLineupMemberView(
+    playerId: PlayerId,
+    nickname: String,
+    elo: Int,
+    currentRank: RankSnapshot,
+    status: PlayerStatus,
+    isAdmin: Boolean,
+    internalTitle: Option[String],
+    privileges: Vector[String]
+) derives CanEqual
+
+final case class PublicClubRecentMatchSeatView(
+    playerId: PlayerId,
+    nickname: String,
+    clubId: Option[ClubId],
+    seat: SeatWind,
+    placement: Int,
+    scoreDelta: Int,
+    finalPoints: Int
+) derives CanEqual
+
+final case class PublicClubRecentMatchView(
+    matchRecordId: MatchRecordId,
+    tournamentId: TournamentId,
+    tournamentName: String,
+    stageId: TournamentStageId,
+    stageName: String,
+    tableId: TableId,
+    generatedAt: Instant,
+    seats: Vector[PublicClubRecentMatchSeatView]
+) derives CanEqual
+
+final case class PublicClubDetailView(
+    clubId: ClubId,
+    name: String,
+    memberCount: Int,
+    activeMemberCount: Int,
+    adminCount: Int,
+    powerRating: Double,
+    totalPoints: Int,
+    treasuryBalance: Long,
+    pointPool: Int,
+    relations: Vector[ClubRelation],
+    honors: Vector[ClubHonor],
+    applicationPolicy: ClubApplicationPolicyView,
+    currentLineup: Vector[PublicClubLineupMemberView],
+    recentMatches: Vector[PublicClubRecentMatchView]
+) derives CanEqual
+
+final case class TournamentStageDirectoryEntry(
+    stageId: TournamentStageId,
+    name: String,
+    format: StageFormat,
+    order: Int,
+    status: StageStatus,
+    currentRound: Int,
+    roundCount: Int,
+    schedulingPoolSize: Int,
+    pendingTablePlanCount: Int,
+    scheduledTableCount: Int
+) derives CanEqual
+
+final case class PublicTournamentSummaryView(
+    tournamentId: TournamentId,
+    name: String,
+    organizer: String,
+    status: TournamentStatus,
+    startsAt: Instant,
+    endsAt: Instant,
+    stageCount: Int,
+    activeStageCount: Int,
+    participantCount: Int,
+    clubCount: Int,
+    playerCount: Int
+) derives CanEqual
+
+final case class PublicTournamentStageView(
+    stageId: TournamentStageId,
+    name: String,
+    format: StageFormat,
+    order: Int,
+    status: StageStatus,
+    currentRound: Int,
+    roundCount: Int,
+    tableCount: Int,
+    archivedTableCount: Int,
+    pendingTablePlanCount: Int,
+    standings: Option[StageRankingSnapshot],
+    bracket: Option[KnockoutBracketSnapshot]
+) derives CanEqual
+
+final case class PublicTournamentDetailView(
+    tournamentId: TournamentId,
+    name: String,
+    organizer: String,
+    status: TournamentStatus,
+    startsAt: Instant,
+    endsAt: Instant,
+    clubIds: Vector[ClubId],
+    playerIds: Vector[PlayerId],
+    whitelistCount: Int,
+    stages: Vector[PublicTournamentStageView]
+) derives CanEqual
+
 enum DemoScenarioVariant derives CanEqual:
   case Basic
   case Leaderboard

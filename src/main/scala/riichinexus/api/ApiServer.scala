@@ -26,7 +26,7 @@ final case class ApiServerConfig(
     host: String,
     port: Int,
     storageLabel: String,
-    corsAllowOrigin: String
+    corsAllowOrigin: String = "*"
 )
 
 object ApiServerConfig:
@@ -139,6 +139,11 @@ private final class ApiHandler(
     val segments = path.split("/").toVector.filter(_.nonEmpty)
 
     (method, segments) match
+      case ("GET", Vector("openapi.json")) =>
+        val baseUrl = s"http://${exchange.getLocalAddress.getHostString}:${exchange.getLocalAddress.getPort}"
+        sendText(exchange, 200, OpenApiSupport.openApiJson(baseUrl), "application/json; charset=utf-8")
+      case ("GET", Vector("swagger")) =>
+        sendText(exchange, 200, OpenApiSupport.swaggerHtml("/openapi.json"), "text/html; charset=utf-8")
       case ("GET", Vector("demo", "summary")) =>
         val variant = queryDemoScenarioVariant(exchange)
         val bootstrapIfMissing = queryBooleanParam(exchange, "bootstrapIfMissing").getOrElse(false)
@@ -254,6 +259,20 @@ private final class ApiHandler(
           schedules,
           activeFilters(exchange, "tournamentStatus", "stageStatus")
         )
+      case ("GET", Vector("public", "tournaments")) =>
+        val statusFilter = queryParam(exchange, "status").filter(_.nonEmpty).map(
+          parseEnum("status", _)(TournamentStatus.valueOf)
+        )
+        val organizerFilter = queryParam(exchange, "organizer").filter(_.nonEmpty)
+        val tournaments = app.tournamentRepository.findAll()
+          .filter(_.status != TournamentStatus.Draft)
+          .filter(tournament => statusFilter.forall(_ == tournament.status))
+          .filter(tournament => organizerFilter.forall(containsIgnoreCase(tournament.organizer, _)))
+          .sortBy(tournament => (tournament.startsAt, tournament.name, tournament.id.value))
+          .map(buildPublicTournamentSummaryView)
+        sendPagedJson(exchange, tournaments, activeFilters(exchange, "status", "organizer"))
+      case ("GET", Vector("public", "tournaments", tournamentId)) =>
+        sendOption(exchange, buildPublicTournamentDetailView(TournamentId(tournamentId)))
       case ("GET", Vector("public", "clubs")) =>
         val nameFilter = queryParam(exchange, "name").filter(_.nonEmpty)
         val relationFilter = queryParam(exchange, "relation").filter(_.nonEmpty).map(
@@ -264,6 +283,8 @@ private final class ApiHandler(
           .filter(club => relationFilter.forall(relation => club.relations.exists(_.relation == relation)))
           .sortBy(_.name)
         sendPagedJson(exchange, clubs, activeFilters(exchange, "name", "relation"))
+      case ("GET", Vector("public", "clubs", clubId)) =>
+        sendOption(exchange, buildPublicClubDetailView(ClubId(clubId)))
       case ("GET", Vector("public", "leaderboards", "players")) =>
         val clubIdFilter = queryParam(exchange, "clubId").filter(_.nonEmpty).map(ClubId(_))
         val statusFilter = queryParam(exchange, "status").filter(_.nonEmpty).map(
@@ -279,6 +300,15 @@ private final class ApiHandler(
           .filter(entry => nameFilter.forall(containsIgnoreCase(entry.name, _)))
         sendPagedJson(exchange, leaderboard, activeFilters(exchange, "name"))
 
+      case ("GET", Vector("session")) =>
+        sendJson(
+          exchange,
+          200,
+          resolveCurrentSessionView(
+            operatorId = queryParam(exchange, "operatorId").filter(_.nonEmpty).map(PlayerId(_)),
+            guestSessionId = queryParam(exchange, "guestSessionId").filter(_.nonEmpty).map(GuestSessionId(_))
+          )
+        )
       case ("GET", Vector("players")) =>
         val clubIdFilter = queryParam(exchange, "clubId").filter(_.nonEmpty).map(ClubId(_))
         val statusFilter = queryParam(exchange, "status").filter(_.nonEmpty).map(
@@ -291,6 +321,12 @@ private final class ApiHandler(
           .filter(player => nicknameFilter.forall(containsIgnoreCase(player.nickname, _)))
           .sortBy(player => (player.nickname, player.id.value))
         sendPagedJson(exchange, players, activeFilters(exchange, "clubId", "status", "nickname"))
+      case ("GET", Vector("players", "me")) =>
+        val operatorId = queryParam(exchange, "operatorId")
+          .filter(_.nonEmpty)
+          .map(PlayerId(_))
+          .getOrElse(throw IllegalArgumentException("Query parameter operatorId is required"))
+        sendOption(exchange, app.playerRepository.findById(operatorId))
       case ("GET", Vector("players", playerId)) =>
         sendOption(exchange, app.playerRepository.findById(PlayerId(playerId)))
       case ("POST", Vector("players")) =>
@@ -343,16 +379,18 @@ private final class ApiHandler(
 
       case ("GET", Vector("clubs")) =>
         val activeOnly = queryBooleanParam(exchange, "activeOnly")
+        val joinableOnly = queryBooleanParam(exchange, "joinableOnly")
         val memberIdFilter = queryParam(exchange, "memberId").filter(_.nonEmpty).map(PlayerId(_))
         val adminIdFilter = queryParam(exchange, "adminId").filter(_.nonEmpty).map(PlayerId(_))
         val nameFilter = queryParam(exchange, "name").filter(_.nonEmpty)
         val clubs = app.clubRepository.findAll()
           .filter(club => activeOnly.forall(flag => !flag || club.dissolvedAt.isEmpty))
+          .filter(club => joinableOnly.forall(flag => !flag || clubApplicationsOpen(club)))
           .filter(club => memberIdFilter.forall(club.members.contains))
           .filter(club => adminIdFilter.forall(club.admins.contains))
           .filter(club => nameFilter.forall(containsIgnoreCase(club.name, _)))
           .sortBy(club => (club.dissolvedAt.nonEmpty, club.name, club.id.value))
-        sendPagedJson(exchange, clubs, activeFilters(exchange, "activeOnly", "memberId", "adminId", "name"))
+        sendPagedJson(exchange, clubs, activeFilters(exchange, "activeOnly", "joinableOnly", "memberId", "adminId", "name"))
       case ("GET", Vector("clubs", clubId)) =>
         sendOption(exchange, app.clubRepository.findById(ClubId(clubId)))
       case ("GET", Vector("clubs", clubId, "members")) =>
@@ -377,33 +415,55 @@ private final class ApiHandler(
       case ("GET", Vector("clubs", clubId, "member-privileges", playerId)) =>
         sendOption(exchange, app.clubService.memberPrivilegeSnapshot(ClubId(clubId), PlayerId(playerId)))
       case ("GET", Vector("clubs", clubId, "applications")) =>
-        val applications = app.clubRepository
+        val club = app.clubRepository
           .findById(ClubId(clubId))
-          .map(_.membershipApplications
-            .filter(application =>
-              queryParam(exchange, "status")
-                .filter(_.nonEmpty)
-                .map(parseEnum("status", _)(ClubMembershipApplicationStatus.valueOf))
-                .forall(_ == application.status)
-            )
-            .filter(application =>
-              queryParam(exchange, "applicantUserId")
-                .filter(_.nonEmpty)
-                .forall(value => application.applicantUserId.contains(value))
-            )
-            .filter(application =>
-              queryParam(exchange, "displayName")
-                .filter(_.nonEmpty)
-                .forall(containsIgnoreCase(application.displayName, _))
-            )
-            .sortBy(_.submittedAt)
-          )
           .getOrElse(throw NoSuchElementException(s"Club $clubId was not found"))
+        val actor = requestActor(
+          queryParam(exchange, "guestSessionId").filter(_.nonEmpty).map(GuestSessionId(_)),
+          queryParam(exchange, "operatorId").filter(_.nonEmpty).map(PlayerId(_))
+        )
+        requireClubApplicationManager(actor, club)
+        val applications = club.membershipApplications
+          .filter(application =>
+            queryParam(exchange, "status")
+              .filter(_.nonEmpty)
+              .map(parseEnum("status", _)(ClubMembershipApplicationStatus.valueOf))
+              .forall(_ == application.status)
+          )
+          .filter(application =>
+            queryParam(exchange, "applicantUserId")
+              .filter(_.nonEmpty)
+              .forall(value => application.applicantUserId.contains(value))
+          )
+          .filter(application =>
+            queryParam(exchange, "displayName")
+              .filter(_.nonEmpty)
+              .forall(containsIgnoreCase(application.displayName, _))
+          )
+          .sortBy(_.submittedAt)
+          .map(application => buildClubMembershipApplicationView(club, application, actor))
         sendPagedJson(
           exchange,
           applications,
-          activeFilters(exchange, "status", "applicantUserId", "displayName")
+          activeFilters(exchange, "operatorId", "guestSessionId", "status", "applicantUserId", "displayName")
         )
+      case ("GET", Vector("clubs", clubId, "applications", applicationId)) =>
+        val club = app.clubRepository
+          .findById(ClubId(clubId))
+          .getOrElse(throw NoSuchElementException(s"Club $clubId was not found"))
+        val actor = requestActor(
+          queryParam(exchange, "guestSessionId").filter(_.nonEmpty).map(GuestSessionId(_)),
+          queryParam(exchange, "operatorId").filter(_.nonEmpty).map(PlayerId(_))
+        )
+        val application = club
+          .findApplication(MembershipApplicationId(applicationId))
+          .getOrElse(
+            throw NoSuchElementException(
+              s"Membership application $applicationId was not found in club $clubId"
+            )
+          )
+        requireClubApplicationViewer(actor, club, application)
+        sendJson(exchange, 200, buildClubMembershipApplicationView(club, application, actor))
       case ("POST", Vector("clubs")) =>
         val request = readJsonBody[CreateClubRequest](exchange)
         val club = app.clubService.createClub(
@@ -486,6 +546,68 @@ private final class ApiHandler(
             actor = principal(request.operator),
             note = request.note
           )
+        )
+      case ("POST", Vector("clubs", clubId, "applications", applicationId, "review")) =>
+        val request = readJsonBody[ReviewClubApplicationRequest](exchange)
+        val normalizedDecision = request.decision.trim.toLowerCase
+        val clubKey = ClubId(clubId)
+        val membershipKey = MembershipApplicationId(applicationId)
+        val updatedClub =
+          normalizedDecision match
+            case "approve" | "approved" =>
+              val club = app.clubRepository
+                .findById(clubKey)
+                .getOrElse(throw NoSuchElementException(s"Club $clubId was not found"))
+              val application = club
+                .findApplication(membershipKey)
+                .getOrElse(
+                  throw NoSuchElementException(
+                    s"Membership application $applicationId was not found in club $clubId"
+                  )
+              )
+              val player = request.player
+                .flatMap(playerId => app.playerRepository.findById(playerId))
+                .orElse(
+                  application.applicantUserId
+                    .filterNot(_.startsWith("guest:"))
+                    .flatMap(app.playerRepository.findByUserId)
+                )
+                .getOrElse(
+                  throw IllegalArgumentException(
+                    s"Membership application $applicationId requires playerId when approving a guest-origin application"
+                  )
+                )
+              app.clubService.approveMembershipApplication(
+                clubId = clubKey,
+                applicationId = membershipKey,
+                playerId = player.id,
+                actor = principal(request.operator),
+                note = request.note
+              )
+            case "reject" | "rejected" =>
+              app.clubService.rejectMembershipApplication(
+                clubId = clubKey,
+                applicationId = membershipKey,
+                actor = principal(request.operator),
+                note = request.note
+              )
+            case other =>
+              throw IllegalArgumentException(
+                s"Unsupported review decision '$other'. Supported decisions: approve, reject"
+              )
+
+        val reviewedClub = updatedClub.getOrElse(
+          throw NoSuchElementException(s"Club $clubId was not found")
+        )
+        val reviewedApplication = reviewedClub.findApplication(membershipKey).getOrElse(
+          throw NoSuchElementException(
+            s"Membership application $applicationId was not found in club $clubId"
+          )
+        )
+        sendJson(
+          exchange,
+          200,
+          buildClubMembershipApplicationView(reviewedClub, reviewedApplication, principal(request.operator))
         )
       case ("POST", Vector("clubs", clubId, "admins")) =>
         val request = readJsonBody[AssignClubAdminRequest](exchange)
@@ -596,6 +718,17 @@ private final class ApiHandler(
             note = request.note
           )
         )
+      case ("POST", Vector("clubs", clubId, "recruitment-policy")) =>
+        val request = readJsonBody[UpdateClubRecruitmentPolicyRequest](exchange)
+        sendOption(
+          exchange,
+          app.clubService.updateRecruitmentPolicy(
+            clubId = ClubId(clubId),
+            policy = request.policy,
+            actor = principal(request.operator),
+            note = request.note
+          )
+        )
       case ("POST", Vector("clubs", clubId, "relations")) =>
         val request = readJsonBody[UpdateClubRelationRequest](exchange)
         sendOption(
@@ -621,6 +754,17 @@ private final class ApiHandler(
         sendPagedJson(exchange, tournaments, activeFilters(exchange, "status", "adminId", "organizer"))
       case ("GET", Vector("tournaments", tournamentId)) =>
         sendOption(exchange, app.tournamentRepository.findById(TournamentId(tournamentId)))
+      case ("GET", Vector("tournaments", tournamentId, "stages")) =>
+        val tournament = app.tournamentRepository
+          .findById(TournamentId(tournamentId))
+          .getOrElse(throw NoSuchElementException(s"Tournament $tournamentId was not found"))
+        sendJson(
+          exchange,
+          200,
+          tournament.stages
+            .sortBy(_.order)
+            .map(buildTournamentStageDirectoryEntry)
+        )
       case ("GET", Vector("tournaments", tournamentId, "whitelist")) =>
         val whitelist = app.tournamentRepository
           .findById(TournamentId(tournamentId))
@@ -1619,6 +1763,331 @@ private final class ApiHandler(
       .orElse(operatorId.map(principal))
       .getOrElse(AccessPrincipal.guest())
 
+  private def resolveCurrentSessionView(
+      operatorId: Option[PlayerId],
+      guestSessionId: Option[GuestSessionId]
+  ): CurrentSessionView =
+    if operatorId.nonEmpty && guestSessionId.nonEmpty then
+      throw IllegalArgumentException("guestSessionId and operatorId cannot be provided together")
+
+    operatorId.map(playerId =>
+      app.playerRepository.findById(playerId)
+        .getOrElse(throw NoSuchElementException(s"Player ${playerId.value} was not found"))
+    ) match
+      case Some(player) =>
+        CurrentSessionView(
+          principalKind = SessionPrincipalKind.RegisteredPlayer,
+          principalId = player.id.value,
+          displayName = player.nickname,
+          authenticated = true,
+          roles = CurrentSessionRoleFlags(
+            isGuest = false,
+            isRegisteredPlayer = true,
+            isClubAdmin = player.roleGrants.exists(_.role == RoleKind.ClubAdmin),
+            isTournamentAdmin = player.roleGrants.exists(_.role == RoleKind.TournamentAdmin),
+            isSuperAdmin = player.roleGrants.exists(_.role == RoleKind.SuperAdmin)
+          ),
+          player = Some(player)
+        )
+      case None =>
+        guestSessionId.map(sessionId =>
+          app.guestSessionService.touchActiveSession(sessionId)
+            .getOrElse(throw NoSuchElementException(s"Guest session ${sessionId.value} was not found"))
+        ) match
+          case Some(session) =>
+            CurrentSessionView(
+              principalKind = SessionPrincipalKind.Guest,
+              principalId = session.id.value,
+              displayName = session.displayName,
+              authenticated = true,
+              roles = CurrentSessionRoleFlags(
+                isGuest = true,
+                isRegisteredPlayer = false,
+                isClubAdmin = false,
+                isTournamentAdmin = false,
+                isSuperAdmin = false
+              ),
+              guestSession = Some(session)
+            )
+          case None =>
+            CurrentSessionView(
+              principalKind = SessionPrincipalKind.Anonymous,
+              principalId = "anonymous",
+              displayName = "Guest",
+              authenticated = false,
+              roles = CurrentSessionRoleFlags(
+                isGuest = true,
+                isRegisteredPlayer = false,
+                isClubAdmin = false,
+                isTournamentAdmin = false,
+                isSuperAdmin = false
+              )
+            )
+
+  private def clubApplicationsOpen(club: Club): Boolean =
+    club.dissolvedAt.isEmpty && club.recruitmentPolicy.applicationsOpen
+
+  private def clubApplicationPolicy(club: Club): ClubApplicationPolicyView =
+    ClubApplicationPolicyView(
+      applicationsOpen = clubApplicationsOpen(club),
+      requirementsText =
+        if clubApplicationsOpen(club) then club.recruitmentPolicy.requirementsText else None,
+      expectedReviewSlaHours =
+        if clubApplicationsOpen(club) then club.recruitmentPolicy.expectedReviewSlaHours else None,
+      pendingApplicationCount = club.membershipApplications.count(_.isPending)
+    )
+
+  private def canManageClubApplications(actor: AccessPrincipal, club: Club): Boolean =
+    actor.isSuperAdmin || actor.playerId.exists(playerId =>
+      club.admins.contains(playerId) || club.hasPrivilege(playerId, ClubPrivilege.ApproveRoster)
+    )
+
+  private def requireClubApplicationManager(actor: AccessPrincipal, club: Club): Unit =
+    if !canManageClubApplications(actor, club) then
+      throw AuthorizationFailure(
+        s"${actor.displayName} cannot manage membership applications for club ${club.id.value}"
+      )
+
+  private def canWithdrawClubApplication(
+      actor: AccessPrincipal,
+      application: ClubMembershipApplication
+  ): Boolean =
+    val ownedByGuest =
+      actor.isGuest && application.applicantUserId.contains(s"guest:${actor.principalId}")
+
+    val ownedByRegisteredPlayer =
+      actor.playerId.flatMap(app.playerRepository.findById).exists(player =>
+        application.applicantUserId.contains(player.userId)
+      )
+
+    actor.isSuperAdmin || ownedByGuest || ownedByRegisteredPlayer
+
+  private def requireClubApplicationViewer(
+      actor: AccessPrincipal,
+      club: Club,
+      application: ClubMembershipApplication
+  ): Unit =
+    if !canManageClubApplications(actor, club) && !canWithdrawClubApplication(actor, application) then
+      throw AuthorizationFailure(
+        s"${actor.displayName} cannot view membership application ${application.id.value}"
+      )
+
+  private def buildClubMembershipApplicationView(
+      club: Club,
+      application: ClubMembershipApplication,
+      actor: AccessPrincipal
+  ): ClubMembershipApplicationView =
+    val applicantPlayer = application.applicantUserId.flatMap(app.playerRepository.findByUserId)
+    ClubMembershipApplicationView(
+      applicationId = application.id,
+      clubId = club.id,
+      clubName = club.name,
+      applicant = ClubMembershipApplicantView(
+        playerId = applicantPlayer.map(_.id),
+        applicantUserId = application.applicantUserId,
+        displayName = application.displayName,
+        playerStatus = applicantPlayer.map(_.status),
+        currentRank = applicantPlayer.map(_.currentRank),
+        elo = applicantPlayer.map(_.elo),
+        clubIds = applicantPlayer.map(_.boundClubIds).getOrElse(Vector.empty)
+      ),
+      submittedAt = application.submittedAt,
+      message = application.message,
+      status = application.status,
+      reviewedBy = application.reviewedBy,
+      reviewedByDisplayName = application.reviewedBy.flatMap(playerId => app.playerRepository.findById(playerId).map(_.nickname)),
+      reviewedAt = application.reviewedAt,
+      reviewNote = application.reviewNote,
+      withdrawnByPrincipalId = application.withdrawnByPrincipalId,
+      canReview = application.isPending && canManageClubApplications(actor, club),
+      canWithdraw = application.isPending && canWithdrawClubApplication(actor, application)
+    )
+
+  private def buildTournamentStageDirectoryEntry(
+      stage: TournamentStage
+  ): TournamentStageDirectoryEntry =
+    TournamentStageDirectoryEntry(
+      stageId = stage.id,
+      name = stage.name,
+      format = stage.format,
+      order = stage.order,
+      status = stage.status,
+      currentRound = stage.currentRound,
+      roundCount = stage.roundCount,
+      schedulingPoolSize = stage.schedulingPoolSize,
+      pendingTablePlanCount = stage.pendingTablePlans.size,
+      scheduledTableCount = stage.scheduledTableIds.size
+    )
+
+  private def buildPublicTournamentSummaryView(
+      tournament: Tournament
+  ): PublicTournamentSummaryView =
+    PublicTournamentSummaryView(
+      tournamentId = tournament.id,
+      name = tournament.name,
+      organizer = tournament.organizer,
+      status = tournament.status,
+      startsAt = tournament.startsAt,
+      endsAt = tournament.endsAt,
+      stageCount = tournament.stages.size,
+      activeStageCount = tournament.stages.count(stage =>
+        stage.status == StageStatus.Active || stage.status == StageStatus.Ready
+      ),
+      participantCount = tournamentParticipantIds(tournament).size,
+      clubCount = tournament.participatingClubs.distinct.size,
+      playerCount = tournament.participatingPlayers.distinct.size
+    )
+
+  private def buildPublicTournamentDetailView(
+      tournamentId: TournamentId
+  ): Option[PublicTournamentDetailView] =
+    app.tournamentRepository.findById(tournamentId)
+      .filter(_.status != TournamentStatus.Draft)
+      .map { tournament =>
+        val stages = tournament.stages
+          .sortBy(_.order)
+          .map { stage =>
+            val tables = app.tableRepository.findByTournamentAndStage(tournament.id, stage.id)
+            val bracket =
+              if stage.format == StageFormat.Knockout || stage.format == StageFormat.Finals then
+                Some(app.tournamentService.stageKnockoutBracket(tournament.id, stage.id))
+              else None
+
+            PublicTournamentStageView(
+              stageId = stage.id,
+              name = stage.name,
+              format = stage.format,
+              order = stage.order,
+              status = stage.status,
+              currentRound = stage.currentRound,
+              roundCount = stage.roundCount,
+              tableCount = tables.size,
+              archivedTableCount = tables.count(_.status == TableStatus.Archived),
+              pendingTablePlanCount = stage.pendingTablePlans.size,
+              standings = Some(app.tournamentService.stageStandings(tournament.id, stage.id)),
+              bracket = bracket
+            )
+          }
+
+        PublicTournamentDetailView(
+          tournamentId = tournament.id,
+          name = tournament.name,
+          organizer = tournament.organizer,
+          status = tournament.status,
+          startsAt = tournament.startsAt,
+          endsAt = tournament.endsAt,
+          clubIds = tournament.participatingClubs.distinct,
+          playerIds = tournamentParticipantIds(tournament),
+          whitelistCount = tournament.whitelist.size,
+          stages = stages
+        )
+      }
+
+  private def tournamentParticipantIds(
+      tournament: Tournament
+  ): Vector[PlayerId] =
+    val clubMembers = tournament.participatingClubs.flatMap(clubId =>
+      app.clubRepository.findById(clubId).toVector.flatMap(_.members)
+    )
+    val whitelistedClubMembers = tournament.whitelist.flatMap(entry =>
+      entry.clubId.toVector.flatMap(clubId => app.clubRepository.findById(clubId).toVector.flatMap(_.members))
+    )
+
+    (tournament.participatingPlayers ++ tournament.whitelist.flatMap(_.playerId) ++ clubMembers ++ whitelistedClubMembers)
+      .distinct
+
+  private def buildPublicClubDetailView(
+      clubId: ClubId
+  ): Option[PublicClubDetailView] =
+    app.clubRepository.findById(clubId)
+      .filter(_.dissolvedAt.isEmpty)
+      .map { club =>
+        val lineupPlayerIds = latestClubLineupPlayerIds(club).getOrElse(club.members)
+        val currentLineup = lineupPlayerIds
+          .flatMap(playerId => app.playerRepository.findById(playerId))
+          .sortBy(player => (-player.elo, player.nickname, player.id.value))
+          .map { player =>
+            val privilegeSnapshot = club.memberPrivilegeSnapshot(player.id)
+            PublicClubLineupMemberView(
+              playerId = player.id,
+              nickname = player.nickname,
+              elo = player.elo,
+              currentRank = player.currentRank,
+              status = player.status,
+              isAdmin = club.admins.contains(player.id),
+              internalTitle = privilegeSnapshot.flatMap(_.internalTitle),
+              privileges = privilegeSnapshot.map(_.privileges).getOrElse(Vector.empty)
+            )
+          }
+
+        val recentMatches = app.matchRecordRepository.findAll()
+          .filter(record => record.seatResults.exists(_.clubId.contains(club.id)))
+          .sortBy(record => (record.generatedAt, record.id.value))
+          .reverse
+          .take(8)
+          .map { record =>
+            val tournamentName = app.tournamentRepository.findById(record.tournamentId).map(_.name).getOrElse(record.tournamentId.value)
+            val stageName = app.tournamentRepository.findById(record.tournamentId)
+              .flatMap(_.stages.find(_.id == record.stageId))
+              .map(_.name)
+              .getOrElse(record.stageId.value)
+            PublicClubRecentMatchView(
+              matchRecordId = record.id,
+              tournamentId = record.tournamentId,
+              tournamentName = tournamentName,
+              stageId = record.stageId,
+              stageName = stageName,
+              tableId = record.tableId,
+              generatedAt = record.generatedAt,
+              seats = record.seatResults
+                .sortBy(_.placement)
+                .map { result =>
+                  val nickname = app.playerRepository.findById(result.playerId).map(_.nickname).getOrElse(result.playerId.value)
+                  PublicClubRecentMatchSeatView(
+                    playerId = result.playerId,
+                    nickname = nickname,
+                    clubId = result.clubId,
+                    seat = result.seat,
+                    placement = result.placement,
+                    scoreDelta = result.scoreDelta,
+                    finalPoints = result.finalPoints
+                  )
+                }
+            )
+          }
+
+        PublicClubDetailView(
+          clubId = club.id,
+          name = club.name,
+          memberCount = club.members.size,
+          activeMemberCount = club.members.count(playerId =>
+            app.playerRepository.findById(playerId).exists(_.status == PlayerStatus.Active)
+          ),
+          adminCount = club.admins.size,
+          powerRating = club.powerRating,
+          totalPoints = club.totalPoints,
+          treasuryBalance = club.treasuryBalance,
+          pointPool = club.pointPool,
+          relations = club.relations,
+          honors = club.honors.sortBy(honor => (honor.achievedAt, honor.title)).reverse,
+          applicationPolicy = clubApplicationPolicy(club),
+          currentLineup = currentLineup,
+          recentMatches = recentMatches
+        )
+      }
+
+  private def latestClubLineupPlayerIds(
+      club: Club
+  ): Option[Vector[PlayerId]] =
+    app.tournamentRepository.findAll()
+      .filter(_.status != TournamentStatus.Draft)
+      .flatMap(_.stages)
+      .flatMap(_.lineupSubmissions)
+      .filter(_.clubId == club.id)
+      .sortBy(submission => (submission.submittedAt, submission.id.value))
+      .lastOption
+      .map(_.activePlayerIds)
+
   private def queryPrincipal(exchange: HttpExchange): AccessPrincipal =
     val operatorId = queryParam(exchange, "operatorId")
       .map(PlayerId(_))
@@ -1737,8 +2206,16 @@ private final class ApiHandler(
 
   private def sendJson[T: Writer](exchange: HttpExchange, statusCode: Int, payload: T): Unit =
     val json = write(payload, indent = 2)
-    val bytes = json.getBytes(StandardCharsets.UTF_8)
-    exchange.getResponseHeaders.set("Content-Type", "application/json; charset=utf-8")
+    sendText(exchange, statusCode, json, "application/json; charset=utf-8")
+
+  private def sendText(
+      exchange: HttpExchange,
+      statusCode: Int,
+      payload: String,
+      contentType: String
+  ): Unit =
+    val bytes = payload.getBytes(StandardCharsets.UTF_8)
+    exchange.getResponseHeaders.set("Content-Type", contentType)
     exchange.sendResponseHeaders(statusCode, bytes.length.toLong)
     Using.resource(exchange.getResponseBody) { output =>
       output.write(bytes)

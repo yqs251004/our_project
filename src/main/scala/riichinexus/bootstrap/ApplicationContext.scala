@@ -141,6 +141,7 @@ object ApplicationContext:
     val guestSessionService = GuestSessionApplicationService(
       playerRepository,
       guestSessionRepository,
+      clubRepository,
       auditEventRepository,
       transactionManager
     )
@@ -359,6 +360,7 @@ object ApplicationContext:
     val guestSessionService = GuestSessionApplicationService(
       playerRepository,
       guestSessionRepository,
+      clubRepository,
       auditEventRepository,
       transactionManager
     )

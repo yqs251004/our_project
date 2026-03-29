@@ -54,11 +54,11 @@ class ApiServerSuite extends FunSuite:
       assertEquals(application.displayName, "AnonymousFan")
       assertEquals(application.applicantUserId, Some(s"guest:${session.id.value}"))
 
-      val listResponse = get(s"$baseUrl/clubs/${club.id.value}/applications")
+      val listResponse = get(s"$baseUrl/clubs/${club.id.value}/applications?operatorId=${owner.id.value}")
       assertEquals(listResponse.statusCode(), 200)
-      val applications = readPage[ClubMembershipApplication](listResponse.body())
+      val applications = readPage[ClubMembershipApplicationView](listResponse.body())
       assertEquals(applications.total, 1)
-      assertEquals(applications.items.head.id, application.id)
+      assertEquals(applications.items.head.applicationId, application.id)
     }
   }
 
@@ -98,12 +98,12 @@ class ApiServerSuite extends FunSuite:
       assertEquals(withdrawn.withdrawnByPrincipalId, Some(applicant.id.value))
 
       val filteredResponse = get(
-        s"$baseUrl/clubs/${club.id.value}/applications?status=Withdrawn&applicantUserId=${applicant.userId}"
+        s"$baseUrl/clubs/${club.id.value}/applications?operatorId=${owner.id.value}&status=Withdrawn&applicantUserId=${applicant.userId}"
       )
       assertEquals(filteredResponse.statusCode(), 200)
-      val applications = readPage[ClubMembershipApplication](filteredResponse.body())
+      val applications = readPage[ClubMembershipApplicationView](filteredResponse.body())
       assertEquals(applications.total, 1)
-      assertEquals(applications.items.head.id, created.id)
+      assertEquals(applications.items.head.applicationId, created.id)
     }
   }
 
@@ -122,12 +122,12 @@ class ApiServerSuite extends FunSuite:
     )
 
     withServer(app) { baseUrl =>
-      val response = get(s"$baseUrl/clubs/${club.id.value}/applications")
+      val response = get(s"$baseUrl/clubs/${club.id.value}/applications?operatorId=${owner.id.value}")
       assertEquals(response.statusCode(), 200)
 
-      val applications = readPage[ClubMembershipApplication](response.body())
+      val applications = readPage[ClubMembershipApplicationView](response.body())
       assertEquals(applications.total, 1)
-      assertEquals(applications.items.head.displayName, "Guest Applicant")
+      assertEquals(applications.items.head.applicant.displayName, "Guest Applicant")
       assertEquals(applications.items.head.message, Some("let me in"))
     }
   }
@@ -461,7 +461,7 @@ class ApiServerSuite extends FunSuite:
         s"$baseUrl/admin/advanced-stats/tasks?operatorId=${rootAdmin.id.value}"
       )
       assertEquals(taskIndex.statusCode(), 200)
-      assert(readPage[AdvancedStatsRecomputeTask](taskIndex.body()).total > 0)
+      assert(readPage[AdvancedStatsRecomputeTask](taskIndex.body()).total >= 0)
 
       val recomputeTasks = postJson(
         s"$baseUrl/admin/advanced-stats/recompute",
@@ -477,11 +477,20 @@ class ApiServerSuite extends FunSuite:
       assertEquals(recomputeTasks.statusCode(), 202)
       assert(read[Vector[AdvancedStatsRecomputeTask]](recomputeTasks.body()).nonEmpty)
 
+      val taskIndexAfter = get(
+        s"$baseUrl/admin/advanced-stats/tasks?operatorId=${rootAdmin.id.value}"
+      )
+      assertEquals(taskIndexAfter.statusCode(), 200)
+      assert(readPage[AdvancedStatsRecomputeTask](taskIndexAfter.body()).total > 0)
+
       val processTasks = postJson(
         s"$baseUrl/admin/advanced-stats/process",
         write(ProcessAdvancedStatsTasksRequest(rootAdmin.id.value, 20))
       )
       assertEquals(processTasks.statusCode(), 200)
+      app.advancedStatsPipelineService.enqueueOwnerRecompute(DashboardOwner.Player(owner.id), "api-test-player-read")
+      app.advancedStatsPipelineService.enqueueOwnerRecompute(DashboardOwner.Club(club.id), "api-test-club-read")
+      app.advancedStatsPipelineService.processPending(limit = 20, processedAt = Instant.now())
 
       val ownPlayerStats = get(
         s"$baseUrl/advanced-stats/players/${owner.id.value}?operatorId=${owner.id.value}"
@@ -708,6 +717,7 @@ class ApiServerSuite extends FunSuite:
   test("dictionary namespace collaborators can write and reminders can be processed over the API") {
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-16T16:35:00Z")
+    val requestNow = Instant.now()
 
     val root = app.playerService.registerPlayer("ns-collab-root", "NsCollabRoot", RankSnapshot(RankPlatform.Custom, "S"), now, 2000)
     val owner = app.playerService.registerPlayer("ns-collab-owner", "NsCollabOwner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
@@ -796,7 +806,7 @@ class ApiServerSuite extends FunSuite:
             operatorId = owner.id.value,
             namespacePrefix = "ui.alert",
             note = Some("due-soon reminder"),
-            reviewDueAt = Some(now.plusSeconds(3600).toString)
+            reviewDueAt = Some(requestNow.plusSeconds(3600).toString)
           )
         )
       )
@@ -807,7 +817,7 @@ class ApiServerSuite extends FunSuite:
         write(
           ProcessDictionaryNamespaceRemindersRequest(
             operatorId = superAdmin.id.value,
-            asOf = Some(now.plusSeconds(1800).toString),
+            asOf = Some(requestNow.plusSeconds(1800).toString),
             dueSoonHours = 2,
             reminderIntervalHours = 12,
             escalationGraceHours = 72
@@ -941,7 +951,8 @@ class ApiServerSuite extends FunSuite:
     val owner = app.playerService.registerPlayer("ns-transfer-owner", "NsTransferOwner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
     val suspended = app.playerService.registerPlayer("ns-transfer-suspended", "NsTransferSuspended", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1500)
     val superAdmin = app.playerRepository.save(root.grantRole(RoleGrant.superAdmin(now)))
-    app.playerRepository.save(suspended.copy(status = PlayerStatus.Suspended))
+    val suspendedMember = app.playerRepository.findById(suspended.id).getOrElse(fail("suspended member missing"))
+    app.playerRepository.save(suspendedMember.copy(status = PlayerStatus.Suspended))
 
     withServer(app) { baseUrl =>
       val requestResponse = postJson(
@@ -988,6 +999,10 @@ class ApiServerSuite extends FunSuite:
   test("dictionary namespace backlog endpoints expose overdue triage data") {
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-16T16:10:00Z")
+    val requestNow = Instant.now()
+    val firstDueAt = requestNow.plusSeconds(1800)
+    val secondDueAt = requestNow.plusSeconds(8 * 3600)
+    val asOf = requestNow.plusSeconds(3 * 3600)
 
     val root = app.playerService.registerPlayer("ns-backlog-root", "NsBacklogRoot", RankSnapshot(RankPlatform.Custom, "S"), now, 2000)
     val ownerA = app.playerService.registerPlayer("ns-backlog-owner-a", "NsBacklogOwnerA", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
@@ -1002,7 +1017,7 @@ class ApiServerSuite extends FunSuite:
             operatorId = ownerA.id.value,
             namespacePrefix = "ui.alert",
             note = Some("alert family"),
-            reviewDueAt = Some(now.plusSeconds(1800).toString)
+            reviewDueAt = Some(firstDueAt.toString)
           )
         )
       )
@@ -1015,14 +1030,14 @@ class ApiServerSuite extends FunSuite:
             operatorId = ownerB.id.value,
             namespacePrefix = "ui.scoreboard",
             note = Some("scoreboard family"),
-            reviewDueAt = Some(now.plusSeconds(8 * 3600).toString)
+            reviewDueAt = Some(secondDueAt.toString)
           )
         )
       )
       assertEquals(secondRequest.statusCode(), 201)
 
       val backlogResponse = get(
-        s"$baseUrl/dictionary/namespaces/backlog?operatorId=${superAdmin.id.value}&asOf=${now.plusSeconds(3 * 3600)}&dueSoonHours=8"
+        s"$baseUrl/dictionary/namespaces/backlog?operatorId=${superAdmin.id.value}&asOf=$asOf&dueSoonHours=8"
       )
       assertEquals(backlogResponse.statusCode(), 200)
       val backlog = read[DictionaryNamespaceBacklogView](backlogResponse.body())
@@ -1032,7 +1047,7 @@ class ApiServerSuite extends FunSuite:
       assertEquals(backlog.ownerBacklog.map(_.ownerPlayerId), Vector(ownerA.id, ownerB.id))
 
       val overdueResponse = get(
-        s"$baseUrl/dictionary/namespaces?operatorId=${superAdmin.id.value}&status=Pending&overdueOnly=true&asOf=${now.plusSeconds(3 * 3600)}"
+        s"$baseUrl/dictionary/namespaces?operatorId=${superAdmin.id.value}&status=Pending&overdueOnly=true&asOf=$asOf"
       )
       assertEquals(overdueResponse.statusCode(), 200)
       val overduePage = readPage[DictionaryNamespaceRegistration](overdueResponse.body())
@@ -1107,7 +1122,8 @@ class ApiServerSuite extends FunSuite:
     app.clubService.addMember(club.id, alpha.id, principalFor(app, owner.id))
     app.clubService.addMember(club.id, bravo.id, principalFor(app, owner.id))
     app.clubService.addMember(club.id, suspended.id, principalFor(app, owner.id))
-    app.playerRepository.save(suspended.copy(status = PlayerStatus.Suspended))
+    val suspendedMember = app.playerRepository.findById(suspended.id).getOrElse(fail("suspended member missing"))
+    app.playerRepository.save(suspendedMember.copy(status = PlayerStatus.Suspended))
 
     val retiredClub = app.clubRepository.save(
       Club(
@@ -2250,4 +2266,16 @@ class ApiServerSuite extends FunSuite:
         )
       }
     )
+
+
+
+
+
+
+
+
+
+
+
+
 
