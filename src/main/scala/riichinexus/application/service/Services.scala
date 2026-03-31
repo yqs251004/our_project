@@ -6413,33 +6413,45 @@ final class AdvancedStatsPipelineService(
       limit: Int = 50,
       processedAt: Instant = Instant.now()
   ): Vector[AdvancedStatsRecomputeTask] =
-    advancedStatsRecomputeTaskRepository.findPending(limit, processedAt).map { task =>
-      val processing = advancedStatsRecomputeTaskRepository.save(task.markProcessing(processedAt))
-      try
-        processing.owner match
-          case DashboardOwner.Player(playerId) =>
-            advancedStatsBoardRepository.save(rebuildPlayerBoard(playerId, processedAt))
-          case DashboardOwner.Club(clubId) =>
-            val club = clubRepository.findById(clubId).getOrElse(
-              throw NoSuchElementException(s"Club ${clubId.value} was not found")
-            )
-            advancedStatsBoardRepository.save(rebuildClubBoard(club, processedAt))
+    advancedStatsRecomputeTaskRepository.findPending(limit, processedAt).flatMap { task =>
+      val maybeProcessing =
+        try Some(advancedStatsRecomputeTaskRepository.save(task.markProcessing(processedAt)))
+        catch
+          case _: OptimisticConcurrencyException =>
+            None
 
-        advancedStatsRecomputeTaskRepository.save(processing.markCompleted(processedAt))
-      catch
-        case error: Throwable =>
-          val errorMessage = Option(error.getMessage).getOrElse(error.getClass.getSimpleName)
-          val failedTask =
-            if processing.attempts >= maxAttempts then
-              advancedStatsRecomputeTaskRepository.save(processing.markDeadLetter(errorMessage, processedAt))
-            else
-              val retryAt = processedAt.plus(retryDelay)
-              val scheduled = advancedStatsRecomputeTaskRepository.save(
-                processing.markRetryScheduled(errorMessage, processedAt, retryAt)
+      maybeProcessing.map { processing =>
+        try
+          processing.owner match
+            case DashboardOwner.Player(playerId) =>
+              advancedStatsBoardRepository.save(rebuildPlayerBoard(playerId, processedAt))
+            case DashboardOwner.Club(clubId) =>
+              val club = clubRepository.findById(clubId).getOrElse(
+                throw NoSuchElementException(s"Club ${clubId.value} was not found")
               )
-              scheduleAsyncDrain(Some(retryAt))
-              scheduled
-          failedTask
+              advancedStatsBoardRepository.save(rebuildClubBoard(club, processedAt))
+
+          try advancedStatsRecomputeTaskRepository.save(processing.markCompleted(processedAt))
+          catch
+            case _: OptimisticConcurrencyException =>
+              advancedStatsRecomputeTaskRepository.findById(processing.id).getOrElse(processing)
+        catch
+          case _: OptimisticConcurrencyException =>
+            advancedStatsRecomputeTaskRepository.findById(processing.id).getOrElse(processing)
+          case error: Throwable =>
+            val errorMessage = Option(error.getMessage).getOrElse(error.getClass.getSimpleName)
+            val failedTask =
+              if processing.attempts >= maxAttempts then
+                advancedStatsRecomputeTaskRepository.save(processing.markDeadLetter(errorMessage, processedAt))
+              else
+                val retryAt = processedAt.plus(retryDelay)
+                val scheduled = advancedStatsRecomputeTaskRepository.save(
+                  processing.markRetryScheduled(errorMessage, processedAt, retryAt)
+                )
+                scheduleAsyncDrain(Some(retryAt))
+                scheduled
+            failedTask
+      }
     }
 
   def taskQueueSummary(

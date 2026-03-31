@@ -2073,3 +2073,26 @@ org.eclipse.lsp4j.jsonrpc.ResponseErrorException: Request window/showMessageRequ
 2026.03.27 09:52:20 WARN  Using H2 2.4.240 which is newer than the version Flyway has been verified with. The latest verified version of H2 is 2.3.232.
 3月 27, 2026 9:53:39 上午 org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
 信息: Unsupported notification method: $/setTrace
+2026.03.29 00:54:24 INFO  Started: Metals version 1.6.6 in folders 'D:\school\2026spring\front-back\our_project' for client Visual Studio Code 1.111.0.
+2026.03.29 00:54:26 INFO  Memory monitor started
+2026.03.29 00:54:30 WARN  Using H2 2.4.240 which is newer than the version Flyway has been verified with. The latest verified version of H2 is 2.3.232.
+3月 29, 2026 1:14:32 上午 org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
+信息: Unsupported notification method: $/setTrace
+2026.03.29 12:50:13 INFO  Started: Metals version 1.6.6 in folders 'D:\school\2026spring\front-back\our_project' for client Visual Studio Code 1.113.0.
+2026.03.29 12:50:13 INFO  Memory monitor started
+2026.03.29 12:50:17 WARN  Using H2 2.4.240 which is newer than the version Flyway has been verified with. The latest verified version of H2 is 2.3.232.
+2026.03.31 09:40:45 INFO  Started: Metals version 1.6.6 in folders 'D:\school\2026spring\front-back\our_project' for client Visual Studio Code 1.113.0.
+2026.03.31 09:40:45 INFO  Memory monitor started
+3月 31, 2026 9:40:46 上午 org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
+信息: Unsupported notification method: $/setTrace
+3月 31, 2026 9:40:46 上午 org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
+信息: Unsupported notification method: $/setTrace
+3月 31, 2026 9:40:46 上午 org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
+信息: Unsupported notification method: $/setTrace
+3月 31, 2026 9:40:46 上午 org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
+信息: Unsupported notification method: $/setTrace
+3月 31, 2026 9:40:47 上午 org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
+信息: Unsupported notification method: $/setTrace
+2026.03.31 09:40:49 WARN  Using H2 2.4.240 which is newer than the version Flyway has been verified with. The latest verified version of H2 is 2.3.232.
+2026.03.31 09:55:17 INFO  no build target found for D:\school\2026spring\front-back\our_project\build.sbt. Using presentation compiler with project's scala-library version: 3.3.7
+2026.03.31 09:55:17 WARN  no build target for: D:\school\2026spring\front-back\our_project\build.sbt

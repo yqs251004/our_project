@@ -1,6 +1,6 @@
 [debug] [zinc] IncrementalCompile -----------
 [debug] IncrementalCompile.incrementalCompile
-[debug] previous = Stamps for: 3 products, 1 sources, 3 libraries
-[debug] current source = Set(${BASE}/src/test/scala/riichinexus/RiichiNexusSuite.scala)
+[debug] previous = Stamps for: 5 products, 3 sources, 7 libraries
+[debug] current source = Set(${BASE}/src/test/scala/riichinexus/ApiServerSuite.scala, ${BASE}/src/test/scala/riichinexus/FrontendContractSuite.scala, ${BASE}/src/test/scala/riichinexus/RiichiNexusSuite.scala)
 [debug] > initialChanges = InitialChanges(Changes(added = Set(), removed = Set(), changed = Set(), unmodified = ...),Set(),Set(),API Changes: Set())
 [debug] No changes

@@ -1,1 +1,1 @@
-["riichinexus.RiichiNexusSuite"]
+["riichinexus.ApiServerSuite","riichinexus.RiichiNexusSuite","riichinexus.FrontendContractSuite"]

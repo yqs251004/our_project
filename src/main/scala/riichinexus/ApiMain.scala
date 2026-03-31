@@ -2,13 +2,13 @@ package riichinexus
 
 import java.util.concurrent.CountDownLatch
 
-import riichinexus.api.*
-import riichinexus.bootstrap.ApplicationContext
+import _root_.api.{ApiServer, ApiServerConfig}
+import _root_.database.ApplicationContext
 
 @main def riichiNexusApi(): Unit =
   val app = ApplicationContext.fromEnvironment()
   val config = ApiServerConfig.fromEnv()
-  val server = RiichiNexusApiServer(app, config)
+  val server = new ApiServer(app, config)
 
   server.start()
   println(s"RiichiNexus API listening on http://${config.host}:${config.port}")

@@ -1,0 +1,92 @@
+[debug] > Exec(early(addDefaultCommands), None, None)
+[debug] > Exec(addDefaultCommands, None, None)
+[debug] > Exec(early(initialize), None, None)
+[debug] > Exec(initialize, None, None)
+[debug] > Exec(boot, None, None)
+[debug] > Exec(writeSbtVersion, None, None)
+[debug] > Exec(reload, None, None)
+[debug] > Exec(sbtStashOnFailure, None, None)
+[debug] > Exec(onFailure loadFailed, None, None)
+[debug] > Exec(loadp, None, None)
+[info] welcome to sbt 1.12.4 (Oracle Corporation Java 25.0.2)
+[debug] Load.defaultLoad until apply took 83.1611ms
+[debug]           Load.loadUnit: plugins took 70.6396ms
+[debug]           Load.loadUnit: defsScala took 0.2723ms
+[debug] [Loading] Scanning directory D:\school\2026spring\front-back\our_project\project
+[debug]             Load.loadUnit: mkEval took 6.9322ms
+[debug] [Loading] Found non-root projects 
+[debug] [Loading] Done in D:\school\2026spring\front-back\our_project\project, returning: ()
+[debug] deducing auto plugins based on known facts Set(Atom(sbt.plugins.CorePlugin)) and clauses Clauses(Clause(Atom(sbt.plugins.JvmPlugin),Set(Atom(sbt.plugins.IvyPlugin)))
+[debug] Clause(Atom(sbt.ScriptedPlugin),Set(Atom(sbt.plugins.JvmPlugin)))
+[debug] Clause(Atom(sbt.plugins.SbtPlugin),Set(Atom(sbt.ScriptedPlugin)))
+[debug] Clause(Atom(sbt.plugins.SemanticdbPlugin),Set(Atom(sbt.plugins.JvmPlugin)))
+[debug] Clause(Atom(sbt.plugins.JUnitXmlReportPlugin),Set(Atom(sbt.plugins.JvmPlugin)))
+[debug] Clause(Atom(sbt.plugins.MiniDependencyTreePlugin),Set(Atom(sbt.plugins.JvmPlugin)))
+[debug] Clause(Atom(sbt.plugins.CorePlugin),Set(Atom(sbt.plugins.IvyPlugin)))
+[debug] Clause(Atom(sbt.plugins.IvyPlugin),Set(Atom(sbt.plugins.JvmPlugin)))
+[debug] Clause(Atom(sbt.plugins.JvmPlugin),Set(Atom(sbt.plugins.SemanticdbPlugin)))
+[debug] Clause(Atom(sbt.plugins.JvmPlugin),Set(Atom(sbt.plugins.JUnitXmlReportPlugin)))
+[debug] Clause(Atom(sbt.plugins.CorePlugin),Set(Atom(sbt.plugins.Giter8TemplatePlugin)))
+[debug] Clause(Atom(sbt.plugins.JvmPlugin),Set(Atom(sbt.plugins.MiniDependencyTreePlugin))))
+[debug]   :: deduced result: Matched(sbt.plugins.CorePlugin,sbt.plugins.Giter8TemplatePlugin,sbt.plugins.IvyPlugin,sbt.plugins.JvmPlugin,sbt.plugins.MiniDependencyTreePlugin,sbt.plugins.JUnitXmlReportPlugin,sbt.plugins.SemanticdbPlugin)
+[debug] Plugins.deducer#function took 16.2355 ms
+[info] loading settings for project our_project-build from plugins.sbt...
+[debug]               Load.resolveProject(our_project-build) took 44.029ms
+[debug]             Load.loadTransitive: finalizeProject(Project(id our_project-build, base: D:\school\2026spring\front-back\our_project\project, plugins: List(<none>))) took 83.3655ms
+[debug] [Loading] Done in D:\school\2026spring\front-back\our_project\project, returning: (our_project-build)
+[debug]           Load.loadUnit: loadedProjectsRaw took 321.419ms
+[debug]           Load.loadUnit: cleanEvalClasses took 11.2119ms
+[debug]         Load.loadUnit(file:/D:/school/2026spring/front-back/our_project/project/, ...) took 409.5062ms
+[debug]       Load.apply: load took 564.4228ms
+[debug]       Load.apply: resolveProjects took 5.8879ms
+[debug]       Load.apply: finalTransforms took 52.7853ms
+[debug]       Load.apply: config.delegates took 7.4982ms
+[debug]       Load.apply: Def.make(settings)... took 334.1252ms
+[debug]       Load.apply: structureIndex took 106.2833ms
+[debug]       Load.apply: mkStreams took 1.6157ms
+[info] loading project definition from D:\school\2026spring\front-back\our_project\project
+[debug] Running task... Cancel: Signal, check cycles: false, forcegc: true
+[debug]     Load.loadUnit: plugins took 2029.5506ms
+[debug]     Load.loadUnit: defsScala took 0.0037ms
+[debug] [Loading] Scanning directory D:\school\2026spring\front-back\our_project
+[debug]       Load.loadUnit: mkEval took 0.2822ms
+[debug] [Loading] Found root project root w/ remaining 
+[debug] deducing auto plugins based on known facts Set(Atom(sbt.plugins.CorePlugin)) and clauses Clauses(Clause(Atom(sbt.plugins.JvmPlugin),Set(Atom(sbt.plugins.IvyPlugin)))
+[debug] Clause(Atom(sbt.ScriptedPlugin),Set(Atom(sbt.plugins.JvmPlugin)))
+[debug] Clause(Atom(sbt.plugins.SbtPlugin),Set(Atom(sbt.ScriptedPlugin)))
+[debug] Clause(Atom(sbt.plugins.SemanticdbPlugin),Set(Atom(sbt.plugins.JvmPlugin)))
+[debug] Clause(Atom(sbt.plugins.JUnitXmlReportPlugin),Set(Atom(sbt.plugins.JvmPlugin)))
+[debug] Clause(Atom(sbt.plugins.MiniDependencyTreePlugin),Set(Atom(sbt.plugins.JvmPlugin)))
+[debug] Clause(Atom(sbtassembly.AssemblyPlugin),Set(Atom(sbt.plugins.JvmPlugin)))
+[debug] Clause(Atom(sbt.plugins.CorePlugin),Set(Atom(sbt.plugins.IvyPlugin)))
+[debug] Clause(Atom(sbt.plugins.IvyPlugin),Set(Atom(sbt.plugins.JvmPlugin)))
+[debug] Clause(Atom(sbt.plugins.JvmPlugin),Set(Atom(sbt.plugins.SemanticdbPlugin)))
+[debug] Clause(Atom(sbt.plugins.JvmPlugin),Set(Atom(sbt.plugins.JUnitXmlReportPlugin)))
+[debug] Clause(Atom(sbt.plugins.CorePlugin),Set(Atom(sbt.plugins.Giter8TemplatePlugin)))
+[debug] Clause(Atom(sbt.plugins.JvmPlugin),Set(Atom(sbt.plugins.MiniDependencyTreePlugin)))
+[debug] Clause(Atom(sbt.plugins.JvmPlugin),Set(Atom(sbtassembly.AssemblyPlugin))))
+[debug]   :: deduced result: Matched(sbt.plugins.CorePlugin,sbt.plugins.Giter8TemplatePlugin,sbt.plugins.IvyPlugin,sbt.plugins.JvmPlugin,sbtassembly.AssemblyPlugin,sbt.plugins.MiniDependencyTreePlugin,sbt.plugins.JUnitXmlReportPlugin,sbt.plugins.SemanticdbPlugin)
+[debug] Plugins.deducer#function took 2.8433 ms
+[info] loading settings for project root from build.sbt...
+[debug]         Load.resolveProject(root) took 27.1943ms
+[debug]       Load.loadTransitive: finalizeProject(Project(id root, base: D:\school\2026spring\front-back\our_project, plugins: List(<none>))) took 31.2231ms
+[debug] [Loading] Done in D:\school\2026spring\front-back\our_project, returning: (root)
+[debug]     Load.loadUnit: loadedProjectsRaw took 133.3979ms
+[debug]     Load.loadUnit: cleanEvalClasses took 10.9555ms
+[debug]   Load.loadUnit(file:/D:/school/2026spring/front-back/our_project/, ...) took 2175.5753ms
+[debug] Load.apply: load took 2191.1139ms
+[debug] Load.apply: resolveProjects took 0.2006ms
+[debug] Load.apply: finalTransforms took 11.0166ms
+[debug] Load.apply: config.delegates took 0.4034ms
+[debug] Load.apply: Def.make(settings)... took 60.6324ms
+[debug] Load.apply: structureIndex took 27.766ms
+[debug] Load.apply: mkStreams took 0.003ms
+[info] set current project to riichi-nexus (in build file:/D:/school/2026spring/front-back/our_project/)
+[debug] Running task... Cancel: Signal, check cycles: false, forcegc: true
+[debug] > Exec(sbtPopOnFailure, None, None)
+[debug] > Exec(resumeFromFailure, None, None)
+[debug] > Exec(notifyUsersAboutShell, None, None)
+[debug] > Exec(iflast shell, None, None)
+[debug] > Exec(testOnly riichinexus.FrontendContractSuite, None, None)
+[debug] Evaluating tasks: Test / testOnly
+[debug] Running task... Cancel: Signal, check cycles: false, forcegc: true
