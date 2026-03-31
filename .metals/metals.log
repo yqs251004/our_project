@@ -2105,3 +2105,19 @@ org.eclipse.lsp4j.jsonrpc.ResponseErrorException: Request window/showMessageRequ
 信息: Unsupported notification method: $/setTrace
 2026.03.31 11:15:10 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\database\DatabaseSession.scala. Using presentation compiler with project's scala-library version: 3.3.7
 2026.03.31 11:15:12 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\database\DatabaseSession.scala. Using presentation compiler with project's scala-library version: 3.3.7
+2026.03.31 14:12:26 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\database\DatabaseSession.scala. Using presentation compiler with project's scala-library version: 3.3.7
+2026.03.31 14:12:27 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\database\DatabaseSession.scala. Using presentation compiler with project's scala-library version: 3.3.7
+2026.03.31 15:18:03 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\database\DatabaseSession.scala. Using presentation compiler with project's scala-library version: 3.3.7
+2026.03.31 15:18:46 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\database\DatabaseSession.scala. Using presentation compiler with project's scala-library version: 3.3.7
+2026.03.31 15:49:13 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\database\postgres\PostgresOperationalRepositories.scala. Using presentation compiler with project's scala-library version: 3.3.7
+3月 31, 2026 3:49:14 下午 org.eclipse.lsp4j.jsonrpc.RemoteEndpoint handleCancellation
+警告: Unmatched cancel notification for request id 35
+2026.03.31 15:49:14 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\database\postgres\PostgresOperationalRepositories.scala. Using presentation compiler with project's scala-library version: 3.3.7
+2026.03.31 15:49:14 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\database\postgres\PostgresOperationalRepositories.scala. Using presentation compiler with project's scala-library version: 3.3.7
+2026.03.31 15:49:15 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\database\postgres\PostgresOperationalRepositories.scala. Using presentation compiler with project's scala-library version: 3.3.7
+2026.03.31 15:50:56 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\database\postgres\PostgresOperationalRepositories.scala. Using presentation compiler with project's scala-library version: 3.3.7
+2026.03.31 15:50:57 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\database\postgres\PostgresOperationalRepositories.scala. Using presentation compiler with project's scala-library version: 3.3.7
+2026.03.31 15:57:44 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\database\postgres\PostgresOperationalRepositories.scala. Using presentation compiler with project's scala-library version: 3.3.7
+2026.03.31 15:57:45 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\database\postgres\PostgresOperationalRepositories.scala. Using presentation compiler with project's scala-library version: 3.3.7
+2026.03.31 16:01:11 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\database\postgres\PostgresOperationalRepositories.scala. Using presentation compiler with project's scala-library version: 3.3.7
+2026.03.31 16:01:12 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\database\postgres\PostgresOperationalRepositories.scala. Using presentation compiler with project's scala-library version: 3.3.7
