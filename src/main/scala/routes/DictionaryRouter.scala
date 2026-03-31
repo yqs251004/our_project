@@ -2,15 +2,14 @@ package routes
 
 import java.time.Instant
 
+import api.contracts.ApiContracts.*
+import api.contracts.JsonSupport.given
 import cats.effect.IO
+import domain.*
+import model.DomainModels.*
 import org.http4s.HttpRoutes
 import org.http4s.Status
 import org.http4s.dsl.io.*
-import riichinexus.api.ApiModels.given
-import riichinexus.api.*
-import riichinexus.domain.model.*
-import riichinexus.domain.service.GlobalDictionaryRegistry
-import riichinexus.infrastructure.json.JsonCodecs.given
 
 object DictionaryRouter:
 

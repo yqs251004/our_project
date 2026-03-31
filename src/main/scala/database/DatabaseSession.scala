@@ -1,7 +1,7 @@
 package database
 
 import cats.effect.IO
-import riichinexus.infrastructure.postgres.{JdbcConnectionFactory, PostgresSchemaInitializer}
+import database.postgres.{DatabaseConfig as PostgresDatabaseConfig, JdbcConnectionFactory, PostgresSchemaInitializer}
 
 object DatabaseSession:
 
@@ -53,7 +53,7 @@ object DatabaseSession:
     val normalizedEnv = normalizedEnvironment(env)
     if storageLabel(normalizedEnv) == "postgres" then
       IO.blocking {
-        val config = riichinexus.infrastructure.postgres.DatabaseConfig(
+        val config = PostgresDatabaseConfig(
           url = normalizedEnv.getOrElse("RIICHI_DB_URL", DatabaseConfig.default(normalizedEnv).url),
           user = normalizedEnv.getOrElse("RIICHI_DB_USER", DatabaseConfig.default(normalizedEnv).user),
           password = normalizedEnv.getOrElse("RIICHI_DB_PASSWORD", DatabaseConfig.default(normalizedEnv).password),

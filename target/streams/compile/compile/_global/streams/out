@@ -1,2 +1,89 @@
-[warn] there was 1 deprecation warning; re-run with -deprecation for details
-[warn] one warning found
+[error] -- [E006] Not Found Error: D:\school\2026spring\front-back\our_project\src\main\scala\database\postgres\PostgresOperationalRepositories.scala:14:29 
+[error] 14 |  override def save(session: GuestAccessSession): GuestAccessSession =
+[error]    |                             ^^^^^^^^^^^^^^^^^^
+[error]    |                             Not found: type GuestAccessSession
+[error]    |
+[error]    | longer explanation available when compiling with `-explain`
+[error] -- [E006] Not Found Error: D:\school\2026spring\front-back\our_project\src\main\scala\database\postgres\PostgresOperationalRepositories.scala:14:50 
+[error] 14 |  override def save(session: GuestAccessSession): GuestAccessSession =
+[error]    |                                                  ^^^^^^^^^^^^^^^^^^
+[error]    |                                      Not found: type GuestAccessSession
+[error]    |
+[error]    | longer explanation available when compiling with `-explain`
+[error] -- [E172] Type Error: D:\school\2026spring\front-back\our_project\src\main\scala\database\postgres\PostgresOperationalRepositories.scala:33:51 
+[error] 33 |        statement.setString(4, writeJson(persisted))
+[error]    |                                                   ^
+[error]    |Ambiguous given instances: both given instance given_ReadWriter_RankSnapshot in object JsonCodecs and given instance given_ReadWriter_DomainEventOutboxOperationFailure in
+[error]    |  object JsonCodecs match type upickle.default.Writer[T] of a context parameter of method writeJson in trait JdbcRepositorySupport
+[error] -- [E006] Not Found Error: D:\school\2026spring\front-back\our_project\src\main\scala\database\postgres\PostgresOperationalRepositories.scala:48:28 
+[error] 48 |  override def findById(id: GuestSessionId): Option[GuestAccessSession] =
+[error]    |                            ^^^^^^^^^^^^^^
+[error]    |                            Not found: type GuestSessionId
+[error]    |
+[error]    | longer explanation available when compiling with `-explain`
+[error] -- [E006] Not Found Error: D:\school\2026spring\front-back\our_project\src\main\scala\database\postgres\PostgresOperationalRepositories.scala:48:52 
+[error] 48 |  override def findById(id: GuestSessionId): Option[GuestAccessSession] =
+[error]    |                                                    ^^^^^^^^^^^^^^^^^^
+[error]    |                                      Not found: type GuestAccessSession
+[error]    |
+[error]    | longer explanation available when compiling with `-explain`
+[error] -- [E006] Not Found Error: D:\school\2026spring\front-back\our_project\src\main\scala\database\postgres\PostgresOperationalRepositories.scala:49:12 
+[error] 49 |    readOne[GuestAccessSession]("select payload from guest_sessions where id = ?", { statement =>
+[error]    |            ^^^^^^^^^^^^^^^^^^
+[error]    |            Not found: type GuestAccessSession
+[error]    |
+[error]    | longer explanation available when compiling with `-explain`
+[error] -- [E006] Not Found Error: D:\school\2026spring\front-back\our_project\src\main\scala\database\postgres\PostgresOperationalRepositories.scala:53:33 
+[error] 53 |  override def findAll(): Vector[GuestAccessSession] =
+[error]    |                                 ^^^^^^^^^^^^^^^^^^
+[error]    |                                 Not found: type GuestAccessSession
+[error]    |
+[error]    | longer explanation available when compiling with `-explain`
+[error] -- [E006] Not Found Error: D:\school\2026spring\front-back\our_project\src\main\scala\database\postgres\PostgresOperationalRepositories.scala:54:12 
+[error] 54 |    readAll[GuestAccessSession]("select payload from guest_sessions order by created_at desc")
+[error]    |            ^^^^^^^^^^^^^^^^^^
+[error]    |            Not found: type GuestAccessSession
+[error]    |
+[error]    | longer explanation available when compiling with `-explain`
+[error] -- [E006] Not Found Error: D:\school\2026spring\front-back\our_project\src\main\scala\database\postgres\PostgresOperationalRepositories.scala:64:27 
+[error] 64 |  override def save(entry: AuditEventEntry): AuditEventEntry =
+[error]    |                           ^^^^^^^^^^^^^^^
+[error]    |                           Not found: type AuditEventEntry
+[error]    |
+[error]    | longer explanation available when compiling with `-explain`
+[error] -- [E006] Not Found Error: D:\school\2026spring\front-back\our_project\src\main\scala\database\postgres\PostgresOperationalRepositories.scala:64:45 
+[error] 64 |  override def save(entry: AuditEventEntry): AuditEventEntry =
+[error]    |                                             ^^^^^^^^^^^^^^^
+[error]    |                                         Not found: type AuditEventEntry
+[error]    |
+[error]    | longer explanation available when compiling with `-explain`
+[error] -- [E172] Type Error: D:\school\2026spring\front-back\our_project\src\main\scala\database\postgres\PostgresOperationalRepositories.scala:86:47 
+[error] 86 |        statement.setString(7, writeJson(entry))
+[error]    |                                               ^
+[error]    |Ambiguous given instances: both given instance given_ReadWriter_RankSnapshot in object JsonCodecs and given instance given_ReadWriter_DomainEventOutboxOperationFailure in
+[error]    |  object JsonCodecs match type upickle.default.Writer[T] of a context parameter of method writeJson in trait JdbcRepositorySupport
+[error] -- [E006] Not Found Error: D:\school\2026spring\front-back\our_project\src\main\scala\database\postgres\PostgresOperationalRepositories.scala:93:83 
+[error] 93 |  override def findByAggregate(aggregateType: String, aggregateId: String): Vector[AuditEventEntry] =
+[error]    |                                                                                   ^^^^^^^^^^^^^^^
+[error]    |                                         Not found: type AuditEventEntry
+[error]    |
+[error]    | longer explanation available when compiling with `-explain`
+[error] -- [E006] Not Found Error: D:\school\2026spring\front-back\our_project\src\main\scala\database\postgres\PostgresOperationalRepositories.scala:94:12 
+[error] 94 |    readAll[AuditEventEntry](
+[error]    |            ^^^^^^^^^^^^^^^
+[error]    |            Not found: type AuditEventEntry
+[error]    |
+[error]    | longer explanation available when compiling with `-explain`
+[error] -- [E006] Not Found Error: D:\school\2026spring\front-back\our_project\src\main\scala\database\postgres\PostgresOperationalRepositories.scala:102:33 
+[error] 102 |  override def findAll(): Vector[AuditEventEntry] =
+[error]     |                                 ^^^^^^^^^^^^^^^
+[error]     |                                 Not found: type AuditEventEntry
+[error]     |
+[error]     | longer explanation available when compiling with `-explain`
+[error] -- [E006] Not Found Error: D:\school\2026spring\front-back\our_project\src\main\scala\database\postgres\PostgresOperationalRepositories.scala:103:12 
+[error] 103 |    readAll[AuditEventEntry]("select payload from audit_events order by occurred_at desc")
+[error]     |            ^^^^^^^^^^^^^^^
+[error]     |            Not found: type AuditEventEntry
+[error]     |
+[error]     | longer explanation available when compiling with `-explain`
+[error] 15 errors found

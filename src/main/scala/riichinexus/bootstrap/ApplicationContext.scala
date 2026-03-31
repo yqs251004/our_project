@@ -1,9 +1,9 @@
 package riichinexus.bootstrap
 
-import riichinexus.application.ports.*
-import riichinexus.application.service.*
-import riichinexus.domain.service.AuthorizationService
-import riichinexus.infrastructure.postgres.DatabaseConfig
+import _root_.database.postgres.DatabaseConfig
+import _root_.domain.*
+import _root_.ports.*
+import _root_.services.*
 
 final case class ApplicationContext(
     playerService: PlayerApplicationService,

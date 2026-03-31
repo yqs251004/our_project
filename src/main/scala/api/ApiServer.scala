@@ -15,18 +15,38 @@ final case class ApiServerConfig(
     port: Int,
     storageLabel: String,
     corsAllowOrigin: String = "*"
-):
-  def toLegacyConfig: riichinexus.api.ApiServerConfig =
-    riichinexus.api.ApiServerConfig(host, port, storageLabel, corsAllowOrigin)
+)
 
 object ApiServerConfig:
   def fromEnv(env: collection.Map[String, String] = sys.env): ApiServerConfig =
-    val config = riichinexus.api.ApiServerConfig.fromEnv(env)
     ApiServerConfig(
-      host = config.host,
-      port = config.port,
-      storageLabel = config.storageLabel,
-      corsAllowOrigin = config.corsAllowOrigin
+      host =
+        env.get("HOST")
+          .orElse(env.get("API_HOST"))
+          .orElse(env.get("RIICHI_HOST"))
+          .orElse(env.get("RIICHI_API_HOST"))
+          .map(_.trim)
+          .filter(_.nonEmpty)
+          .getOrElse("0.0.0.0"),
+      port =
+        env.get("PORT")
+          .orElse(env.get("API_PORT"))
+          .orElse(env.get("RIICHI_PORT"))
+          .orElse(env.get("RIICHI_API_PORT"))
+          .flatMap(_.trim.toIntOption)
+          .getOrElse(8080),
+      storageLabel =
+        env.get("RIICHI_STORAGE")
+          .orElse(env.get("STORAGE_LABEL"))
+          .map(_.trim)
+          .filter(_.nonEmpty)
+          .getOrElse("memory"),
+      corsAllowOrigin =
+        env.get("CORS_ALLOW_ORIGIN")
+          .orElse(env.get("RIICHI_CORS_ALLOW_ORIGIN"))
+          .map(_.trim)
+          .filter(_.nonEmpty)
+          .getOrElse("*")
     )
 
 object ApiServer:

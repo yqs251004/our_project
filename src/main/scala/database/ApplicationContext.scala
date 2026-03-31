@@ -16,6 +16,6 @@ object ApplicationContext:
     ApplicationAssembly.postgres(config)
 
   def postgres(
-      config: riichinexus.infrastructure.postgres.DatabaseConfig
+      config: _root_.database.postgres.DatabaseConfig
   ): ApplicationContext =
     ApplicationAssembly.postgres(config)

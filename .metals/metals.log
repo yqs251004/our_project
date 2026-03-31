@@ -2096,3 +2096,12 @@ org.eclipse.lsp4j.jsonrpc.ResponseErrorException: Request window/showMessageRequ
 2026.03.31 09:40:49 WARN  Using H2 2.4.240 which is newer than the version Flyway has been verified with. The latest verified version of H2 is 2.3.232.
 2026.03.31 09:55:17 INFO  no build target found for D:\school\2026spring\front-back\our_project\build.sbt. Using presentation compiler with project's scala-library version: 3.3.7
 2026.03.31 09:55:17 WARN  no build target for: D:\school\2026spring\front-back\our_project\build.sbt
+2026.03.31 10:03:56 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\database\DatabaseSession.scala. Using presentation compiler with project's scala-library version: 3.3.7
+3月 31, 2026 10:03:57 上午 org.eclipse.lsp4j.jsonrpc.RemoteEndpoint handleCancellation
+警告: Unmatched cancel notification for request id 6
+2026.03.31 10:03:57 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\database\DatabaseSession.scala. Using presentation compiler with project's scala-library version: 3.3.7
+2026.03.31 10:11:08 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\database\DatabaseSession.scala. Using presentation compiler with project's scala-library version: 3.3.7
+3月 31, 2026 10:11:39 上午 org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
+信息: Unsupported notification method: $/setTrace
+2026.03.31 11:15:10 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\database\DatabaseSession.scala. Using presentation compiler with project's scala-library version: 3.3.7
+2026.03.31 11:15:12 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\database\DatabaseSession.scala. Using presentation compiler with project's scala-library version: 3.3.7

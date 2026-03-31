@@ -1,14 +1,13 @@
 package routes
 
 import api.OpenApiSupport
+import api.contracts.JsonSupport.given
 import cats.effect.IO
+import model.DomainModels.*
 import objects.HealthResponse
 import org.http4s.HttpRoutes
 import org.http4s.Status
 import org.http4s.dsl.io.*
-import riichinexus.api.ApiModels.given
-import riichinexus.domain.model.DemoScenarioActionCode
-import riichinexus.infrastructure.json.JsonCodecs.given
 
 object DocsRouter:
 

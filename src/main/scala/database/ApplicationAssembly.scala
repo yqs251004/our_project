@@ -1,12 +1,8 @@
 package database
 
 import _root_.riichinexus.bootstrap.{ApplicationContext => BootstrapApplicationContext}
-import riichinexus.application.ports.*
-import riichinexus.application.service.*
-import riichinexus.domain.service.*
-import riichinexus.infrastructure.events.*
-import riichinexus.infrastructure.memory.*
-import riichinexus.infrastructure.postgres.{
+import database.memory.*
+import database.postgres.{
   DatabaseConfig as PostgresRuntimeConfig,
   JdbcConnectionFactory,
   JdbcTransactionManager,
@@ -31,6 +27,10 @@ import riichinexus.infrastructure.postgres.{
   PostgresTournamentRepository,
   PostgresTournamentSettlementRepository
 }
+import domain.*
+import events.*
+import ports.*
+import services.*
 
 private[database] object ApplicationAssembly:
 
