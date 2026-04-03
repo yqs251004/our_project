@@ -12,7 +12,7 @@ import riichinexus.api.*
 import riichinexus.api.ApiModels.given
 import riichinexus.bootstrap.ApplicationContext
 import riichinexus.domain.model.*
-import riichinexus.infrastructure.json.JsonCodecs.given
+import json.JsonCodecs.given
 import upickle.default.*
 
 class FrontendContractSuite extends FunSuite:
@@ -315,3 +315,4 @@ class FrontendContractSuite extends FunSuite:
 
   private def readPage[T: Reader](body: String): PagedResponse[T] =
     read[PagedResponse[T]](body)
+

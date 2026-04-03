@@ -12,7 +12,7 @@ import riichinexus.api.*
 import riichinexus.api.ApiModels.given
 import riichinexus.bootstrap.ApplicationContext
 import riichinexus.domain.model.*
-import riichinexus.infrastructure.json.JsonCodecs.given
+import json.JsonCodecs.given
 import upickle.default.*
 
 class ApiServerSuite extends FunSuite:
@@ -2266,6 +2266,7 @@ class ApiServerSuite extends FunSuite:
         )
       }
     )
+
 
 
 

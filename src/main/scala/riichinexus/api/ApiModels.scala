@@ -2,8 +2,8 @@ package riichinexus.api
 
 import java.time.Instant
 
+import json.JsonCodecs.given
 import riichinexus.domain.model.*
-import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.*
 
 final case class ApiError(

@@ -11,9 +11,9 @@ import scala.util.Using
 
 import org.postgresql.util.PSQLException
 
+import json.JsonCodecs.given
 import riichinexus.application.ports.*
 import riichinexus.domain.model.*
-import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.*
 
 private object PostgresErrors:

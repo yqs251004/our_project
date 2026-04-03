@@ -72,4 +72,4 @@ object ApiContracts:
 
 object JsonSupport:
   export _root_.riichinexus.api.ApiModels.given
-  export _root_.riichinexus.infrastructure.json.JsonCodecs.given
+  export _root_.json.JsonCodecs.given
