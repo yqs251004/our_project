@@ -1,5 +1,11 @@
+[debug] Running TaskDef(riichinexus.ApiServerSuite, CustomFingerprint{suite='munit.Suite'}, false, [SuiteSelector])
+[debug] Running TaskDef(riichinexus.FrontendContractSuite, CustomFingerprint{suite='munit.Suite'}, false, [SuiteSelector])
 [debug] Running TaskDef(riichinexus.RiichiNexusSuite, CustomFingerprint{suite='munit.Suite'}, false, [SuiteSelector])
 [debug] Summary for munit not available.
-[info] Passed: Total 2, Failed 0, Errors 0, Passed 2
+[error] Failed: Total 79, Failed 11, Errors 0, Passed 68
 [debug] Passed tests:
-[debug] 	riichinexus.RiichiNexusSuite
+[debug] 	riichinexus.ApiServerSuite
+[debug] 	riichinexus.FrontendContractSuite
+[error] Failed tests:
+[error] 	riichinexus.RiichiNexusSuite
+[error] (Test / test) sbt.TestsFailedException: Tests unsuccessful

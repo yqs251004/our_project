@@ -5,6 +5,7 @@ import ports.*
 
 type KnockoutStageCoordinator = riichinexus.application.service.KnockoutStageCoordinator
 type PlayerApplicationService = riichinexus.application.service.PlayerApplicationService
+type AuthApplicationService = riichinexus.application.service.AuthApplicationService
 type GuestSessionApplicationService = riichinexus.application.service.GuestSessionApplicationService
 type PublicQueryService = riichinexus.application.service.PublicQueryService
 type DemoScenarioService = riichinexus.application.service.DemoScenarioService
@@ -51,6 +52,22 @@ object PlayerApplicationService:
     new riichinexus.application.service.PlayerApplicationService(
       playerRepository = playerRepository,
       dashboardRepository = dashboardRepository,
+      transactionManager = transactionManager
+    )
+
+object AuthApplicationService:
+  def apply(
+      playerService: PlayerApplicationService,
+      playerRepository: PlayerRepository,
+      accountCredentialRepository: AccountCredentialRepository,
+      authenticatedSessionRepository: AuthenticatedSessionRepository,
+      transactionManager: TransactionManager = NoOpTransactionManager
+  ): AuthApplicationService =
+    new riichinexus.application.service.AuthApplicationService(
+      playerService = playerService,
+      playerRepository = playerRepository,
+      accountCredentialRepository = accountCredentialRepository,
+      authenticatedSessionRepository = authenticatedSessionRepository,
       transactionManager = transactionManager
     )
 

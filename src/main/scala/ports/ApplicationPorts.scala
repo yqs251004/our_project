@@ -1,6 +1,8 @@
 package ports
 
 type PlayerRepository = riichinexus.application.ports.PlayerRepository
+type AccountCredentialRepository = riichinexus.application.ports.AccountCredentialRepository
+type AuthenticatedSessionRepository = riichinexus.application.ports.AuthenticatedSessionRepository
 type GuestSessionRepository = riichinexus.application.ports.GuestSessionRepository
 type ClubRepository = riichinexus.application.ports.ClubRepository
 type TournamentRepository = riichinexus.application.ports.TournamentRepository

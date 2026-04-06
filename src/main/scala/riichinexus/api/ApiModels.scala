@@ -42,6 +42,17 @@ final case class CreatePlayerRequest(
   def toRankSnapshot: RankSnapshot =
     RankSnapshot(RankPlatform.valueOf(rankPlatform), tier, stars)
 
+final case class RegisterAccountRequest(
+    username: String,
+    password: String,
+    displayName: String
+)
+
+final case class LoginRequest(
+    username: String,
+    password: String
+)
+
 final case class CreateClubRequest(
     name: String,
     creatorId: String
@@ -840,6 +851,8 @@ object ApiModels:
   given [T: Reader]: Reader[PagedResponse[T]] = macroR
   given [T: Writer]: Writer[PagedResponse[T]] = macroW
   given ReadWriter[CreatePlayerRequest] = macroRW
+  given ReadWriter[RegisterAccountRequest] = macroRW
+  given ReadWriter[LoginRequest] = macroRW
   given ReadWriter[CreateClubRequest] = macroRW
   given ReadWriter[CreateGuestSessionRequest] = macroRW
   given ReadWriter[RevokeGuestSessionRequest] = macroRW

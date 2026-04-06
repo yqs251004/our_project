@@ -15,6 +15,7 @@ object ApiRouter:
     val support = RouteSupport(app, storageLabel, corsAllowOrigin)
     (
       DocsRouter.routes(support) <+>
+        AuthRouter.routes(support) <+>
         PublicRouter.routes(support) <+>
         ClubRouter.routes(support) <+>
         TournamentRouter.routes(support) <+>

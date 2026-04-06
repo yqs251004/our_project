@@ -8,6 +8,7 @@ import database.postgres.{
   JdbcTransactionManager,
   PostgresAdvancedStatsBoardRepository,
   PostgresAdvancedStatsRecomputeTaskRepository,
+  PostgresAccountCredentialRepository,
   PostgresAppealTicketRepository,
   PostgresAuditEventRepository,
   PostgresClubRepository,
@@ -19,6 +20,7 @@ import database.postgres.{
   PostgresEventCascadeRecordRepository,
   PostgresGlobalDictionaryRepository,
   PostgresGuestSessionRepository,
+  PostgresAuthenticatedSessionRepository,
   PostgresMatchRecordRepository,
   PostgresPaifuRepository,
   PostgresPlayerRepository,
@@ -36,6 +38,8 @@ private[database] object ApplicationAssembly:
 
   private final case class RepositoryBundle(
       playerRepository: PlayerRepository,
+      accountCredentialRepository: AccountCredentialRepository,
+      authenticatedSessionRepository: AuthenticatedSessionRepository,
       guestSessionRepository: GuestSessionRepository,
       clubRepository: ClubRepository,
       tournamentRepository: TournamentRepository,
@@ -77,6 +81,8 @@ private[database] object ApplicationAssembly:
         authorizationService = StrictRbacAuthorizationService(),
         repositories = RepositoryBundle(
           playerRepository = InMemoryPlayerRepository(),
+          accountCredentialRepository = InMemoryAccountCredentialRepository(),
+          authenticatedSessionRepository = InMemoryAuthenticatedSessionRepository(),
           guestSessionRepository = InMemoryGuestSessionRepository(),
           clubRepository = InMemoryClubRepository(),
           tournamentRepository = InMemoryTournamentRepository(),
@@ -118,6 +124,8 @@ private[database] object ApplicationAssembly:
         authorizationService = StrictRbacAuthorizationService(),
         repositories = RepositoryBundle(
           playerRepository = PostgresPlayerRepository(connectionFactory),
+          accountCredentialRepository = PostgresAccountCredentialRepository(connectionFactory),
+          authenticatedSessionRepository = PostgresAuthenticatedSessionRepository(connectionFactory),
           guestSessionRepository = PostgresGuestSessionRepository(connectionFactory),
           clubRepository = PostgresClubRepository(connectionFactory),
           tournamentRepository = PostgresTournamentRepository(connectionFactory),
@@ -213,6 +221,13 @@ private[database] object ApplicationAssembly:
       repositories.dashboardRepository,
       wiring.transactionManager
     )
+    val authService = AuthApplicationService(
+      playerService = playerService,
+      playerRepository = repositories.playerRepository,
+      accountCredentialRepository = repositories.accountCredentialRepository,
+      authenticatedSessionRepository = repositories.authenticatedSessionRepository,
+      transactionManager = wiring.transactionManager
+    )
     val guestSessionService = GuestSessionApplicationService(
       repositories.playerRepository,
       repositories.guestSessionRepository,
@@ -307,6 +322,7 @@ private[database] object ApplicationAssembly:
 
     BootstrapApplicationContext(
       playerService = playerService,
+      authService = authService,
       guestSessionService = guestSessionService,
       publicQueryService = publicQueryService,
       clubService = clubService,
@@ -337,5 +353,7 @@ private[database] object ApplicationAssembly:
       auditEventRepository = repositories.auditEventRepository,
       eventBus = eventBus,
       authorizationService = wiring.authorizationService,
+      accountCredentialRepository = repositories.accountCredentialRepository,
+      authenticatedSessionRepository = repositories.authenticatedSessionRepository,
       guestSessionRepository = repositories.guestSessionRepository
     )

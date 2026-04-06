@@ -47,6 +47,59 @@ object InMemoryGuestSessionRepository:
   def apply(): InMemoryGuestSessionRepository =
     new InMemoryGuestSessionRepository()
 
+final class InMemoryAccountCredentialRepository extends AccountCredentialRepository:
+  private val state = mutable.LinkedHashMap.empty[String, AccountCredential]
+
+  override def save(credential: AccountCredential): AccountCredential =
+    val persisted = credential.copy(
+      version = InMemoryRepositoryLockSupport.nextVersion(
+        "account-credential",
+        credential.username,
+        credential.version,
+        state.get(credential.username).map(_.version)
+      )
+    )
+    state.update(persisted.username, persisted)
+    persisted
+
+  override def findByUsername(username: String): Option[AccountCredential] =
+    state.get(AccountCredential.normalizeUsername(username))
+
+  override def findByPlayerId(playerId: PlayerId): Option[AccountCredential] =
+    state.values.find(_.playerId == playerId)
+
+  override def findAll(): Vector[AccountCredential] =
+    state.values.toVector
+
+object InMemoryAccountCredentialRepository:
+  def apply(): InMemoryAccountCredentialRepository =
+    new InMemoryAccountCredentialRepository()
+
+final class InMemoryAuthenticatedSessionRepository extends AuthenticatedSessionRepository:
+  private val state = mutable.LinkedHashMap.empty[String, AuthenticatedSession]
+
+  override def save(session: AuthenticatedSession): AuthenticatedSession =
+    val persisted = session.copy(
+      version = InMemoryRepositoryLockSupport.nextVersion(
+        "authenticated-session",
+        session.token,
+        session.version,
+        state.get(session.token).map(_.version)
+      )
+    )
+    state.update(persisted.token, persisted)
+    persisted
+
+  override def findByToken(token: String): Option[AuthenticatedSession] =
+    state.get(token)
+
+  override def findAll(): Vector[AuthenticatedSession] =
+    state.values.toVector
+
+object InMemoryAuthenticatedSessionRepository:
+  def apply(): InMemoryAuthenticatedSessionRepository =
+    new InMemoryAuthenticatedSessionRepository()
+
 final class InMemoryMatchRecordRepository extends MatchRecordRepository:
   private val state = mutable.LinkedHashMap.empty[MatchRecordId, MatchRecord]
 

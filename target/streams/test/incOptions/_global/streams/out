@@ -1,2 +1,35 @@
 [debug] Created transactional ClassFileManager with tempDir = D:\school\2026spring\front-back\our_project\target\scala-3.3.4\test-classes.bak
+[debug] About to delete class files:
+[debug] 	RiichiNexusSuite$package$.class
+[debug] 	RiichiNexusSuite$package.class
+[debug] 	FrontendContractSuite.class
+[debug] 	RiichiNexusSuite.class
+[debug] 	ApiServerSuite.class
+[debug] 	RiichiNexusSuite$package$.tasty
+[debug] 	RiichiNexusSuite$package.tasty
+[debug] 	FrontendContractSuite.tasty
+[debug] 	RiichiNexusSuite.tasty
+[debug] 	ApiServerSuite.tasty
+[debug] We backup class files:
+[debug] 	RiichiNexusSuite$package$.class
+[debug] 	RiichiNexusSuite$package.class
+[debug] 	FrontendContractSuite.class
+[debug] 	RiichiNexusSuite.class
+[debug] 	ApiServerSuite.class
+[debug] 	RiichiNexusSuite$package$.tasty
+[debug] 	RiichiNexusSuite$package.tasty
+[debug] 	FrontendContractSuite.tasty
+[debug] 	RiichiNexusSuite.tasty
+[debug] 	ApiServerSuite.tasty
+[debug] Registering generated classes:
+[debug] 	RiichiNexusSuite$package$.class
+[debug] 	RiichiNexusSuite$package.class
+[debug] 	FrontendContractSuite.class
+[debug] 	RiichiNexusSuite.class
+[debug] 	ApiServerSuite.class
+[debug] 	RiichiNexusSuite$package$.tasty
+[debug] 	RiichiNexusSuite$package.tasty
+[debug] 	FrontendContractSuite.tasty
+[debug] 	RiichiNexusSuite.tasty
+[debug] 	ApiServerSuite.tasty
 [debug] Removing the temporary directory used for backing up class files: D:\school\2026spring\front-back\our_project\target\scala-3.3.4\test-classes.bak

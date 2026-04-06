@@ -1,6 +1,7 @@
 package domain
 
 type AuthorizationFailure = riichinexus.domain.service.AuthorizationFailure
+type AuthenticationFailure = riichinexus.domain.service.AuthenticationFailure
 type AuthorizationService = riichinexus.domain.service.AuthorizationService
 type StrictRbacAuthorizationService = riichinexus.domain.service.StrictRbacAuthorizationService
 type RatingChange = riichinexus.domain.service.RatingChange
@@ -21,6 +22,13 @@ val NoOpAuthorizationService: AuthorizationService =
 object AuthorizationFailure:
   def apply(message: String): AuthorizationFailure =
     riichinexus.domain.service.AuthorizationFailure(message)
+
+object AuthenticationFailure:
+  def apply(
+      message: String,
+      code: String = "authentication_failed"
+  ): AuthenticationFailure =
+    riichinexus.domain.service.AuthenticationFailure(message, code)
 
 object StrictRbacAuthorizationService:
   def apply(): StrictRbacAuthorizationService =

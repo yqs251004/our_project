@@ -54,6 +54,8 @@ final class RouteSupport(
         )
       case handled: AuthorizationFailure =>
         jsonResponse(Status.Forbidden, ErrorResponse(handled.getMessage, code = "authorization_failed"))
+      case handled: AuthenticationFailure =>
+        jsonResponse(Status.Unauthorized, ErrorResponse(handled.getMessage, code = handled.code))
       case handled: IllegalArgumentException =>
         jsonResponse(Status.BadRequest, ErrorResponse(handled.getMessage, code = "invalid_request"))
       case handled: NoSuchElementException =>
@@ -104,6 +106,17 @@ final class RouteSupport(
 
   def queryParam(request: Request[IO], key: String): Option[String] =
     request.params.get(key)
+
+  def bearerToken(request: Request[IO]): Option[String] =
+    request.headers.headers
+      .find(_.name == CIString("Authorization"))
+      .map(_.value)
+      .flatMap { rawValue =>
+        val prefix = "Bearer "
+        Option.when(rawValue.regionMatches(true, 0, prefix, 0, prefix.length))(
+          rawValue.substring(prefix.length).trim
+        ).filter(_.nonEmpty)
+      }
 
   def queryIntParam(request: Request[IO], key: String): Option[Int] =
     queryParam(request, key).filter(_.nonEmpty).map { value =>
@@ -215,13 +228,7 @@ final class RouteSupport(
           principalId = player.id.value,
           displayName = player.nickname,
           authenticated = true,
-          roles = CurrentSessionRoleFlags(
-            isGuest = false,
-            isRegisteredPlayer = true,
-            isClubAdmin = player.roleGrants.exists(_.role == RoleKind.ClubAdmin),
-            isTournamentAdmin = player.roleGrants.exists(_.role == RoleKind.TournamentAdmin),
-            isSuperAdmin = player.roleGrants.exists(_.role == RoleKind.SuperAdmin)
-          ),
+          roles = registeredRoleFlags(player),
           player = Some(player)
         )
       case None =>
@@ -257,7 +264,16 @@ final class RouteSupport(
                 isTournamentAdmin = false,
                 isSuperAdmin = false
               )
-            )
+              )
+
+  def registeredRoleFlags(player: Player): CurrentSessionRoleFlags =
+    CurrentSessionRoleFlags(
+      isGuest = false,
+      isRegisteredPlayer = true,
+      isClubAdmin = player.roleGrants.exists(_.role == RoleKind.ClubAdmin),
+      isTournamentAdmin = player.roleGrants.exists(_.role == RoleKind.TournamentAdmin),
+      isSuperAdmin = player.roleGrants.exists(_.role == RoleKind.SuperAdmin)
+    )
 
   def clubApplicationsOpen(club: Club): Boolean =
     club.dissolvedAt.isEmpty && club.recruitmentPolicy.applicationsOpen

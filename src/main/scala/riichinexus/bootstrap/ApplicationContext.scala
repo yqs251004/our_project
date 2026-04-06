@@ -7,6 +7,7 @@ import _root_.services.*
 
 final case class ApplicationContext(
     playerService: PlayerApplicationService,
+    authService: AuthApplicationService,
     guestSessionService: GuestSessionApplicationService,
     publicQueryService: PublicQueryService,
     clubService: ClubApplicationService,
@@ -37,6 +38,8 @@ final case class ApplicationContext(
     auditEventRepository: AuditEventRepository,
     eventBus: DomainEventBus,
     authorizationService: AuthorizationService,
+    accountCredentialRepository: AccountCredentialRepository,
+    authenticatedSessionRepository: AuthenticatedSessionRepository,
     guestSessionRepository: GuestSessionRepository
 )
 

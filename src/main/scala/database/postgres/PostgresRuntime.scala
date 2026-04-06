@@ -279,6 +279,46 @@ final class PostgresSchemaInitializer(connectionFactory: JdbcConnectionFactory):
       execute(
         connection,
         """
+          |create table if not exists account_credentials (
+          |  username text primary key,
+          |  player_id text not null,
+          |  payload jsonb not null,
+          |  updated_at timestamptz not null default now()
+          |)
+          |""".stripMargin
+      )
+      execute(connection, "alter table account_credentials add column if not exists player_id text")
+      execute(connection, "alter table account_credentials add column if not exists payload jsonb")
+      execute(connection, "alter table account_credentials add column if not exists updated_at timestamptz default now()")
+      execute(connection, "create unique index if not exists idx_account_credentials_player_id on account_credentials (player_id)")
+
+      execute(
+        connection,
+        """
+          |create table if not exists authenticated_sessions (
+          |  token text primary key,
+          |  username text not null,
+          |  player_id text not null,
+          |  created_at timestamptz not null,
+          |  expires_at timestamptz not null,
+          |  payload jsonb not null,
+          |  updated_at timestamptz not null default now()
+          |)
+          |""".stripMargin
+      )
+      execute(connection, "alter table authenticated_sessions add column if not exists username text")
+      execute(connection, "alter table authenticated_sessions add column if not exists player_id text")
+      execute(connection, "alter table authenticated_sessions add column if not exists created_at timestamptz")
+      execute(connection, "alter table authenticated_sessions add column if not exists expires_at timestamptz")
+      execute(connection, "alter table authenticated_sessions add column if not exists payload jsonb")
+      execute(connection, "alter table authenticated_sessions add column if not exists updated_at timestamptz default now()")
+      execute(connection, "create index if not exists idx_authenticated_sessions_player_id on authenticated_sessions (player_id)")
+      execute(connection, "create index if not exists idx_authenticated_sessions_username on authenticated_sessions (username)")
+      execute(connection, "create index if not exists idx_authenticated_sessions_expires_at on authenticated_sessions (expires_at)")
+
+      execute(
+        connection,
+        """
           |create table if not exists dashboards (
           |  owner_key text primary key,
           |  owner_type text not null,
@@ -624,6 +664,14 @@ final class PostgresSchemaInitializer(connectionFactory: JdbcConnectionFactory):
           |on conflict (version) do nothing
           |""".stripMargin
       )
+      execute(
+        connection,
+        """
+          |insert into schema_version(version, description)
+          |values (12, 'Added account credential and authenticated session schema')
+          |on conflict (version) do nothing
+          |""".stripMargin
+      )
     }
 
   private def execute(connection: Connection, sql: String): Unit =
@@ -639,6 +687,8 @@ final class PostgresAdminService(connectionFactory: JdbcConnectionFactory):
   private val managedTables =
     Vector(
       "players",
+      "account_credentials",
+      "authenticated_sessions",
       "guest_sessions",
       "clubs",
       "tournaments",
@@ -697,6 +747,8 @@ final class PostgresAdminService(connectionFactory: JdbcConnectionFactory):
         executeAdmin(connection, "truncate table advanced_stats_recompute_tasks restart identity")
         executeAdmin(connection, "truncate table dashboards restart identity")
         executeAdmin(connection, "truncate table advanced_stats_boards restart identity")
+        executeAdmin(connection, "truncate table authenticated_sessions restart identity")
+        executeAdmin(connection, "truncate table account_credentials restart identity")
         executeAdmin(connection, "truncate table guest_sessions restart identity")
         executeAdmin(connection, "truncate table appeal_tickets restart identity")
         executeAdmin(connection, "truncate table paifus restart identity")

@@ -58,7 +58,9 @@ object JsonCodecs:
   given ReadWriter[Permission] =
     stringEnumReadWriter(Permission.valueOf, _.toString)
   given ReadWriter[RoleGrant] = macroRW
+  given ReadWriter[AccountCredential] = macroRW
   given ReadWriter[GuestAccessSession] = macroRW
+  given ReadWriter[AuthenticatedSession] = macroRW
   given ReadWriter[AccessPrincipal] = macroRW
 
   given ReadWriter[RankPlatform] =
@@ -232,6 +234,8 @@ object JsonCodecs:
     )
   given ReadWriter[CurrentSessionRoleFlags] = macroRW
   given ReadWriter[CurrentSessionView] = macroRW
+  given ReadWriter[AuthSuccessView] = macroRW
+  given ReadWriter[AuthSessionView] = macroRW
   given ReadWriter[ClubMembershipApplicantView] = macroRW
   given ReadWriter[ClubMembershipApplicationView] = macroRW
   given ReadWriter[ClubApplicationPolicyView] = macroRW
