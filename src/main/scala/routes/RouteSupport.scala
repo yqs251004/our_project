@@ -293,6 +293,13 @@ final class RouteSupport(
       club.admins.contains(playerId) || club.hasPrivilege(playerId, ClubPrivilege.ApproveRoster)
     )
 
+  def canManageClubTournamentParticipation(actor: AccessPrincipal, club: Club): Boolean =
+    actor.isSuperAdmin ||
+      app.authorizationService.can(actor, Permission.SubmitTournamentLineup, clubId = Some(club.id)) ||
+      actor.playerId.exists(playerId =>
+        club.members.contains(playerId) && club.hasPrivilege(playerId, ClubPrivilege.PriorityLineup)
+      )
+
   def requireClubApplicationManager(actor: AccessPrincipal, club: Club): Unit =
     if !canManageClubApplications(actor, club) then
       throw AuthorizationFailure(s"${actor.displayName} cannot manage membership applications for club ${club.id.value}")
@@ -353,6 +360,141 @@ final class RouteSupport(
       pendingTablePlanCount = stage.pendingTablePlans.size,
       scheduledTableCount = stage.scheduledTableIds.size
     )
+
+  def buildTournamentLineupSubmissionView(submission: StageLineupSubmission): TournamentLineupSubmissionView =
+    TournamentLineupSubmissionView(
+      submissionId = submission.id,
+      clubId = submission.clubId,
+      clubName = app.clubRepository.findById(submission.clubId).map(_.name).getOrElse(submission.clubId.value),
+      submittedBy = submission.submittedBy,
+      submittedByDisplayName = app.playerRepository.findById(submission.submittedBy).map(_.nickname),
+      submittedAt = submission.submittedAt,
+      activePlayerIds = submission.seats.filterNot(_.reserve).map(_.playerId),
+      reservePlayerIds = submission.seats.filter(_.reserve).map(_.playerId),
+      note = submission.note
+    )
+
+  def buildTournamentOperationsStageView(stage: TournamentStage): TournamentOperationsStageView =
+    TournamentOperationsStageView(
+      stageId = stage.id,
+      name = stage.name,
+      format = stage.format,
+      order = stage.order,
+      status = stage.status,
+      currentRound = stage.currentRound,
+      roundCount = stage.roundCount,
+      schedulingPoolSize = stage.schedulingPoolSize,
+      pendingTablePlanCount = stage.pendingTablePlans.size,
+      scheduledTableCount = stage.scheduledTableIds.size,
+      lineupSubmissions = stage.lineupSubmissions.sortBy(_.submittedAt).map(buildTournamentLineupSubmissionView)
+    )
+
+  def buildTournamentDetailView(tournament: Tournament): TournamentDetailView =
+    val participatingClubs = tournament.participatingClubs.distinct.flatMap { clubId =>
+      app.clubRepository.findById(clubId).map { club =>
+        TournamentParticipantClubView(
+          clubId = club.id,
+          clubName = club.name,
+          memberCount = club.members.size,
+          activeMemberCount = club.members.count(playerId =>
+            app.playerRepository.findById(playerId).exists(_.status == PlayerStatus.Active)
+          )
+        )
+      }
+    }.sortBy(club => (club.clubName, club.clubId.value))
+
+    val participatingPlayers = tournamentParticipantIds(tournament).flatMap { playerId =>
+      app.playerRepository.findById(playerId).map { player =>
+        TournamentParticipantPlayerView(
+          playerId = player.id,
+          nickname = player.nickname,
+          status = player.status,
+          elo = player.elo,
+          currentRank = player.currentRank,
+          clubIds = player.boundClubIds
+        )
+      }
+    }.sortBy(player => (player.nickname, player.playerId.value))
+
+    val whitelistedClubIds = tournament.whitelist.flatMap(_.clubId).distinct.sortBy(_.value)
+    val whitelistedPlayerIds = tournament.whitelist.flatMap(_.playerId).distinct.sortBy(_.value)
+
+    TournamentDetailView(
+      tournamentId = tournament.id,
+      name = tournament.name,
+      organizer = tournament.organizer,
+      status = tournament.status,
+      startsAt = tournament.startsAt,
+      endsAt = tournament.endsAt,
+      participatingClubs = participatingClubs,
+      participatingPlayers = participatingPlayers,
+      whitelistSummary = TournamentWhitelistSummaryView(
+        totalEntries = tournament.whitelist.size,
+        clubCount = whitelistedClubIds.size,
+        playerCount = whitelistedPlayerIds.size,
+        clubIds = whitelistedClubIds,
+        playerIds = whitelistedPlayerIds
+      ),
+      stages = tournament.stages.sortBy(_.order).map(buildTournamentOperationsStageView)
+    )
+
+  def buildTournamentDetailView(tournamentId: TournamentId): Option[TournamentDetailView] =
+    app.tournamentRepository.findById(tournamentId).map(buildTournamentDetailView)
+
+  def buildTournamentMutationView(
+      tournamentId: TournamentId,
+      scheduledTables: Vector[Table] = Vector.empty
+  ): Option[TournamentMutationView] =
+    buildTournamentDetailView(tournamentId).map(detail =>
+      TournamentMutationView(
+        tournament = detail,
+        scheduledTables = scheduledTables.sortBy(table => (table.stageRoundNumber, table.tableNo, table.id.value))
+      )
+    )
+
+  def buildClubTournamentParticipationView(
+      clubId: ClubId,
+      tournament: Tournament,
+      viewer: AccessPrincipal
+  ): Option[ClubTournamentParticipationView] =
+    val club = app.clubRepository.findById(clubId)
+    val clubVisibleToViewer =
+      club.exists(currentClub => canManageClubTournamentParticipation(viewer, currentClub))
+    val isWhitelisted = tournament.whitelist.exists(_.clubId.contains(clubId))
+    val isParticipating = tournament.participatingClubs.contains(clubId)
+    if !isWhitelisted && !isParticipating then None
+    else
+      val stageName = tournament.stages
+        .sortBy(_.order)
+        .find(stage => stage.status != StageStatus.Completed && stage.status != StageStatus.Archived)
+        .orElse(tournament.stages.sortBy(_.order).lastOption)
+        .map(_.name)
+      Some(
+        ClubTournamentParticipationView(
+          clubId = clubId,
+          tournamentId = tournament.id,
+          name = tournament.name,
+          status = tournament.status,
+          clubParticipationStatus =
+            if isParticipating then ClubTournamentParticipationStatus.Participating
+            else ClubTournamentParticipationStatus.Invited,
+          stageName = stageName,
+          startsAt = tournament.startsAt,
+          endsAt = tournament.endsAt,
+          canViewDetail = tournament.status != TournamentStatus.Draft || clubVisibleToViewer,
+          canSubmitLineup =
+            clubVisibleToViewer &&
+              tournament.status != TournamentStatus.Draft &&
+              tournament.status != TournamentStatus.Cancelled &&
+              tournament.status != TournamentStatus.Archived &&
+              (isWhitelisted || isParticipating),
+          canDecline =
+            clubVisibleToViewer &&
+              tournament.status != TournamentStatus.Completed &&
+              tournament.status != TournamentStatus.Cancelled &&
+              tournament.status != TournamentStatus.Archived
+        )
+      )
 
   def buildPublicTournamentSummaryView(tournament: Tournament): PublicTournamentSummaryView =
     PublicTournamentSummaryView(

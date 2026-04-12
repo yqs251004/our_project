@@ -244,6 +244,7 @@ object JsonCodecs:
   given ReadWriter[PublicClubRecentMatchView] = macroRW
   given ReadWriter[PublicClubDetailView] = macroRW
   given ReadWriter[TournamentStageDirectoryEntry] = macroRW
+
   given ReadWriter[PublicTournamentSummaryView] = macroRW
   given ReadWriter[PublicTournamentStageView] = macroRW
   given ReadWriter[PublicTournamentDetailView] = macroRW
@@ -274,3 +275,4 @@ object JsonCodecs:
   given ReadWriter[DemoScenarioGuideStep] = macroRW
   given ReadWriter[DemoScenarioGuide] = macroRW
   given ReadWriter[DemoScenarioSnapshot] = macroRW
+

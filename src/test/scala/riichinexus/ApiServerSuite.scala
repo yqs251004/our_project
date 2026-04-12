@@ -1927,7 +1927,8 @@ class ApiServerSuite extends FunSuite:
         write(OperatorRequest(Some(admin.id.value)))
       )
       assertEquals(scheduleResponse.statusCode(), 200)
-      val tables = read[Vector[Table]](scheduleResponse.body()).sortBy(_.tableNo)
+      val scheduled = read[TournamentMutationView](scheduleResponse.body())
+      val tables = scheduled.scheduledTables.sortBy(_.tableNo)
       val nicknameById = players.map(player => player.id -> player.nickname).toMap
       val groupedNicknames = tables.map(table => table.seats.map(seat => nicknameById(seat.playerId)).toSet)
       assertEquals(
@@ -1987,7 +1988,8 @@ class ApiServerSuite extends FunSuite:
         write(OperatorRequest(Some(admin.id.value)))
       )
       assertEquals(scheduleResponse.statusCode(), 200)
-      val tables = read[Vector[Table]](scheduleResponse.body())
+      val scheduled = read[TournamentMutationView](scheduleResponse.body())
+      val tables = scheduled.scheduledTables
       assertEquals(tables.size, 1)
       assertEquals(tables.head.seats.map(_.playerId).toSet, players.take(4).map(_.id).toSet)
     }
@@ -2266,6 +2268,8 @@ class ApiServerSuite extends FunSuite:
         )
       }
     )
+
+
 
 
 

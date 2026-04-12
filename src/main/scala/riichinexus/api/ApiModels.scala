@@ -915,3 +915,14 @@ object ApiModels:
   given ReadWriter[BatchReplayDomainEventOutboxRequest] = macroRW
   given ReadWriter[BatchAcknowledgeDomainEventOutboxRequest] = macroRW
   given ReadWriter[BatchQuarantineDomainEventOutboxRequest] = macroRW
+  given ReadWriter[ClubTournamentParticipationStatus] =
+    readwriter[String].bimap[ClubTournamentParticipationStatus](_.toString, ClubTournamentParticipationStatus.valueOf)
+  given ReadWriter[TournamentParticipantClubView] = macroRW
+  given ReadWriter[TournamentParticipantPlayerView] = macroRW
+  given ReadWriter[TournamentWhitelistSummaryView] = macroRW
+  given ReadWriter[TournamentLineupSubmissionView] = macroRW
+  given ReadWriter[TournamentOperationsStageView] = macroRW
+  given ReadWriter[TournamentDetailView] = macroRW
+  given ReadWriter[TournamentMutationView] = macroRW
+  given ReadWriter[ClubTournamentParticipationView] = macroRW
+

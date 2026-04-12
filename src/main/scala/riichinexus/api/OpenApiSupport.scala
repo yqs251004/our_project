@@ -62,8 +62,11 @@ object OpenApiSupport:
     "Player" -> Obj("$ref" -> "#/components/schemas/Player"),
     "ClubMembershipApplicationView" -> Obj("$ref" -> "#/components/schemas/ClubMembershipApplicationView"),
     "ClubMembershipApplicationPage" -> Obj("$ref" -> "#/components/schemas/ClubMembershipApplicationPage"),
+    "ClubTournamentParticipationPage" -> Obj("$ref" -> "#/components/schemas/ClubTournamentParticipationPage"),
     "Club" -> Obj("$ref" -> "#/components/schemas/Club"),
     "ClubPage" -> Obj("$ref" -> "#/components/schemas/ClubPage"),
+    "TournamentDetailView" -> Obj("$ref" -> "#/components/schemas/TournamentDetailView"),
+    "TournamentMutationView" -> Obj("$ref" -> "#/components/schemas/TournamentMutationView"),
     "TournamentStageDirectoryEntryList" -> Obj(
       "type" -> "array",
       "items" -> Obj("$ref" -> "#/components/schemas/TournamentStageDirectoryEntry")
@@ -217,6 +220,61 @@ object OpenApiSupport:
       )
     ),
     PathSpec(
+      "/clubs/{clubId}/tournaments",
+      "get",
+      OperationSpec(
+        summary = "List club tournaments",
+        description = "Returns the club-facing tournament participation and invitation list. scope=recent includes active tournaments and tournaments that ended within the last 90 days.",
+        tags = Vector("clubs"),
+        parameters = Vector(
+          ParameterSpec("clubId", "path", required = true, "Club id"),
+          ParameterSpec("scope", "query", required = false, "One of recent, active, all. recent includes active tournaments and tournaments that ended within the last 90 days."),
+          ParameterSpec("viewer", "query", required = false, "Operator id for role-sensitive flags"),
+          ParameterSpec("limit", "query", required = false, "Page size", "integer"),
+          ParameterSpec("offset", "query", required = false, "Page offset", "integer")
+        ),
+        responseRef = Some("ClubTournamentParticipationPage")
+      )
+    ),
+    PathSpec(
+      "/clubs/{clubId}/tournaments/{tournamentId}/accept",
+      "post",
+      OperationSpec(
+        summary = "Accept club tournament participation",
+        description = "Accepts a club invitation or confirms club participation in a tournament.",
+        tags = Vector("clubs", "tournaments"),
+        parameters = Vector(
+          ParameterSpec("clubId", "path", required = true, "Club id"),
+          ParameterSpec("tournamentId", "path", required = true, "Tournament id")
+        ),
+        requestBody = Some(
+          objectSchema(
+            "operatorId" -> Obj("type" -> "string")
+          )
+        ),
+        responseRef = Some("TournamentMutationView")
+      )
+    ),
+    PathSpec(
+      "/clubs/{clubId}/tournaments/{tournamentId}/decline",
+      "post",
+      OperationSpec(
+        summary = "Decline or withdraw club tournament participation",
+        description = "Declines an invitation or withdraws the club from tournament participation.",
+        tags = Vector("clubs", "tournaments"),
+        parameters = Vector(
+          ParameterSpec("clubId", "path", required = true, "Club id"),
+          ParameterSpec("tournamentId", "path", required = true, "Tournament id")
+        ),
+        requestBody = Some(
+          objectSchema(
+            "operatorId" -> Obj("type" -> "string")
+          )
+        ),
+        responseRef = Some("TournamentMutationView")
+      )
+    ),
+    PathSpec(
       "/clubs",
       "get",
       OperationSpec(
@@ -253,6 +311,75 @@ object OpenApiSupport:
       )
     ),
     PathSpec(
+      "/tournaments/{id}",
+      "get",
+      OperationSpec(
+        summary = "Tournament operations detail",
+        description = "Returns the dedicated tournament detail view used by the operations workbench.",
+        tags = Vector("tournaments"),
+        parameters = Vector(
+          ParameterSpec("id", "path", required = true, "Tournament id")
+        ),
+        responseRef = Some("TournamentDetailView")
+      )
+    ),
+    PathSpec(
+      "/tournaments/{id}/publish",
+      "post",
+      OperationSpec(
+        summary = "Publish tournament",
+        description = "Publishes a tournament and returns the updated tournament mutation view.",
+        tags = Vector("tournaments"),
+        parameters = Vector(
+          ParameterSpec("id", "path", required = true, "Tournament id")
+        ),
+        requestBody = Some(
+          objectSchema(
+            "operatorId" -> Obj("type" -> "string")
+          )
+        ),
+        responseRef = Some("TournamentMutationView")
+      )
+    ),
+    PathSpec(
+      "/tournaments/{id}/clubs/{clubId}",
+      "post",
+      OperationSpec(
+        summary = "Register club in tournament",
+        description = "Registers a club into a tournament and returns the updated tournament mutation view.",
+        tags = Vector("tournaments"),
+        parameters = Vector(
+          ParameterSpec("id", "path", required = true, "Tournament id"),
+          ParameterSpec("clubId", "path", required = true, "Club id")
+        ),
+        requestBody = Some(
+          objectSchema(
+            "operatorId" -> Obj("type" -> "string")
+          )
+        ),
+        responseRef = Some("TournamentMutationView")
+      )
+    ),
+    PathSpec(
+      "/tournaments/{id}/clubs/{clubId}/remove",
+      "post",
+      OperationSpec(
+        summary = "Remove club from tournament",
+        description = "Removes a club from tournament participation or invitation state.",
+        tags = Vector("tournaments"),
+        parameters = Vector(
+          ParameterSpec("id", "path", required = true, "Tournament id"),
+          ParameterSpec("clubId", "path", required = true, "Club id")
+        ),
+        requestBody = Some(
+          objectSchema(
+            "operatorId" -> Obj("type" -> "string")
+          )
+        ),
+        responseRef = Some("TournamentMutationView")
+      )
+    ),
+    PathSpec(
       "/tournaments/{id}/stages",
       "get",
       OperationSpec(
@@ -263,6 +390,47 @@ object OpenApiSupport:
           ParameterSpec("id", "path", required = true, "Tournament id")
         ),
         responseRef = Some("TournamentStageDirectoryEntryList")
+      )
+    ),
+    PathSpec(
+      "/tournaments/{id}/stages/{stageId}/lineups",
+      "post",
+      OperationSpec(
+        summary = "Submit stage lineup",
+        description = "Submits or replaces a club lineup for a tournament stage and returns the updated tournament mutation view.",
+        tags = Vector("tournaments"),
+        parameters = Vector(
+          ParameterSpec("id", "path", required = true, "Tournament id"),
+          ParameterSpec("stageId", "path", required = true, "Stage id")
+        ),
+        requestBody = Some(
+          objectSchema(
+            "clubId" -> Obj("type" -> "string"),
+            "operatorId" -> Obj("type" -> "string"),
+            "seats" -> Obj("type" -> "array", "items" -> Obj("type" -> "object")),
+            "note" -> Obj("type" -> "string")
+          )
+        ),
+        responseRef = Some("TournamentMutationView")
+      )
+    ),
+    PathSpec(
+      "/tournaments/{id}/stages/{stageId}/schedule",
+      "post",
+      OperationSpec(
+        summary = "Schedule stage tables",
+        description = "Schedules stage tables and returns the updated tournament mutation view together with scheduled tables.",
+        tags = Vector("tournaments"),
+        parameters = Vector(
+          ParameterSpec("id", "path", required = true, "Tournament id"),
+          ParameterSpec("stageId", "path", required = true, "Stage id")
+        ),
+        requestBody = Some(
+          objectSchema(
+            "operatorId" -> Obj("type" -> "string")
+          )
+        ),
+        responseRef = Some("TournamentMutationView")
       )
     ),
     PathSpec(
@@ -437,16 +605,43 @@ object OpenApiSupport:
           "boundClubIds" -> Obj("type" -> "array", "items" -> Obj("type" -> "string")),
           "roleGrants" -> Obj("type" -> "array", "items" -> Obj("type" -> "object"))
         ),
+        "ClubMembershipApplicantView" -> objectSchema(
+          "playerId" -> Obj("type" -> "string"),
+          "applicantUserId" -> Obj("type" -> "string"),
+          "displayName" -> Obj("type" -> "string"),
+          "playerStatus" -> Obj("type" -> "string"),
+          "currentRank" -> Obj("type" -> "object"),
+          "elo" -> Obj("type" -> "integer"),
+          "clubIds" -> Obj("type" -> "array", "items" -> Obj("type" -> "string"))
+        ),
         "ClubMembershipApplicationView" -> objectSchema(
           "applicationId" -> Obj("type" -> "string"),
           "clubId" -> Obj("type" -> "string"),
           "clubName" -> Obj("type" -> "string"),
-          "applicant" -> Obj("type" -> "object"),
+          "applicant" -> Obj("$ref" -> "#/components/schemas/ClubMembershipApplicantView"),
           "submittedAt" -> Obj("type" -> "string", "format" -> "date-time"),
           "message" -> Obj("type" -> "string"),
           "status" -> Obj("type" -> "string"),
+          "reviewedBy" -> Obj("type" -> "string"),
+          "reviewedByDisplayName" -> Obj("type" -> "string"),
+          "reviewedAt" -> Obj("type" -> "string", "format" -> "date-time"),
+          "reviewNote" -> Obj("type" -> "string"),
+          "withdrawnByPrincipalId" -> Obj("type" -> "string"),
           "canReview" -> Obj("type" -> "boolean"),
           "canWithdraw" -> Obj("type" -> "boolean")
+        ),
+        "ClubTournamentParticipationView" -> objectSchema(
+          "clubId" -> Obj("type" -> "string"),
+          "tournamentId" -> Obj("type" -> "string"),
+          "name" -> Obj("type" -> "string"),
+          "status" -> Obj("type" -> "string"),
+          "clubParticipationStatus" -> Obj("type" -> "string"),
+          "stageName" -> Obj("type" -> "string"),
+          "startsAt" -> Obj("type" -> "string", "format" -> "date-time"),
+          "endsAt" -> Obj("type" -> "string", "format" -> "date-time"),
+          "canViewDetail" -> Obj("type" -> "boolean"),
+          "canSubmitLineup" -> Obj("type" -> "boolean"),
+          "canDecline" -> Obj("type" -> "boolean")
         ),
         "TournamentStageDirectoryEntry" -> objectSchema(
           "stageId" -> Obj("type" -> "string"),
@@ -459,6 +654,82 @@ object OpenApiSupport:
           "schedulingPoolSize" -> Obj("type" -> "integer"),
           "pendingTablePlanCount" -> Obj("type" -> "integer"),
           "scheduledTableCount" -> Obj("type" -> "integer")
+        ),
+        "TournamentParticipantClubView" -> objectSchema(
+          "clubId" -> Obj("type" -> "string"),
+          "clubName" -> Obj("type" -> "string"),
+          "memberCount" -> Obj("type" -> "integer"),
+          "activeMemberCount" -> Obj("type" -> "integer")
+        ),
+        "TournamentParticipantPlayerView" -> objectSchema(
+          "playerId" -> Obj("type" -> "string"),
+          "nickname" -> Obj("type" -> "string"),
+          "status" -> Obj("type" -> "string"),
+          "elo" -> Obj("type" -> "integer"),
+          "currentRank" -> Obj("type" -> "object"),
+          "clubIds" -> Obj("type" -> "array", "items" -> Obj("type" -> "string"))
+        ),
+        "TournamentWhitelistSummaryView" -> objectSchema(
+          "totalEntries" -> Obj("type" -> "integer"),
+          "clubCount" -> Obj("type" -> "integer"),
+          "playerCount" -> Obj("type" -> "integer"),
+          "clubIds" -> Obj("type" -> "array", "items" -> Obj("type" -> "string")),
+          "playerIds" -> Obj("type" -> "array", "items" -> Obj("type" -> "string"))
+        ),
+        "TournamentLineupSubmissionView" -> objectSchema(
+          "submissionId" -> Obj("type" -> "string"),
+          "clubId" -> Obj("type" -> "string"),
+          "clubName" -> Obj("type" -> "string"),
+          "submittedBy" -> Obj("type" -> "string"),
+          "submittedByDisplayName" -> Obj("type" -> "string"),
+          "submittedAt" -> Obj("type" -> "string", "format" -> "date-time"),
+          "activePlayerIds" -> Obj("type" -> "array", "items" -> Obj("type" -> "string")),
+          "reservePlayerIds" -> Obj("type" -> "array", "items" -> Obj("type" -> "string")),
+          "note" -> Obj("type" -> "string")
+        ),
+        "TournamentOperationsStageView" -> objectSchema(
+          "stageId" -> Obj("type" -> "string"),
+          "name" -> Obj("type" -> "string"),
+          "format" -> Obj("type" -> "string"),
+          "order" -> Obj("type" -> "integer"),
+          "status" -> Obj("type" -> "string"),
+          "currentRound" -> Obj("type" -> "integer"),
+          "roundCount" -> Obj("type" -> "integer"),
+          "schedulingPoolSize" -> Obj("type" -> "integer"),
+          "pendingTablePlanCount" -> Obj("type" -> "integer"),
+          "scheduledTableCount" -> Obj("type" -> "integer"),
+          "lineupSubmissions" -> Obj(
+            "type" -> "array",
+            "items" -> Obj("$ref" -> "#/components/schemas/TournamentLineupSubmissionView")
+          )
+        ),
+        "TournamentDetailView" -> objectSchema(
+          "tournamentId" -> Obj("type" -> "string"),
+          "name" -> Obj("type" -> "string"),
+          "organizer" -> Obj("type" -> "string"),
+          "status" -> Obj("type" -> "string"),
+          "startsAt" -> Obj("type" -> "string", "format" -> "date-time"),
+          "endsAt" -> Obj("type" -> "string", "format" -> "date-time"),
+          "participatingClubs" -> Obj(
+            "type" -> "array",
+            "items" -> Obj("$ref" -> "#/components/schemas/TournamentParticipantClubView")
+          ),
+          "participatingPlayers" -> Obj(
+            "type" -> "array",
+            "items" -> Obj("$ref" -> "#/components/schemas/TournamentParticipantPlayerView")
+          ),
+          "whitelistSummary" -> Obj("$ref" -> "#/components/schemas/TournamentWhitelistSummaryView"),
+          "stages" -> Obj(
+            "type" -> "array",
+            "items" -> Obj("$ref" -> "#/components/schemas/TournamentOperationsStageView")
+          )
+        ),
+        "TournamentMutationView" -> objectSchema(
+          "tournament" -> Obj("$ref" -> "#/components/schemas/TournamentDetailView"),
+          "scheduledTables" -> Obj(
+            "type" -> "array",
+            "items" -> Obj("$ref" -> "#/components/schemas/Table")
+          )
         ),
         "PublicTournamentDetailView" -> objectSchema(
           "tournamentId" -> Obj("type" -> "string"),
@@ -538,6 +809,7 @@ object OpenApiSupport:
           "priority" -> Obj("type" -> "string")
         ),
         "ClubMembershipApplicationPage" -> pageSchema("#/components/schemas/ClubMembershipApplicationView"),
+        "ClubTournamentParticipationPage" -> pageSchema("#/components/schemas/ClubTournamentParticipationView"),
         "ClubPage" -> pageSchema("#/components/schemas/Club"),
         "PublicTournamentSummaryPage" -> pageSchema("#/components/schemas/PublicTournamentSummaryView"),
         "AppealTicketPage" -> pageSchema("#/components/schemas/AppealTicket")

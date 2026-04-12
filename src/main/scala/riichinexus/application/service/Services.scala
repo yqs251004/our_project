@@ -3366,6 +3366,85 @@ final class TournamentApplicationService(
       }
     }
 
+  def acceptClubParticipation(
+      tournamentId: TournamentId,
+      clubId: ClubId,
+      actor: AccessPrincipal
+  ): Option[Tournament] =
+    transactionManager.inTransaction {
+      val club = clubRepository
+        .findById(clubId)
+        .map { club =>
+          ensureClubActive(club)
+          club
+        }
+        .getOrElse(throw NoSuchElementException(s"Club ${clubId.value} was not found"))
+      requireClubLineupCapability(actor, club)
+
+      tournamentRepository.findById(tournamentId).map { tournament =>
+        val alreadyParticipating = tournament.participatingClubs.contains(clubId)
+        val isWhitelisted = tournament.whitelist.exists(_.clubId.contains(clubId))
+        if !alreadyParticipating && !isWhitelisted then
+          throw IllegalArgumentException(
+            s"Club ${clubId.value} is not invited to tournament ${tournamentId.value}"
+          )
+        tournamentRepository.save(tournament.registerClub(clubId))
+      }
+    }
+
+  def declineClubParticipation(
+      tournamentId: TournamentId,
+      clubId: ClubId,
+      actor: AccessPrincipal
+  ): Option[Tournament] =
+    transactionManager.inTransaction {
+      val club = clubRepository
+        .findById(clubId)
+        .map { club =>
+          ensureClubActive(club)
+          club
+        }
+        .getOrElse(throw NoSuchElementException(s"Club ${clubId.value} was not found"))
+      requireClubLineupCapability(actor, club)
+
+      tournamentRepository.findById(tournamentId).map { tournament =>
+        val trackedParticipation =
+          tournament.participatingClubs.contains(clubId) || tournament.whitelist.exists(_.clubId.contains(clubId))
+        if !trackedParticipation then
+          throw IllegalArgumentException(
+            s"Club ${clubId.value} is not participating in tournament ${tournamentId.value}"
+          )
+        tournamentRepository.save(tournament.removeClub(clubId))
+      }
+    }
+
+  def removeClubParticipation(
+      tournamentId: TournamentId,
+      clubId: ClubId,
+      actor: AccessPrincipal = AccessPrincipal.system
+  ): Option[Tournament] =
+    transactionManager.inTransaction {
+      authorizationService.requirePermission(
+        actor,
+        Permission.ManageTournamentStages,
+        tournamentId = Some(tournamentId)
+      )
+
+      clubRepository
+        .findById(clubId)
+        .getOrElse(throw NoSuchElementException(s"Club ${clubId.value} was not found"))
+
+      tournamentRepository.findById(tournamentId).map { tournament =>
+        val trackedParticipation =
+          tournament.participatingClubs.contains(clubId) || tournament.whitelist.exists(_.clubId.contains(clubId))
+        if !trackedParticipation then
+          throw IllegalArgumentException(
+            s"Club ${clubId.value} is not participating in tournament ${tournamentId.value}"
+          )
+        tournamentRepository.save(tournament.removeClub(clubId))
+      }
+    }
+
   def whitelistPlayer(
       tournamentId: TournamentId,
       playerId: PlayerId,
@@ -6293,6 +6372,7 @@ final class DashboardProjectionSubscriber(
         ()
 
   private def buildPlayerDashboard(playerId: PlayerId, at: Instant): Dashboard =
+    val existingVersion = dashboardRepository.findByOwner(DashboardOwner.Player(playerId)).map(_.version).getOrElse(0)
     val records = matchRecordRepository.findByPlayer(playerId)
     val rounds = paifuRepository.findByPlayer(playerId).flatMap(_.rounds)
     val playerResults = records.flatMap(_.seatResults.find(_.playerId == playerId))
@@ -6309,7 +6389,8 @@ final class DashboardProjectionSubscriber(
       riichiRate = ratio(roundStats.count(_.riichiDeclared), rounds.size),
       averagePlacement = average(placements),
       topFinishRate = ratio(topFinishes, records.size),
-      lastUpdatedAt = at
+      lastUpdatedAt = at,
+      version = existingVersion
     )
 
 private object AdvancedStatsAsyncOutbox:
@@ -6337,6 +6418,9 @@ final class AdvancedStatsPipelineService(
   private val drainInFlight = AtomicBoolean(false)
   private val retryDelay = java.time.Duration.ofMinutes(5)
   private val maxAttempts = 3
+  private val asyncDrainStartupDelay =
+    if transactionManager == NoOpTransactionManager then java.time.Duration.ofMillis(50)
+    else java.time.Duration.ZERO
 
   def enqueueImpactedOwners(
       matchRecord: MatchRecord,
@@ -6485,7 +6569,9 @@ final class AdvancedStatsPipelineService(
   ): AdvancedStatsBoard =
     val records = matchRecordRepository.findByPlayer(playerId)
     val paifus = paifuRepository.findByPlayer(playerId)
-    buildPlayerBoard(playerId, records, paifus, at)
+    val existingVersion =
+      advancedStatsBoardRepository.findByOwner(DashboardOwner.Player(playerId)).map(_.version).getOrElse(0)
+    buildPlayerBoard(playerId, records, paifus, at).copy(version = existingVersion)
 
   def rebuildClubBoard(
       club: Club,
@@ -6496,12 +6582,16 @@ final class AdvancedStatsPipelineService(
         .filter(_.status == PlayerStatus.Active)
         .map(_ => rebuildPlayerBoard(playerId, at))
     }
-    buildClubBoard(club, memberBoards, at)
+    val existingVersion =
+      advancedStatsBoardRepository.findByOwner(DashboardOwner.Club(club.id)).map(_.version).getOrElse(0)
+    buildClubBoard(club, memberBoards, at).copy(version = existingVersion)
 
   private def scheduleAsyncDrain(notBefore: Option[Instant] = None): Unit =
     if drainInFlight.compareAndSet(false, true) then
       AdvancedStatsAsyncOutbox.submit {
         try
+          if !asyncDrainStartupDelay.isZero then
+            Thread.sleep(asyncDrainStartupDelay.toMillis)
           notBefore.foreach { scheduledAt =>
             val sleepMillis = java.time.Duration.between(Instant.now(), scheduledAt).toMillis
             if sleepMillis > 0 then Thread.sleep(sleepMillis)
@@ -6714,8 +6804,17 @@ final class EventCascadeProjectionSubscriber(
           )
         )
       case PlayerBanned(playerId, reason, occurredAt) =>
-        dashboardRepository.save(Dashboard.empty(DashboardOwner.Player(playerId), occurredAt))
-        advancedStatsBoardRepository.save(AdvancedStatsBoard.empty(DashboardOwner.Player(playerId), occurredAt))
+        val playerOwner = DashboardOwner.Player(playerId)
+        dashboardRepository.save(
+          Dashboard.empty(playerOwner, occurredAt).copy(
+            version = dashboardRepository.findByOwner(playerOwner).map(_.version).getOrElse(0)
+          )
+        )
+        advancedStatsBoardRepository.save(
+          AdvancedStatsBoard.empty(playerOwner, occurredAt).copy(
+            version = advancedStatsBoardRepository.findByOwner(playerOwner).map(_.version).getOrElse(0)
+          )
+        )
         val repairedClubIds = playerRepository.findById(playerId).toVector.flatMap(_.boundClubIds).distinct.flatMap { clubId =>
           clubRepository.findById(clubId).map { club =>
             val refreshed = ProjectionSupport.refreshClubProjection(
@@ -6747,8 +6846,17 @@ final class EventCascadeProjectionSubscriber(
           )
         )
       case ClubDissolved(clubId, occurredAt) =>
-        dashboardRepository.save(Dashboard.empty(DashboardOwner.Club(clubId), occurredAt))
-        advancedStatsBoardRepository.save(AdvancedStatsBoard.empty(DashboardOwner.Club(clubId), occurredAt))
+        val clubOwner = DashboardOwner.Club(clubId)
+        dashboardRepository.save(
+          Dashboard.empty(clubOwner, occurredAt).copy(
+            version = dashboardRepository.findByOwner(clubOwner).map(_.version).getOrElse(0)
+          )
+        )
+        advancedStatsBoardRepository.save(
+          AdvancedStatsBoard.empty(clubOwner, occurredAt).copy(
+            version = advancedStatsBoardRepository.findByOwner(clubOwner).map(_.version).getOrElse(0)
+          )
+        )
         eventCascadeRecordRepository.save(
           EventCascadeRecord.completed(
             eventType = "ClubDissolved",
@@ -6762,4 +6870,5 @@ final class EventCascadeProjectionSubscriber(
         )
       case _ =>
         ()
+
 

@@ -4,6 +4,8 @@ import java.util.NoSuchElementException
 
 import api.contracts.ApiContracts.*
 import api.contracts.JsonSupport.given
+import json.JsonCodecs.given
+import riichinexus.api.ApiModels.given
 import cats.effect.IO
 import model.DomainModels.*
 import org.http4s.HttpRoutes
@@ -29,7 +31,7 @@ object TournamentRouter:
       }
 
     case GET -> Root / "tournaments" / tournamentId =>
-      support.handled(support.optionJsonResponse(support.app.tournamentRepository.findById(TournamentId(tournamentId))))
+      support.handled(support.optionJsonResponse(support.buildTournamentDetailView(TournamentId(tournamentId))))
 
     case GET -> Root / "tournaments" / tournamentId / "stages" =>
       support.handled {
@@ -115,10 +117,14 @@ object TournamentRouter:
     case req @ POST -> Root / "tournaments" / tournamentId / "publish" =>
       support.handled {
         support.readOptionalJsonBody[OperatorRequest](req).flatMap { request =>
+          support.app.tournamentService.publishTournament(
+            TournamentId(tournamentId),
+            request.flatMap(_.operator).map(support.principal).getOrElse(AccessPrincipal.system)
+          )
           support.optionJsonResponse(
-            support.app.tournamentService.publishTournament(
+            support.buildTournamentMutationView(
               TournamentId(tournamentId),
-              request.flatMap(_.operator).map(support.principal).getOrElse(AccessPrincipal.system)
+              Vector.empty
             )
           )
         }
@@ -187,11 +193,32 @@ object TournamentRouter:
     case req @ POST -> Root / "tournaments" / tournamentId / "clubs" / clubId =>
       support.handled {
         support.readOptionalJsonBody[OperatorRequest](req).flatMap { request =>
+          support.app.tournamentService.registerClub(
+            TournamentId(tournamentId),
+            ClubId(clubId),
+            request.flatMap(_.operator).map(support.principal).getOrElse(AccessPrincipal.system)
+          )
           support.optionJsonResponse(
-            support.app.tournamentService.registerClub(
+            support.buildTournamentMutationView(
               TournamentId(tournamentId),
-              ClubId(clubId),
-              request.flatMap(_.operator).map(support.principal).getOrElse(AccessPrincipal.system)
+              Vector.empty
+            )
+          )
+        }
+      }
+
+    case req @ POST -> Root / "tournaments" / tournamentId / "clubs" / clubId / "remove" =>
+      support.handled {
+        support.readOptionalJsonBody[OperatorRequest](req).flatMap { request =>
+          support.app.tournamentService.removeClubParticipation(
+            tournamentId = TournamentId(tournamentId),
+            clubId = ClubId(clubId),
+            actor = request.flatMap(_.operator).map(support.principal).getOrElse(AccessPrincipal.system)
+          )
+          support.optionJsonResponse(
+            support.buildTournamentMutationView(
+              TournamentId(tournamentId),
+              Vector.empty
             )
           )
         }
@@ -282,12 +309,16 @@ object TournamentRouter:
     case req @ POST -> Root / "tournaments" / tournamentId / "stages" / stageId / "lineups" =>
       support.handled {
         support.readJsonBody[SubmitStageLineupRequest](req).flatMap { request =>
+          support.app.tournamentService.submitLineup(
+            tournamentId = TournamentId(tournamentId),
+            stageId = TournamentStageId(stageId),
+            submission = request.toSubmission,
+            actor = support.principal(request.operator)
+          )
           support.optionJsonResponse(
-            support.app.tournamentService.submitLineup(
+            support.buildTournamentMutationView(
               tournamentId = TournamentId(tournamentId),
-              stageId = TournamentStageId(stageId),
-              submission = request.toSubmission,
-              actor = support.principal(request.operator)
+              scheduledTables = Vector.empty
             )
           )
         }
@@ -296,12 +327,15 @@ object TournamentRouter:
     case req @ POST -> Root / "tournaments" / tournamentId / "stages" / stageId / "schedule" =>
       support.handled {
         support.readOptionalJsonBody[OperatorRequest](req).flatMap { request =>
-          support.jsonResponse(
-            Status.Ok,
-            support.app.tournamentService.scheduleStageTables(
+          val scheduledTables = support.app.tournamentService.scheduleStageTables(
+            TournamentId(tournamentId),
+            TournamentStageId(stageId),
+            request.flatMap(_.operator).map(support.principal).getOrElse(AccessPrincipal.system)
+          )
+          support.optionJsonResponse(
+            support.buildTournamentMutationView(
               TournamentId(tournamentId),
-              TournamentStageId(stageId),
-              request.flatMap(_.operator).map(support.principal).getOrElse(AccessPrincipal.system)
+              scheduledTables
             )
           )
         }
@@ -373,3 +407,5 @@ object TournamentRouter:
         }
       }
   }
+
+

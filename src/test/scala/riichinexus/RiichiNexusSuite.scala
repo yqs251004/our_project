@@ -1724,7 +1724,8 @@ class RiichiNexusSuite extends FunSuite:
       principalFor(app, owner.id)
     )
 
-    app.playerRepository.save(absent.copy(status = PlayerStatus.Suspended))
+    val suspendedAbsent = app.playerRepository.findById(absent.id).getOrElse(fail("absent player missing"))
+    app.playerRepository.save(suspendedAbsent.copy(status = PlayerStatus.Suspended))
 
     val table = app.tournamentService.scheduleStageTables(tournament.id, stage.id).head
     assert(table.seats.exists(_.playerId == reserve.id))
@@ -2562,3 +2563,4 @@ private def demoPaifuForResult(
       )
     }
   )
+

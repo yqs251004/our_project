@@ -1,9 +1,12 @@
 package routes
 
+import java.time.{Duration, Instant}
 import java.util.NoSuchElementException
 
 import api.contracts.ApiContracts.*
 import api.contracts.JsonSupport.given
+import json.JsonCodecs.given
+import riichinexus.api.ApiModels.given
 import cats.effect.IO
 import model.DomainModels.*
 import org.http4s.HttpRoutes
@@ -11,6 +14,7 @@ import org.http4s.Status
 import org.http4s.dsl.io.*
 
 object ClubRouter:
+  private val RecentTournamentWindow = Duration.ofDays(90)
 
   def routes(support: RouteSupport): HttpRoutes[IO] = HttpRoutes.of[IO] {
     case GET -> Root / "club-privileges" =>
@@ -35,6 +39,45 @@ object ClubRouter:
 
     case GET -> Root / "clubs" / clubId =>
       support.handled(support.optionJsonResponse(support.app.clubRepository.findById(ClubId(clubId))))
+
+    case req @ GET -> Root / "clubs" / clubId / "tournaments" =>
+      support.handled {
+        val clubKey = ClubId(clubId)
+        support.app.clubRepository
+          .findById(clubKey)
+          .getOrElse(throw NoSuchElementException(s"Club $clubId was not found"))
+        val viewer = support.queryParam(req, "viewer").filter(_.nonEmpty)
+          .map(value => support.principal(PlayerId(value)))
+          .getOrElse(AccessPrincipal.guest())
+        val scope = support.queryParam(req, "scope").filter(_.nonEmpty).getOrElse("recent").trim.toLowerCase
+        val items = support.app.tournamentRepository.findAll()
+          .flatMap(tournament => support.buildClubTournamentParticipationView(clubKey, tournament, viewer))
+        val recentThreshold = Instant.now().minus(RecentTournamentWindow)
+
+        val filtered =
+          scope match
+            case "recent" =>
+              items.filter(item =>
+                item.status == TournamentStatus.RegistrationOpen ||
+                  item.status == TournamentStatus.Scheduled ||
+                  item.status == TournamentStatus.InProgress ||
+                  item.endsAt.isAfter(recentThreshold)
+              )
+            case "active" =>
+              items.filter(item =>
+                item.status == TournamentStatus.RegistrationOpen ||
+                  item.status == TournamentStatus.Scheduled ||
+                  item.status == TournamentStatus.InProgress
+              )
+            case "all" => items
+            case other =>
+              throw IllegalArgumentException(
+                s"Unsupported scope '$other'. Supported values: recent, active, all"
+              )
+
+        val sorted = filtered.sortBy(item => (item.startsAt, item.tournamentId.value)).reverse
+        support.pagedJsonResponse(req, sorted, support.activeFilters(req, "scope", "viewer"))
+      }
 
     case req @ GET -> Root / "clubs" / clubId / "members" =>
       support.handled {
@@ -276,6 +319,34 @@ object ClubRouter:
         }
       }
 
+    case req @ POST -> Root / "clubs" / clubId / "tournaments" / tournamentId / "accept" =>
+      support.handled {
+        support.readJsonBody[OperatorRequest](req).flatMap { request =>
+          val actor = request.operator.map(support.principal)
+            .getOrElse(throw IllegalArgumentException("operatorId is required"))
+          support.app.tournamentService.acceptClubParticipation(
+            tournamentId = TournamentId(tournamentId),
+            clubId = ClubId(clubId),
+            actor = actor
+          )
+          support.optionJsonResponse(support.buildTournamentMutationView(TournamentId(tournamentId)))
+        }
+      }
+
+    case req @ POST -> Root / "clubs" / clubId / "tournaments" / tournamentId / "decline" =>
+      support.handled {
+        support.readJsonBody[OperatorRequest](req).flatMap { request =>
+          val actor = request.operator.map(support.principal)
+            .getOrElse(throw IllegalArgumentException("operatorId is required"))
+          support.app.tournamentService.declineClubParticipation(
+            tournamentId = TournamentId(tournamentId),
+            clubId = ClubId(clubId),
+            actor = actor
+          )
+          support.optionJsonResponse(support.buildTournamentMutationView(TournamentId(tournamentId)))
+        }
+      }
+
     case req @ POST -> Root / "clubs" / clubId / "admins" =>
       support.handled {
         support.readJsonBody[AssignClubAdminRequest](req).flatMap { request =>
@@ -442,3 +513,5 @@ object ClubRouter:
         }
       }
   }
+
+

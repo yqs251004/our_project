@@ -1,227 +1,90 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<testsuite hostname="DESKTOP-2NQEDLH" name="riichinexus.RiichiNexusSuite" tests="41" errors="0" failures="11" skipped="0" time="2.493" timestamp="2026-04-06T17:17:23">
+<testsuite hostname="DESKTOP-2NQEDLH" name="riichinexus.RiichiNexusSuite" tests="41" errors="0" failures="0" skipped="0" time="1.929" timestamp="2026-04-12T21:54:25">
           <properties>
       <property name="java.specification.version" value="25"/><property name="sun.cpu.isalist" value="amd64"/><property name="sun.jnu.encoding" value="GBK"/><property name="java.class.path" value="C:\Program Files (x86)\sbt\\bin\sbt-launch.jar"/><property name="java.vm.vendor" value="Oracle Corporation"/><property name="sbt.global.base" value=".codex-sbt"/><property name="sun.arch.data.model" value="64"/><property name="ivy.home" value=".codex-ivy2"/><property name="user.variant" value=""/><property name="jline.shutdownhook" value="false"/><property name="java.vendor.url" value="https://java.oracle.com/"/><property name="user.timezone" value="Asia/Shanghai"/><property name="java.vm.specification.version" value="25"/><property name="os.name" value="Windows 11"/><property name="sun.java.launcher" value="SUN_STANDARD"/><property name="user.country" value="CN"/><property name="sun.boot.library.path" value="D:\jdk-25.0.2\bin"/><property name="sun.java.command" value="xsbt.boot.Boot test"/><property name="jdk.debug" value="release"/><property name="sun.cpu.endian" value="little"/><property name="user.home" value="C:\Users\CodexSandboxOffline"/><property name="user.language" value="zh"/><property name="java.specification.vendor" value="Oracle Corporation"/><property name="sbt.ipcsocket.tmpdir" value="C:\Users\tgs9311\AppData\Local\Temp\.sbtd48641ed\ipcsocket"/><property name="swoval.tmpdir" value="C:\Users\tgs9311\AppData\Local\Temp\.sbtd48641ed\swoval"/><property name="java.version.date" value="2026-01-20"/><property name="java.home" value="D:\jdk-25.0.2"/><property name="file.separator" value="\"/><property name="java.vm.compressedOopsMode" value="32-bit"/><property name="line.separator" value="
-"/><property name="java.vm.specification.vendor" value="Oracle Corporation"/><property name="java.specification.name" value="Java Platform API Specification"/><property name="sbt.boot.directory" value=".codex-boot"/><property name="user.script" value=""/><property name="jline.esc.timeout" value="0"/><property name="sun.management.compiler" value="HotSpot 64-Bit Tiered Compilers"/><property name="java.runtime.version" value="25.0.2+10-69"/><property name="user.name" value="tgs9311"/><property name="stdout.encoding" value="GBK"/><property name="path.separator" value=";"/><property name="os.version" value="10.0"/><property name="jna.nosys" value="true"/><property name="java.runtime.name" value="OpenJDK Runtime Environment"/><property name="log4j.ignoreTCL" value="true"/><property name="file.encoding" value="UTF-8"/><property name="jnidispatch.path" value="C:\Users\tgs9311\AppData\Local\Temp\jna--1366999270\jna15031498320587835071.dll"/><property name="java.vm.name" value="OpenJDK 64-Bit Server VM"/><property name="jna.loaded" value="true"/><property name="java.vendor.url.bug" value="https://bugreport.java.com/bugreport/"/><property name="java.io.tmpdir" value="C:\Users\tgs9311\AppData\Local\Temp\"/><property name="java.version" value="25.0.2"/><property name="user.dir" value="D:\school\2026spring\front-back\our_project"/><property name="os.arch" value="amd64"/><property name="sun.misc.unsafe.memory.access" value="allow"/><property name="java.vm.specification.name" value="Java Virtual Machine Specification"/><property name="sun.os.patch.level" value=""/><property name="sbt.ivy.home" value=".codex-ivy2"/><property name="native.encoding" value="GBK"/><property name="java.library.path" value="D:\jdk-25.0.2\bin;C:\WINDOWS\Sun\Java\bin;C:\WINDOWS\system32;C:\WINDOWS;C:\Users\tgs9311\.codex\tmp\arg0\codex-arg0zmAlnZ;D:\Microsoft VS Code;C:\Python314\Scripts\;C:\Python314\;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\bin;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\libnvvp;D:\Vulkan\Bin;D:\jdk-25.0.2\bin;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0\;C:\Windows\System32\OpenSSH\;C:\Program Files (x86)\NVIDIA Corporation\PhysX\Common;C:\Program Files\NVIDIA Corporation\NVIDIA NvDLISR;D:\Git\cmd;C:\Program Files\CMake\bin;C:\Program Files\Wolfram Research\WolframScript\;C:\Program Files\gsudo\Current;C:\Program Files\NVIDIA Corporation\Nsight Compute 2025.1.0\;C:\Program Files\NVIDIA Corporation\NVIDIA app\NvDLISR;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0\;C:\WINDOWS\System32\OpenSSH\;D:\WinSCP\;C:\ProgramData\chocolatey\bin;C:\Program Files (x86)\sbt\bin;D:\nodejs\;C:\Users\tgs9311\AppData\Local\Programs\Python\Python313\Scripts\;C:\Users\tgs9311\AppData\Local\Programs\Python\Python313\;C:\Users\tgs9311\AppData\Local\Microsoft\WindowsApps;D:\Microsoft VS Code\bin;D:\pandoc-3.4;D:\mingw\w64devkit\bin;D:\IntelliJ IDEA 2025.1.2\bin;;D:\mysys2\mingw64\bin;C:\Users\tgs9311\AppData\Roaming\npm;c:\Users\tgs9311\.vscode\extensions\openai.chatgpt-26.325.31654-win32-x64\bin\windows-x86_64;."/><property name="java.vm.info" value="mixed mode, sharing"/><property name="stderr.encoding" value="GBK"/><property name="java.vendor" value="Oracle Corporation"/><property name="java.vm.version" value="25.0.2+10-69"/><property name="stdin.encoding" value="GBK"/><property name="scala.ext.dirs" value=".codex-sbt\java9-rt-ext-oracle_corporation_25_0_2"/><property name="sun.io.unicode.encoding" value="UnicodeLittle"/><property name="java.class.version" value="69.0"/>
+"/><property name="java.vm.specification.vendor" value="Oracle Corporation"/><property name="java.specification.name" value="Java Platform API Specification"/><property name="sbt.boot.directory" value=".codex-boot"/><property name="user.script" value=""/><property name="jline.esc.timeout" value="0"/><property name="sun.management.compiler" value="HotSpot 64-Bit Tiered Compilers"/><property name="java.runtime.version" value="25.0.2+10-69"/><property name="user.name" value="tgs9311"/><property name="stdout.encoding" value="GBK"/><property name="path.separator" value=";"/><property name="os.version" value="10.0"/><property name="jna.nosys" value="true"/><property name="java.runtime.name" value="OpenJDK Runtime Environment"/><property name="log4j.ignoreTCL" value="true"/><property name="file.encoding" value="UTF-8"/><property name="jnidispatch.path" value="C:\Users\tgs9311\AppData\Local\Temp\jna--1366999270\jna8830967531132355391.dll"/><property name="java.vm.name" value="OpenJDK 64-Bit Server VM"/><property name="jna.loaded" value="true"/><property name="java.vendor.url.bug" value="https://bugreport.java.com/bugreport/"/><property name="java.io.tmpdir" value="C:\Users\tgs9311\AppData\Local\Temp\"/><property name="java.version" value="25.0.2"/><property name="user.dir" value="D:\school\2026spring\front-back\our_project"/><property name="os.arch" value="amd64"/><property name="sun.misc.unsafe.memory.access" value="allow"/><property name="java.vm.specification.name" value="Java Virtual Machine Specification"/><property name="sun.os.patch.level" value=""/><property name="sbt.ivy.home" value=".codex-ivy2"/><property name="native.encoding" value="GBK"/><property name="java.library.path" value="D:\jdk-25.0.2\bin;C:\WINDOWS\Sun\Java\bin;C:\WINDOWS\system32;C:\WINDOWS;C:\Users\tgs9311\.codex\tmp\arg0\codex-arg05zWXOY;D:\Microsoft VS Code;C:\Python314\Scripts\;C:\Python314\;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\bin;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\libnvvp;D:\Vulkan\Bin;D:\jdk-25.0.2\bin;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0\;C:\Windows\System32\OpenSSH\;C:\Program Files (x86)\NVIDIA Corporation\PhysX\Common;C:\Program Files\NVIDIA Corporation\NVIDIA NvDLISR;D:\Git\cmd;C:\Program Files\CMake\bin;C:\Program Files\Wolfram Research\WolframScript\;C:\Program Files\gsudo\Current;C:\Program Files\NVIDIA Corporation\Nsight Compute 2025.1.0\;C:\Program Files\NVIDIA Corporation\NVIDIA app\NvDLISR;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0\;C:\WINDOWS\System32\OpenSSH\;D:\WinSCP\;C:\ProgramData\chocolatey\bin;C:\Program Files (x86)\sbt\bin;D:\nodejs\;C:\Users\tgs9311\AppData\Local\Programs\Python\Python313\Scripts\;C:\Users\tgs9311\AppData\Local\Programs\Python\Python313\;C:\Users\tgs9311\AppData\Local\Microsoft\WindowsApps;D:\Microsoft VS Code\bin;D:\pandoc-3.4;D:\mingw\w64devkit\bin;D:\IntelliJ IDEA 2025.1.2\bin;;D:\mysys2\mingw64\bin;C:\Users\tgs9311\AppData\Roaming\npm;c:\Users\tgs9311\.vscode\extensions\openai.chatgpt-26.325.31654-win32-x64\bin\windows-x86_64;."/><property name="java.vm.info" value="mixed mode, sharing"/><property name="stderr.encoding" value="GBK"/><property name="java.vendor" value="Oracle Corporation"/><property name="java.vm.version" value="25.0.2+10-69"/><property name="stdin.encoding" value="GBK"/><property name="scala.ext.dirs" value=".codex-sbt\java9-rt-ext-oracle_corporation_25_0_2"/><property name="sun.io.unicode.encoding" value="UnicodeLittle"/><property name="java.class.version" value="69.0"/>
     </properties>
-          <testcase classname="riichinexus.RiichiNexusSuite" name="guest access sessions can submit club applications with anonymous identity" time="0.236">
+          <testcase classname="riichinexus.RiichiNexusSuite" name="guest access sessions can submit club applications with anonymous identity" time="0.305">
                       
-                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="pending club applications can be withdrawn by their original actor" time="0.006">
+                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="pending club applications can be withdrawn by their original actor" time="0.01">
                       
-                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="scheduling a stage creates one four-player table" time="0.096">
+                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="scheduling a stage creates one four-player table" time="0.136">
                       
-                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="recording a completed table updates player elo and dashboards" time="0.236">
-                      <failure message="D:\school\2026spring\front-back\our_project\src\test\scala\riichinexus\RiichiNexusSuite.scala:138 values are the same, expected 2 different values: 1600 is equal to 1600
-137:
-[7m138:    assertNotEquals(updatedAlice.elo, alice.elo)[0m
-139:    assertNotEquals(updatedBob.elo, bob.elo)" type="munit.ComparisonFailException">munit.ComparisonFailException: D:\school\2026spring\front-back\our_project\src\test\scala\riichinexus\RiichiNexusSuite.scala:138 values are the same, expected 2 different values: 1600 is equal to 1600
-137:
-[7m138:    assertNotEquals(updatedAlice.elo, alice.elo)[0m
-139:    assertNotEquals(updatedBob.elo, bob.elo)
-	at munit.Assertions.failComparison(Assertions.scala:278)
-</failure>
-                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="advanced stats pipeline computes exact sample metadata from detailed paifu" time="1.251">
-                      <failure message="expected advanced stats board" type="java.lang.AssertionError">java.lang.AssertionError: expected advanced stats board
-	at riichinexus.RiichiNexusSuite$package$.eventually$$anonfun$1(RiichiNexusSuite.scala:2383)
-	at scala.Option.getOrElse(Option.scala:201)
-	at riichinexus.RiichiNexusSuite$package$.eventually(RiichiNexusSuite.scala:2383)
-	at riichinexus.RiichiNexusSuite.$init$$$anonfun$5(RiichiNexusSuite.scala:182)
-</failure>
-                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="advanced stats pipeline retries failed tasks and dead-letters after max attempts" time="0.02">
+                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="recording a completed table updates player elo and dashboards" time="0.395">
                       
-                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="advanced stats backfill mode targets only missing boards" time="0.006">
+                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="advanced stats pipeline computes exact sample metadata from detailed paifu" time="0.174">
                       
-                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="stage lineups preserve represented club for multi-club players" time="0.07">
-                      <failure message="D:\school\2026spring\front-back\our_project\src\test\scala\riichinexus\RiichiNexusSuite.scala:341
-340:
-[7m341:    assertEquals(app.clubRepository.findById(clubB.id).map(_.totalPoints), Some(7700))[0m
-342:    assertEquals(app.clubRepository.findById(clubA.id).map(_.totalPoints), Some(-7700))
-values are not the same
-[1m=&gt; Obtained[0m
-Some(
-  value = 0
-)
-[1m=&gt; Diff[0m ([91m- obtained[0m, [92m+ expected[0m)
- Some(
-[91m-  value = 0[0m
-[92m+  value = 7700[0m
- )" type="munit.ComparisonFailException">munit.ComparisonFailException: D:\school\2026spring\front-back\our_project\src\test\scala\riichinexus\RiichiNexusSuite.scala:341
-340:
-[7m341:    assertEquals(app.clubRepository.findById(clubB.id).map(_.totalPoints), Some(7700))[0m
-342:    assertEquals(app.clubRepository.findById(clubA.id).map(_.totalPoints), Some(-7700))
-values are not the same
-[1m=&gt; Obtained[0m
-Some(
-  value = 0
-)
-[1m=&gt; Diff[0m ([91m- obtained[0m, [92m+ expected[0m)
- Some(
-[91m-  value = 0[0m
-[92m+  value = 7700[0m
- )
-	at munit.Assertions.failComparison(Assertions.scala:278)
-</failure>
-                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="secondary club dashboards refresh after a member match result" time="0.025">
-                      <failure message="D:\school\2026spring\front-back\our_project\src\test\scala\riichinexus\RiichiNexusSuite.scala:389
-388:    assert(dashboard.nonEmpty)
-[7m389:    assertEquals(dashboard.map(_.sampleSize), Some(1))[0m
-390:  }
-values are not the same
-[1m=&gt; Obtained[0m
-Some(
-  value = 0
-)
-[1m=&gt; Diff[0m ([91m- obtained[0m, [92m+ expected[0m)
- Some(
-[91m-  value = 0[0m
-[92m+  value = 1[0m
- )" type="munit.ComparisonFailException">munit.ComparisonFailException: D:\school\2026spring\front-back\our_project\src\test\scala\riichinexus\RiichiNexusSuite.scala:389
-388:    assert(dashboard.nonEmpty)
-[7m389:    assertEquals(dashboard.map(_.sampleSize), Some(1))[0m
-390:  }
-values are not the same
-[1m=&gt; Obtained[0m
-Some(
-  value = 0
-)
-[1m=&gt; Diff[0m ([91m- obtained[0m, [92m+ expected[0m)
- Some(
-[91m-  value = 0[0m
-[92m+  value = 1[0m
- )
-	at munit.Assertions.failComparison(Assertions.scala:278)
-</failure>
-                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="club titles can be cleared after assignment with audit trail" time="0.008">
+                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="advanced stats pipeline retries failed tasks and dead-letters after max attempts" time="0.013">
                       
-                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="registering players and managing club rosters initializes dashboards and power rating" time="0.006">
+                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="advanced stats backfill mode targets only missing boards" time="0.005">
                       
-                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="global dictionary can tune club power formula at runtime" time="0.008">
-                      <failure message="Optimistic concurrency conflict for club:club-9a4060a8. Expected version 1, actual version 2" type="riichinexus.application.ports.OptimisticConcurrencyException">riichinexus.application.ports.OptimisticConcurrencyException: Optimistic concurrency conflict for club:club-9a4060a8. Expected version 1, actual version 2
-	at riichinexus.application.ports.OptimisticConcurrencyException$.apply(TransactionManager.scala:3)
-	at ports.ApplicationPorts$package$OptimisticConcurrencyException$.apply(ApplicationPorts.scala:46)
-	at database.memory.InMemoryAggregateRepositoryLockSupport$.nextVersion(InMemoryAggregateRepositories.scala:22)
-	at database.memory.InMemoryClubRepository.save(InMemoryAggregateRepositories.scala:62)
-	at riichinexus.application.service.ClubApplicationService.addMember$$anonfun$1$$anonfun$1$$anonfun$1(Services.scala:2463)
-	at scala.Option.map(Option.scala:242)
-	at riichinexus.application.service.ClubApplicationService.addMember$$anonfun$1$$anonfun$1(Services.scala:2444)
-	at scala.Option.flatMap(Option.scala:283)
-	at riichinexus.application.service.ClubApplicationService.addMember$$anonfun$1(Services.scala:2443)
-	at riichinexus.application.ports.NoOpTransactionManager$.inTransaction(TransactionManager.scala:17)
-	at riichinexus.application.service.ClubApplicationService.addMember(Services.scala:2466)
-	at riichinexus.RiichiNexusSuite.$init$$$anonfun$12(RiichiNexusSuite.scala:464)
-</failure>
-                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="global dictionary can tune rating calculation at runtime" time="0.016">
-                      <failure message="D:\school\2026spring\front-back\our_project\src\test\scala\riichinexus\RiichiNexusSuite.scala:522 assertion failed
-521:
-[7m522:    assert(tunedDelta &gt; baselineDelta)[0m
-523:  }" type="munit.FailException">munit.FailException: D:\school\2026spring\front-back\our_project\src\test\scala\riichinexus\RiichiNexusSuite.scala:522 assertion failed
-521:
-[7m522:    assert(tunedDelta &gt; baselineDelta)[0m
-523:  }
-	at munit.FunSuite.assert(FunSuite.scala:11)
-	at riichinexus.RiichiNexusSuite.$init$$$anonfun$13(RiichiNexusSuite.scala:522)
-</failure>
-                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="global dictionary provides default tournament payout ratios" time="0.048">
-                      <failure message="D:\school\2026spring\front-back\our_project\src\test\scala\riichinexus\RiichiNexusSuite.scala:590 settlement export record missing
-589:      .find(_.eventType == &quot;TournamentSettlementRecorded&quot;)
-[7m590:      .getOrElse(fail(&quot;settlement export record missing&quot;))[0m
-591:    assertEquals(exportRecord.consumer, EventCascadeConsumer.SettlementExport)" type="munit.FailException">munit.FailException: D:\school\2026spring\front-back\our_project\src\test\scala\riichinexus\RiichiNexusSuite.scala:590 settlement export record missing
-589:      .find(_.eventType == &quot;TournamentSettlementRecorded&quot;)
-[7m590:      .getOrElse(fail(&quot;settlement export record missing&quot;))[0m
-591:    assertEquals(exportRecord.consumer, EventCascadeConsumer.SettlementExport)
-	at munit.Assertions.fail(Assertions.scala:256)
-	at munit.Assertions.fail$(Assertions.scala:16)
-	at munit.FunSuite.fail(FunSuite.scala:11)
-	at riichinexus.RiichiNexusSuite.$anonfun$18(RiichiNexusSuite.scala:590)
-	at scala.Option.getOrElse(Option.scala:201)
-	at riichinexus.RiichiNexusSuite.$init$$$anonfun$14(RiichiNexusSuite.scala:590)
-</failure>
-                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="tournament settlement supports revisions draft finalization and club-share adjustments" time="0.028">
+                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="stage lineups preserve represented club for multi-club players" time="0.063">
                       
-                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="appeal workflow emits moderation and notification cascade records" time="0.035">
-                      <failure message="D:\school\2026spring\front-back\our_project\src\test\scala\riichinexus\RiichiNexusSuite.scala:748 assertion failed
-747:    assert(records.exists(record =&gt; record.eventType == &quot;AppealTicketFiled&quot; &amp;&amp; record.consumer == EventCascadeConsumer.ModerationInbox &amp;&amp; record.status == EventCascadeStatus.Pending))
-[7m748:    assert(records.exists(record =&gt; record.eventType == &quot;AppealTicketResolved&quot; &amp;&amp; record.consumer == EventCascadeConsumer.ModerationInbox &amp;&amp; record.status == EventCascadeStatus.Completed))[0m
-749:    assert(records.exists(record =&gt; record.eventType == &quot;AppealTicketAdjudicated&quot; &amp;&amp; record.consumer == EventCascadeConsumer.Notification &amp;&amp; record.status == EventCascadeStatus.Completed))" type="munit.FailException">munit.FailException: D:\school\2026spring\front-back\our_project\src\test\scala\riichinexus\RiichiNexusSuite.scala:748 assertion failed
-747:    assert(records.exists(record =&gt; record.eventType == &quot;AppealTicketFiled&quot; &amp;&amp; record.consumer == EventCascadeConsumer.ModerationInbox &amp;&amp; record.status == EventCascadeStatus.Pending))
-[7m748:    assert(records.exists(record =&gt; record.eventType == &quot;AppealTicketResolved&quot; &amp;&amp; record.consumer == EventCascadeConsumer.ModerationInbox &amp;&amp; record.status == EventCascadeStatus.Completed))[0m
-749:    assert(records.exists(record =&gt; record.eventType == &quot;AppealTicketAdjudicated&quot; &amp;&amp; record.consumer == EventCascadeConsumer.Notification &amp;&amp; record.status == EventCascadeStatus.Completed))
-	at munit.FunSuite.assert(FunSuite.scala:11)
-	at riichinexus.RiichiNexusSuite.$init$$$anonfun$16(RiichiNexusSuite.scala:748)
-</failure>
-                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="appeal workflow supports triage assignment overdue tracking and reopening" time="0.02">
-                      <failure message="D:\school\2026spring\front-back\our_project\src\test\scala\riichinexus\RiichiNexusSuite.scala:828 assertion failed
-827:    assert(records.exists(_.eventType == &quot;AppealTicketWorkflowUpdated&quot;))
-[7m828:    assert(records.exists(_.eventType == &quot;AppealTicketReopened&quot;))[0m
-829:    val auditTypes = app.auditEventRepository.findByAggregate(&quot;appeal&quot;, ticket.id.value).map(_.eventType)" type="munit.FailException">munit.FailException: D:\school\2026spring\front-back\our_project\src\test\scala\riichinexus\RiichiNexusSuite.scala:828 assertion failed
-827:    assert(records.exists(_.eventType == &quot;AppealTicketWorkflowUpdated&quot;))
-[7m828:    assert(records.exists(_.eventType == &quot;AppealTicketReopened&quot;))[0m
-829:    val auditTypes = app.auditEventRepository.findByAggregate(&quot;appeal&quot;, ticket.id.value).map(_.eventType)
-	at munit.FunSuite.assert(FunSuite.scala:11)
-	at riichinexus.RiichiNexusSuite.$init$$$anonfun$17(RiichiNexusSuite.scala:828)
-</failure>
-                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="dictionary updates and player bans repair club projections and emit cascade records" time="0.004">
-                      <failure message="D:\school\2026spring\front-back\our_project\src\test\scala\riichinexus\RiichiNexusSuite.scala:853 assertion failed
-852:    val boostedClub = app.clubRepository.findById(club.id).getOrElse(fail(&quot;club missing after dictionary update&quot;))
-[7m853:    assert(boostedClub.powerRating &gt; powerBefore)[0m
-854:" type="munit.FailException">munit.FailException: D:\school\2026spring\front-back\our_project\src\test\scala\riichinexus\RiichiNexusSuite.scala:853 assertion failed
-852:    val boostedClub = app.clubRepository.findById(club.id).getOrElse(fail(&quot;club missing after dictionary update&quot;))
-[7m853:    assert(boostedClub.powerRating &gt; powerBefore)[0m
-854:
-	at munit.FunSuite.assert(FunSuite.scala:11)
-	at riichinexus.RiichiNexusSuite.$init$$$anonfun$18(RiichiNexusSuite.scala:853)
-</failure>
-                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="dictionary namespace workflow governs metadata writes while runtime registry stays strict" time="0.013">
+                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="secondary club dashboards refresh after a member match result" time="0.016">
                       
-                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="dictionary namespace collaborators can write metadata and co-owners can manage editors" time="0.019">
+                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="club titles can be cleared after assignment with audit trail" time="0.009">
                       
-                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="dictionary namespace ownership rejects suspended or banned owners" time="0.0">
+                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="registering players and managing club rosters initializes dashboards and power rating" time="0.008">
+                      
+                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="global dictionary can tune club power formula at runtime" time="0.025">
+                      
+                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="global dictionary can tune rating calculation at runtime" time="0.034">
+                      
+                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="global dictionary provides default tournament payout ratios" time="0.085">
+                      
+                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="tournament settlement supports revisions draft finalization and club-share adjustments" time="0.031">
+                      
+                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="appeal workflow emits moderation and notification cascade records" time="0.063">
+                      
+                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="appeal workflow supports triage assignment overdue tracking and reopening" time="0.033">
+                      
+                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="dictionary updates and player bans repair club projections and emit cascade records" time="0.018">
+                      
+                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="dictionary namespace workflow governs metadata writes while runtime registry stays strict" time="0.037">
+                      
+                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="dictionary namespace collaborators can write metadata and co-owners can manage editors" time="0.016">
+                      
+                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="dictionary namespace ownership rejects suspended or banned owners" time="0.002">
                       
                     </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="dictionary namespace backlog tracks pending overdue and due-soon reviews" time="0.014">
                       
-                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="dictionary namespace reminder processing emits due-soon and escalated actions without spamming" time="0.01">
+                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="dictionary namespace reminder processing emits due-soon and escalated actions without spamming" time="0.009">
                       
-                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="dictionary namespace explicit context club governs collaborators transfers and writes" time="0.0">
+                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="dictionary namespace explicit context club governs collaborators transfers and writes" time="0.022">
                       
-                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="global dictionary normalizes ranks in the public player leaderboard" time="0.021">
+                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="global dictionary normalizes ranks in the public player leaderboard" time="0.016">
                       
-                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="stage lineup preferred winds influence scheduled seats" time="0.0">
+                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="stage lineup preferred winds influence scheduled seats" time="0.008">
                       
-                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="club operations update treasury point pool and rank tree" time="0.026">
+                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="club operations update treasury point pool and rank tree" time="0.01">
                       
-                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="club member contributions resolve effective rank privileges" time="0.022">
+                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="club member contributions resolve effective rank privileges" time="0.011">
                       
-                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="delegated club rank privileges unlock roster bank and lineup operations" time="0.002">
+                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="delegated club rank privileges unlock roster bank and lineup operations" time="0.014">
                       
-                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="multi-round scheduling respects pool size and advances rounds incrementally" time="0.08">
+                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="multi-round scheduling respects pool size and advances rounds incrementally" time="0.11">
                       
-                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="reserve lineup seats backfill unavailable active players during scheduling" time="0.0">
-                      <failure message="Optimistic concurrency conflict for player:player-7fc27193. Expected version 1, actual version 2" type="riichinexus.application.ports.OptimisticConcurrencyException">riichinexus.application.ports.OptimisticConcurrencyException: Optimistic concurrency conflict for player:player-7fc27193. Expected version 1, actual version 2
-	at riichinexus.application.ports.OptimisticConcurrencyException$.apply(TransactionManager.scala:3)
-	at ports.ApplicationPorts$package$OptimisticConcurrencyException$.apply(ApplicationPorts.scala:46)
-	at database.memory.InMemoryAggregateRepositoryLockSupport$.nextVersion(InMemoryAggregateRepositories.scala:22)
-	at database.memory.InMemoryPlayerRepository.save(InMemoryAggregateRepositories.scala:34)
-	at riichinexus.RiichiNexusSuite.$init$$$anonfun$31(RiichiNexusSuite.scala:1727)
-</failure>
-                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="swiss pairingMethod can switch from balanced elo to snake grouping" time="0.035">
+                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="reserve lineup seats backfill unavailable active players during scheduling" time="0.005">
                       
-                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="round robin stages rotate dedicated table pods across rounds" time="0.02">
+                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="swiss pairingMethod can switch from balanced elo to snake grouping" time="0.042">
                       
-                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="custom stages honor targetTableCount for scheduling and completion" time="0.019">
+                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="round robin stages rotate dedicated table pods across rounds" time="0.029">
                       
-                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="swiss maxRounds limits scheduling horizon and completion requirements" time="0.031">
+                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="custom stages honor targetTableCount for scheduling and completion" time="0.021">
                       
-                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="knockout seeding policy can follow rating instead of ranking order" time="0.03">
+                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="swiss maxRounds limits scheduling horizon and completion requirements" time="0.056">
                       
-                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="club relations stay reciprocal when updated or cleared" time="0.01">
+                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="knockout seeding policy can follow rating instead of ranking order" time="0.033">
                       
-                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="swiss standings can reset each round when carryOverPoints is disabled" time="0.006">
+                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="club relations stay reciprocal when updated or cleared" time="0.009">
                       
-                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="table seat readiness and disconnect workflow gates table start" time="0.0">
+                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="swiss standings can reset each round when carryOverPoints is disabled" time="0.018">
                       
-                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="club honors can be awarded and revoked with audit trail" time="0.016">
+                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="table seat readiness and disconnect workflow gates table start" time="0.006">
                       
-                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="round settlement validation and match record notes are populated from paifu" time="0.0">
+                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="club honors can be awarded and revoked with audit trail" time="0.008">
+                      
+                    </testcase><testcase classname="riichinexus.RiichiNexusSuite" name="round settlement validation and match record notes are populated from paifu" time="0.01">
                       
                     </testcase>
           <system-out><![CDATA[]]></system-out>

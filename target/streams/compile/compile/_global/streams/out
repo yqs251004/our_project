@@ -1,2 +1,338 @@
-[warn] there was 1 deprecation warning; re-run with -deprecation for details
-[warn] one warning found
+[error] -- [E172] Type Error: D:\school\2026spring\front-back\our_project\src\main\scala\routes\ClubRouter.scala:68:33 
+[error] 68 |        support.pagedJsonResponse(req, sorted, support.activeFilters(req, "scope", "viewer"))
+[error]    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[error]    |No given instance of type upickle.default.Writer[riichinexus.domain.model.ClubTournamentParticipationView] was found.
+[error]    |I found:
+[error]    |
+[error]    |    upickle.default.superTypeWriter[
+[error]    |      riichinexus.domain.model.ClubTournamentParticipationView, V](
+[error]    |      riichinexus.domain.model.ClubTournamentParticipationView.$asInstanceOf[
+[error]    |        
+[error]    |          scala.deriving.Mirror.Product{
+[error]    |            type MirroredMonoType =
+[error]    |              riichinexus.domain.model.ClubTournamentParticipationView;
+[error]    |              type MirroredType =
+[error]    |                riichinexus.domain.model.ClubTournamentParticipationView;
+[error]    |              type MirroredLabel = ("ClubTournamentParticipationView" : String);
+[error]    |              type MirroredElemTypes = (riichinexus.domain.model.ClubId,
+[error]    |                riichinexus.domain.model.TournamentId, String,
+[error]    |                riichinexus.domain.model.TournamentStatus,
+[error]    |                riichinexus.domain.model.ClubTournamentParticipationStatus,
+[error]    |                Option[String], java.time.Instant, java.time.Instant, Boolean,
+[error]    |                Boolean, Boolean);
+[error]    |              type MirroredElemLabels = (("clubId" : String),
+[error]    |                ("tournamentId" : String), ("name" : String), ("status" : String),
+[error]    |                ("clubParticipationStatus" : String), ("stageName" : String),
+[error]    |                ("startsAt" : String), ("endsAt" : String),
+[error]    |                ("canViewDetail" : String), ("canSubmitLineup" : String),
+[error]    |                ("canDecline" : String))
+[error]    |          }
+[error]    |        
+[error]    |      ],
+[error]    |      scala.reflect.ClassTag.apply[
+[error]    |        riichinexus.domain.model.ClubTournamentParticipationView](
+[error]    |        classOf[riichinexus.domain.model.ClubTournamentParticipationView]),
+[error]    |      /* missing */summon[upickle.default.Writer[V]], ???, ???)
+[error]    |
+[error]    |But no implicit values were found that match type upickle.default.Writer[V].
+[error]    |
+[error]    |The following import might make progress towards fixing the problem:
+[error]    |
+[error]    |  import upickle.default.ReadWriter.join
+[error]    |
+[error] -- [E172] Type Error: D:\school\2026spring\front-back\our_project\src\main\scala\routes\ClubRouter.scala:321:36 
+[error] 321 |          support.optionJsonResponse(support.buildTournamentMutationView(TournamentId(tournamentId)))
+[error]     |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[error]     |No given instance of type upickle.default.Writer[riichinexus.domain.model.TournamentMutationView] was found.
+[error]     |I found:
+[error]     |
+[error]     |    upickle.default.superTypeWriter[
+[error]     |      riichinexus.domain.model.TournamentMutationView, V](
+[error]     |      riichinexus.domain.model.TournamentMutationView.$asInstanceOf[
+[error]     |        
+[error]     |          scala.deriving.Mirror.Product{
+[error]     |            type MirroredMonoType = riichinexus.domain.model.TournamentMutationView
+[error]     |              ;
+[error]     |              type MirroredType = riichinexus.domain.model.TournamentMutationView;
+[error]     |              type MirroredLabel = ("TournamentMutationView" : String);
+[error]     |              type MirroredElemTypes = (
+[error]     |                riichinexus.domain.model.TournamentDetailView,
+[error]     |                Vector[riichinexus.domain.model.Table]);
+[error]     |              type MirroredElemLabels = (("tournament" : String),
+[error]     |                ("scheduledTables" : String))
+[error]     |          }
+[error]     |        
+[error]     |      ],
+[error]     |      scala.reflect.ClassTag.apply[riichinexus.domain.model.TournamentMutationView](
+[error]     |        classOf[riichinexus.domain.model.TournamentMutationView]),
+[error]     |      /* missing */summon[upickle.default.Writer[V]], ???, ???)
+[error]     |
+[error]     |But no implicit values were found that match type upickle.default.Writer[V].
+[error]     |
+[error]     |The following import might make progress towards fixing the problem:
+[error]     |
+[error]     |  import upickle.default.ReadWriter.join
+[error]     |
+[error] -- [E172] Type Error: D:\school\2026spring\front-back\our_project\src\main\scala\routes\ClubRouter.scala:335:36 
+[error] 335 |          support.optionJsonResponse(support.buildTournamentMutationView(TournamentId(tournamentId)))
+[error]     |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[error]     |No given instance of type upickle.default.Writer[riichinexus.domain.model.TournamentMutationView] was found.
+[error]     |I found:
+[error]     |
+[error]     |    upickle.default.superTypeWriter[
+[error]     |      riichinexus.domain.model.TournamentMutationView, V](
+[error]     |      riichinexus.domain.model.TournamentMutationView.$asInstanceOf[
+[error]     |        
+[error]     |          scala.deriving.Mirror.Product{
+[error]     |            type MirroredMonoType = riichinexus.domain.model.TournamentMutationView
+[error]     |              ;
+[error]     |              type MirroredType = riichinexus.domain.model.TournamentMutationView;
+[error]     |              type MirroredLabel = ("TournamentMutationView" : String);
+[error]     |              type MirroredElemTypes = (
+[error]     |                riichinexus.domain.model.TournamentDetailView,
+[error]     |                Vector[riichinexus.domain.model.Table]);
+[error]     |              type MirroredElemLabels = (("tournament" : String),
+[error]     |                ("scheduledTables" : String))
+[error]     |          }
+[error]     |        
+[error]     |      ],
+[error]     |      scala.reflect.ClassTag.apply[riichinexus.domain.model.TournamentMutationView](
+[error]     |        classOf[riichinexus.domain.model.TournamentMutationView]),
+[error]     |      /* missing */summon[upickle.default.Writer[V]], ???, ???)
+[error]     |
+[error]     |But no implicit values were found that match type upickle.default.Writer[V].
+[error]     |
+[error]     |The following import might make progress towards fixing the problem:
+[error]     |
+[error]     |  import upickle.default.ReadWriter.join
+[error]     |
+[error] -- [E172] Type Error: D:\school\2026spring\front-back\our_project\src\main\scala\routes\TournamentRouter.scala:32:48 
+[error] 32 |      support.handled(support.optionJsonResponse(support.buildTournamentDetailView(TournamentId(tournamentId))))
+[error]    |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[error]    |No given instance of type upickle.default.Writer[riichinexus.domain.model.TournamentDetailView] was found.
+[error]    |I found:
+[error]    |
+[error]    |    upickle.default.superTypeWriter[riichinexus.domain.model.TournamentDetailView, V
+[error]    |      ](
+[error]    |      riichinexus.domain.model.TournamentDetailView.$asInstanceOf[
+[error]    |        
+[error]    |          scala.deriving.Mirror.Product{
+[error]    |            type MirroredMonoType = riichinexus.domain.model.TournamentDetailView;
+[error]    |              type MirroredType = riichinexus.domain.model.TournamentDetailView;
+[error]    |              type MirroredLabel = ("TournamentDetailView" : String);
+[error]    |              type MirroredElemTypes = (riichinexus.domain.model.TournamentId,
+[error]    |                String, String, riichinexus.domain.model.TournamentStatus,
+[error]    |                java.time.Instant, java.time.Instant,
+[error]    |                Vector[riichinexus.domain.model.TournamentParticipantClubView],
+[error]    |                Vector[riichinexus.domain.model.TournamentParticipantPlayerView],
+[error]    |                riichinexus.domain.model.TournamentWhitelistSummaryView,
+[error]    |                Vector[riichinexus.domain.model.TournamentOperationsStageView]);
+[error]    |              type MirroredElemLabels = (("tournamentId" : String),
+[error]    |                ("name" : String), ("organizer" : String), ("status" : String),
+[error]    |                ("startsAt" : String), ("endsAt" : String),
+[error]    |                ("participatingClubs" : String), ("participatingPlayers" : String),
+[error]    |                ("whitelistSummary" : String), ("stages" : String))
+[error]    |          }
+[error]    |        
+[error]    |      ],
+[error]    |      scala.reflect.ClassTag.apply[riichinexus.domain.model.TournamentDetailView](
+[error]    |        classOf[riichinexus.domain.model.TournamentDetailView]),
+[error]    |      /* missing */summon[upickle.default.Writer[V]], ???, ???)
+[error]    |
+[error]    |But no implicit values were found that match type upickle.default.Writer[V].
+[error]    |
+[error]    |The following import might make progress towards fixing the problem:
+[error]    |
+[error]    |  import upickle.default.ReadWriter.join
+[error]    |
+[error] -- [E172] Type Error: D:\school\2026spring\front-back\our_project\src\main\scala\routes\TournamentRouter.scala:122:36 
+[error] 122 |          support.optionJsonResponse(
+[error]     |          ^
+[error]     |No given instance of type upickle.default.Writer[riichinexus.domain.model.TournamentMutationView] was found.
+[error]     |I found:
+[error]     |
+[error]     |    upickle.default.superTypeWriter[
+[error]     |      riichinexus.domain.model.TournamentMutationView, V](
+[error]     |      riichinexus.domain.model.TournamentMutationView.$asInstanceOf[
+[error]     |        
+[error]     |          scala.deriving.Mirror.Product{
+[error]     |            type MirroredMonoType = riichinexus.domain.model.TournamentMutationView
+[error]     |              ;
+[error]     |              type MirroredType = riichinexus.domain.model.TournamentMutationView;
+[error]     |              type MirroredLabel = ("TournamentMutationView" : String);
+[error]     |              type MirroredElemTypes = (
+[error]     |                riichinexus.domain.model.TournamentDetailView,
+[error]     |                Vector[riichinexus.domain.model.Table]);
+[error]     |              type MirroredElemLabels = (("tournament" : String),
+[error]     |                ("scheduledTables" : String))
+[error]     |          }
+[error]     |        
+[error]     |      ],
+[error]     |      scala.reflect.ClassTag.apply[riichinexus.domain.model.TournamentMutationView](
+[error]     |        classOf[riichinexus.domain.model.TournamentMutationView]),
+[error]     |      /* missing */summon[upickle.default.Writer[V]], ???, ???)
+[error]     |
+[error]     |But no implicit values were found that match type upickle.default.Writer[V].
+[error]     |
+[error]     |The following import might make progress towards fixing the problem:
+[error]     |
+[error]     |  import upickle.default.ReadWriter.join
+[error]     |
+[error] 123 |            support.buildTournamentMutationView(
+[error] 124 |              TournamentId(tournamentId),
+[error] 125 |              Vector.empty
+[error] 126 |            )
+[error] 127 |          )
+[error] -- [E172] Type Error: D:\school\2026spring\front-back\our_project\src\main\scala\routes\TournamentRouter.scala:199:36 
+[error] 199 |          support.optionJsonResponse(
+[error]     |          ^
+[error]     |No given instance of type upickle.default.Writer[riichinexus.domain.model.TournamentMutationView] was found.
+[error]     |I found:
+[error]     |
+[error]     |    upickle.default.superTypeWriter[
+[error]     |      riichinexus.domain.model.TournamentMutationView, V](
+[error]     |      riichinexus.domain.model.TournamentMutationView.$asInstanceOf[
+[error]     |        
+[error]     |          scala.deriving.Mirror.Product{
+[error]     |            type MirroredMonoType = riichinexus.domain.model.TournamentMutationView
+[error]     |              ;
+[error]     |              type MirroredType = riichinexus.domain.model.TournamentMutationView;
+[error]     |              type MirroredLabel = ("TournamentMutationView" : String);
+[error]     |              type MirroredElemTypes = (
+[error]     |                riichinexus.domain.model.TournamentDetailView,
+[error]     |                Vector[riichinexus.domain.model.Table]);
+[error]     |              type MirroredElemLabels = (("tournament" : String),
+[error]     |                ("scheduledTables" : String))
+[error]     |          }
+[error]     |        
+[error]     |      ],
+[error]     |      scala.reflect.ClassTag.apply[riichinexus.domain.model.TournamentMutationView](
+[error]     |        classOf[riichinexus.domain.model.TournamentMutationView]),
+[error]     |      /* missing */summon[upickle.default.Writer[V]], ???, ???)
+[error]     |
+[error]     |But no implicit values were found that match type upickle.default.Writer[V].
+[error]     |
+[error]     |The following import might make progress towards fixing the problem:
+[error]     |
+[error]     |  import upickle.default.ReadWriter.join
+[error]     |
+[error] 200 |            support.buildTournamentMutationView(
+[error] 201 |              TournamentId(tournamentId),
+[error] 202 |              Vector.empty
+[error] 203 |            )
+[error] 204 |          )
+[error] -- [E172] Type Error: D:\school\2026spring\front-back\our_project\src\main\scala\routes\TournamentRouter.scala:216:36 
+[error] 216 |          support.optionJsonResponse(
+[error]     |          ^
+[error]     |No given instance of type upickle.default.Writer[riichinexus.domain.model.TournamentMutationView] was found.
+[error]     |I found:
+[error]     |
+[error]     |    upickle.default.superTypeWriter[
+[error]     |      riichinexus.domain.model.TournamentMutationView, V](
+[error]     |      riichinexus.domain.model.TournamentMutationView.$asInstanceOf[
+[error]     |        
+[error]     |          scala.deriving.Mirror.Product{
+[error]     |            type MirroredMonoType = riichinexus.domain.model.TournamentMutationView
+[error]     |              ;
+[error]     |              type MirroredType = riichinexus.domain.model.TournamentMutationView;
+[error]     |              type MirroredLabel = ("TournamentMutationView" : String);
+[error]     |              type MirroredElemTypes = (
+[error]     |                riichinexus.domain.model.TournamentDetailView,
+[error]     |                Vector[riichinexus.domain.model.Table]);
+[error]     |              type MirroredElemLabels = (("tournament" : String),
+[error]     |                ("scheduledTables" : String))
+[error]     |          }
+[error]     |        
+[error]     |      ],
+[error]     |      scala.reflect.ClassTag.apply[riichinexus.domain.model.TournamentMutationView](
+[error]     |        classOf[riichinexus.domain.model.TournamentMutationView]),
+[error]     |      /* missing */summon[upickle.default.Writer[V]], ???, ???)
+[error]     |
+[error]     |But no implicit values were found that match type upickle.default.Writer[V].
+[error]     |
+[error]     |The following import might make progress towards fixing the problem:
+[error]     |
+[error]     |  import upickle.default.ReadWriter.join
+[error]     |
+[error] 217 |            support.buildTournamentMutationView(
+[error] 218 |              TournamentId(tournamentId),
+[error] 219 |              Vector.empty
+[error] 220 |            )
+[error] 221 |          )
+[error] -- [E172] Type Error: D:\school\2026spring\front-back\our_project\src\main\scala\routes\TournamentRouter.scala:316:36 
+[error] 316 |          support.optionJsonResponse(
+[error]     |          ^
+[error]     |No given instance of type upickle.default.Writer[riichinexus.domain.model.TournamentMutationView] was found.
+[error]     |I found:
+[error]     |
+[error]     |    upickle.default.superTypeWriter[
+[error]     |      riichinexus.domain.model.TournamentMutationView, V](
+[error]     |      riichinexus.domain.model.TournamentMutationView.$asInstanceOf[
+[error]     |        
+[error]     |          scala.deriving.Mirror.Product{
+[error]     |            type MirroredMonoType = riichinexus.domain.model.TournamentMutationView
+[error]     |              ;
+[error]     |              type MirroredType = riichinexus.domain.model.TournamentMutationView;
+[error]     |              type MirroredLabel = ("TournamentMutationView" : String);
+[error]     |              type MirroredElemTypes = (
+[error]     |                riichinexus.domain.model.TournamentDetailView,
+[error]     |                Vector[riichinexus.domain.model.Table]);
+[error]     |              type MirroredElemLabels = (("tournament" : String),
+[error]     |                ("scheduledTables" : String))
+[error]     |          }
+[error]     |        
+[error]     |      ],
+[error]     |      scala.reflect.ClassTag.apply[riichinexus.domain.model.TournamentMutationView](
+[error]     |        classOf[riichinexus.domain.model.TournamentMutationView]),
+[error]     |      /* missing */summon[upickle.default.Writer[V]], ???, ???)
+[error]     |
+[error]     |But no implicit values were found that match type upickle.default.Writer[V].
+[error]     |
+[error]     |The following import might make progress towards fixing the problem:
+[error]     |
+[error]     |  import upickle.default.ReadWriter.join
+[error]     |
+[error] 317 |            support.buildTournamentMutationView(
+[error] 318 |              tournamentId = TournamentId(tournamentId),
+[error] 319 |              scheduledTables = Vector.empty
+[error] 320 |            )
+[error] 321 |          )
+[error] -- [E172] Type Error: D:\school\2026spring\front-back\our_project\src\main\scala\routes\TournamentRouter.scala:333:36 
+[error] 333 |          support.optionJsonResponse(
+[error]     |          ^
+[error]     |No given instance of type upickle.default.Writer[riichinexus.domain.model.TournamentMutationView] was found.
+[error]     |I found:
+[error]     |
+[error]     |    upickle.default.superTypeWriter[
+[error]     |      riichinexus.domain.model.TournamentMutationView, V](
+[error]     |      riichinexus.domain.model.TournamentMutationView.$asInstanceOf[
+[error]     |        
+[error]     |          scala.deriving.Mirror.Product{
+[error]     |            type MirroredMonoType = riichinexus.domain.model.TournamentMutationView
+[error]     |              ;
+[error]     |              type MirroredType = riichinexus.domain.model.TournamentMutationView;
+[error]     |              type MirroredLabel = ("TournamentMutationView" : String);
+[error]     |              type MirroredElemTypes = (
+[error]     |                riichinexus.domain.model.TournamentDetailView,
+[error]     |                Vector[riichinexus.domain.model.Table]);
+[error]     |              type MirroredElemLabels = (("tournament" : String),
+[error]     |                ("scheduledTables" : String))
+[error]     |          }
+[error]     |        
+[error]     |      ],
+[error]     |      scala.reflect.ClassTag.apply[riichinexus.domain.model.TournamentMutationView](
+[error]     |        classOf[riichinexus.domain.model.TournamentMutationView]),
+[error]     |      /* missing */summon[upickle.default.Writer[V]], ???, ???)
+[error]     |
+[error]     |But no implicit values were found that match type upickle.default.Writer[V].
+[error]     |
+[error]     |The following import might make progress towards fixing the problem:
+[error]     |
+[error]     |  import upickle.default.ReadWriter.join
+[error]     |
+[error] 334 |            support.buildTournamentMutationView(
+[error] 335 |              TournamentId(tournamentId),
+[error] 336 |              scheduledTables
+[error] 337 |            )
+[error] 338 |          )
+[error] 9 errors found

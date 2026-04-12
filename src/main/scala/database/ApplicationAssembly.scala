@@ -156,7 +156,8 @@ private[database] object ApplicationAssembly:
       repositories.domainEventOutboxRepository,
       repositories.domainEventDeliveryReceiptRepository,
       repositories.domainEventSubscriberCursorRepository,
-      wiring.transactionManager
+      wiring.transactionManager,
+      eagerDrainOnPublish = wiring.transactionManager == NoOpTransactionManager
     )
     val tournamentRuleEngine = DefaultTournamentRuleEngine()
     val advancedStatsPipelineService = AdvancedStatsPipelineService(

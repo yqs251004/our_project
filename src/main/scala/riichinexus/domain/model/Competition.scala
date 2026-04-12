@@ -407,6 +407,12 @@ final case class Tournament(
       whitelist = (whitelist :+ TournamentWhitelistEntry(TournamentParticipantKind.Club, clubId = Some(clubId))).distinct
     )
 
+  def removeClub(clubId: ClubId): Tournament =
+    copy(
+      participatingClubs = participatingClubs.filterNot(_ == clubId),
+      whitelist = whitelist.filterNot(_.clubId.contains(clubId))
+    )
+
   def registerPlayer(playerId: PlayerId): Tournament =
     copy(
       participatingPlayers = (participatingPlayers :+ playerId).distinct,

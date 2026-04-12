@@ -62,6 +62,7 @@ final class OutboxBackedDomainEventBus(
     subscriberCursorRepository: DomainEventSubscriberCursorRepository,
     transactionManager: TransactionManager,
     initialSubscribers: Vector[DomainEventSubscriber] = Vector.empty,
+    eagerDrainOnPublish: Boolean = false,
     retryDelay: Duration = Duration.ofSeconds(30),
     deferredRedeliveryDelay: Duration = Duration.ofSeconds(2),
     maxAttempts: Int = 5,
@@ -100,7 +101,8 @@ final class OutboxBackedDomainEventBus(
         )
       )
     }
-    scheduleDrain()
+    if eagerDrainOnPublish then drainPendingNow(processedAt = event.occurredAt)
+    else scheduleDrain()
 
   override def register(subscriber: DomainEventSubscriber): Unit =
     require(
@@ -249,6 +251,7 @@ object OutboxBackedDomainEventBus:
       subscriberCursorRepository: DomainEventSubscriberCursorRepository,
       transactionManager: TransactionManager,
       initialSubscribers: Vector[DomainEventSubscriber] = Vector.empty,
+      eagerDrainOnPublish: Boolean = false,
       retryDelay: Duration = Duration.ofSeconds(30),
       deferredRedeliveryDelay: Duration = Duration.ofSeconds(2),
       maxAttempts: Int = 5,
@@ -260,6 +263,7 @@ object OutboxBackedDomainEventBus:
       subscriberCursorRepository = subscriberCursorRepository,
       transactionManager = transactionManager,
       initialSubscribers = initialSubscribers,
+      eagerDrainOnPublish = eagerDrainOnPublish,
       retryDelay = retryDelay,
       deferredRedeliveryDelay = deferredRedeliveryDelay,
       maxAttempts = maxAttempts,

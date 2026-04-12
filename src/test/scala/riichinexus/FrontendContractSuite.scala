@@ -4,7 +4,7 @@ import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
-import java.time.Instant
+import java.time.{Duration, Instant}
 
 import munit.FunSuite
 
@@ -29,6 +29,8 @@ class FrontendContractSuite extends FunSuite:
       assert(paths.contains("/session"))
       assert(paths.contains("/players/me"))
       assert(paths.contains("/clubs/{clubId}/applications"))
+      assert(paths.contains("/clubs/{clubId}/tournaments"))
+      assert(paths.contains("/tournaments/{id}"))
       assert(paths.contains("/public/tournaments/{id}"))
       assert(paths.contains("/public/clubs/{clubId}"))
 
@@ -233,7 +235,7 @@ class FrontendContractSuite extends FunSuite:
     }
   }
 
-  test("public tournament contract exposes index, detail and stage directory") {
+  test("public tournament contract exposes index detail and stage directory") {
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-29T10:00:00Z")
 
@@ -271,6 +273,15 @@ class FrontendContractSuite extends FunSuite:
       val stages = read[Vector[TournamentStageDirectoryEntry]](stagesResponse.body())
       assertEquals(stages.map(_.stageId), Vector(stage.id))
 
+      val operationsDetailResponse = get(s"$baseUrl/tournaments/${tournament.id.value}")
+      assertEquals(operationsDetailResponse.statusCode(), 200)
+      val operationsDetail = read[TournamentDetailView](operationsDetailResponse.body())
+      assertEquals(operationsDetail.tournamentId, tournament.id)
+      assertEquals(operationsDetail.participatingPlayers.map(_.playerId).toSet, players.map(_.id).toSet)
+      assertEquals(operationsDetail.stages.map(_.stageId), Vector(stage.id))
+      assertEquals(operationsDetail.stages.head.scheduledTableCount, 1)
+      assert(operationsDetail.stages.head.lineupSubmissions.isEmpty)
+
       val publicDetailResponse = get(s"$baseUrl/public/tournaments/${tournament.id.value}")
       assertEquals(publicDetailResponse.statusCode(), 200)
       val publicDetail = read[PublicTournamentDetailView](publicDetailResponse.body())
@@ -278,6 +289,178 @@ class FrontendContractSuite extends FunSuite:
       assertEquals(publicDetail.stages.map(_.stageId), Vector(stage.id))
       assert(publicDetail.stages.head.standings.nonEmpty)
       assertEquals(publicDetail.stages.head.bracket, None)
+    }
+  }
+
+  test("tournament mutation contract returns dedicated detail views for operations endpoints") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-29T11:00:00Z")
+
+    val admin = app.playerService.registerPlayer("ops-admin", "OpsAdmin", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1830)
+    val club = app.clubService.createClub("Ops Club", admin.id, now, admin.asPrincipal)
+    val lineupMembers = Vector(
+      admin,
+      app.playerService.registerPlayer("ops-b", "OpsB", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1700),
+      app.playerService.registerPlayer("ops-c", "OpsC", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1680),
+      app.playerService.registerPlayer("ops-d", "OpsD", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1660)
+    )
+    lineupMembers.tail.foreach(member =>
+      app.clubService.addMember(club.id, member.id, principalFor(app, admin.id))
+    )
+
+    val stage = TournamentStage(IdGenerator.stageId(), "Ops Stage", StageFormat.Swiss, 1, 1)
+    val tournament = app.tournamentService.createTournament(
+      "Ops Cup",
+      "QA",
+      now,
+      now.plusSeconds(7200),
+      Vector(stage),
+      adminId = Some(admin.id)
+    )
+
+    withServer(app) { baseUrl =>
+      val registerClubResponse = postJson(
+        s"$baseUrl/tournaments/${tournament.id.value}/clubs/${club.id.value}",
+        write(OperatorRequest(Some(admin.id.value)))
+      )
+      assertEquals(registerClubResponse.statusCode(), 200)
+      val clubRegistered = read[TournamentMutationView](registerClubResponse.body())
+      assertEquals(clubRegistered.tournament.participatingClubs.map(_.clubId), Vector(club.id))
+
+      val publishResponse = postJson(
+        s"$baseUrl/tournaments/${tournament.id.value}/publish",
+        write(OperatorRequest(Some(admin.id.value)))
+      )
+      assertEquals(publishResponse.statusCode(), 200)
+      assertEquals(read[TournamentMutationView](publishResponse.body()).tournament.status, TournamentStatus.RegistrationOpen)
+
+      val lineupResponse = postJson(
+        s"$baseUrl/tournaments/${tournament.id.value}/stages/${stage.id.value}/lineups",
+        write(
+          SubmitStageLineupRequest(
+            clubId = club.id.value,
+            operatorId = admin.id.value,
+            seats = lineupMembers.map(player => StageLineupSeatRequest(player.id.value)),
+            note = Some("operations contract lineup")
+          )
+        )
+      )
+      assertEquals(lineupResponse.statusCode(), 200)
+      val lineupMutation = read[TournamentMutationView](lineupResponse.body())
+      assertEquals(lineupMutation.tournament.stages.head.lineupSubmissions.size, 1)
+      assertEquals(lineupMutation.tournament.stages.head.lineupSubmissions.head.clubId, club.id)
+
+      val scheduleResponse = postJson(
+        s"$baseUrl/tournaments/${tournament.id.value}/stages/${stage.id.value}/schedule",
+        write(OperatorRequest(Some(admin.id.value)))
+      )
+      assertEquals(scheduleResponse.statusCode(), 200)
+      val scheduled = read[TournamentMutationView](scheduleResponse.body())
+      assertEquals(scheduled.scheduledTables.size, 1)
+      assertEquals(scheduled.tournament.stages.head.scheduledTableCount, 1)
+      assertEquals(scheduled.tournament.whitelistSummary.clubIds, Vector(club.id))
+    }
+  }
+
+  test("club tournament participation contract exposes invitation and accept-decline lifecycle") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-29T11:30:00Z")
+
+    val owner = app.playerService.registerPlayer("club-tour-owner", "ClubTourOwner", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1810)
+    val club = app.clubService.createClub("Participation Club", owner.id, now, owner.asPrincipal)
+    val stage = TournamentStage(IdGenerator.stageId(), "Participation Stage", StageFormat.Swiss, 1, 1)
+    val tournament = app.tournamentService.createTournament(
+      "Participation Cup",
+      "QA",
+      now,
+      now.plusSeconds(5400),
+      Vector(stage),
+      adminId = Some(owner.id)
+    )
+    app.tournamentService.whitelistClub(tournament.id, club.id, principalFor(app, owner.id))
+    app.tournamentService.publishTournament(tournament.id, principalFor(app, owner.id))
+
+    withServer(app) { baseUrl =>
+      val invitedResponse = get(
+        s"$baseUrl/clubs/${club.id.value}/tournaments?viewer=${owner.id.value}&scope=all"
+      )
+      assertEquals(invitedResponse.statusCode(), 200)
+      val invited = readPage[ClubTournamentParticipationView](invitedResponse.body())
+      assertEquals(invited.total, 1)
+      assertEquals(invited.items.head.clubParticipationStatus, ClubTournamentParticipationStatus.Invited)
+      assert(invited.items.head.canSubmitLineup)
+
+      val acceptResponse = postJson(
+        s"$baseUrl/clubs/${club.id.value}/tournaments/${tournament.id.value}/accept",
+        write(OperatorRequest(Some(owner.id.value)))
+      )
+      assertEquals(acceptResponse.statusCode(), 200)
+      val accepted = read[TournamentMutationView](acceptResponse.body())
+      assert(accepted.tournament.participatingClubs.exists(_.clubId == club.id))
+
+      val participatingResponse = get(
+        s"$baseUrl/clubs/${club.id.value}/tournaments?viewer=${owner.id.value}&scope=all"
+      )
+      val participating = readPage[ClubTournamentParticipationView](participatingResponse.body())
+      assertEquals(participating.items.head.clubParticipationStatus, ClubTournamentParticipationStatus.Participating)
+
+      val declineResponse = postJson(
+        s"$baseUrl/clubs/${club.id.value}/tournaments/${tournament.id.value}/decline",
+        write(OperatorRequest(Some(owner.id.value)))
+      )
+      assertEquals(declineResponse.statusCode(), 200)
+
+      val afterDeclineResponse = get(
+        s"$baseUrl/clubs/${club.id.value}/tournaments?viewer=${owner.id.value}&scope=all"
+      )
+      assertEquals(readPage[ClubTournamentParticipationView](afterDeclineResponse.body()).total, 0)
+    }
+  }
+
+  test("club tournament participation recent scope excludes stale historical tournaments") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.now()
+
+    val owner = app.playerService.registerPlayer("club-tour-recent-owner", "ClubTourRecentOwner", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now.minusSeconds(120), 1810)
+    val club = app.clubService.createClub("Recent Participation Club", owner.id, now.minusSeconds(120), owner.asPrincipal)
+    val recentStage = TournamentStage(IdGenerator.stageId(), "Recent Participation Stage", StageFormat.Swiss, 1, 1)
+    val historicalStage = TournamentStage(IdGenerator.stageId(), "Historical Participation Stage", StageFormat.Swiss, 1, 1)
+
+    val recentTournament = app.tournamentService.createTournament(
+      "Recent Participation Cup",
+      "QA",
+      now.minus(Duration.ofDays(10)),
+      now.minus(Duration.ofDays(9)),
+      Vector(recentStage),
+      adminId = Some(owner.id)
+    )
+    val historicalTournament = app.tournamentService.createTournament(
+      "Historical Participation Cup",
+      "QA",
+      now.minus(Duration.ofDays(200)),
+      now.minus(Duration.ofDays(199)),
+      Vector(historicalStage),
+      adminId = Some(owner.id)
+    )
+
+    app.tournamentService.whitelistClub(recentTournament.id, club.id, principalFor(app, owner.id))
+    app.tournamentService.whitelistClub(historicalTournament.id, club.id, principalFor(app, owner.id))
+
+    withServer(app) { baseUrl =>
+      val recentResponse = get(
+        s"$baseUrl/clubs/${club.id.value}/tournaments?viewer=${owner.id.value}&scope=recent"
+      )
+      assertEquals(recentResponse.statusCode(), 200)
+      val recentPage = readPage[ClubTournamentParticipationView](recentResponse.body())
+      assertEquals(recentPage.items.map(_.tournamentId), Vector(recentTournament.id))
+
+      val allResponse = get(
+        s"$baseUrl/clubs/${club.id.value}/tournaments?viewer=${owner.id.value}&scope=all"
+      )
+      assertEquals(allResponse.statusCode(), 200)
+      val allPage = readPage[ClubTournamentParticipationView](allResponse.body())
+      assert(allPage.items.exists(_.tournamentId == recentTournament.id))
+      assert(allPage.items.exists(_.tournamentId == historicalTournament.id))
     }
   }
 
