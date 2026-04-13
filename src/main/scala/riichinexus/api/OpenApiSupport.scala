@@ -198,6 +198,21 @@ object OpenApiSupport:
       )
     ),
     PathSpec(
+      "/clubs/{clubId}/applications/current",
+      "get",
+      OperationSpec(
+        summary = "Get current applicant club application",
+        description = "Returns the caller's current pending club application for the club.",
+        tags = Vector("clubs"),
+        parameters = Vector(
+          ParameterSpec("clubId", "path", required = true, "Club id"),
+          ParameterSpec("operatorId", "query", required = false, "Registered player id"),
+          ParameterSpec("guestSessionId", "query", required = false, "Guest session id")
+        ),
+        responseRef = Some("ClubMembershipApplicationView")
+      )
+    ),
+    PathSpec(
       "/clubs/{clubId}/applications/{membershipId}/review",
       "post",
       OperationSpec(

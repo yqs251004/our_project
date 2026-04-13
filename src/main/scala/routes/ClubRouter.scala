@@ -143,6 +143,25 @@ object ClubRouter:
         )
       }
 
+    case req @ GET -> Root / "clubs" / clubId / "applications" / "current" =>
+      support.handled {
+        val club = support.app.clubRepository
+          .findById(ClubId(clubId))
+          .getOrElse(throw NoSuchElementException(s"Club $clubId was not found"))
+        val guestSessionId = support.queryParam(req, "guestSessionId").filter(_.nonEmpty).map(GuestSessionId(_))
+        val operatorId = support.queryParam(req, "operatorId").filter(_.nonEmpty).map(PlayerId(_))
+        if guestSessionId.isEmpty && operatorId.isEmpty then
+          throw IllegalArgumentException("operatorId or guestSessionId is required")
+        val actor = support.requestActor(guestSessionId, operatorId)
+        val currentApplication = club.membershipApplications
+          .filter(_.isPending)
+          .sortBy(_.submittedAt)
+          .reverse
+          .find(application => support.ownsClubApplication(actor, application))
+          .map(application => support.buildClubMembershipApplicationView(club, application, actor))
+        support.optionJsonResponse(currentApplication)
+      }
+
     case req @ GET -> Root / "clubs" / clubId / "applications" / applicationId =>
       support.handled {
         val club = support.app.clubRepository

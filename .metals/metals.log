@@ -2233,3 +2233,12 @@ org.eclipse.lsp4j.jsonrpc.ResponseErrorException: Request window/showMessageRequ
 2026.04.12 21:43:24 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\database\postgres\PostgresOperationalRepositories.scala. Using presentation compiler with project's scala-library version: 3.3.7
 2026.04.12 21:43:25 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\database\postgres\PostgresOperationalRepositories.scala. Using presentation compiler with project's scala-library version: 3.3.7
 2026.04.12 21:43:25 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\database\postgres\PostgresOperationalRepositories.scala. Using presentation compiler with project's scala-library version: 3.3.7
+4月 12, 2026 10:36:26 下午 org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
+信息: Unsupported notification method: $/setTrace
+2026.04.12 22:37:25 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\riichinexus\api\OpenApiSupport.scala. Using presentation compiler with project's scala-library version: 3.3.7
+2026.04.12 22:37:25 WARN  no build target for: D:\school\2026spring\front-back\our_project\src\main\scala\riichinexus\api\OpenApiSupport.scala
+2026.04.12 22:37:25 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\riichinexus\api\OpenApiSupport.scala. Using presentation compiler with project's scala-library version: 3.3.7
+4月 12, 2026 10:37:26 下午 org.eclipse.lsp4j.jsonrpc.RemoteEndpoint handleCancellation
+警告: Unmatched cancel notification for request id 20
+2026.04.12 22:37:26 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\riichinexus\api\OpenApiSupport.scala. Using presentation compiler with project's scala-library version: 3.3.7
+2026.04.12 22:37:41 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\riichinexus\api\OpenApiSupport.scala. Using presentation compiler with project's scala-library version: 3.3.7

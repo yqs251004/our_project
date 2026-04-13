@@ -304,13 +304,16 @@ final class RouteSupport(
     if !canManageClubApplications(actor, club) then
       throw AuthorizationFailure(s"${actor.displayName} cannot manage membership applications for club ${club.id.value}")
 
-  def canWithdrawClubApplication(actor: AccessPrincipal, application: ClubMembershipApplication): Boolean =
+  def ownsClubApplication(actor: AccessPrincipal, application: ClubMembershipApplication): Boolean =
     val ownedByGuest = actor.isGuest && application.applicantUserId.contains(s"guest:${actor.principalId}")
     val ownedByRegisteredPlayer =
       actor.playerId.flatMap(app.playerRepository.findById).exists(player =>
         application.applicantUserId.contains(player.userId)
       )
-    actor.isSuperAdmin || ownedByGuest || ownedByRegisteredPlayer
+    ownedByGuest || ownedByRegisteredPlayer
+
+  def canWithdrawClubApplication(actor: AccessPrincipal, application: ClubMembershipApplication): Boolean =
+    actor.isSuperAdmin || ownsClubApplication(actor, application)
 
   def requireClubApplicationViewer(actor: AccessPrincipal, club: Club, application: ClubMembershipApplication): Unit =
     if !canManageClubApplications(actor, club) && !canWithdrawClubApplication(actor, application) then

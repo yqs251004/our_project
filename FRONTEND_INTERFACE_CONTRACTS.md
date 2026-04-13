@@ -116,6 +116,15 @@ Query:
 
 Returns the same stable `ClubMembershipApplicationView` shape as the inbox list.
 
+### GET `/clubs/:clubId/applications/current`
+
+Query:
+
+- `operatorId` or `guestSessionId`
+
+Returns the caller's own current `Pending` application for that club.
+If the caller has no current pending application, the backend returns `404`.
+
 ### POST `/clubs/:clubId/applications/:membershipId/review`
 
 Body:
