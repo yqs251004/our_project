@@ -2,47 +2,49 @@
 [debug] IncrementalCompile.incrementalCompile
 [debug] previous = Stamps for: 5 products, 3 sources, 7 libraries
 [debug] current source = Set(${BASE}/src/test/scala/riichinexus/ApiServerSuite.scala, ${BASE}/src/test/scala/riichinexus/FrontendContractSuite.scala, ${BASE}/src/test/scala/riichinexus/RiichiNexusSuite.scala)
-[debug] > initialChanges = InitialChanges(Changes(added = Set(), removed = Set(), changed = Set(${BASE}/src/test/scala/riichinexus/FrontendContractSuite.scala), unmodified = ...),Set(),Set(),API Changes: Set())
+[debug] > initialChanges = InitialChanges(Changes(added = Set(), removed = Set(), changed = Set(${BASE}/src/test/scala/riichinexus/ApiServerSuite.scala), unmodified = ...),Set(),Set(),API Changes: Set(NamesChange(riichinexus.application.service.TableLifecycleService,ModifiedNames(changes = UsedName(updateOwnReadyState$default$4,[Default]), UsedName(updateOwnReadyState,[Default]), UsedName(updateOwnReadyState$default$3,[Default]))), NamesChange(riichinexus.api.ApiModels$,ModifiedNames(changes = UsedName(given_ReadWriter_UpdateOwnTableReadyStateRequest,[Implicit])))))
+[debug] The riichinexus.application.service.TableLifecycleService has the following regular definitions changed:
+[debug] 	UsedName(updateOwnReadyState$default$4,[Default]), UsedName(updateOwnReadyState,[Default]), UsedName(updateOwnReadyState$default$3,[Default]).
+[debug] All member reference dependencies will be considered within this context.
+[debug] Files invalidated by inheriting from (external) riichinexus.application.service.TableLifecycleService: Set()
+[debug] Now invalidating by inheritance (internally).
+[debug] Getting direct dependencies of all classes transitively invalidated by inheritance.
+[debug] Getting classes that directly depend on (external) riichinexus.application.service.TableLifecycleService.
+[debug] None of the modified names appears in source file of riichinexus.ApiServerSuite. This dependency is not being considered for invalidation.
+[debug] None of the modified names appears in source file of riichinexus.RiichiNexusSuite. This dependency is not being considered for invalidation.
+[debug] The riichinexus.api.ApiModels$ has the following implicit definitions changed:
+[debug] 	UsedName(given_ReadWriter_UpdateOwnTableReadyStateRequest,[Implicit]).
+[debug] All member reference dependencies will be considered within this context.
+[debug] Files invalidated by inheriting from (external) riichinexus.api.ApiModels$: Set()
+[debug] Now invalidating by inheritance (internally).
+[debug] Getting direct dependencies of all classes transitively invalidated by inheritance.
+[debug] Getting classes that directly depend on (external) riichinexus.api.ApiModels$.
+[debug] The following member ref dependencies of riichinexus.api.ApiModels$ are invalidated:
+[debug] 	riichinexus.ApiServerSuite
+[debug] 	riichinexus.FrontendContractSuite
 [debug] 
 [debug] Initial source changes:
 [debug] 	removed: Set()
 [debug] 	added: Set()
-[debug] 	modified: Set(${BASE}/src/test/scala/riichinexus/FrontendContractSuite.scala)
+[debug] 	modified: Set(${BASE}/src/test/scala/riichinexus/ApiServerSuite.scala)
 [debug] Invalidated products: Set()
-[debug] External API changes: API Changes: Set()
+[debug] External API changes: API Changes: Set(NamesChange(riichinexus.application.service.TableLifecycleService,ModifiedNames(changes = UsedName(updateOwnReadyState$default$4,[Default]), UsedName(updateOwnReadyState,[Default]), UsedName(updateOwnReadyState$default$3,[Default]))), NamesChange(riichinexus.api.ApiModels$,ModifiedNames(changes = UsedName(given_ReadWriter_UpdateOwnTableReadyStateRequest,[Implicit]))))
 [debug] Modified binary dependencies: Set()
-[debug] Initial directly invalidated classes: Set(riichinexus.FrontendContractSuite)
+[debug] Initial directly invalidated classes: Set(riichinexus.ApiServerSuite)
 [debug] Sources indirectly invalidated by:
 [debug] 	product: Set()
 [debug] 	binary dep: Set()
-[debug] 	external source: Set()
-[debug] All initially invalidated classes: Set(riichinexus.FrontendContractSuite)
-[debug] All initially invalidated sources:Set(${BASE}/src/test/scala/riichinexus/FrontendContractSuite.scala)
-[debug] Initial set of included nodes: riichinexus.FrontendContractSuite
+[debug] 	external source: Set(riichinexus.ApiServerSuite, riichinexus.FrontendContractSuite)
+[debug] All initially invalidated classes: Set(riichinexus.ApiServerSuite, riichinexus.FrontendContractSuite)
+[debug] All initially invalidated sources:Set(${BASE}/src/test/scala/riichinexus/ApiServerSuite.scala)
+[debug] Initial set of included nodes: riichinexus.ApiServerSuite, riichinexus.FrontendContractSuite
+[debug] Recompiling all sources: number of invalidated sources > 50.0 percent of all sources
 [debug] compilation cycle 1
-[info] compiling 1 Scala source to D:\school\2026spring\front-back\our_project\target\scala-3.3.4\test-classes ...
+[info] compiling 3 Scala sources to D:\school\2026spring\front-back\our_project\target\scala-3.3.4\test-classes ...
 [debug] Returning already retrieved and compiled bridge: D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\org\scala-lang\scala3-sbt-bridge\3.3.4\scala3-sbt-bridge-3.3.4.jar.
-[debug] [zinc] Running cached compiler 205ac6d4 for Scala Compiler version 3.3.4
+[debug] [zinc] Running cached compiler 142a0d92 for Scala Compiler version 3.3.4
 [debug] [zinc] The Scala compiler is invoked with:
 [debug] 	-classpath
 [debug] 	D:\school\2026spring\front-back\our_project\target\scala-3.3.4\test-classes;D:\school\2026spring\front-back\our_project\target\scala-3.3.4\classes;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\org\scala-lang\scala3-library_3\3.3.4\scala3-library_3-3.3.4.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\org\scala-lang\toolkit_3\0.5.0\toolkit_3-0.5.0.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\org\typelevel\cats-effect_3\3.5.4\cats-effect_3-3.5.4.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\org\http4s\http4s-dsl_3\0.23.27\http4s-dsl_3-0.23.27.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\org\http4s\http4s-ember-server_3\0.23.27\http4s-ember-server_3-0.23.27.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\org\http4s\http4s-circe_3\0.23.27\http4s-circe_3-0.23.27.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\io\circe\circe-generic_3\0.14.9\circe-generic_3-0.14.9.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\io\circe\circe-parser_3\0.14.9\circe-parser_3-0.14.9.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\org\typelevel\log4cats-slf4j_3\2.7.0\log4cats-slf4j_3-2.7.0.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\org\slf4j\slf4j-simple\2.0.13\slf4j-simple-2.0.13.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\org\postgresql\postgresql\42.7.10\postgresql-42.7.10.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\org\scala-lang\toolkit-test_3\0.5.0\toolkit-test_3-0.5.0.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\org\scala-lang\scala-library\2.13.14\scala-library-2.13.14.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\com\softwaremill\sttp\client4\core_3\4.0.0-M16\core_3-4.0.0-M16.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\com\softwaremill\sttp\client4\upickle_3\4.0.0-M16\upickle_3-4.0.0-M16.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\com\lihaoyi\upickle_3\3.3.1\upickle_3-3.3.1.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\com\lihaoyi\os-lib_3\0.10.3\os-lib_3-0.10.3.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\org\typelevel\cats-effect-kernel_3\3.5.4\cats-effect-kernel_3-3.5.4.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\org\typelevel\cats-effect-std_3\3.5.4\cats-effect-std_3-3.5.4.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\org\http4s\http4s-core_3\0.23.27\http4s-core_3-0.23.27.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\org\http4s\http4s-ember-core_3\0.23.27\http4s-ember-core_3-0.23.27.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\org\http4s\http4s-server_3\0.23.27\http4s-server_3-0.23.27.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\org\http4s\http4s-jawn_3\0.23.27\http4s-jawn_3-0.23.27.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\io\circe\circe-core_3\0.14.9\circe-core_3-0.14.9.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\io\circe\circe-jawn_3\0.14.9\circe-jawn_3-0.14.9.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\org\typelevel\log4cats-core_3\2.7.0\log4cats-core_3-2.7.0.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\org\slf4j\slf4j-api\2.0.13\slf4j-api-2.0.13.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\org\checkerframework\checker-qual\3.52.0\checker-qual-3.52.0.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\org\scalameta\munit_3\1.0.0\munit_3-1.0.0.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\com\softwaremill\sttp\model\core_3\1.7.10\core_3-1.7.10.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\com\softwaremill\sttp\shared\core_3\1.3.19\core_3-1.3.19.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\com\softwaremill\sttp\shared\ws_3\1.3.19\ws_3-1.3.19.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\com\softwaremill\sttp\client4\json-common_3\4.0.0-M16\json-common_3-4.0.0-M16.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\com\lihaoyi\ujson_3\3.3.1\ujson_3-3.3.1.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\com\lihaoyi\upack_3\3.3.1\upack_3-3.3.1.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\com\lihaoyi\upickle-implicits_3\3.3.1\upickle-implicits_3-3.3.1.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\com\lihaoyi\geny_3\1.1.1\geny_3-1.1.1.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\org\typelevel\cats-core_3\2.12.0\cats-core_3-2.12.0.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\org\typelevel\case-insensitive_3\1.4.0\case-insensitive_3-1.4.0.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\org\typelevel\cats-parse_3\1.0.0\cats-parse_3-1.0.0.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\org\http4s\http4s-crypto_3\0.2.4\http4s-crypto_3-0.2.4.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\co\fs2\fs2-core_3\3.10.2\fs2-core_3-3.10.2.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\co\fs2\fs2-io_3\3.10.2\fs2-io_3-3.10.2.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\com\comcast\ip4s-core_3\3.5.0\ip4s-core_3-3.5.0.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\org\typelevel\literally_3\1.1.0\literally_3-1.1.0.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\org\scodec\scodec-bits_3\1.1.38\scodec-bits_3-1.1.38.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\org\typelevel\vault_3\3.5.0\vault_3-3.5.0.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\org\log4s\log4s_3\1.10.0\log4s_3-1.10.0.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\com\twitter\hpack\1.0.2\hpack-1.0.2.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\org\typelevel\jawn-fs2_3\2.4.0\jawn-fs2_3-2.4.0.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\org\typelevel\jawn-parser_3\1.6.0\jawn-parser_3-1.6.0.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\io\circe\circe-numbers_3\0.14.9\circe-numbers_3-0.14.9.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\org\scalameta\junit-interface\1.0.0\junit-interface-1.0.0.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\org\scalameta\munit-diff_3\1.0.0\munit-diff_3-1.0.0.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\junit\junit\4.13.2\junit-4.13.2.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\com\lihaoyi\upickle-core_3\3.3.1\upickle-core_3-3.3.1.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\org\typelevel\cats-kernel_3\2.12.0\cats-kernel_3-2.12.0.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\org\scala-sbt\test-interface\1.0\test-interface-1.0.jar;D:\school\2026spring\front-back\our_project\.coursier-cache\https\repo1.maven.org\maven2\org\hamcrest\hamcrest-core\1.3\hamcrest-core-1.3.jar
-[debug] Scala compilation took 8.0690805 s
+[debug] Scala compilation took 3.2902822 s
 [info] done compiling
-[debug] Invalidating (transitively) by inheritance from riichinexus.FrontendContractSuite...
-[debug] Initial set of included nodes: riichinexus.FrontendContractSuite
-[debug] Invalidated by transitive inheritance dependency: Set(riichinexus.FrontendContractSuite)
-[debug] Change NamesChange(riichinexus.FrontendContractSuite,ModifiedNames(changes = UsedName(compileErrors,[Default]))) invalidates 1 classes due to The riichinexus.FrontendContractSuite has the following regular definitions changed:
-[debug] 	UsedName(compileErrors,[Default]).
-[debug]   > by transitive inheritance: Set(riichinexus.FrontendContractSuite)
-[debug]   > 
-[debug]   > 
-[debug]   > 
-[debug]         
-[debug] New invalidations:
-[debug] Initial set of included nodes: 
-[debug] Previously invalidated, but (transitively) depend on new invalidations:
-[debug] Final step, transitive dependencies:
-[debug] 	Set()
-[debug] Initial set of included nodes: riichinexus.FrontendContractSuite
-[debug] Invalidated macros due to upstream dependencies change: Set()
-[debug] No classes were invalidated.

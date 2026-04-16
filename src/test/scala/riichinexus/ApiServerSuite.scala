@@ -2136,6 +2136,51 @@ class ApiServerSuite extends FunSuite:
     }
   }
 
+  test("player self-ready endpoint updates only their own seat before start") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-15T16:40:00Z")
+
+    val admin = app.playerService.registerPlayer("self-ready-admin", "SelfReadyAdmin", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1760)
+    val players = Vector(
+      admin,
+      app.playerService.registerPlayer("self-ready-b", "SelfReadyB", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1650),
+      app.playerService.registerPlayer("self-ready-c", "SelfReadyC", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1640),
+      app.playerService.registerPlayer("self-ready-d", "SelfReadyD", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1630)
+    )
+    val outsider = app.playerService.registerPlayer("self-ready-x", "SelfReadyX", RankSnapshot(RankPlatform.Tenhou, "3-dan"), now, 1500)
+    val stage = TournamentStage(IdGenerator.stageId(), "Self Ready Stage", StageFormat.Swiss, 1, 1)
+    val tournament = app.tournamentService.createTournament(
+      "Self Ready Cup",
+      "QA",
+      now,
+      now.plusSeconds(7200),
+      Vector(stage),
+      adminId = Some(admin.id)
+    )
+
+    players.foreach(player => app.tournamentService.registerPlayer(tournament.id, player.id, principalFor(app, admin.id)))
+    app.tournamentService.publishTournament(tournament.id, principalFor(app, admin.id))
+    val table = app.tournamentService.scheduleStageTables(tournament.id, stage.id, principalFor(app, admin.id)).head
+    val actorSeat = table.seats(1)
+
+    withServer(app) { baseUrl =>
+      val readyResponse = postJson(
+        s"$baseUrl/tables/${table.id.value}/ready",
+        write(UpdateOwnTableReadyStateRequest(actorSeat.playerId.value))
+      )
+      assertEquals(readyResponse.statusCode(), 200)
+      val updatedTable = read[Table](readyResponse.body())
+      assert(updatedTable.seats.find(_.seat == actorSeat.seat).exists(_.ready))
+      assertEquals(updatedTable.seats.count(_.ready), 1)
+
+      val outsiderResponse = postJson(
+        s"$baseUrl/tables/${table.id.value}/ready",
+        write(UpdateOwnTableReadyStateRequest(outsider.id.value))
+      )
+      assertEquals(outsiderResponse.statusCode(), 400)
+    }
+  }
+
 
   test("club honor endpoints award and revoke honors") {
     val app = ApplicationContext.inMemory()

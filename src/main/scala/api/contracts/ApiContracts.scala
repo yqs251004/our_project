@@ -65,6 +65,7 @@ object ApiContracts:
     UpdateClubRelationRequest,
     UpdateDictionaryNamespaceCollaboratorsRequest,
     UpdateDictionaryNamespaceContextRequest,
+    UpdateOwnTableReadyStateRequest,
     UpdateTableSeatStateRequest,
     UpgradeGuestSessionRequest,
     UploadPaifuRequest,

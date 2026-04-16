@@ -4583,6 +4583,41 @@ final class TableLifecycleService(
       }
     }
 
+  def updateOwnReadyState(
+      tableId: TableId,
+      actor: AccessPrincipal,
+      ready: Boolean = true,
+      note: Option[String] = None
+  ): Option[Table] =
+    transactionManager.inTransaction {
+      tableRepository.findById(tableId).map { table =>
+        val playerId = actor.playerId.getOrElse(
+          throw IllegalArgumentException("Only authenticated players can update their own ready state")
+        )
+        val targetSeat = table.seats.find(_.playerId == playerId).getOrElse(
+          throw IllegalArgumentException(
+            s"Player ${playerId.value} is not seated at table ${tableId.value}"
+          )
+        )
+        authorizationService.requirePermission(
+          actor,
+          Permission.ManageTableSeatState,
+          tournamentId = Some(table.tournamentId),
+          subjectPlayerId = Some(targetSeat.playerId)
+        )
+
+        tableRepository.save(
+          table.updateSeatState(
+            targetSeat = targetSeat.seat,
+            ready = Some(ready),
+            note = note.map(message =>
+              s"${actor.displayName} updated their ready state: $message"
+            )
+          )
+        )
+      }
+    }
+
   def startTable(
       tableId: TableId,
       startedAt: Instant = Instant.now(),

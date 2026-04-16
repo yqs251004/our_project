@@ -535,6 +535,26 @@ object OpenApiSupport:
       )
     ),
     PathSpec(
+      "/tables/{tableId}/ready",
+      "post",
+      OperationSpec(
+        summary = "Update the requesting player's ready state",
+        description = "Marks the requesting player's own seat ready or not ready before the table starts.",
+        tags = Vector("tables"),
+        parameters = Vector(
+          ParameterSpec("tableId", "path", required = true, "Table id")
+        ),
+        requestBody = Some(
+          objectSchema(
+            "operatorId" -> Obj("type" -> "string"),
+            "ready" -> Obj("type" -> "boolean"),
+            "note" -> Obj("type" -> "string")
+          )
+        ),
+        responseRef = Some("Table")
+      )
+    ),
+    PathSpec(
       "/appeals",
       "get",
       OperationSpec(

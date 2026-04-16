@@ -56,6 +56,20 @@ object TableRouter:
         }
       }
 
+    case req @ POST -> Root / "tables" / tableId / "ready" =>
+      support.handled {
+        support.readJsonBody[UpdateOwnTableReadyStateRequest](req).flatMap { request =>
+          support.optionJsonResponse(
+            support.app.tableService.updateOwnReadyState(
+              tableId = TableId(tableId),
+              actor = support.principal(request.operator),
+              ready = request.ready,
+              note = request.note
+            )
+          )
+        }
+      }
+
     case req @ POST -> Root / "tables" / tableId / "start" =>
       support.handled {
         support.readOptionalJsonBody[OperatorRequest](req).flatMap { request =>

@@ -400,6 +400,14 @@ final case class OperatorRequest(
   def operator: Option[PlayerId] =
     operatorId.map(PlayerId(_))
 
+final case class UpdateOwnTableReadyStateRequest(
+    operatorId: String,
+    ready: Boolean = true,
+    note: Option[String] = None
+):
+  def operator: PlayerId =
+    PlayerId(operatorId)
+
 final case class RejectClubApplicationRequest(
     operatorId: String,
     note: Option[String] = None
@@ -878,6 +886,7 @@ object ApiModels:
   given ReadWriter[SubmitStageLineupRequest] = macroRW
   given ReadWriter[AssignTournamentAdminRequest] = macroRW
   given ReadWriter[OperatorRequest] = macroRW
+  given ReadWriter[UpdateOwnTableReadyStateRequest] = macroRW
   given ReadWriter[RejectClubApplicationRequest] = macroRW
   given ReadWriter[ReviewClubApplicationRequest] = macroRW
   given ReadWriter[WithdrawClubApplicationRequest] = macroRW

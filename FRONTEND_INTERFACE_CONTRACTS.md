@@ -327,6 +327,7 @@ Notes:
 
 - `GET /tournaments/:id/stages/:stageId/standings`
 - `GET /tournaments/:id/stages/:stageId/bracket`
+- `POST /tables/:tableId/ready`
 - `POST /tables/:tableId/seats/:seat/state`
 - `GET /appeals`
 - `GET /advanced-stats/players/:playerId`
