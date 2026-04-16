@@ -27,12 +27,13 @@ object ClubRouter:
         val memberIdFilter = support.queryParam(req, "memberId").filter(_.nonEmpty).map(PlayerId(_))
         val adminIdFilter = support.queryParam(req, "adminId").filter(_.nonEmpty).map(PlayerId(_))
         val nameFilter = support.queryParam(req, "name").filter(_.nonEmpty)
-        val clubs = support.app.clubRepository.findAll()
-          .filter(club => activeOnly.forall(flag => !flag || club.dissolvedAt.isEmpty))
-          .filter(club => joinableOnly.forall(flag => !flag || support.clubApplicationsOpen(club)))
-          .filter(club => memberIdFilter.forall(club.members.contains))
-          .filter(club => adminIdFilter.forall(club.admins.contains))
-          .filter(club => nameFilter.forall(support.containsIgnoreCase(club.name, _)))
+        val clubs = support.app.clubRepository.findFiltered(
+          activeOnly = activeOnly.contains(true),
+          joinableOnly = joinableOnly.contains(true),
+          memberId = memberIdFilter,
+          adminId = adminIdFilter,
+          name = nameFilter
+        )
           .sortBy(club => (club.dissolvedAt.nonEmpty, club.name, club.id.value))
         support.pagedJsonResponse(req, clubs, support.activeFilters(req, "activeOnly", "joinableOnly", "memberId", "adminId", "name"))
       }
@@ -50,7 +51,7 @@ object ClubRouter:
           .map(value => support.principal(PlayerId(value)))
           .getOrElse(AccessPrincipal.guest())
         val scope = support.queryParam(req, "scope").filter(_.nonEmpty).getOrElse("recent").trim.toLowerCase
-        val items = support.app.tournamentRepository.findAll()
+        val items = support.app.tournamentRepository.findByClub(clubKey)
           .flatMap(tournament => support.buildClubTournamentParticipationView(clubKey, tournament, viewer))
         val recentThreshold = Instant.now().minus(RecentTournamentWindow)
 

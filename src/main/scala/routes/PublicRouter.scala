@@ -31,7 +31,9 @@ object PublicRouter:
           support.parseEnum("status", _)(PlayerStatus.valueOf)
         )
         val nicknameFilter = support.queryParam(req, "nickname").filter(_.nonEmpty)
-        val players = support.app.playerRepository.findAll()
+        val players = clubIdFilter
+          .map(support.app.playerRepository.findByClub)
+          .getOrElse(support.app.playerRepository.findAll())
           .filter(player => clubIdFilter.forall(player.boundClubIds.contains))
           .filter(player => statusFilter.forall(_ == player.status))
           .filter(player => nicknameFilter.forall(support.containsIgnoreCase(player.nickname, _)))
@@ -132,13 +134,14 @@ object PublicRouter:
           support.parseEnum("status", _)(TournamentStatus.valueOf)
         )
         val organizerFilter = support.queryParam(req, "organizer").filter(_.nonEmpty)
-        val tournaments = support.app.tournamentRepository.findAll()
-          .filter(_.status != TournamentStatus.Draft)
-          .filter(tournament => statusFilter.forall(_ == tournament.status))
-          .filter(tournament => organizerFilter.forall(support.containsIgnoreCase(tournament.organizer, _)))
+        val tournaments = support.app.tournamentRepository.findFiltered(
+          status = statusFilter,
+          organizer = organizerFilter,
+          includeDraft = false
+        )
           .sortBy(tournament => (tournament.startsAt, tournament.name, tournament.id.value))
-          .map(support.buildPublicTournamentSummaryView)
-        support.pagedJsonResponse(req, tournaments, support.activeFilters(req, "status", "organizer"))
+        val summaries = support.buildPublicTournamentSummaryViews(tournaments)
+        support.pagedJsonResponse(req, summaries, support.activeFilters(req, "status", "organizer"))
       }
 
     case GET -> Root / "public" / "tournaments" / tournamentId =>
@@ -166,7 +169,7 @@ object PublicRouter:
         val statusFilter = support.queryParam(req, "status").filter(_.nonEmpty).map(
           support.parseEnum("status", _)(PlayerStatus.valueOf)
         )
-        val leaderboard = support.app.publicQueryService.publicPlayerLeaderboard(support.app.playerRepository.findAll().size)
+        val leaderboard = support.app.publicQueryService.publicPlayerLeaderboard(Int.MaxValue)
           .filter(entry => clubIdFilter.forall(entry.clubIds.contains))
           .filter(entry => statusFilter.forall(_ == entry.status))
         support.pagedJsonResponse(req, leaderboard, support.activeFilters(req, "clubId", "status"))
@@ -175,7 +178,7 @@ object PublicRouter:
     case req @ GET -> Root / "public" / "leaderboards" / "clubs" =>
       support.handled {
         val nameFilter = support.queryParam(req, "name").filter(_.nonEmpty)
-        val leaderboard = support.app.publicQueryService.publicClubLeaderboard(support.app.clubRepository.findAll().size)
+        val leaderboard = support.app.publicQueryService.publicClubLeaderboard(Int.MaxValue)
           .filter(entry => nameFilter.forall(support.containsIgnoreCase(entry.name, _)))
         support.pagedJsonResponse(req, leaderboard, support.activeFilters(req, "name"))
       }

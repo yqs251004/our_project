@@ -22,10 +22,11 @@ object TournamentRouter:
         )
         val adminIdFilter = support.queryParam(req, "adminId").filter(_.nonEmpty).map(PlayerId(_))
         val organizerFilter = support.queryParam(req, "organizer").filter(_.nonEmpty)
-        val tournaments = support.app.tournamentRepository.findAll()
-          .filter(tournament => statusFilter.forall(_ == tournament.status))
-          .filter(tournament => adminIdFilter.forall(tournament.admins.contains))
-          .filter(tournament => organizerFilter.forall(support.containsIgnoreCase(tournament.organizer, _)))
+        val tournaments = support.app.tournamentRepository.findFiltered(
+          status = statusFilter,
+          adminId = adminIdFilter,
+          organizer = organizerFilter
+        )
           .sortBy(tournament => (tournament.startsAt, tournament.name, tournament.id.value))
         support.pagedJsonResponse(req, tournaments, support.activeFilters(req, "status", "adminId", "organizer"))
       }

@@ -151,117 +151,130 @@ private[database] object ApplicationAssembly:
   private def buildContext(
       wiring: WiringBundle
   ): ApplicationContext =
+    val diagnostics = PerformanceDiagnosticsService()
     val repositories = wiring.repositories
+    val instrumentedRepositories = repositories.copy(
+      playerRepository =
+        new riichinexus.application.service.InstrumentedPlayerRepository(repositories.playerRepository, diagnostics),
+      clubRepository =
+        new riichinexus.application.service.InstrumentedClubRepository(repositories.clubRepository, diagnostics),
+      tournamentRepository =
+        new riichinexus.application.service.InstrumentedTournamentRepository(repositories.tournamentRepository, diagnostics),
+      tableRepository =
+        new riichinexus.application.service.InstrumentedTableRepository(repositories.tableRepository, diagnostics),
+      matchRecordRepository =
+        new riichinexus.application.service.InstrumentedMatchRecordRepository(repositories.matchRecordRepository, diagnostics)
+    )
     val eventBus = OutboxBackedDomainEventBus(
-      repositories.domainEventOutboxRepository,
-      repositories.domainEventDeliveryReceiptRepository,
-      repositories.domainEventSubscriberCursorRepository,
+      instrumentedRepositories.domainEventOutboxRepository,
+      instrumentedRepositories.domainEventDeliveryReceiptRepository,
+      instrumentedRepositories.domainEventSubscriberCursorRepository,
       wiring.transactionManager,
       eagerDrainOnPublish = wiring.transactionManager == NoOpTransactionManager
     )
     val tournamentRuleEngine = DefaultTournamentRuleEngine()
     val advancedStatsPipelineService = AdvancedStatsPipelineService(
-      repositories.paifuRepository,
-      repositories.matchRecordRepository,
-      repositories.playerRepository,
-      repositories.clubRepository,
-      repositories.advancedStatsBoardRepository,
-      repositories.advancedStatsRecomputeTaskRepository,
+      instrumentedRepositories.paifuRepository,
+      instrumentedRepositories.matchRecordRepository,
+      instrumentedRepositories.playerRepository,
+      instrumentedRepositories.clubRepository,
+      instrumentedRepositories.advancedStatsBoardRepository,
+      instrumentedRepositories.advancedStatsRecomputeTaskRepository,
       wiring.transactionManager
     )
     val knockoutStageCoordinator = KnockoutStageCoordinator(
-      repositories.tournamentRepository,
-      repositories.playerRepository,
-      repositories.clubRepository,
-      repositories.tableRepository,
-      repositories.matchRecordRepository,
+      instrumentedRepositories.tournamentRepository,
+      instrumentedRepositories.playerRepository,
+      instrumentedRepositories.clubRepository,
+      instrumentedRepositories.tableRepository,
+      instrumentedRepositories.matchRecordRepository,
       tournamentRuleEngine,
       wiring.transactionManager
     )
     val domainEventSubscribers = Vector[DomainEventSubscriber](
       RatingProjectionSubscriber(
-        repositories.playerRepository,
-        PairwiseEloRatingService(DictionaryBackedRatingConfigProvider(repositories.globalDictionaryRepository))
+        instrumentedRepositories.playerRepository,
+        PairwiseEloRatingService(DictionaryBackedRatingConfigProvider(instrumentedRepositories.globalDictionaryRepository))
       ),
       ClubProjectionSubscriber(
-        repositories.clubRepository,
-        repositories.playerRepository,
-        repositories.globalDictionaryRepository
+        instrumentedRepositories.clubRepository,
+        instrumentedRepositories.playerRepository,
+        instrumentedRepositories.globalDictionaryRepository
       ),
       DashboardProjectionSubscriber(
-        repositories.matchRecordRepository,
-        repositories.paifuRepository,
-        repositories.playerRepository,
-        repositories.clubRepository,
-        repositories.dashboardRepository
+        instrumentedRepositories.matchRecordRepository,
+        instrumentedRepositories.paifuRepository,
+        instrumentedRepositories.playerRepository,
+        instrumentedRepositories.clubRepository,
+        instrumentedRepositories.dashboardRepository
       ),
       AdvancedStatsProjectionSubscriber(advancedStatsPipelineService),
       EventCascadeProjectionSubscriber(
-        repositories.playerRepository,
-        repositories.clubRepository,
-        repositories.dashboardRepository,
-        repositories.advancedStatsBoardRepository,
-        repositories.eventCascadeRecordRepository,
+        instrumentedRepositories.playerRepository,
+        instrumentedRepositories.clubRepository,
+        instrumentedRepositories.dashboardRepository,
+        instrumentedRepositories.advancedStatsBoardRepository,
+        instrumentedRepositories.eventCascadeRecordRepository,
         advancedStatsPipelineService,
-        repositories.globalDictionaryRepository
+        instrumentedRepositories.globalDictionaryRepository
       )
     )
     domainEventSubscribers.foreach(eventBus.register)
 
     val domainEventOperationsService = DomainEventOperationsService(
-      repositories.domainEventOutboxRepository,
-      repositories.domainEventDeliveryReceiptRepository,
-      repositories.domainEventSubscriberCursorRepository,
+      instrumentedRepositories.domainEventOutboxRepository,
+      instrumentedRepositories.domainEventDeliveryReceiptRepository,
+      instrumentedRepositories.domainEventSubscriberCursorRepository,
       domainEventSubscribers,
-      repositories.auditEventRepository,
+      instrumentedRepositories.auditEventRepository,
       wiring.transactionManager,
       wiring.authorizationService
     )
     val playerService = PlayerApplicationService(
-      repositories.playerRepository,
-      repositories.dashboardRepository,
+      instrumentedRepositories.playerRepository,
+      instrumentedRepositories.dashboardRepository,
       wiring.transactionManager
     )
     val authService = AuthApplicationService(
       playerService = playerService,
-      playerRepository = repositories.playerRepository,
-      accountCredentialRepository = repositories.accountCredentialRepository,
-      authenticatedSessionRepository = repositories.authenticatedSessionRepository,
+      playerRepository = instrumentedRepositories.playerRepository,
+      accountCredentialRepository = instrumentedRepositories.accountCredentialRepository,
+      authenticatedSessionRepository = instrumentedRepositories.authenticatedSessionRepository,
       transactionManager = wiring.transactionManager
     )
     val guestSessionService = GuestSessionApplicationService(
-      repositories.playerRepository,
-      repositories.guestSessionRepository,
-      repositories.clubRepository,
-      repositories.auditEventRepository,
+      instrumentedRepositories.playerRepository,
+      instrumentedRepositories.guestSessionRepository,
+      instrumentedRepositories.clubRepository,
+      instrumentedRepositories.auditEventRepository,
       wiring.transactionManager
     )
     val publicQueryService = PublicQueryService(
-      repositories.tournamentRepository,
-      repositories.tableRepository,
-      repositories.playerRepository,
-      repositories.clubRepository,
-      repositories.globalDictionaryRepository,
+      instrumentedRepositories.tournamentRepository,
+      instrumentedRepositories.tableRepository,
+      instrumentedRepositories.playerRepository,
+      instrumentedRepositories.clubRepository,
+      instrumentedRepositories.globalDictionaryRepository,
       wiring.authorizationService
     )
     val clubService = ClubApplicationService(
-      repositories.clubRepository,
-      repositories.playerRepository,
-      repositories.globalDictionaryRepository,
-      repositories.dashboardRepository,
-      repositories.auditEventRepository,
+      instrumentedRepositories.clubRepository,
+      instrumentedRepositories.playerRepository,
+      instrumentedRepositories.globalDictionaryRepository,
+      instrumentedRepositories.dashboardRepository,
+      instrumentedRepositories.auditEventRepository,
       wiring.transactionManager,
       wiring.authorizationService
     )
     val tournamentService = TournamentApplicationService(
-      repositories.tournamentRepository,
-      repositories.playerRepository,
-      repositories.clubRepository,
-      repositories.globalDictionaryRepository,
-      repositories.tableRepository,
-      repositories.matchRecordRepository,
-      repositories.tournamentSettlementRepository,
-      repositories.auditEventRepository,
+      instrumentedRepositories.tournamentRepository,
+      instrumentedRepositories.playerRepository,
+      instrumentedRepositories.clubRepository,
+      instrumentedRepositories.globalDictionaryRepository,
+      instrumentedRepositories.tableRepository,
+      instrumentedRepositories.matchRecordRepository,
+      instrumentedRepositories.tournamentSettlementRepository,
+      instrumentedRepositories.auditEventRepository,
       BalancedEloSeatingPolicy(),
       tournamentRuleEngine,
       knockoutStageCoordinator,
@@ -270,30 +283,30 @@ private[database] object ApplicationAssembly:
       wiring.authorizationService
     )
     val tableService = TableLifecycleService(
-      repositories.tableRepository,
-      repositories.paifuRepository,
-      repositories.matchRecordRepository,
+      instrumentedRepositories.tableRepository,
+      instrumentedRepositories.paifuRepository,
+      instrumentedRepositories.matchRecordRepository,
       knockoutStageCoordinator,
       eventBus,
       wiring.transactionManager,
       wiring.authorizationService
     )
     val appealService = AppealApplicationService(
-      repositories.appealTicketRepository,
-      repositories.tableRepository,
-      repositories.playerRepository,
+      instrumentedRepositories.appealTicketRepository,
+      instrumentedRepositories.tableRepository,
+      instrumentedRepositories.playerRepository,
       knockoutStageCoordinator,
-      repositories.auditEventRepository,
+      instrumentedRepositories.auditEventRepository,
       eventBus,
       wiring.transactionManager,
       wiring.authorizationService
     )
     val superAdminService = SuperAdminService(
-      repositories.playerRepository,
-      repositories.clubRepository,
-      repositories.globalDictionaryRepository,
-      repositories.dictionaryNamespaceRepository,
-      repositories.auditEventRepository,
+      instrumentedRepositories.playerRepository,
+      instrumentedRepositories.clubRepository,
+      instrumentedRepositories.globalDictionaryRepository,
+      instrumentedRepositories.dictionaryNamespaceRepository,
+      instrumentedRepositories.auditEventRepository,
       eventBus,
       wiring.transactionManager,
       wiring.authorizationService
@@ -306,19 +319,19 @@ private[database] object ApplicationAssembly:
       tournamentService = tournamentService,
       tableService = tableService,
       appealService = appealService,
-      dashboardRepository = repositories.dashboardRepository,
-      advancedStatsBoardRepository = repositories.advancedStatsBoardRepository,
-      advancedStatsRecomputeTaskRepository = repositories.advancedStatsRecomputeTaskRepository,
+      dashboardRepository = instrumentedRepositories.dashboardRepository,
+      advancedStatsBoardRepository = instrumentedRepositories.advancedStatsBoardRepository,
+      advancedStatsRecomputeTaskRepository = instrumentedRepositories.advancedStatsRecomputeTaskRepository,
       advancedStatsPipelineService = advancedStatsPipelineService,
-      domainEventOutboxRepository = repositories.domainEventOutboxRepository,
-      appealTicketRepository = repositories.appealTicketRepository,
+      domainEventOutboxRepository = instrumentedRepositories.domainEventOutboxRepository,
+      appealTicketRepository = instrumentedRepositories.appealTicketRepository,
       eventBus = eventBus,
-      playerRepository = repositories.playerRepository,
-      guestSessionRepository = repositories.guestSessionRepository,
-      clubRepository = repositories.clubRepository,
-      tournamentRepository = repositories.tournamentRepository,
-      tableRepository = repositories.tableRepository,
-      matchRecordRepository = repositories.matchRecordRepository
+      playerRepository = instrumentedRepositories.playerRepository,
+      guestSessionRepository = instrumentedRepositories.guestSessionRepository,
+      clubRepository = instrumentedRepositories.clubRepository,
+      tournamentRepository = instrumentedRepositories.tournamentRepository,
+      tableRepository = instrumentedRepositories.tableRepository,
+      matchRecordRepository = instrumentedRepositories.matchRecordRepository
     )
 
     BootstrapApplicationContext(
@@ -334,27 +347,28 @@ private[database] object ApplicationAssembly:
       advancedStatsPipelineService = advancedStatsPipelineService,
       demoScenarioService = demoScenarioService,
       domainEventOperationsService = domainEventOperationsService,
-      playerRepository = repositories.playerRepository,
-      clubRepository = repositories.clubRepository,
-      tournamentRepository = repositories.tournamentRepository,
-      tableRepository = repositories.tableRepository,
-      matchRecordRepository = repositories.matchRecordRepository,
-      paifuRepository = repositories.paifuRepository,
-      appealTicketRepository = repositories.appealTicketRepository,
-      dashboardRepository = repositories.dashboardRepository,
-      advancedStatsBoardRepository = repositories.advancedStatsBoardRepository,
-      advancedStatsRecomputeTaskRepository = repositories.advancedStatsRecomputeTaskRepository,
-      globalDictionaryRepository = repositories.globalDictionaryRepository,
-      dictionaryNamespaceRepository = repositories.dictionaryNamespaceRepository,
-      tournamentSettlementRepository = repositories.tournamentSettlementRepository,
-      eventCascadeRecordRepository = repositories.eventCascadeRecordRepository,
-      domainEventOutboxRepository = repositories.domainEventOutboxRepository,
-      domainEventDeliveryReceiptRepository = repositories.domainEventDeliveryReceiptRepository,
-      domainEventSubscriberCursorRepository = repositories.domainEventSubscriberCursorRepository,
-      auditEventRepository = repositories.auditEventRepository,
+      performanceDiagnosticsService = diagnostics,
+      playerRepository = instrumentedRepositories.playerRepository,
+      clubRepository = instrumentedRepositories.clubRepository,
+      tournamentRepository = instrumentedRepositories.tournamentRepository,
+      tableRepository = instrumentedRepositories.tableRepository,
+      matchRecordRepository = instrumentedRepositories.matchRecordRepository,
+      paifuRepository = instrumentedRepositories.paifuRepository,
+      appealTicketRepository = instrumentedRepositories.appealTicketRepository,
+      dashboardRepository = instrumentedRepositories.dashboardRepository,
+      advancedStatsBoardRepository = instrumentedRepositories.advancedStatsBoardRepository,
+      advancedStatsRecomputeTaskRepository = instrumentedRepositories.advancedStatsRecomputeTaskRepository,
+      globalDictionaryRepository = instrumentedRepositories.globalDictionaryRepository,
+      dictionaryNamespaceRepository = instrumentedRepositories.dictionaryNamespaceRepository,
+      tournamentSettlementRepository = instrumentedRepositories.tournamentSettlementRepository,
+      eventCascadeRecordRepository = instrumentedRepositories.eventCascadeRecordRepository,
+      domainEventOutboxRepository = instrumentedRepositories.domainEventOutboxRepository,
+      domainEventDeliveryReceiptRepository = instrumentedRepositories.domainEventDeliveryReceiptRepository,
+      domainEventSubscriberCursorRepository = instrumentedRepositories.domainEventSubscriberCursorRepository,
+      auditEventRepository = instrumentedRepositories.auditEventRepository,
       eventBus = eventBus,
       authorizationService = wiring.authorizationService,
-      accountCredentialRepository = repositories.accountCredentialRepository,
-      authenticatedSessionRepository = repositories.authenticatedSessionRepository,
-      guestSessionRepository = repositories.guestSessionRepository
+      accountCredentialRepository = instrumentedRepositories.accountCredentialRepository,
+      authenticatedSessionRepository = instrumentedRepositories.authenticatedSessionRepository,
+      guestSessionRepository = instrumentedRepositories.guestSessionRepository
     )

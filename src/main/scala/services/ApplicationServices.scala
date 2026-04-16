@@ -16,6 +16,7 @@ type TableLifecycleService = riichinexus.application.service.TableLifecycleServi
 type AppealApplicationService = riichinexus.application.service.AppealApplicationService
 type SuperAdminService = riichinexus.application.service.SuperAdminService
 type AdvancedStatsPipelineService = riichinexus.application.service.AdvancedStatsPipelineService
+type PerformanceDiagnosticsService = riichinexus.application.service.PerformanceDiagnosticsService
 type DictionaryBackedRatingConfigProvider = riichinexus.application.service.DictionaryBackedRatingConfigProvider
 type RatingProjectionSubscriber = riichinexus.application.service.RatingProjectionSubscriber
 type ClubProjectionSubscriber = riichinexus.application.service.ClubProjectionSubscriber
@@ -86,6 +87,10 @@ object GuestSessionApplicationService:
       auditEventRepository = auditEventRepository,
       transactionManager = transactionManager
     )
+
+object PerformanceDiagnosticsService:
+  def apply(): PerformanceDiagnosticsService =
+    new riichinexus.application.service.PerformanceDiagnosticsService()
 
 object PublicQueryService:
   def apply(

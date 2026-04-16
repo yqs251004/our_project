@@ -128,6 +128,7 @@ final class PostgresSchemaInitializer(connectionFactory: JdbcConnectionFactory):
       execute(connection, "alter table clubs add column if not exists payload jsonb")
       execute(connection, "alter table clubs add column if not exists updated_at timestamptz default now()")
       execute(connection, "create unique index if not exists idx_clubs_name on clubs (name)")
+      execute(connection, "create index if not exists idx_clubs_payload_gin on clubs using gin (payload)")
 
       execute(
         connection,
@@ -151,6 +152,7 @@ final class PostgresSchemaInitializer(connectionFactory: JdbcConnectionFactory):
         connection,
         "create unique index if not exists idx_tournaments_name_start on tournaments (name, organizer)"
       )
+      execute(connection, "create index if not exists idx_tournaments_payload_gin on tournaments using gin (payload)")
 
       execute(
         connection,
@@ -231,6 +233,10 @@ final class PostgresSchemaInitializer(connectionFactory: JdbcConnectionFactory):
       execute(connection, "alter table match_records add column if not exists updated_at timestamptz default now()")
       execute(connection, "create unique index if not exists idx_match_records_table_id on match_records (table_id)")
       execute(connection, "create index if not exists idx_match_records_tournament_id on match_records (tournament_id)")
+      execute(
+        connection,
+        "create index if not exists idx_match_records_tournament_stage_generated_at on match_records (tournament_id, stage_id, generated_at desc)"
+      )
       execute(connection, "create index if not exists idx_match_records_player_ids on match_records using gin (player_ids)")
 
       execute(

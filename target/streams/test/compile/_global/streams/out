@@ -1,0 +1,8 @@
+[error] -- [E007] Type Mismatch Error: D:\school\2026spring\front-back\our_project\src\test\scala\riichinexus\ApiServerSuite.scala:1251:62 
+[error] 1251 |      ClubRelation(betaClub.id, ClubRelationKind.Rivalry, Some("league rival")),
+[error]      |                                                          ^^^^^^^^^^^^^^^^^^^^
+[error]      |                                         Found:    Some[String]
+[error]      |                                         Required: java.time.Instant
+[error]      |
+[error]      | longer explanation available when compiling with `-explain`
+[error] one error found

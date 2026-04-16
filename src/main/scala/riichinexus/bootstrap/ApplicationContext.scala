@@ -18,6 +18,7 @@ final case class ApplicationContext(
     advancedStatsPipelineService: AdvancedStatsPipelineService,
     demoScenarioService: DemoScenarioService,
     domainEventOperationsService: DomainEventOperationsService,
+    performanceDiagnosticsService: PerformanceDiagnosticsService,
     playerRepository: PlayerRepository,
     clubRepository: ClubRepository,
     tournamentRepository: TournamentRepository,

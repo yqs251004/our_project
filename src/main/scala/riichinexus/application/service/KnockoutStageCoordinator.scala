@@ -27,10 +27,34 @@ final class KnockoutStageCoordinator(
     val stage = requireStage(tournament, stageId)
     val participants = resolveParticipants(tournament, stage)
     val records = stageRecords(tournamentId, stageId)
+    buildProgression(
+      tournament = tournament,
+      stage = stage,
+      participants = participants,
+      records = records,
+      tables = tableRepository.findByTournamentAndStage(tournamentId, stageId),
+      at = at
+    )
+
+  def buildProgression(
+      tournament: Tournament,
+      stage: TournamentStage,
+      participants: Vector[Player],
+      records: Vector[MatchRecord],
+      tables: Vector[Table],
+      at: Instant
+  ): KnockoutBracketSnapshot =
+    val ranking = tournamentRuleEngine.buildStageRanking(
+      tournament,
+      stage,
+      participants.map(_.id),
+      records,
+      at
+    )
     val advancement = tournamentRuleEngine.projectAdvancement(
       tournament,
       stage,
-      tournamentRuleEngine.buildStageRanking(tournament, stage, participants.map(_.id), records, at),
+      ranking,
       at
     )
     tournamentRuleEngine.buildKnockoutProgression(
@@ -38,7 +62,7 @@ final class KnockoutStageCoordinator(
       stage = stage,
       advancement = advancement,
       participants = participants,
-      tables = tableRepository.findByTournamentAndStage(tournamentId, stageId),
+      tables = tables,
       records = records,
       at = at
     )
@@ -54,7 +78,10 @@ final class KnockoutStageCoordinator(
         .getOrElse(throw NoSuchElementException(s"Tournament ${tournamentId.value} was not found"))
       val stage = requireStage(tournament, stageId)
       val existingTables = tableRepository.findByTournamentAndStage(tournamentId, stageId)
-      val progression = buildProgression(tournamentId, stageId, at)
+      val participants = resolveParticipants(tournament, stage)
+      val participantsById = participants.map(player => player.id -> player).toMap
+      val records = stageRecords(tournamentId, stageId)
+      val progression = buildProgression(tournament, stage, participants, records, existingTables, at)
       val representedClubByPlayer = representativeClubMap(stage)
 
       val startingTableNo = existingTables.map(_.tableNo).foldLeft(0)(math.max)
@@ -70,8 +97,8 @@ final class KnockoutStageCoordinator(
             )
 
           val seats = SeatWind.all.zip(playerIds).map { case (wind, playerId) =>
-            val player = playerRepository
-              .findById(playerId)
+            val player = participantsById
+              .get(playerId)
               .getOrElse(throw NoSuchElementException(s"Player ${playerId.value} was not found"))
             TableSeat(
               seat = wind,
@@ -132,31 +159,37 @@ final class KnockoutStageCoordinator(
       tournamentId: TournamentId,
       stageId: TournamentStageId
   ): Vector[MatchRecord] =
-    matchRecordRepository.findAll()
-      .filter(record => record.tournamentId == tournamentId && record.stageId == stageId)
+    matchRecordRepository.findByTournamentAndStage(tournamentId, stageId)
 
   private def resolveParticipants(
       tournament: Tournament,
       stage: TournamentStage
   ): Vector[Player] =
-    val stagePlayerIds = StageLineupSupport.resolveEligiblePlayers(stage, playerRepository)
+    val clubsById = clubRepository.findByIds(
+      (tournament.participatingClubs ++ tournament.whitelist.flatMap(_.clubId)).distinct
+    ).map(club => club.id -> club).toMap
 
     val fallbackPlayerIds =
       val registeredClubMembers = tournament.participatingClubs.flatMap { clubId =>
-        clubRepository.findById(clubId).toVector.flatMap(_.members)
+        clubsById.get(clubId).toVector.flatMap(_.members)
       }
       val whitelistedPlayers = tournament.whitelist.flatMap(_.playerId)
       val whitelistedClubMembers = tournament.whitelist.flatMap { entry =>
-        entry.clubId.toVector.flatMap(clubId => clubRepository.findById(clubId).toVector.flatMap(_.members))
+        entry.clubId.toVector.flatMap(clubId => clubsById.get(clubId).toVector.flatMap(_.members))
       }
 
       (tournament.participatingPlayers ++ whitelistedPlayers ++ registeredClubMembers ++ whitelistedClubMembers).distinct
+
+    val playersById = playerRepository.findByIds(
+      (stage.lineupSubmissions.flatMap(_.seats.map(_.playerId)) ++ fallbackPlayerIds).distinct
+    ).map(player => player.id -> player).toMap
+    val stagePlayerIds = StageLineupSupport.resolveEligiblePlayers(stage, playersById.get)
 
     val targetPlayerIds =
       if stagePlayerIds.nonEmpty then stagePlayerIds else fallbackPlayerIds
 
     targetPlayerIds.flatMap { playerId =>
-      playerRepository.findById(playerId).filter(_.status == PlayerStatus.Active)
+      playersById.get(playerId).filter(_.status == PlayerStatus.Active)
     }
 
   private def pruneDependentTables(

@@ -365,12 +365,23 @@ final class RouteSupport(
     )
 
   def buildTournamentLineupSubmissionView(submission: StageLineupSubmission): TournamentLineupSubmissionView =
+    buildTournamentLineupSubmissionView(
+      submission,
+      loadClubsById(Vector(submission.clubId)),
+      loadPlayersById(Vector(submission.submittedBy))
+    )
+
+  private def buildTournamentLineupSubmissionView(
+      submission: StageLineupSubmission,
+      clubsById: Map[ClubId, Club],
+      playersById: Map[PlayerId, Player]
+  ): TournamentLineupSubmissionView =
     TournamentLineupSubmissionView(
       submissionId = submission.id,
       clubId = submission.clubId,
-      clubName = app.clubRepository.findById(submission.clubId).map(_.name).getOrElse(submission.clubId.value),
+      clubName = clubsById.get(submission.clubId).map(_.name).getOrElse(submission.clubId.value),
       submittedBy = submission.submittedBy,
-      submittedByDisplayName = app.playerRepository.findById(submission.submittedBy).map(_.nickname),
+      submittedByDisplayName = playersById.get(submission.submittedBy).map(_.nickname),
       submittedAt = submission.submittedAt,
       activePlayerIds = submission.seats.filterNot(_.reserve).map(_.playerId),
       reservePlayerIds = submission.seats.filter(_.reserve).map(_.playerId),
@@ -378,6 +389,17 @@ final class RouteSupport(
     )
 
   def buildTournamentOperationsStageView(stage: TournamentStage): TournamentOperationsStageView =
+    buildTournamentOperationsStageView(
+      stage,
+      loadClubsById(stage.lineupSubmissions.map(_.clubId)),
+      loadPlayersById(stage.lineupSubmissions.map(_.submittedBy))
+    )
+
+  private def buildTournamentOperationsStageView(
+      stage: TournamentStage,
+      clubsById: Map[ClubId, Club],
+      playersById: Map[PlayerId, Player]
+  ): TournamentOperationsStageView =
     TournamentOperationsStageView(
       stageId = stage.id,
       name = stage.name,
@@ -389,25 +411,36 @@ final class RouteSupport(
       schedulingPoolSize = stage.schedulingPoolSize,
       pendingTablePlanCount = stage.pendingTablePlans.size,
       scheduledTableCount = stage.scheduledTableIds.size,
-      lineupSubmissions = stage.lineupSubmissions.sortBy(_.submittedAt).map(buildTournamentLineupSubmissionView)
+      lineupSubmissions = stage.lineupSubmissions
+        .sortBy(_.submittedAt)
+        .map(submission => buildTournamentLineupSubmissionView(submission, clubsById, playersById))
     )
 
   def buildTournamentDetailView(tournament: Tournament): TournamentDetailView =
+    val tournamentClubIds = tournamentRelatedClubIds(tournament)
+    val clubsById = loadClubsById(tournamentClubIds)
+    val participantIds = tournamentParticipantIds(tournament, clubsById)
+    val playerIdsForLookup = (
+      tournament.participatingClubs.distinct.flatMap(clubId => clubsById.get(clubId).toVector.flatMap(_.members)) ++
+        participantIds ++
+        tournament.stages.flatMap(_.lineupSubmissions.map(_.submittedBy))
+    ).distinct
+    val playersById = loadPlayersById(playerIdsForLookup)
     val participatingClubs = tournament.participatingClubs.distinct.flatMap { clubId =>
-      app.clubRepository.findById(clubId).map { club =>
+      clubsById.get(clubId).map { club =>
         TournamentParticipantClubView(
           clubId = club.id,
           clubName = club.name,
           memberCount = club.members.size,
           activeMemberCount = club.members.count(playerId =>
-            app.playerRepository.findById(playerId).exists(_.status == PlayerStatus.Active)
+            playersById.get(playerId).exists(_.status == PlayerStatus.Active)
           )
         )
       }
     }.sortBy(club => (club.clubName, club.clubId.value))
 
-    val participatingPlayers = tournamentParticipantIds(tournament).flatMap { playerId =>
-      app.playerRepository.findById(playerId).map { player =>
+    val participatingPlayers = participantIds.flatMap { playerId =>
+      playersById.get(playerId).map { player =>
         TournamentParticipantPlayerView(
           playerId = player.id,
           nickname = player.nickname,
@@ -438,7 +471,9 @@ final class RouteSupport(
         clubIds = whitelistedClubIds,
         playerIds = whitelistedPlayerIds
       ),
-      stages = tournament.stages.sortBy(_.order).map(buildTournamentOperationsStageView)
+      stages = tournament.stages.sortBy(_.order).map(stage =>
+        buildTournamentOperationsStageView(stage, clubsById, playersById)
+      )
     )
 
   def buildTournamentDetailView(tournamentId: TournamentId): Option[TournamentDetailView] =
@@ -500,6 +535,19 @@ final class RouteSupport(
       )
 
   def buildPublicTournamentSummaryView(tournament: Tournament): PublicTournamentSummaryView =
+    buildPublicTournamentSummaryView(
+      tournament,
+      loadClubsById(tournamentRelatedClubIds(tournament))
+    )
+
+  def buildPublicTournamentSummaryViews(tournaments: Vector[Tournament]): Vector[PublicTournamentSummaryView] =
+    val clubsById = loadClubsById(tournaments.flatMap(tournamentRelatedClubIds))
+    tournaments.map(tournament => buildPublicTournamentSummaryView(tournament, clubsById))
+
+  private def buildPublicTournamentSummaryView(
+      tournament: Tournament,
+      clubsById: Map[ClubId, Club]
+  ): PublicTournamentSummaryView =
     PublicTournamentSummaryView(
       tournamentId = tournament.id,
       name = tournament.name,
@@ -511,7 +559,7 @@ final class RouteSupport(
       activeStageCount = tournament.stages.count(stage =>
         stage.status == StageStatus.Active || stage.status == StageStatus.Ready
       ),
-      participantCount = tournamentParticipantIds(tournament).size,
+      participantCount = tournamentParticipantIds(tournament, clubsById).size,
       clubCount = tournament.participatingClubs.distinct.size,
       playerCount = tournament.participatingPlayers.distinct.size
     )
@@ -520,10 +568,14 @@ final class RouteSupport(
     app.tournamentRepository.findById(tournamentId)
       .filter(_.status != TournamentStatus.Draft)
       .map { tournament =>
+        val clubsById = loadClubsById(tournamentRelatedClubIds(tournament))
+        val tablesByStage = app.tableRepository.findByTournamentIds(Vector(tournament.id))
+          .groupBy(_.stageId)
+          .withDefaultValue(Vector.empty)
         val stages = tournament.stages
           .sortBy(_.order)
           .map { stage =>
-            val tables = app.tableRepository.findByTournamentAndStage(tournament.id, stage.id)
+            val tables = tablesByStage(stage.id)
             val bracket =
               if stage.format == StageFormat.Knockout || stage.format == StageFormat.Finals then
                 Some(app.tournamentService.stageKnockoutBracket(tournament.id, stage.id))
@@ -553,18 +605,27 @@ final class RouteSupport(
           startsAt = tournament.startsAt,
           endsAt = tournament.endsAt,
           clubIds = tournament.participatingClubs.distinct,
-          playerIds = tournamentParticipantIds(tournament),
+          playerIds = tournamentParticipantIds(tournament, clubsById),
           whitelistCount = tournament.whitelist.size,
           stages = stages
         )
       }
 
   def tournamentParticipantIds(tournament: Tournament): Vector[PlayerId] =
+    tournamentParticipantIds(
+      tournament,
+      loadClubsById(tournamentRelatedClubIds(tournament))
+    )
+
+  private def tournamentParticipantIds(
+      tournament: Tournament,
+      clubsById: Map[ClubId, Club]
+  ): Vector[PlayerId] =
     val clubMembers = tournament.participatingClubs.flatMap(clubId =>
-      app.clubRepository.findById(clubId).toVector.flatMap(_.members)
+      clubsById.get(clubId).toVector.flatMap(_.members)
     )
     val whitelistedClubMembers = tournament.whitelist.flatMap(entry =>
-      entry.clubId.toVector.flatMap(clubId => app.clubRepository.findById(clubId).toVector.flatMap(_.members))
+      entry.clubId.toVector.flatMap(clubId => clubsById.get(clubId).toVector.flatMap(_.members))
     )
 
     (tournament.participatingPlayers ++ tournament.whitelist.flatMap(_.playerId) ++ clubMembers ++ whitelistedClubMembers)
@@ -574,9 +635,23 @@ final class RouteSupport(
     app.clubRepository.findById(clubId)
       .filter(_.dissolvedAt.isEmpty)
       .map { club =>
+        val recentRecords = app.matchRecordRepository.findRecentByClub(club.id, limit = 8)
         val lineupPlayerIds = latestClubLineupPlayerIds(club).getOrElse(club.members)
+        val recentTournamentIds = recentRecords.map(_.tournamentId).distinct
+        val tournamentsById = app.tournamentRepository.findByIds(recentTournamentIds)
+          .map(tournament => tournament.id -> tournament)
+          .toMap
+        val playersById = loadPlayersById(
+          (club.members ++ lineupPlayerIds ++ recentRecords.flatMap(_.seatResults.map(_.playerId))).distinct
+        )
+        val tournamentCache = scala.collection.mutable.Map.empty[TournamentId, Option[Tournament]]
+        def tournamentFor(id: TournamentId): Option[Tournament] =
+          tournamentCache.getOrElseUpdate(id, tournamentsById.get(id).orElse(app.tournamentRepository.findById(id)))
+        def nicknameFor(id: PlayerId): String =
+          playersById.get(id).map(_.nickname).getOrElse(id.value)
+
         val currentLineup = lineupPlayerIds
-          .flatMap(playerId => app.playerRepository.findById(playerId))
+          .flatMap(playerId => playersById.get(playerId))
           .sortBy(player => (-player.elo, player.nickname, player.id.value))
           .map { player =>
             val privilegeSnapshot = club.memberPrivilegeSnapshot(player.id)
@@ -592,14 +667,9 @@ final class RouteSupport(
             )
           }
 
-        val recentMatches = app.matchRecordRepository.findAll()
-          .filter(record => record.seatResults.exists(_.clubId.contains(club.id)))
-          .sortBy(record => (record.generatedAt, record.id.value))
-          .reverse
-          .take(8)
-          .map { record =>
-            val tournamentName = app.tournamentRepository.findById(record.tournamentId).map(_.name).getOrElse(record.tournamentId.value)
-            val stageName = app.tournamentRepository.findById(record.tournamentId)
+        val recentMatches = recentRecords.map { record =>
+            val tournamentName = tournamentFor(record.tournamentId).map(_.name).getOrElse(record.tournamentId.value)
+            val stageName = tournamentFor(record.tournamentId)
               .flatMap(_.stages.find(_.id == record.stageId))
               .map(_.name)
               .getOrElse(record.stageId.value)
@@ -614,10 +684,9 @@ final class RouteSupport(
               seats = record.seatResults
                 .sortBy(_.placement)
                 .map { result =>
-                  val nickname = app.playerRepository.findById(result.playerId).map(_.nickname).getOrElse(result.playerId.value)
                   PublicClubRecentMatchSeatView(
                     playerId = result.playerId,
-                    nickname = nickname,
+                    nickname = nicknameFor(result.playerId),
                     clubId = result.clubId,
                     seat = result.seat,
                     placement = result.placement,
@@ -633,7 +702,7 @@ final class RouteSupport(
           name = club.name,
           memberCount = club.members.size,
           activeMemberCount = club.members.count(playerId =>
-            app.playerRepository.findById(playerId).exists(_.status == PlayerStatus.Active)
+            playersById.get(playerId).exists(_.status == PlayerStatus.Active)
           ),
           adminCount = club.admins.size,
           powerRating = club.powerRating,
@@ -649,7 +718,7 @@ final class RouteSupport(
       }
 
   def latestClubLineupPlayerIds(club: Club): Option[Vector[PlayerId]] =
-    app.tournamentRepository.findAll()
+    app.tournamentRepository.findByClub(club.id)
       .filter(_.status != TournamentStatus.Draft)
       .flatMap(_.stages)
       .flatMap(_.lineupSubmissions)
@@ -657,6 +726,19 @@ final class RouteSupport(
       .sortBy(submission => (submission.submittedAt, submission.id.value))
       .lastOption
       .map(_.activePlayerIds)
+
+  private def tournamentRelatedClubIds(tournament: Tournament): Vector[ClubId] =
+    (tournament.participatingClubs ++ tournament.whitelist.flatMap(_.clubId)).distinct
+
+  private def loadPlayersById(playerIds: Iterable[PlayerId]): Map[PlayerId, Player] =
+    app.playerRepository.findByIds(playerIds.toVector.distinct)
+      .map(player => player.id -> player)
+      .toMap
+
+  private def loadClubsById(clubIds: Iterable[ClubId]): Map[ClubId, Club] =
+    app.clubRepository.findByIds(clubIds.toVector.distinct)
+      .map(club => club.id -> club)
+      .toMap
 
   def queryDemoScenarioVariant(request: Request[IO]): DemoScenarioVariant =
     queryParam(request, "variant")

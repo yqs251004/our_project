@@ -31,6 +31,18 @@ object AdminRouter:
         support.jsonResponse(Status.Ok, support.app.advancedStatsPipelineService.taskQueueSummary(asOf))
       }
 
+    case req @ GET -> Root / "admin" / "performance" / "summary" =>
+      support.handled {
+        val operator = support.queryPrincipal(req)
+        support.requirePermission(operator, Permission.ManageGlobalDictionary)
+        val limit = support.queryIntParam(req, "limit").getOrElse(15)
+        require(limit > 0, "Query parameter limit must be positive")
+        support.jsonResponse(
+          Status.Ok,
+          support.app.performanceDiagnosticsService.snapshot(limit = math.min(limit, 100))
+        )
+      }
+
     case req @ GET -> Root / "admin" / "domain-events" / "summary" =>
       support.handled {
         val operator = support.queryPrincipal(req)

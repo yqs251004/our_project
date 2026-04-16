@@ -10,6 +10,7 @@ import munit.FunSuite
 
 import riichinexus.api.*
 import riichinexus.api.ApiModels.given
+import riichinexus.application.service.PerformanceDiagnosticsSnapshot
 import riichinexus.bootstrap.ApplicationContext
 import riichinexus.domain.model.*
 import json.JsonCodecs.given
@@ -552,6 +553,44 @@ class ApiServerSuite extends FunSuite:
       val summary = read[AdvancedStatsTaskQueueSummary](summaryResponse.body())
       assert(summary.runnablePendingCount + summary.processingCount + summary.completedCount > 0)
       assertEquals(summary.deadLetterCount, 0)
+    }
+  }
+
+  test("admin performance summary exposes normalized request and repository metrics") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-15T12:15:00Z")
+
+    val root = app.playerService.registerPlayer("perf-root", "PerfRoot", RankSnapshot(RankPlatform.Custom, "S"), now, 2100)
+    val admin = app.playerRepository.save(root.grantRole(RoleGrant.superAdmin(now)))
+    val owner = app.playerService.registerPlayer("perf-owner", "PerfOwner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1650)
+    val member = app.playerService.registerPlayer("perf-member", "PerfMember", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1580)
+    val club = app.clubService.createClub("Perf Club", owner.id, now, owner.asPrincipal)
+    app.clubService.addMember(club.id, member.id, principalFor(app, owner.id))
+
+    withServer(app) { baseUrl =>
+      val playersResponse = get(s"$baseUrl/players?clubId=${club.id.value}")
+      assertEquals(playersResponse.statusCode(), 200)
+
+      val clubDetailResponse = get(s"$baseUrl/public/clubs/${club.id.value}")
+      assertEquals(clubDetailResponse.statusCode(), 200)
+
+      val summaryResponse = get(
+        s"$baseUrl/admin/performance/summary?operatorId=${admin.id.value}&limit=20"
+      )
+      assertEquals(summaryResponse.statusCode(), 200)
+
+      val summary = read[PerformanceDiagnosticsSnapshot](summaryResponse.body())
+      assert(summary.totalRequestCount >= 2)
+      assert(summary.totalRepositoryCallCount > 0)
+      assert(summary.busiestRequests.exists(_.key == "GET /players"))
+      assert(summary.busiestRequests.exists(_.key == "GET /public/clubs/:clubId"))
+      assert(summary.slowestRequests.forall(!_.key.contains(club.id.value)))
+      assert(summary.busiestRepositoryCalls.exists(entry =>
+        entry.key.startsWith("PlayerRepository.") ||
+          entry.key.startsWith("ClubRepository.") ||
+          entry.key.startsWith("TournamentRepository.") ||
+          entry.key.startsWith("MatchRecordRepository.")
+      ))
     }
   }
 
@@ -1160,6 +1199,113 @@ class ApiServerSuite extends FunSuite:
       assertEquals(clubsPage.items.map(_.id), Vector(club.id))
       assert(!clubsPage.items.exists(_.id == retiredClub.id))
       assertEquals(clubsPage.appliedFilters("activeOnly"), "true")
+    }
+  }
+
+  test("tournament list and public schedules endpoints support filtered summaries") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-15T12:40:00Z")
+
+    val admin = app.playerService.registerPlayer("schedule-admin", "ScheduleAdmin", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1810)
+    val otherAdmin = app.playerService.registerPlayer("schedule-other-admin", "ScheduleOtherAdmin", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1790)
+    val players = Vector(
+      admin,
+      app.playerService.registerPlayer("schedule-b", "ScheduleB", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1650),
+      app.playerService.registerPlayer("schedule-c", "ScheduleC", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1620),
+      app.playerService.registerPlayer("schedule-d", "ScheduleD", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1590)
+    )
+
+    val publishedStage = TournamentStage(IdGenerator.stageId(), "Published Stage", StageFormat.Swiss, 1, 1)
+    val publishedTournament = app.tournamentService.createTournament(
+      "Schedule Cup",
+      "QA",
+      now,
+      now.plusSeconds(7200),
+      Vector(publishedStage),
+      adminId = Some(admin.id)
+    )
+    players.foreach(player =>
+      app.tournamentService.registerPlayer(publishedTournament.id, player.id, principalFor(app, admin.id))
+    )
+    app.tournamentService.publishTournament(publishedTournament.id, principalFor(app, admin.id))
+    app.tournamentService.scheduleStageTables(publishedTournament.id, publishedStage.id, principalFor(app, admin.id))
+
+    app.tournamentService.createTournament(
+      "Draft Cup",
+      "QA",
+      now.plusSeconds(3600),
+      now.plusSeconds(10800),
+      Vector(TournamentStage(IdGenerator.stageId(), "Draft Stage", StageFormat.Swiss, 1, 1)),
+      adminId = Some(admin.id)
+    )
+    app.tournamentService.createTournament(
+      "Other Organizer Cup",
+      "Campus",
+      now.plusSeconds(1800),
+      now.plusSeconds(9000),
+      Vector(TournamentStage(IdGenerator.stageId(), "Other Stage", StageFormat.Swiss, 1, 1)),
+      adminId = Some(otherAdmin.id)
+    )
+
+    withServer(app) { baseUrl =>
+      val tournamentsResponse = get(
+        s"$baseUrl/tournaments?adminId=${admin.id.value}&status=InProgress&organizer=QA"
+      )
+      assertEquals(tournamentsResponse.statusCode(), 200)
+      val tournamentsPage = readPage[Tournament](tournamentsResponse.body())
+      assertEquals(tournamentsPage.total, 1)
+      assertEquals(tournamentsPage.items.map(_.id), Vector(publishedTournament.id))
+
+      val schedulesResponse = get(
+        s"$baseUrl/public/schedules?tournamentStatus=InProgress"
+      )
+      assertEquals(schedulesResponse.statusCode(), 200)
+      val schedulesPage = readPage[PublicScheduleView](schedulesResponse.body())
+      assertEquals(schedulesPage.total, 1)
+      assertEquals(schedulesPage.items.head.tournamentId, publishedTournament.id)
+      assertEquals(schedulesPage.items.head.tableCount, 1)
+      assertEquals(schedulesPage.items.head.participantCount, 4)
+    }
+  }
+
+  test("public club directory endpoint supports filtered summaries") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-15T13:00:00Z")
+
+    val alphaOwner = app.playerService.registerPlayer("alpha-owner", "AlphaOwner", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1820)
+    val alphaActive = app.playerService.registerPlayer("alpha-active", "AlphaActive", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1690)
+    val alphaSuspended = app.playerService.registerPlayer("alpha-suspended", "AlphaSuspended", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1580)
+    val betaOwner = app.playerService.registerPlayer("beta-owner", "BetaOwner", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1800)
+
+    val alphaClub = app.clubService.createClub("Alpha Club", alphaOwner.id, now, alphaOwner.asPrincipal)
+    val betaClub = app.clubService.createClub("Beta Club", betaOwner.id, now.plusSeconds(60), betaOwner.asPrincipal)
+
+    app.clubService.addMember(alphaClub.id, alphaActive.id, principalFor(app, alphaOwner.id))
+    app.clubService.addMember(alphaClub.id, alphaSuspended.id, principalFor(app, alphaOwner.id))
+    val suspendedPlayer = app.playerRepository.findById(alphaSuspended.id).getOrElse(fail("suspended player missing"))
+    app.playerRepository.save(suspendedPlayer.copy(status = PlayerStatus.Suspended))
+
+    app.clubService.updateRelation(
+      alphaClub.id,
+      ClubRelation(betaClub.id, ClubRelationKind.Rivalry, now.plusSeconds(120), Some("league rival")),
+      principalFor(app, alphaOwner.id),
+      now.plusSeconds(120)
+    )
+
+    withServer(app) { baseUrl =>
+      val response = get(
+        s"$baseUrl/public/clubs?relation=Rivalry&name=Alpha"
+      )
+      assertEquals(response.statusCode(), 200)
+      val page = readPage[PublicClubDirectoryEntry](response.body())
+      assertEquals(page.total, 1)
+      assertEquals(page.items.map(_.clubId), Vector(alphaClub.id))
+      assertEquals(page.items.head.memberCount, 3)
+      assertEquals(page.items.head.activeMemberCount, 2)
+      assertEquals(page.items.head.rivalryCount, 1)
+      assertEquals(page.items.head.strongestRivalClubId, Some(betaClub.id))
+      assertEquals(page.appliedFilters("relation"), "Rivalry")
+      assertEquals(page.appliedFilters("name"), "Alpha")
     }
   }
 

@@ -2328,3 +2328,41 @@ org.eclipse.lsp4j.jsonrpc.ResponseErrorException: Request window/showMessageRequ
 4月 14, 2026 12:32:11 上午 org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
 信息: Unsupported notification method: $/setTrace
 2026.04.14 00:32:15 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\routes\ClubRouter.scala. Using presentation compiler with project's scala-library version: 3.3.7
+2026.04.16 14:31:58 INFO  Started: Metals version 1.6.7 in folders 'D:\school\2026spring\front-back\our_project' for client Visual Studio Code 1.115.0.
+2026.04.16 14:31:58 INFO  Memory monitor started
+2026.04.16 14:32:02 WARN  Using H2 2.4.240 which is newer than the version Flyway has been verified with. The latest verified version of H2 is 2.3.232.
+2026.04.16 14:32:02 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\routes\ClubRouter.scala. Using presentation compiler with project's scala-library version: 3.3.7
+4月 16, 2026 2:32:05 下午 org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
+信息: Unsupported notification method: $/setTrace
+4月 16, 2026 2:32:05 下午 org.eclipse.lsp4j.jsonrpc.RemoteEndpoint handleCancellation
+警告: Unmatched cancel notification for request id 2
+2026.04.16 14:32:05 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\routes\ClubRouter.scala. Using presentation compiler with project's scala-library version: 3.3.7
+2026.04.16 14:32:05 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\routes\ClubRouter.scala. Using presentation compiler with project's scala-library version: 3.3.7
+4月 16, 2026 2:32:06 下午 org.eclipse.lsp4j.jsonrpc.RemoteEndpoint handleCancellation
+警告: Unmatched cancel notification for request id 8
+2026.04.16 14:32:05 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\routes\ClubRouter.scala. Using presentation compiler with project's scala-library version: 3.3.7
+2026.04.16 14:32:05 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\routes\ClubRouter.scala. Using presentation compiler with project's scala-library version: 3.3.7
+2026.04.16 14:32:05 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\routes\ClubRouter.scala. Using presentation compiler with project's scala-library version: 3.3.7
+4月 16, 2026 2:32:06 下午 org.eclipse.lsp4j.jsonrpc.RemoteEndpoint handleCancellation
+警告: Unmatched cancel notification for request id 11
+2026.04.16 14:32:05 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\routes\ClubRouter.scala. Using presentation compiler with project's scala-library version: 3.3.7
+2026.04.16 14:32:05 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\routes\ClubRouter.scala. Using presentation compiler with project's scala-library version: 3.3.7
+2026.04.16 14:32:06 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\routes\ClubRouter.scala. Using presentation compiler with project's scala-library version: 3.3.7
+4月 16, 2026 2:32:06 下午 org.eclipse.lsp4j.jsonrpc.RemoteEndpoint handleCancellation
+警告: Unmatched cancel notification for request id 13
+4月 16, 2026 2:32:06 下午 org.eclipse.lsp4j.jsonrpc.RemoteEndpoint handleCancellation
+警告: Unmatched cancel notification for request id 14
+4月 16, 2026 2:32:06 下午 org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
+信息: Unsupported notification method: $/setTrace
+4月 16, 2026 2:32:06 下午 org.eclipse.lsp4j.jsonrpc.RemoteEndpoint handleCancellation
+警告: Unmatched cancel notification for request id 15
+2026.04.16 14:32:06 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\routes\ClubRouter.scala. Using presentation compiler with project's scala-library version: 3.3.7
+4月 16, 2026 2:32:36 下午 org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
+信息: Unsupported notification method: $/setTrace
+2026.04.16 14:32:37 INFO  no build target found for D:\school\2026spring\front-back\our_project\src\main\scala\routes\ClubRouter.scala. Using presentation compiler with project's scala-library version: 3.3.7
+4月 16, 2026 2:44:01 下午 org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
+信息: Unsupported notification method: $/setTrace
+2026.04.16 15:04:55 INFO  Shutting down server
+2026.04.16 15:04:55 INFO  Memory monitor stopped
+2026.04.16 15:04:55 INFO  shutting down Metals
+2026.04.16 15:04:55 INFO  Exiting server

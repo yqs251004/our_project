@@ -93,6 +93,41 @@ final class PostgresPlayerRepository(
       statement.setString(1, userId)
     })
 
+  override def findByIds(ids: Vector[PlayerId]): Vector[Player] =
+    if ids.isEmpty then Vector.empty
+    else
+      withConnection { connection =>
+        Using.resource(
+          connection.prepareStatement(
+            """
+              |select payload
+              |from players
+              |where id = any(?)
+              |order by nickname asc
+              |""".stripMargin
+          )
+        ) { statement =>
+          statement.setArray(
+            1,
+            connection.createArrayOf("text", ids.map(_.value).distinct.toArray)
+          )
+          Using.resource(statement.executeQuery()) { resultSet =>
+            val buffer = Vector.newBuilder[Player]
+            while resultSet.next() do
+              buffer += read[Player](resultSet.getString("payload"))
+            buffer.result()
+          }
+        }
+      }
+
+  override def findByClub(clubId: ClubId): Vector[Player] =
+    readAll[Player](
+      "select payload from players where club_id = ? order by nickname",
+      { statement =>
+        statement.setString(1, clubId.value)
+      }
+    )
+
   override def findAll(): Vector[Player] =
     readAll[Player]("select payload from players order by nickname")
 
@@ -216,6 +251,66 @@ final class PostgresClubRepository(
       statement.setString(1, name)
     })
 
+  override def findByIds(ids: Vector[ClubId]): Vector[Club] =
+    if ids.isEmpty then Vector.empty
+    else
+      withConnection { connection =>
+        Using.resource(
+          connection.prepareStatement(
+            """
+              |select payload
+              |from clubs
+              |where id = any(?)
+              |order by name asc
+              |""".stripMargin
+          )
+        ) { statement =>
+          statement.setArray(
+            1,
+            connection.createArrayOf("text", ids.map(_.value).distinct.toArray)
+          )
+          Using.resource(statement.executeQuery()) { resultSet =>
+            val buffer = Vector.newBuilder[Club]
+            while resultSet.next() do
+              buffer += read[Club](resultSet.getString("payload"))
+            buffer.result()
+          }
+        }
+      }
+
+  override def findFiltered(
+      activeOnly: Boolean = false,
+      joinableOnly: Boolean = false,
+      memberId: Option[PlayerId] = None,
+      adminId: Option[PlayerId] = None,
+      name: Option[String] = None
+  ): Vector[Club] =
+    readAll[Club](
+      """
+        |select payload
+        |from clubs
+        |where (? = false or payload ->> 'dissolvedAt' is null)
+        |  and (? = false or (
+        |    payload ->> 'dissolvedAt' is null and
+        |    coalesce((payload #>> '{recruitmentPolicy,applicationsOpen}')::boolean, false)
+        |  ))
+        |  and (? is null or payload @> cast(? as jsonb))
+        |  and (? is null or payload @> cast(? as jsonb))
+        |  and (? is null or lower(name) like ?)
+        |order by name asc
+        |""".stripMargin,
+      { statement =>
+        statement.setBoolean(1, activeOnly)
+        statement.setBoolean(2, joinableOnly)
+        setNullableString(statement, 3, memberId.map(_.value))
+        setNullableString(statement, 4, memberId.map(id => s"""{"members":[{"value":"${id.value}"}]}"""))
+        setNullableString(statement, 5, adminId.map(_.value))
+        setNullableString(statement, 6, adminId.map(id => s"""{"admins":[{"value":"${id.value}"}]}"""))
+        setNullableString(statement, 7, name)
+        setNullableString(statement, 8, name.map(fragment => s"%${fragment.toLowerCase}%"))
+      }
+    )
+
   override def findAll(): Vector[Club] =
     readAll[Club]("select payload from clubs order by name")
 
@@ -285,6 +380,78 @@ final class PostgresTournamentRepository(
         statement.setString(2, organizer)
       }
     )
+
+  override def findByIds(ids: Vector[TournamentId]): Vector[Tournament] =
+    if ids.isEmpty then Vector.empty
+    else
+      withConnection { connection =>
+        Using.resource(
+          connection.prepareStatement(
+            """
+              |select payload
+              |from tournaments
+              |where id = any(?)
+              |order by updated_at desc
+              |""".stripMargin
+          )
+        ) { statement =>
+          statement.setArray(
+            1,
+            connection.createArrayOf("text", ids.map(_.value).distinct.toArray)
+          )
+          Using.resource(statement.executeQuery()) { resultSet =>
+            val buffer = Vector.newBuilder[Tournament]
+            while resultSet.next() do
+              buffer += read[Tournament](resultSet.getString("payload"))
+            buffer.result()
+          }
+        }
+      }
+
+  override def findFiltered(
+      status: Option[TournamentStatus] = None,
+      adminId: Option[PlayerId] = None,
+      organizer: Option[String] = None,
+      includeDraft: Boolean = true
+  ): Vector[Tournament] =
+    readAll[Tournament](
+      """
+        |select payload
+        |from tournaments
+        |where (? = true or status <> 'Draft')
+        |  and (? is null or status = ?)
+        |  and (? is null or payload @> cast(? as jsonb))
+        |  and (? is null or lower(organizer) like ?)
+        |order by updated_at desc
+        |""".stripMargin,
+      { statement =>
+        statement.setBoolean(1, includeDraft)
+        setNullableString(statement, 2, status.map(_.toString))
+        setNullableString(statement, 3, status.map(_.toString))
+        setNullableString(statement, 4, adminId.map(_.value))
+        setNullableString(statement, 5, adminId.map(id => s"""{"admins":[{"value":"${id.value}"}]}"""))
+        setNullableString(statement, 6, organizer)
+        setNullableString(statement, 7, organizer.map(fragment => s"%${fragment.toLowerCase}%"))
+      }
+    )
+
+  override def findByClub(clubId: ClubId): Vector[Tournament] =
+    readAll[Tournament](
+      """
+        |select payload
+        |from tournaments
+        |where payload @> cast(? as jsonb)
+        |   or payload @> cast(? as jsonb)
+        |order by updated_at desc
+        |""".stripMargin,
+      { statement =>
+        statement.setString(1, s"""{"participatingClubs":[{"value":"${clubId.value}"}]}""")
+        statement.setString(2, s"""{"whitelist":[{"clubId":{"value":"${clubId.value}"}}]}""")
+      }
+    )
+
+  override def findPublic(): Vector[Tournament] =
+    findFiltered(includeDraft = false)
 
   override def findAll(): Vector[Tournament] =
     readAll[Tournament]("select payload from tournaments order by updated_at desc")
@@ -360,6 +527,33 @@ final class PostgresTableRepository(
       }
     )
 
+  override def findByTournamentIds(tournamentIds: Vector[TournamentId]): Vector[Table] =
+    if tournamentIds.isEmpty then Vector.empty
+    else
+      withConnection { connection =>
+        Using.resource(
+          connection.prepareStatement(
+            """
+              |select payload
+              |from tables
+              |where tournament_id = any(?)
+              |order by tournament_id asc, stage_id asc, table_no asc
+              |""".stripMargin
+          )
+        ) { statement =>
+          statement.setArray(
+            1,
+            connection.createArrayOf("text", tournamentIds.map(_.value).toArray)
+          )
+          Using.resource(statement.executeQuery()) { resultSet =>
+            val buffer = Vector.newBuilder[Table]
+            while resultSet.next() do
+              buffer += read[Table](resultSet.getString("payload"))
+            buffer.result()
+          }
+        }
+      }
+
   override def findAll(): Vector[Table] =
     readAll[Table]("select payload from tables order by updated_at desc")
 
@@ -413,6 +607,42 @@ final class PostgresMatchRecordRepository(
     readOne[MatchRecord]("select payload from match_records where table_id = ?", { statement =>
       statement.setString(1, tableId.value)
     })
+
+  override def findByTournamentAndStage(
+      tournamentId: TournamentId,
+      stageId: TournamentStageId
+  ): Vector[MatchRecord] =
+    readAll[MatchRecord](
+      """
+        |select payload
+        |from match_records
+        |where tournament_id = ? and stage_id = ?
+        |order by generated_at desc, id desc
+        |""".stripMargin,
+      { statement =>
+        statement.setString(1, tournamentId.value)
+        statement.setString(2, stageId.value)
+      }
+    )
+
+  override def findRecentByClub(clubId: ClubId, limit: Int): Vector[MatchRecord] =
+    readAll[MatchRecord](
+      """
+        |select payload
+        |from match_records
+        |where exists (
+        |  select 1
+        |  from jsonb_array_elements(payload -> 'seatResults') as seat
+        |  where seat ->> 'clubId' = ?
+        |)
+        |order by generated_at desc, id desc
+        |limit ?
+        |""".stripMargin,
+      { statement =>
+        statement.setString(1, clubId.value)
+        statement.setInt(2, limit)
+      }
+    )
 
   override def findAll(): Vector[MatchRecord] =
     readAll[MatchRecord]("select payload from match_records order by generated_at desc")

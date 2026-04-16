@@ -8,6 +8,10 @@ trait PlayerRepository:
   def findByUserId(userId: String): Option[Player]
   def findAll(): Vector[Player]
 
+  def findByIds(ids: Vector[PlayerId]): Vector[Player] =
+    val allowed = ids.toSet
+    findAll().filter(player => allowed.contains(player.id))
+
   def findByClub(clubId: ClubId): Vector[Player] =
     findAll().filter(_.boundClubIds.contains(clubId))
 
@@ -33,6 +37,24 @@ trait ClubRepository:
   def findByName(name: String): Option[Club]
   def findAll(): Vector[Club]
 
+  def findByIds(ids: Vector[ClubId]): Vector[Club] =
+    val allowed = ids.toSet
+    findAll().filter(club => allowed.contains(club.id))
+
+  def findFiltered(
+      activeOnly: Boolean = false,
+      joinableOnly: Boolean = false,
+      memberId: Option[PlayerId] = None,
+      adminId: Option[PlayerId] = None,
+      name: Option[String] = None
+  ): Vector[Club] =
+    findAll()
+      .filter(club => !activeOnly || club.dissolvedAt.isEmpty)
+      .filter(club => !joinableOnly || (club.dissolvedAt.isEmpty && club.recruitmentPolicy.applicationsOpen))
+      .filter(club => memberId.forall(club.members.contains))
+      .filter(club => adminId.forall(club.admins.contains))
+      .filter(club => name.forall(fragment => club.name.toLowerCase.contains(fragment.toLowerCase)))
+
   def findActive(): Vector[Club] =
     findAll().filter(_.dissolvedAt.isEmpty)
 
@@ -41,6 +63,33 @@ trait TournamentRepository:
   def findById(id: TournamentId): Option[Tournament]
   def findByNameAndOrganizer(name: String, organizer: String): Option[Tournament]
   def findAll(): Vector[Tournament]
+
+  def findByIds(ids: Vector[TournamentId]): Vector[Tournament] =
+    val allowed = ids.toSet
+    findAll().filter(tournament => allowed.contains(tournament.id))
+
+  def findFiltered(
+      status: Option[TournamentStatus] = None,
+      adminId: Option[PlayerId] = None,
+      organizer: Option[String] = None,
+      includeDraft: Boolean = true
+  ): Vector[Tournament] =
+    findAll()
+      .filter(tournament => includeDraft || tournament.status != TournamentStatus.Draft)
+      .filter(tournament => status.forall(_ == tournament.status))
+      .filter(tournament => adminId.forall(tournament.admins.contains))
+      .filter(tournament => organizer.forall(fragment =>
+        tournament.organizer.toLowerCase.contains(fragment.toLowerCase)
+      ))
+
+  def findByClub(clubId: ClubId): Vector[Tournament] =
+    findAll().filter(tournament =>
+      tournament.participatingClubs.contains(clubId) ||
+        tournament.whitelist.exists(_.clubId.contains(clubId))
+    )
+
+  def findPublic(): Vector[Tournament] =
+    findFiltered(includeDraft = false)
 
   def findByAdmin(playerId: PlayerId): Vector[Tournament] =
     findAll().filter(_.admins.contains(playerId))
@@ -55,6 +104,10 @@ trait TableRepository:
   ): Vector[Table]
   def findAll(): Vector[Table]
 
+  def findByTournamentIds(tournamentIds: Vector[TournamentId]): Vector[Table] =
+    val allowed = tournamentIds.toSet
+    findAll().filter(table => allowed.contains(table.tournamentId))
+
   def findByStatus(status: TableStatus): Vector[Table] =
     findAll().filter(_.status == status)
 
@@ -63,6 +116,19 @@ trait MatchRecordRepository:
   def findById(id: MatchRecordId): Option[MatchRecord]
   def findByTable(tableId: TableId): Option[MatchRecord]
   def findAll(): Vector[MatchRecord]
+
+  def findByTournamentAndStage(
+      tournamentId: TournamentId,
+      stageId: TournamentStageId
+  ): Vector[MatchRecord] =
+    findAll().filter(record => record.tournamentId == tournamentId && record.stageId == stageId)
+
+  def findRecentByClub(clubId: ClubId, limit: Int): Vector[MatchRecord] =
+    findAll()
+      .filter(record => record.seatResults.exists(_.clubId.contains(clubId)))
+      .sortBy(record => (record.generatedAt, record.id.value))
+      .reverse
+      .take(limit)
 
   def findByPlayer(playerId: PlayerId): Vector[MatchRecord] =
     findAll().filter(_.playerIds.contains(playerId))

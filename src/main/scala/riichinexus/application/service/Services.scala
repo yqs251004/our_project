@@ -349,19 +349,19 @@ object StageLineupSupport:
 
   def resolveEligiblePlayers(
       stage: TournamentStage,
-      playerRepository: PlayerRepository
+      playerLookup: PlayerId => Option[Player]
   ): Vector[PlayerId] =
     val resolvedBySubmission = stage.lineupSubmissions.flatMap { submission =>
       val activeSeats = submission.seats.filterNot(_.reserve)
       val reserveSeats = submission.seats.filter(_.reserve)
 
       val availableActive = activeSeats.flatMap { seat =>
-        playerRepository.findById(seat.playerId).filter(_.status == PlayerStatus.Active).map(_ => seat.playerId)
+        playerLookup(seat.playerId).filter(_.status == PlayerStatus.Active).map(_ => seat.playerId)
       }
       val promotedReserves = reserveSeats
         .filterNot(seat => availableActive.contains(seat.playerId))
         .flatMap { seat =>
-          playerRepository.findById(seat.playerId).filter(_.status == PlayerStatus.Active).map(_ => seat.playerId)
+          playerLookup(seat.playerId).filter(_.status == PlayerStatus.Active).map(_ => seat.playerId)
         }
 
       val shortfall = math.max(0, activeSeats.size - availableActive.size)
@@ -374,7 +374,7 @@ object StageLineupSupport:
       .distinct
       .filterNot(selected.contains)
       .flatMap { playerId =>
-        playerRepository.findById(playerId).filter(_.status == PlayerStatus.Active).map(_ => playerId)
+        playerLookup(playerId).filter(_.status == PlayerStatus.Active).map(_ => playerId)
       }
 
     val remainder = selected.size % 4
@@ -383,6 +383,12 @@ object StageLineupSupport:
       val needed = 4 - remainder
       if reserveCandidates.size >= needed then selected ++ reserveCandidates.take(needed)
       else selected
+
+  def resolveEligiblePlayers(
+      stage: TournamentStage,
+      playerRepository: PlayerRepository
+  ): Vector[PlayerId] =
+    resolveEligiblePlayers(stage, playerRepository.findById)
 
   def effectiveRoundLimit(stage: TournamentStage): Int =
     stage.swissRule.flatMap(_.maxRounds) match
@@ -579,15 +585,30 @@ final class PublicQueryService(
   def publicSchedules(): Vector[PublicScheduleView] =
     authorizationService.requirePermission(guestPrincipal, Permission.ViewPublicSchedule)
 
-    tournamentRepository.findAll().filter(_.status != TournamentStatus.Draft).flatMap { tournament =>
+    val tournaments = tournamentRepository.findPublic()
+    val lineupPlayersById = playerRepository.findByIds(
+      tournaments.flatMap(_.stages.flatMap(_.lineupSubmissions.flatMap(_.seats.map(_.playerId)))).distinct
+    ).map(player => player.id -> player).toMap
+    val tablesByStage = tableRepository.findByTournamentIds(tournaments.map(_.id))
+      .groupBy(table => table.tournamentId -> table.stageId)
+      .withDefaultValue(Vector.empty)
+    val clubsById = clubRepository.findByIds(tournaments.flatMap(_.participatingClubs).distinct)
+      .map(club => club.id -> club)
+      .toMap
+
+    tournaments.flatMap { tournament =>
       tournament.stages.map { stage =>
-        val stageTables = tableRepository.findByTournamentAndStage(tournament.id, stage.id)
-        val activeTableCount = stageTables.count(table =>
-          table.status != TableStatus.Archived
-        )
-        PublicScheduleView(
-          tournamentId = tournament.id,
-          tournamentName = tournament.name,
+          val stageTables = tablesByStage(tournament.id -> stage.id)
+          val activeTableCount = stageTables.count(table =>
+            table.status != TableStatus.Archived
+          )
+          val lineupPlayers = StageLineupSupport.resolveEligiblePlayers(stage, lineupPlayersById.get)
+          val fallbackClubMembers = tournament.participatingClubs.flatMap { clubId =>
+            clubsById.get(clubId).toVector.flatMap(_.members)
+          }
+          PublicScheduleView(
+            tournamentId = tournament.id,
+            tournamentName = tournament.name,
           tournamentStatus = tournament.status,
           stageId = stage.id,
           stageName = stage.name,
@@ -599,7 +620,7 @@ final class PublicQueryService(
           tableCount = stageTables.size,
           activeTableCount = activeTableCount,
           pendingTablePlanCount = stage.pendingTablePlans.size,
-          participantCount = publicParticipantCount(tournament, stage),
+          participantCount = (lineupPlayers ++ tournament.participatingPlayers ++ fallbackClubMembers).distinct.size,
           whitelistCount = tournament.whitelist.size
         )
       }
@@ -608,13 +629,23 @@ final class PublicQueryService(
   def publicClubDirectory(): Vector[PublicClubDirectoryEntry] =
     authorizationService.requirePermission(guestPrincipal, Permission.ViewClubDirectory)
 
-    clubRepository.findActive().sortBy(_.name).map { club =>
+    val clubs = clubRepository.findActive().sortBy(_.name)
+    val playersById = playerRepository.findByIds(clubs.flatMap(_.members).distinct)
+      .map(player => player.id -> player)
+      .toMap
+    val activeClubIds = clubs.map(_.id).toSet
+    val relatedClubsById = clubRepository.findByIds(
+      clubs.flatMap(_.relations.map(_.targetClubId)).distinct.filterNot(activeClubIds.contains)
+    ).map(club => club.id -> club).toMap
+    val clubsById = clubs.map(club => club.id -> club).toMap ++ relatedClubsById
+
+    clubs.map { club =>
       val activeMemberCount = club.members.count(playerId =>
-        playerRepository.findById(playerId).exists(_.status == PlayerStatus.Active)
+        playersById.get(playerId).exists(_.status == PlayerStatus.Active)
       )
       val rivalryTargets = club.relations.filter(_.relation == ClubRelationKind.Rivalry)
       val strongestRival = rivalryTargets
-        .flatMap(relation => clubRepository.findById(relation.targetClubId))
+        .flatMap(relation => clubsById.get(relation.targetClubId))
         .sortBy(rival => (-rival.powerRating, rival.name))
         .headOption
       PublicClubDirectoryEntry(
@@ -3855,39 +3886,44 @@ final class TournamentApplicationService(
       stageId: TournamentStageId,
       at: Instant = Instant.now()
   ): StageRankingSnapshot =
-    val tournament = tournamentRepository
-      .findById(tournamentId)
-      .getOrElse(throw NoSuchElementException(s"Tournament ${tournamentId.value} was not found"))
-    val stage = requireStage(tournament, stageId)
-    val records = stageRecords(tournamentId, stageId)
-    val participants = resolveParticipants(tournament, stage).map(_.id)
-    tournamentRuleEngine.buildStageRanking(tournament, stage, participants, records, at)
+    val context = stageComputationContext(tournamentId, stageId)
+    tournamentRuleEngine.buildStageRanking(
+      context.tournament,
+      context.stage,
+      context.participants.map(_.id),
+      context.records,
+      at
+    )
 
   def stageAdvancementPreview(
       tournamentId: TournamentId,
       stageId: TournamentStageId,
       at: Instant = Instant.now()
   ): StageAdvancementSnapshot =
-    val tournament = tournamentRepository
-      .findById(tournamentId)
-      .getOrElse(throw NoSuchElementException(s"Tournament ${tournamentId.value} was not found"))
-    val stage = requireStage(tournament, stageId)
-    val participants = resolveParticipants(tournament, stage).map(_.id)
+    val context = stageComputationContext(tournamentId, stageId)
     val ranking = tournamentRuleEngine.buildStageRanking(
-      tournament,
-      stage,
-      participants,
-      stageRecords(tournamentId, stageId),
+      context.tournament,
+      context.stage,
+      context.participants.map(_.id),
+      context.records,
       at
     )
-    tournamentRuleEngine.projectAdvancement(tournament, stage, ranking, at)
+    tournamentRuleEngine.projectAdvancement(context.tournament, context.stage, ranking, at)
 
   def stageKnockoutBracket(
       tournamentId: TournamentId,
       stageId: TournamentStageId,
       at: Instant = Instant.now()
   ): KnockoutBracketSnapshot =
-    knockoutStageCoordinator.buildProgression(tournamentId, stageId, at)
+    val context = stageComputationContext(tournamentId, stageId)
+    knockoutStageCoordinator.buildProgression(
+      tournament = context.tournament,
+      stage = context.stage,
+      participants = context.participants,
+      records = context.records,
+      tables = tableRepository.findByTournamentAndStage(tournamentId, stageId),
+      at = at
+    )
 
   def advanceKnockoutStage(
       tournamentId: TournamentId,
@@ -3951,15 +3987,15 @@ final class TournamentApplicationService(
             s"Stage ${stageId.value} cannot complete while tables are still active or under appeal"
           )
 
+        val context = stageComputationContext(tournamentId, stageId, Some(tournament), Some(stage))
         if !isKnockoutStage then
-          val participants = resolveParticipants(tournament, stage)
           val effectiveRoundLimit = StageLineupSupport.effectiveRoundLimit(stage)
           val requiredTablesPerRound =
             expectedTablesPerRound(
-              tournament = tournament,
-              stage = stage,
-              participants = participants,
-              records = stageRecords(tournamentId, stageId),
+              tournament = context.tournament,
+              stage = context.stage,
+              participants = context.participants,
+              records = context.records,
               at = completedAt
             )
           val roundCounts = stageTables.groupBy(_.stageRoundNumber).view.mapValues(_.size).toMap
@@ -3974,13 +4010,13 @@ final class TournamentApplicationService(
 
         val ranking =
           tournamentRuleEngine.buildStageRanking(
-            tournament,
-            stage,
-            resolveParticipants(tournament, stage).map(_.id),
-            stageRecords(tournamentId, stageId),
+            context.tournament,
+            context.stage,
+            context.participants.map(_.id),
+            context.records,
             completedAt
           )
-        val advancement = tournamentRuleEngine.projectAdvancement(tournament, stage, ranking, completedAt)
+        val advancement = tournamentRuleEngine.projectAdvancement(context.tournament, context.stage, ranking, completedAt)
 
         tournamentRepository.save(tournament.updateStage(stageId, _.complete))
         advancement
@@ -4204,25 +4240,58 @@ final class TournamentApplicationService(
       tournament: Tournament,
       stage: TournamentStage
   ): Vector[Player] =
-    val stagePlayerIds = StageLineupSupport.resolveEligiblePlayers(stage, playerRepository)
+    val clubsById = clubRepository.findByIds(
+      (tournament.participatingClubs ++ tournament.whitelist.flatMap(_.clubId)).distinct
+    ).map(club => club.id -> club).toMap
 
     val fallbackPlayerIds =
       val registeredClubMembers = tournament.participatingClubs.flatMap { clubId =>
-        clubRepository.findById(clubId).toVector.flatMap(_.members)
+        clubsById.get(clubId).toVector.flatMap(_.members)
       }
       val whitelistedPlayers = tournament.whitelist.flatMap(_.playerId)
       val whitelistedClubMembers = tournament.whitelist.flatMap { entry =>
-        entry.clubId.toVector.flatMap(clubId => clubRepository.findById(clubId).toVector.flatMap(_.members))
+        entry.clubId.toVector.flatMap(clubId => clubsById.get(clubId).toVector.flatMap(_.members))
       }
 
       (tournament.participatingPlayers ++ whitelistedPlayers ++ registeredClubMembers ++ whitelistedClubMembers).distinct
+
+    val playersById = playerRepository.findByIds(
+      (stage.lineupSubmissions.flatMap(_.seats.map(_.playerId)) ++ fallbackPlayerIds).distinct
+    ).map(player => player.id -> player).toMap
+    val stagePlayerIds = StageLineupSupport.resolveEligiblePlayers(stage, playersById.get)
 
     val targetPlayerIds =
       if stagePlayerIds.nonEmpty then stagePlayerIds else fallbackPlayerIds
 
     targetPlayerIds.flatMap { playerId =>
-      playerRepository.findById(playerId).filter(_.status == PlayerStatus.Active)
+      playersById.get(playerId).filter(_.status == PlayerStatus.Active)
     }
+
+  private final case class StageComputationContext(
+      tournament: Tournament,
+      stage: TournamentStage,
+      participants: Vector[Player],
+      records: Vector[MatchRecord]
+  )
+
+  private def stageComputationContext(
+      tournamentId: TournamentId,
+      stageId: TournamentStageId,
+      tournamentHint: Option[Tournament] = None,
+      stageHint: Option[TournamentStage] = None
+  ): StageComputationContext =
+    val tournament = tournamentHint.getOrElse(
+      tournamentRepository
+        .findById(tournamentId)
+        .getOrElse(throw NoSuchElementException(s"Tournament ${tournamentId.value} was not found"))
+    )
+    val stage = stageHint.getOrElse(requireStage(tournament, stageId))
+    StageComputationContext(
+      tournament = tournament,
+      stage = stage,
+      participants = resolveParticipants(tournament, stage),
+      records = stageRecords(tournamentId, stageId)
+    )
 
   private def prepareNonKnockoutRoundIfNeeded(
       tournament: Tournament,
@@ -4250,9 +4319,7 @@ final class TournamentApplicationService(
         case None => tournament
         case Some(roundNumber) =>
           val tournamentHistory =
-            matchRecordRepository.findAll().filter(record =>
-              record.tournamentId == tournament.id && record.stageId == stage.id
-            )
+            matchRecordRepository.findByTournamentAndStage(tournament.id, stage.id)
           val planningStage =
             if roundNumber == stage.currentRound then stage
             else stage.advanceRound(roundNumber)
@@ -4493,8 +4560,7 @@ final class TournamentApplicationService(
       tournamentId: TournamentId,
       stageId: TournamentStageId
   ): Vector[MatchRecord] =
-    matchRecordRepository.findAll()
-      .filter(record => record.tournamentId == tournamentId && record.stageId == stageId)
+    matchRecordRepository.findByTournamentAndStage(tournamentId, stageId)
 
   private def requireUniqueStageConfiguration(stages: Vector[TournamentStage]): Unit =
     if stages.map(_.id).distinct.size != stages.size then
