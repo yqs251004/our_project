@@ -163,7 +163,9 @@ private[database] object ApplicationAssembly:
       tableRepository =
         new riichinexus.application.service.InstrumentedTableRepository(repositories.tableRepository, diagnostics),
       matchRecordRepository =
-        new riichinexus.application.service.InstrumentedMatchRecordRepository(repositories.matchRecordRepository, diagnostics)
+        new riichinexus.application.service.InstrumentedMatchRecordRepository(repositories.matchRecordRepository, diagnostics),
+      globalDictionaryRepository =
+        new riichinexus.application.service.InstrumentedGlobalDictionaryRepository(repositories.globalDictionaryRepository, diagnostics)
     )
     val eventBus = OutboxBackedDomainEventBus(
       instrumentedRepositories.domainEventOutboxRepository,

@@ -36,6 +36,10 @@ private object RuntimeDictionarySupport:
       sourceKey: String
   )
 
+  final case class DictionarySnapshot(
+      valuesByNormalizedKey: Map[String, String]
+  )
+
   def validateRuntimeEntry(
       key: String,
       value: String
@@ -45,11 +49,16 @@ private object RuntimeDictionarySupport:
   def currentEloRatingConfig(
       globalDictionaryRepository: GlobalDictionaryRepository
   ): EloRatingConfig =
+    currentEloRatingConfig(snapshot(globalDictionaryRepository))
+
+  def currentEloRatingConfig(
+      dictionarySnapshot: DictionarySnapshot
+  ): EloRatingConfig =
     val defaultConfig = EloRatingConfig.default
-    val kFactor = readInt(globalDictionaryRepository, RatingKFactorKey).filter(_ > 0).getOrElse(defaultConfig.kFactor)
-    val rawPlacementWeight = readDouble(globalDictionaryRepository, RatingPlacementWeightKey).filter(_ >= 0.0).getOrElse(defaultConfig.placementWeight)
-    val rawScoreWeight = readDouble(globalDictionaryRepository, RatingScoreWeightKey).filter(_ >= 0.0).getOrElse(defaultConfig.scoreWeight)
-    val rawUmaWeight = readDouble(globalDictionaryRepository, RatingUmaWeightKey).filter(_ >= 0.0).getOrElse(defaultConfig.umaWeight)
+    val kFactor = readInt(dictionarySnapshot, RatingKFactorKey).filter(_ > 0).getOrElse(defaultConfig.kFactor)
+    val rawPlacementWeight = readDouble(dictionarySnapshot, RatingPlacementWeightKey).filter(_ >= 0.0).getOrElse(defaultConfig.placementWeight)
+    val rawScoreWeight = readDouble(dictionarySnapshot, RatingScoreWeightKey).filter(_ >= 0.0).getOrElse(defaultConfig.scoreWeight)
+    val rawUmaWeight = readDouble(dictionarySnapshot, RatingUmaWeightKey).filter(_ >= 0.0).getOrElse(defaultConfig.umaWeight)
     val totalWeight = rawPlacementWeight + rawScoreWeight + rawUmaWeight
     val normalizedWeights =
       if totalWeight <= 0.0 then
@@ -71,16 +80,26 @@ private object RuntimeDictionarySupport:
   def currentClubPowerConfig(
       globalDictionaryRepository: GlobalDictionaryRepository
   ): ClubPowerConfig =
+    currentClubPowerConfig(snapshot(globalDictionaryRepository))
+
+  def currentClubPowerConfig(
+      dictionarySnapshot: DictionarySnapshot
+  ): ClubPowerConfig =
     ClubPowerConfig(
-      eloWeight = readDouble(globalDictionaryRepository, ClubPowerEloWeightKey).filter(_ >= 0.0).getOrElse(1.0),
-      pointWeight = readDouble(globalDictionaryRepository, ClubPowerPointWeightKey).filter(_ >= 0.0).getOrElse(0.001),
-      baseBonus = readDouble(globalDictionaryRepository, ClubPowerBaseBonusKey).getOrElse(0.0)
+      eloWeight = readDouble(dictionarySnapshot, ClubPowerEloWeightKey).filter(_ >= 0.0).getOrElse(1.0),
+      pointWeight = readDouble(dictionarySnapshot, ClubPowerPointWeightKey).filter(_ >= 0.0).getOrElse(0.001),
+      baseBonus = readDouble(dictionarySnapshot, ClubPowerBaseBonusKey).getOrElse(0.0)
     )
 
   def currentSettlementPayoutRatios(
       globalDictionaryRepository: GlobalDictionaryRepository
   ): Vector[Double] =
-    readDoubleVector(globalDictionaryRepository, SettlementPayoutRatiosKey)
+    currentSettlementPayoutRatios(snapshot(globalDictionaryRepository))
+
+  def currentSettlementPayoutRatios(
+      dictionarySnapshot: DictionarySnapshot
+  ): Vector[Double] =
+    readDoubleVector(dictionarySnapshot, SettlementPayoutRatiosKey)
       .filter(_ >= 0.0) match
       case ratios if ratios.nonEmpty && ratios.exists(_ > 0.0) => ratios
       case _                                                   => Vector(0.5, 0.3, 0.2)
@@ -90,17 +109,30 @@ private object RuntimeDictionarySupport:
       playerRepository: PlayerRepository,
       globalDictionaryRepository: GlobalDictionaryRepository
   ): Double =
+    calculateClubPowerRating(club, playerRepository, snapshot(globalDictionaryRepository))
+
+  def calculateClubPowerRating(
+      club: Club,
+      playerRepository: PlayerRepository,
+      dictionarySnapshot: DictionarySnapshot
+  ): Double =
     val memberElos = club.members.flatMap(memberId =>
       playerRepository.findById(memberId).filter(_.status == PlayerStatus.Active).map(_.elo)
     )
     val averageElo =
       if memberElos.isEmpty then 0.0 else memberElos.sum.toDouble / memberElos.size.toDouble
-    val config = currentClubPowerConfig(globalDictionaryRepository)
+    val config = currentClubPowerConfig(dictionarySnapshot)
     round2(averageElo * config.eloWeight + club.totalPoints.toDouble * config.pointWeight + config.baseBonus)
 
   def normalizeRank(
       rank: RankSnapshot,
       globalDictionaryRepository: GlobalDictionaryRepository
+  ): Option[NormalizedRank] =
+    normalizeRank(rank, snapshot(globalDictionaryRepository))
+
+  def normalizeRank(
+      rank: RankSnapshot,
+      dictionarySnapshot: DictionarySnapshot
   ): Option[NormalizedRank] =
     val platformKey = GlobalDictionaryRegistry.normalizePlatformKey(rank.platform)
     val normalizedTier = GlobalDictionaryRegistry.normalizedToken(rank.tier)
@@ -114,12 +146,12 @@ private object RuntimeDictionarySupport:
     val baseKey = s"$RankNormalizationPrefix$platformKey.$normalizedTier"
 
     starSpecificKeys
-      .flatMap(key => readInt(globalDictionaryRepository, key).map(score => NormalizedRank(score, key)))
+      .flatMap(key => readInt(dictionarySnapshot, key).map(score => NormalizedRank(score, key)))
       .headOption
       .orElse {
-        readInt(globalDictionaryRepository, baseKey).map { base =>
+        readInt(dictionarySnapshot, baseKey).map { base =>
           val weightedScore = rank.stars.flatMap { stars =>
-            readInt(globalDictionaryRepository, s"$RankNormalizationPrefix$platformKey.starweight")
+            readInt(dictionarySnapshot, s"$RankNormalizationPrefix$platformKey.starweight")
               .map(starWeight => base + stars * starWeight)
           }.getOrElse(base)
 
@@ -134,10 +166,27 @@ private object RuntimeDictionarySupport:
       stage: TournamentStage,
       globalDictionaryRepository: GlobalDictionaryRepository
   ): TournamentStage =
+    resolveStageRules(stage, snapshot(globalDictionaryRepository))
+
+  def resolveStageRules(
+      stage: TournamentStage,
+      dictionarySnapshot: DictionarySnapshot
+  ): TournamentStage =
     stage.advancementRule.templateKey
-      .flatMap(templateKey => readStageRuleTemplate(globalDictionaryRepository, templateKey))
+      .flatMap(templateKey => readStageRuleTemplate(dictionarySnapshot, templateKey))
       .map(template => applyStageRuleTemplate(stage, template))
       .getOrElse(stage)
+
+  def snapshot(
+      globalDictionaryRepository: GlobalDictionaryRepository
+  ): DictionarySnapshot =
+    DictionarySnapshot(
+      globalDictionaryRepository.findAll()
+        .iterator
+        .map(entry => normalizedKey(entry.key) -> entry.value.trim)
+        .filter(_._2.nonEmpty)
+        .toMap
+    )
 
   private def readInt(
       globalDictionaryRepository: GlobalDictionaryRepository,
@@ -145,17 +194,35 @@ private object RuntimeDictionarySupport:
   ): Option[Int] =
     readValue(globalDictionaryRepository, key).flatMap(parseInt)
 
+  private def readInt(
+      dictionarySnapshot: DictionarySnapshot,
+      key: String
+  ): Option[Int] =
+    readValue(dictionarySnapshot, key).flatMap(parseInt)
+
   private def readDouble(
       globalDictionaryRepository: GlobalDictionaryRepository,
       key: String
   ): Option[Double] =
     readValue(globalDictionaryRepository, key).flatMap(parseDouble)
 
+  private def readDouble(
+      dictionarySnapshot: DictionarySnapshot,
+      key: String
+  ): Option[Double] =
+    readValue(dictionarySnapshot, key).flatMap(parseDouble)
+
   private def readDoubleVector(
       globalDictionaryRepository: GlobalDictionaryRepository,
       key: String
   ): Vector[Double] =
     readValue(globalDictionaryRepository, key).map(parseDoubleVector).getOrElse(Vector.empty)
+
+  private def readDoubleVector(
+      dictionarySnapshot: DictionarySnapshot,
+      key: String
+  ): Vector[Double] =
+    readValue(dictionarySnapshot, key).map(parseDoubleVector).getOrElse(Vector.empty)
 
   private def readValue(
       globalDictionaryRepository: GlobalDictionaryRepository,
@@ -165,6 +232,12 @@ private object RuntimeDictionarySupport:
       .find(entry => normalizedKey(entry.key) == normalizedKey(key))
       .map(_.value.trim)
       .filter(_.nonEmpty)
+
+  private def readValue(
+      dictionarySnapshot: DictionarySnapshot,
+      key: String
+  ): Option[String] =
+    dictionarySnapshot.valuesByNormalizedKey.get(normalizedKey(key))
 
   private def parseInt(value: String): Option[Int] =
     scala.util.Try(value.trim.toInt).toOption
@@ -188,6 +261,13 @@ private object RuntimeDictionarySupport:
       templateKey: String
   ): Option[GlobalDictionaryRegistry.StageRuleTemplate] =
     readValue(globalDictionaryRepository, GlobalDictionaryRegistry.stageRuleTemplateKey(templateKey))
+      .map(GlobalDictionaryRegistry.parseStageRuleTemplate)
+
+  private def readStageRuleTemplate(
+      dictionarySnapshot: DictionarySnapshot,
+      templateKey: String
+  ): Option[GlobalDictionaryRegistry.StageRuleTemplate] =
+    readValue(dictionarySnapshot, GlobalDictionaryRegistry.stageRuleTemplateKey(templateKey))
       .map(GlobalDictionaryRegistry.parseStageRuleTemplate)
 
   private def applyStageRuleTemplate(
@@ -276,7 +356,22 @@ private object ProjectionSupport:
       dashboardRepository: DashboardRepository,
       at: Instant
   ): Club =
-    val refreshedClub = recalculateClubPowerRating(club, playerRepository, globalDictionaryRepository)
+    refreshClubProjection(
+      club,
+      playerRepository,
+      RuntimeDictionarySupport.snapshot(globalDictionaryRepository),
+      dashboardRepository,
+      at
+    )
+
+  def refreshClubProjection(
+      club: Club,
+      playerRepository: PlayerRepository,
+      dictionarySnapshot: RuntimeDictionarySupport.DictionarySnapshot,
+      dashboardRepository: DashboardRepository,
+      at: Instant
+  ): Club =
+    val refreshedClub = recalculateClubPowerRating(club, playerRepository, dictionarySnapshot)
     dashboardRepository.save(buildClubDashboard(refreshedClub, playerRepository, dashboardRepository, at))
     refreshedClub
 
@@ -285,8 +380,15 @@ private object ProjectionSupport:
       playerRepository: PlayerRepository,
       globalDictionaryRepository: GlobalDictionaryRepository
   ): Club =
+    recalculateClubPowerRating(club, playerRepository, RuntimeDictionarySupport.snapshot(globalDictionaryRepository))
+
+  def recalculateClubPowerRating(
+      club: Club,
+      playerRepository: PlayerRepository,
+      dictionarySnapshot: RuntimeDictionarySupport.DictionarySnapshot
+  ): Club =
     club.updatePowerRating(
-      RuntimeDictionarySupport.calculateClubPowerRating(club, playerRepository, globalDictionaryRepository)
+      RuntimeDictionarySupport.calculateClubPowerRating(club, playerRepository, dictionarySnapshot)
     )
 
   def buildClubDashboard(
@@ -670,18 +772,15 @@ final class PublicQueryService(
   def publicPlayerLeaderboard(limit: Int = 100): Vector[PlayerLeaderboardEntry] =
     authorizationService.requirePermission(guestPrincipal, Permission.ViewPublicLeaderboard)
 
+    val dictionarySnapshot = RuntimeDictionarySupport.snapshot(globalDictionaryRepository)
     playerRepository.findAll()
-      .sortBy { player =>
-        val normalizedRankScore =
-          RuntimeDictionarySupport.normalizeRank(player.currentRank, globalDictionaryRepository)
-            .map(_.score)
-            .getOrElse(Int.MinValue)
+      .map(player => player -> RuntimeDictionarySupport.normalizeRank(player.currentRank, dictionarySnapshot))
+      .sortBy { case (player, normalizedRank) =>
+        val normalizedRankScore = normalizedRank.map(_.score).getOrElse(Int.MinValue)
         (-player.elo, -normalizedRankScore, player.nickname)
       }
       .take(limit)
-      .map { player =>
-        val normalizedRank =
-          RuntimeDictionarySupport.normalizeRank(player.currentRank, globalDictionaryRepository)
+      .map { case (player, normalizedRank) =>
         PlayerLeaderboardEntry(
           playerId = player.id,
           nickname = player.nickname,
@@ -3308,7 +3407,8 @@ final class TournamentApplicationService(
       require(organizer.trim.nonEmpty, "Tournament organizer cannot be empty")
       require(startsAt.isBefore(endsAt), "Tournament start time must be earlier than end time")
 
-      val normalizedStages = stages.map(normalizeStage).sortBy(_.order)
+      val dictionarySnapshot = RuntimeDictionarySupport.snapshot(globalDictionaryRepository)
+      val normalizedStages = stages.map(stage => normalizeStage(stage, dictionarySnapshot)).sortBy(_.order)
       requireUniqueStageConfiguration(normalizedStages)
 
       adminId.foreach { targetAdminId =>
@@ -3664,7 +3764,8 @@ final class TournamentApplicationService(
           tournamentId = Some(tournamentId)
         )
 
-        tournamentRepository.save(tournament.addStage(normalizeStage(stage)))
+        val dictionarySnapshot = RuntimeDictionarySupport.snapshot(globalDictionaryRepository)
+        tournamentRepository.save(tournament.addStage(normalizeStage(stage, dictionarySnapshot)))
       }
     }
 
@@ -3686,13 +3787,15 @@ final class TournamentApplicationService(
           tournamentId = Some(tournamentId)
         )
 
+        val dictionarySnapshot = RuntimeDictionarySupport.snapshot(globalDictionaryRepository)
         val configuredStage = normalizeStage(
           currentStage.withRules(
             advancementRule,
             swissRule,
             knockoutRule,
             schedulingPoolSize.getOrElse(currentStage.schedulingPoolSize)
-          )
+          ),
+          dictionarySnapshot
         )
 
         tournamentRepository.save(
@@ -4547,8 +4650,14 @@ final class TournamentApplicationService(
       values.drop(normalized) ++ values.take(normalized)
 
   private def normalizeStage(stage: TournamentStage): TournamentStage =
+    normalizeStage(stage, RuntimeDictionarySupport.snapshot(globalDictionaryRepository))
+
+  private def normalizeStage(
+      stage: TournamentStage,
+      dictionarySnapshot: RuntimeDictionarySupport.DictionarySnapshot
+  ): TournamentStage =
     val templatedStage =
-      RuntimeDictionarySupport.resolveStageRules(stage, globalDictionaryRepository)
+      RuntimeDictionarySupport.resolveStageRules(stage, dictionarySnapshot)
 
     if templatedStage.advancementRule.ruleType == AdvancementRuleType.Custom &&
         templatedStage.advancementRule.note.contains("unconfigured") &&
@@ -5873,6 +5982,7 @@ final class ClubProjectionSubscriber(
           playerRepository.findById(result.playerId).toVector.flatMap(_.boundClubIds)
         }.distinct
         val impactedClubIds = (representedClubIds ++ memberClubIds).distinct
+        val dictionarySnapshot = RuntimeDictionarySupport.snapshot(globalDictionaryRepository)
 
         matchRecord.seatResults.foreach { result =>
           result.clubId.foreach { clubId =>
@@ -5888,7 +5998,7 @@ final class ClubProjectionSubscriber(
               ProjectionSupport.recalculateClubPowerRating(
                 club,
                 playerRepository,
-                globalDictionaryRepository
+                dictionarySnapshot
               )
             )
           }
@@ -6877,11 +6987,12 @@ final class EventCascadeProjectionSubscriber(
       case GlobalDictionaryUpdated(entry, occurredAt) =>
         val repairedClubCount =
           if entry.key.trim.toLowerCase.startsWith("club.power.") then
+            val dictionarySnapshot = RuntimeDictionarySupport.snapshot(globalDictionaryRepository)
             clubRepository.findActive().map { club =>
               val refreshed = ProjectionSupport.refreshClubProjection(
                 club,
                 playerRepository,
-                globalDictionaryRepository,
+                dictionarySnapshot,
                 dashboardRepository,
                 occurredAt
               )
@@ -6916,12 +7027,13 @@ final class EventCascadeProjectionSubscriber(
             version = advancedStatsBoardRepository.findByOwner(playerOwner).map(_.version).getOrElse(0)
           )
         )
+        val dictionarySnapshot = RuntimeDictionarySupport.snapshot(globalDictionaryRepository)
         val repairedClubIds = playerRepository.findById(playerId).toVector.flatMap(_.boundClubIds).distinct.flatMap { clubId =>
           clubRepository.findById(clubId).map { club =>
             val refreshed = ProjectionSupport.refreshClubProjection(
               club,
               playerRepository,
-              globalDictionaryRepository,
+              dictionarySnapshot,
               dashboardRepository,
               occurredAt
             )

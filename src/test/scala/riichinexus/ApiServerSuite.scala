@@ -574,6 +574,9 @@ class ApiServerSuite extends FunSuite:
       val clubDetailResponse = get(s"$baseUrl/public/clubs/${club.id.value}")
       assertEquals(clubDetailResponse.statusCode(), 200)
 
+      val leaderboardResponse = get(s"$baseUrl/public/leaderboards/players")
+      assertEquals(leaderboardResponse.statusCode(), 200)
+
       val summaryResponse = get(
         s"$baseUrl/admin/performance/summary?operatorId=${admin.id.value}&limit=20"
       )
@@ -588,9 +591,11 @@ class ApiServerSuite extends FunSuite:
       assert(summary.busiestRepositoryCalls.exists(entry =>
         entry.key.startsWith("PlayerRepository.") ||
           entry.key.startsWith("ClubRepository.") ||
+          entry.key.startsWith("GlobalDictionaryRepository.") ||
           entry.key.startsWith("TournamentRepository.") ||
           entry.key.startsWith("MatchRecordRepository.")
       ))
+      assert(summary.busiestRepositoryCalls.exists(_.key == "GlobalDictionaryRepository.findAll"))
     }
   }
 

@@ -249,3 +249,14 @@ final class InstrumentedMatchRecordRepository(
     instrument("findRecentByClub")(delegate.findRecentByClub(clubId, limit))
   override def findByPlayer(playerId: PlayerId): Vector[MatchRecord] =
     instrument("findByPlayer")(delegate.findByPlayer(playerId))
+
+final class InstrumentedGlobalDictionaryRepository(
+    delegate: GlobalDictionaryRepository,
+    protected val diagnostics: PerformanceDiagnosticsService
+) extends GlobalDictionaryRepository
+    with RepositoryInstrumentationSupport:
+  protected val repositoryName = "GlobalDictionaryRepository"
+
+  def save(entry: GlobalDictionaryEntry): GlobalDictionaryEntry = instrument("save")(delegate.save(entry))
+  def findByKey(key: String): Option[GlobalDictionaryEntry] = instrument("findByKey")(delegate.findByKey(key))
+  def findAll(): Vector[GlobalDictionaryEntry] = instrument("findAll")(delegate.findAll())

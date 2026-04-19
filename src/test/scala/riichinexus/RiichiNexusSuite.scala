@@ -4,10 +4,38 @@ import java.time.Instant
 
 import munit.FunSuite
 
+import riichinexus.application.ports.GlobalDictionaryRepository
+import riichinexus.application.service.PublicQueryService
 import riichinexus.bootstrap.ApplicationContext
 import riichinexus.domain.model.*
 
 class RiichiNexusSuite extends FunSuite:
+  private final class CountingGlobalDictionaryRepository(delegate: GlobalDictionaryRepository)
+      extends GlobalDictionaryRepository:
+    var findAllCalls: Int = 0
+
+    override def save(entry: GlobalDictionaryEntry): GlobalDictionaryEntry =
+      delegate.save(entry)
+
+    override def findByKey(key: String): Option[GlobalDictionaryEntry] =
+      delegate.findByKey(key)
+
+    override def findAll(): Vector[GlobalDictionaryEntry] =
+      findAllCalls += 1
+      delegate.findAll()
+
+  private def repositoryCallCount(app: ApplicationContext, key: String): Long =
+    app.performanceDiagnosticsService.snapshot(limit = 100).busiestRepositoryCalls
+      .find(_.key == key)
+      .map(_.count)
+      .getOrElse(0L)
+
+  private def repositoryTotalMillis(app: ApplicationContext, key: String): Double =
+    app.performanceDiagnosticsService.snapshot(limit = 100).busiestRepositoryCalls
+      .find(_.key == key)
+      .map(_.totalMillis)
+      .getOrElse(0.0)
+
   test("guest access sessions can submit club applications with anonymous identity") {
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-15T17:00:00Z")
@@ -1359,6 +1387,132 @@ class RiichiNexusSuite extends FunSuite:
     assertEquals(soulEntry.normalizedRankScore, Some(620))
     assertEquals(tenhouEntry.normalizedRankScore, Some(550))
     assertEquals(leaderboard.head.playerId, soul.id)
+  }
+
+  test("public player leaderboard reads global dictionary once per request") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-16T12:35:00Z")
+
+    app.superAdminService.upsertDictionary(
+      key = "rank.normalization.tenhou.5-dan",
+      value = "550",
+      actor = AccessPrincipal.system,
+      updatedAt = now
+    )
+    app.superAdminService.upsertDictionary(
+      key = "rank.normalization.mahjongsoul.master",
+      value = "600",
+      actor = AccessPrincipal.system,
+      updatedAt = now.plusSeconds(1)
+    )
+    app.superAdminService.upsertDictionary(
+      key = "rank.normalization.mahjongsoul.starWeight",
+      value = "10",
+      actor = AccessPrincipal.system,
+      updatedAt = now.plusSeconds(2)
+    )
+
+    app.playerService.registerPlayer("rank-cache-a", "RankCacheA", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1700)
+    app.playerService.registerPlayer("rank-cache-b", "RankCacheB", RankSnapshot(RankPlatform.MahjongSoul, "Master", Some(2)), now, 1700)
+
+    val countingDictionaryRepository = new CountingGlobalDictionaryRepository(app.globalDictionaryRepository)
+    val publicQueryService = new PublicQueryService(
+      app.tournamentRepository,
+      app.tableRepository,
+      app.playerRepository,
+      app.clubRepository,
+      countingDictionaryRepository
+    )
+
+    val leaderboard = publicQueryService.publicPlayerLeaderboard(10)
+
+    assertEquals(leaderboard.size, 2)
+    assertEquals(countingDictionaryRepository.findAllCalls, 1)
+  }
+
+  test("public player leaderboard records dictionary timing diagnostics") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-16T12:40:00Z")
+
+    app.superAdminService.upsertDictionary(
+      key = "rank.normalization.tenhou.5-dan",
+      value = "550",
+      actor = AccessPrincipal.system,
+      updatedAt = now
+    )
+    app.playerService.registerPlayer("rank-diag-a", "RankDiagA", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1700)
+
+    app.publicQueryService.publicPlayerLeaderboard(10)
+
+    assertEquals(repositoryCallCount(app, "GlobalDictionaryRepository.findAll"), 1L)
+    assert(repositoryTotalMillis(app, "GlobalDictionaryRepository.findAll") >= 0.0)
+  }
+
+  test("club power dictionary update repairs active clubs with one dictionary scan") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-16T12:45:00Z")
+
+    val ownerA = app.playerService.registerPlayer("club-power-owner-a", "ClubPowerOwnerA", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1800)
+    val ownerB = app.playerService.registerPlayer("club-power-owner-b", "ClubPowerOwnerB", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1750)
+    app.clubService.createClub("Club Power A", ownerA.id, now, ownerA.asPrincipal)
+    app.clubService.createClub("Club Power B", ownerB.id, now.plusSeconds(1), ownerB.asPrincipal)
+
+    val beforeCalls = repositoryCallCount(app, "GlobalDictionaryRepository.findAll")
+
+    app.superAdminService.upsertDictionary(
+      key = "club.power.eloWeight",
+      value = "1.15",
+      actor = AccessPrincipal.system,
+      updatedAt = now.plusSeconds(2)
+    )
+
+    val afterCalls = repositoryCallCount(app, "GlobalDictionaryRepository.findAll")
+    assertEquals(afterCalls - beforeCalls, 1L)
+  }
+
+  test("creating tournament with multiple templated stages reads global dictionary once") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-16T12:50:00Z")
+
+    app.superAdminService.upsertDictionary(
+      key = "tournament.rule-template.swiss-snake-template",
+      value = "advancement=SwissCut;cutSize=8;pairingMethod=snake;maxRounds=2;schedulingPoolSize=2;note=template backed",
+      actor = AccessPrincipal.system,
+      updatedAt = now
+    )
+
+    val beforeCalls = repositoryCallCount(app, "GlobalDictionaryRepository.findAll")
+    val stages = Vector(
+      TournamentStage(
+        id = IdGenerator.stageId(),
+        name = "Template Stage A",
+        format = StageFormat.Swiss,
+        order = 1,
+        roundCount = 2,
+        advancementRule = AdvancementRule(AdvancementRuleType.Custom, templateKey = Some("swiss-snake-template"))
+      ),
+      TournamentStage(
+        id = IdGenerator.stageId(),
+        name = "Template Stage B",
+        format = StageFormat.Swiss,
+        order = 2,
+        roundCount = 2,
+        advancementRule = AdvancementRule(AdvancementRuleType.Custom, templateKey = Some("swiss-snake-template"))
+      )
+    )
+
+    val tournament = app.tournamentService.createTournament(
+      name = "Template Diagnostics Cup",
+      organizer = "QA",
+      startsAt = now.plusSeconds(60),
+      endsAt = now.plusSeconds(7200),
+      stages = stages
+    )
+
+    val afterCalls = repositoryCallCount(app, "GlobalDictionaryRepository.findAll")
+
+    assertEquals(afterCalls - beforeCalls, 1L)
+    assertEquals(tournament.stages.map(_.schedulingPoolSize), Vector(2, 2))
   }
 
   test("stage lineup preferred winds influence scheduled seats") {
