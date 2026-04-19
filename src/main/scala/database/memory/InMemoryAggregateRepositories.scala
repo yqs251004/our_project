@@ -82,27 +82,32 @@ final class InMemoryTournamentRepository extends TournamentRepository:
   private val state = mutable.LinkedHashMap.empty[TournamentId, Tournament]
 
   override def save(tournament: Tournament): Tournament =
-    val persisted = tournament.copy(
+    val normalized = TournamentDefaults.ensureInitialStage(tournament)
+    val persisted = normalized.copy(
       version = InMemoryAggregateRepositoryLockSupport.nextVersion(
         "tournament",
-        tournament.id.value,
-        tournament.version,
-        state.get(tournament.id).map(_.version)
+        normalized.id.value,
+        normalized.version,
+        state.get(normalized.id).map(_.version)
       )
     )
     state.update(persisted.id, persisted)
     persisted
 
   override def findById(id: TournamentId): Option[Tournament] =
-    state.get(id)
+    state.get(id).map(normalizeOnRead)
 
   override def findByNameAndOrganizer(name: String, organizer: String): Option[Tournament] =
     state.values.find(tournament =>
       tournament.name == name && tournament.organizer == organizer
-    )
+    ).map(normalizeOnRead)
 
   override def findAll(): Vector[Tournament] =
-    state.values.toVector
+    state.values.toVector.map(normalizeOnRead)
+
+  private def normalizeOnRead(tournament: Tournament): Tournament =
+    if tournament.stages.nonEmpty then tournament
+    else save(TournamentDefaults.ensureInitialStage(tournament))
 
 object InMemoryTournamentRepository:
   def apply(): InMemoryTournamentRepository =

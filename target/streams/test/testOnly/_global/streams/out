@@ -1,7 +1,5 @@
-[debug] Running TaskDef(riichinexus.RiichiNexusSuite, CustomFingerprint{suite='munit.Suite'}, false, [SuiteSelector])
 [debug] Running TaskDef(riichinexus.ApiServerSuite, CustomFingerprint{suite='munit.Suite'}, false, [SuiteSelector])
 [debug] Summary for munit not available.
-[info] Passed: Total 83, Failed 0, Errors 0, Passed 83
+[info] Passed: Total 38, Failed 0, Errors 0, Passed 38
 [debug] Passed tests:
-[debug] 	riichinexus.RiichiNexusSuite
 [debug] 	riichinexus.ApiServerSuite

@@ -292,6 +292,89 @@ class FrontendContractSuite extends FunSuite:
     }
   }
 
+  test("creating tournaments without explicit stages still exposes a lineup-ready initial stage") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-29T10:45:00Z")
+
+    val owner = app.playerService.registerPlayer("auto-stage-owner", "AutoStageOwner", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1820)
+    val club = app.clubService.createClub("Auto Stage Club", owner.id, now, owner.asPrincipal)
+    val lineupMembers = Vector(
+      owner,
+      app.playerService.registerPlayer("auto-stage-b", "AutoStageB", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1710),
+      app.playerService.registerPlayer("auto-stage-c", "AutoStageC", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1690),
+      app.playerService.registerPlayer("auto-stage-d", "AutoStageD", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1670)
+    )
+    lineupMembers.tail.foreach(member =>
+      app.clubService.addMember(club.id, member.id, principalFor(app, owner.id))
+    )
+
+    withServer(app) { baseUrl =>
+      val createResponse = postJson(
+        s"$baseUrl/tournaments",
+        write(
+          CreateTournamentRequest(
+            name = "Auto Stage Cup",
+            organizer = "QA",
+            startsAt = now,
+            endsAt = now.plusSeconds(7200),
+            stages = Vector.empty,
+            adminId = Some(owner.id.value)
+          )
+        )
+      )
+      assertEquals(createResponse.statusCode(), 201)
+      val created = read[Tournament](createResponse.body())
+      assertEquals(created.stages.size, 1)
+      assertEquals(created.stages.head.name, "Swiss Stage 1")
+
+      val stageId = created.stages.head.id
+
+      app.tournamentService.whitelistClub(created.id, club.id, principalFor(app, owner.id))
+      app.tournamentService.publishTournament(created.id, principalFor(app, owner.id))
+
+      val detailResponse = get(s"$baseUrl/tournaments/${created.id.value}")
+      assertEquals(detailResponse.statusCode(), 200)
+      val detail = read[TournamentDetailView](detailResponse.body())
+      assertEquals(detail.stages.map(_.stageId), Vector(stageId))
+      assertEquals(detail.stages.head.name, "Swiss Stage 1")
+
+      val stagesResponse = get(s"$baseUrl/tournaments/${created.id.value}/stages")
+      assertEquals(stagesResponse.statusCode(), 200)
+      val stages = read[Vector[TournamentStageDirectoryEntry]](stagesResponse.body())
+      assertEquals(stages.map(_.stageId), Vector(stageId))
+      assertEquals(stages.head.name, "Swiss Stage 1")
+
+      val publicDetailResponse = get(s"$baseUrl/public/tournaments/${created.id.value}")
+      assertEquals(publicDetailResponse.statusCode(), 200)
+      val publicDetail = read[PublicTournamentDetailView](publicDetailResponse.body())
+      assertEquals(publicDetail.stages.map(_.stageId), Vector(stageId))
+
+      val invitedResponse = get(
+        s"$baseUrl/clubs/${club.id.value}/tournaments?viewer=${owner.id.value}&scope=all"
+      )
+      assertEquals(invitedResponse.statusCode(), 200)
+      val invited = readPage[ClubTournamentParticipationView](invitedResponse.body())
+      assertEquals(invited.items.head.clubParticipationStatus, ClubTournamentParticipationStatus.Invited)
+      assert(invited.items.head.canSubmitLineup)
+
+      val lineupResponse = postJson(
+        s"$baseUrl/tournaments/${created.id.value}/stages/${stageId.value}/lineups",
+        write(
+          SubmitStageLineupRequest(
+            clubId = club.id.value,
+            operatorId = owner.id.value,
+            seats = lineupMembers.map(player => StageLineupSeatRequest(player.id.value)),
+            note = Some("auto-provisioned stage lineup")
+          )
+        )
+      )
+      assertEquals(lineupResponse.statusCode(), 200)
+      val lineupMutation = read[TournamentMutationView](lineupResponse.body())
+      assertEquals(lineupMutation.tournament.stages.map(_.stageId), Vector(stageId))
+      assertEquals(lineupMutation.tournament.stages.head.lineupSubmissions.head.clubId, club.id)
+    }
+  }
+
   test("tournament mutation contract returns dedicated detail views for operations endpoints") {
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-29T11:00:00Z")

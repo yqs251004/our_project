@@ -323,11 +323,13 @@ final class PostgresTournamentRepository(
 ) extends TournamentRepository
     with JdbcRepositorySupport:
   override def save(tournament: Tournament): Tournament =
-    try persist(tournament)
+    try persist(TournamentDefaults.ensureInitialStage(tournament))
     catch
       case error: SQLException if PostgresErrors.isUniqueViolation(error, "idx_tournaments_name_start") =>
         val normalized = findByNameAndOrganizer(tournament.name, tournament.organizer)
-          .map(existing => tournament.copy(id = existing.id, version = existing.version))
+          .map(existing =>
+            TournamentDefaults.ensureInitialStage(tournament).copy(id = existing.id, version = existing.version)
+          )
           .getOrElse(throw error)
         persist(normalized)
 
@@ -370,7 +372,7 @@ final class PostgresTournamentRepository(
   override def findById(id: TournamentId): Option[Tournament] =
     readOne[Tournament]("select payload from tournaments where id = ?", { statement =>
       statement.setString(1, id.value)
-    })
+    }).map(normalizeOnRead)
 
   override def findByNameAndOrganizer(name: String, organizer: String): Option[Tournament] =
     readOne[Tournament](
@@ -379,7 +381,7 @@ final class PostgresTournamentRepository(
         statement.setString(1, name)
         statement.setString(2, organizer)
       }
-    )
+    ).map(normalizeOnRead)
 
   override def findByIds(ids: Vector[TournamentId]): Vector[Tournament] =
     if ids.isEmpty then Vector.empty
@@ -402,7 +404,7 @@ final class PostgresTournamentRepository(
           Using.resource(statement.executeQuery()) { resultSet =>
             val buffer = Vector.newBuilder[Tournament]
             while resultSet.next() do
-              buffer += read[Tournament](resultSet.getString("payload"))
+              buffer += normalizeOnRead(read[Tournament](resultSet.getString("payload")))
             buffer.result()
           }
         }
@@ -433,7 +435,7 @@ final class PostgresTournamentRepository(
         setNullableString(statement, 6, organizer)
         setNullableString(statement, 7, organizer.map(fragment => s"%${fragment.toLowerCase}%"))
       }
-    )
+    ).map(normalizeOnRead)
 
   override def findByClub(clubId: ClubId): Vector[Tournament] =
     readAll[Tournament](
@@ -454,7 +456,11 @@ final class PostgresTournamentRepository(
     findFiltered(includeDraft = false)
 
   override def findAll(): Vector[Tournament] =
-    readAll[Tournament]("select payload from tournaments order by updated_at desc")
+    readAll[Tournament]("select payload from tournaments order by updated_at desc").map(normalizeOnRead)
+
+  private def normalizeOnRead(tournament: Tournament): Tournament =
+    if tournament.stages.nonEmpty then tournament
+    else save(TournamentDefaults.ensureInitialStage(tournament))
 
 object PostgresTournamentRepository:
   def apply(connectionFactory: JdbcConnectionFactory): PostgresTournamentRepository =

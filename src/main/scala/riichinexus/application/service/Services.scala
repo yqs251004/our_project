@@ -3408,7 +3408,9 @@ final class TournamentApplicationService(
       require(startsAt.isBefore(endsAt), "Tournament start time must be earlier than end time")
 
       val dictionarySnapshot = RuntimeDictionarySupport.snapshot(globalDictionaryRepository)
-      val normalizedStages = stages.map(stage => normalizeStage(stage, dictionarySnapshot)).sortBy(_.order)
+      val normalizedStages = TournamentDefaults.initialStages(stages)
+        .map(stage => normalizeStage(stage, dictionarySnapshot))
+        .sortBy(_.order)
       requireUniqueStageConfiguration(normalizedStages)
 
       adminId.foreach { targetAdminId =>

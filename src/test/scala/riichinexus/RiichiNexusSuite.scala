@@ -95,6 +95,33 @@ class RiichiNexusSuite extends FunSuite:
     )
   }
 
+  test("tournament persistence auto-provisions an initial stage for empty tournaments") {
+    val app = ApplicationContext.inMemory()
+    val now = Instant.parse("2026-03-15T17:20:00Z")
+
+    val legacyTournament = Tournament(
+      id = IdGenerator.tournamentId(),
+      name = "Legacy Empty Stage Cup",
+      organizer = "QA",
+      startsAt = now,
+      endsAt = now.plusSeconds(3600),
+      stages = Vector.empty
+    )
+
+    val saved = app.tournamentRepository.save(legacyTournament)
+    assertEquals(saved.stages.size, 1)
+    assertEquals(saved.stages.head.name, "Swiss Stage 1")
+
+    val reloaded = app.tournamentRepository.findById(saved.id).getOrElse(fail("tournament missing"))
+    assertEquals(reloaded.stages.map(_.id), saved.stages.map(_.id))
+    assertEquals(reloaded.stages.head.roundCount, 4)
+
+    val published = app.tournamentService.publishTournament(saved.id)
+      .getOrElse(fail("published tournament missing"))
+    assertEquals(published.status, TournamentStatus.RegistrationOpen)
+    assertEquals(published.stages.size, 1)
+  }
+
   test("scheduling a stage creates one four-player table") {
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-13T09:00:00Z")
