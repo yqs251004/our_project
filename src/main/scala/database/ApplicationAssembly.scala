@@ -158,14 +158,17 @@ private[database] object ApplicationAssembly:
         new riichinexus.application.service.InstrumentedPlayerRepository(repositories.playerRepository, diagnostics),
       clubRepository =
         new riichinexus.application.service.InstrumentedClubRepository(repositories.clubRepository, diagnostics),
+      globalDictionaryRepository =
+        new riichinexus.application.service.InstrumentedGlobalDictionaryRepository(
+          repositories.globalDictionaryRepository,
+          diagnostics
+        ),
       tournamentRepository =
         new riichinexus.application.service.InstrumentedTournamentRepository(repositories.tournamentRepository, diagnostics),
       tableRepository =
         new riichinexus.application.service.InstrumentedTableRepository(repositories.tableRepository, diagnostics),
       matchRecordRepository =
-        new riichinexus.application.service.InstrumentedMatchRecordRepository(repositories.matchRecordRepository, diagnostics),
-      globalDictionaryRepository =
-        new riichinexus.application.service.InstrumentedGlobalDictionaryRepository(repositories.globalDictionaryRepository, diagnostics)
+        new riichinexus.application.service.InstrumentedMatchRecordRepository(repositories.matchRecordRepository, diagnostics)
     )
     val eventBus = OutboxBackedDomainEventBus(
       instrumentedRepositories.domainEventOutboxRepository,

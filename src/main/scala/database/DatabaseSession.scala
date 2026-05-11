@@ -15,12 +15,11 @@ object DatabaseSession:
   ): collection.Map[String, String] =
     env.get("RIICHI_STORAGE").map(_.trim.toLowerCase) match
       case Some("postgres") =>
-        val config = DatabaseConfig.default(env)
         env ++ Map(
-          "RIICHI_DB_URL" -> config.url,
-          "RIICHI_DB_USER" -> config.user,
-          "RIICHI_DB_PASSWORD" -> config.password,
-          "RIICHI_DB_SCHEMA" -> config.schema
+          "RIICHI_DB_URL" -> env.getOrElse("RIICHI_DB_URL", DatabaseConfig.default(env).url),
+          "RIICHI_DB_USER" -> env.getOrElse("RIICHI_DB_USER", DatabaseConfig.default(env).user),
+          "RIICHI_DB_PASSWORD" -> env.getOrElse("RIICHI_DB_PASSWORD", DatabaseConfig.default(env).password),
+          "RIICHI_DB_SCHEMA" -> env.getOrElse("RIICHI_DB_SCHEMA", DatabaseConfig.default(env).schema)
         )
       case Some(_) =>
         env

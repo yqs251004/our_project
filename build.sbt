@@ -19,5 +19,6 @@ lazy val root = (project in file("."))
       "org.postgresql" % "postgresql" % "42.7.10",
       "org.scala-lang" %% "toolkit-test" % "0.5.0" % Test
     ),
-    Compile / run / mainClass := Some("Main")
+    Compile / run / mainClass := Some("Main"),
+    Compile / run / fork := true
   )

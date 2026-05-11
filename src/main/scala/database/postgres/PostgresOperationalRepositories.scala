@@ -447,8 +447,8 @@ final class PostgresTournamentRepository(
         |order by updated_at desc
         |""".stripMargin,
       { statement =>
-        statement.setString(1, s"""{"participatingClubs":[{"value":"${clubId.value}"}]}""")
-        statement.setString(2, s"""{"whitelist":[{"clubId":{"value":"${clubId.value}"}}]}""")
+        statement.setString(1, s"""{"participatingClubs":["${clubId.value}"]}""")
+        statement.setString(2, s"""{"whitelist":[{"clubId":"${clubId.value}"}]}""")
       }
     )
 
