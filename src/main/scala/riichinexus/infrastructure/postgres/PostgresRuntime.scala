@@ -1,4 +1,4 @@
-package database.postgres
+package riichinexus.infrastructure.postgres
 
 import java.sql.Connection
 import java.sql.DriverManager
@@ -6,7 +6,7 @@ import java.sql.SQLException
 
 import scala.util.Using
 
-import ports.TransactionManager
+import riichinexus.application.ports.TransactionManager
 
 final class JdbcConnectionFactory(config: DatabaseConfig):
   private val driverClass = "org.postgresql.Driver"

@@ -1,6 +1,6 @@
 package riichinexus
 
-import _root_.database.postgres.*
+import riichinexus.infrastructure.postgres.*
 
 @main def riichiNexusDbAdmin(command: String = "health"): Unit =
   val config = DatabaseConfig.fromEnv()

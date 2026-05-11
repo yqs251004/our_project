@@ -1,13 +1,13 @@
 package routes
 
-import api.OpenApiSupport
-import api.contracts.JsonSupport.given
 import cats.effect.IO
-import model.DomainModels.*
 import objects.HealthResponse
 import org.http4s.HttpRoutes
 import org.http4s.Status
 import org.http4s.dsl.io.*
+import riichinexus.api.OpenApiSupport
+import riichinexus.domain.model.*
+import riichinexus.infrastructure.json.JsonCodecs.given
 
 object DocsRouter:
 
@@ -16,7 +16,7 @@ object DocsRouter:
       support.handled(support.textResponse(Status.Ok, support.openApiJson(req), "application/json; charset=utf-8"))
 
     case GET -> Root / "swagger" =>
-      support.handled(support.textResponse(Status.Ok, OpenApiSupport.swaggerHtml("/openapi.json"), "text/html; charset=utf-8"))
+      support.handled(support.textResponse(Status.Ok, OpenApiSupport.swaggerHtml(), "text/html; charset=utf-8"))
 
     case GET -> Root =>
       support.handled(

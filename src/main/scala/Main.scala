@@ -1,8 +1,8 @@
 import cats.effect.{IO, IOApp, Resource}
-import api.{ApiHttpApp, ApiServer, ApiServerConfig}
-import database.DatabaseSession
 import org.http4s.server.Server
 import org.typelevel.log4cats.slf4j.Slf4jLogger
+import riichinexus.api.{ApiServer, ApiServerConfig}
+import riichinexus.bootstrap.DatabaseSession
 
 object Main extends IOApp.Simple:
 

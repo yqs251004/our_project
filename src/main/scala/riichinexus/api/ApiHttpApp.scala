@@ -1,11 +1,11 @@
-package api
+package riichinexus.api
 
 import cats.data.Kleisli
 import cats.effect.IO
-import database.ApplicationContext
 import org.http4s.HttpApp
 import org.http4s.Request
 import org.http4s.server.middleware.Logger
+import riichinexus.bootstrap.ApplicationContext
 import routes.ApiRouter
 
 object ApiHttpApp:

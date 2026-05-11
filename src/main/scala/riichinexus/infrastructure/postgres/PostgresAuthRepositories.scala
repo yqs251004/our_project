@@ -1,4 +1,4 @@
-package database.postgres
+package riichinexus.infrastructure.postgres
 
 import java.sql.SQLException
 import java.sql.Timestamp
@@ -7,8 +7,8 @@ import scala.util.Using
 
 import org.postgresql.util.PSQLException
 
-import json.JsonCodecs.given
-import ports.*
+import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.application.ports.*
 import riichinexus.domain.model.*
 
 private object PostgresAuthErrors:

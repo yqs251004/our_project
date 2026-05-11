@@ -1,9 +1,9 @@
 package riichinexus.bootstrap
 
-import _root_.database.postgres.DatabaseConfig
-import _root_.domain.*
-import _root_.ports.*
-import _root_.services.*
+import riichinexus.application.ports.*
+import riichinexus.application.service.*
+import riichinexus.domain.service.AuthorizationService
+import riichinexus.infrastructure.postgres.DatabaseConfig
 
 final case class ApplicationContext(
     playerService: PlayerApplicationService,
@@ -49,10 +49,13 @@ object ApplicationContext:
   def fromEnvironment(
       env: collection.Map[String, String] = sys.env
   ): ApplicationContext =
-    _root_.database.ApplicationContext.fromEnvironment(env)
+    ApplicationAssembly.fromEnvironment(env)
 
   def inMemory(): ApplicationContext =
-    _root_.database.ApplicationContext.inMemory()
+    ApplicationAssembly.inMemory()
 
   def postgres(config: DatabaseConfig): ApplicationContext =
-    _root_.database.ApplicationContext.postgres(config)
+    ApplicationAssembly.postgres(config)
+
+  def postgres(config: TemplateDatabaseConfig): ApplicationContext =
+    ApplicationAssembly.postgres(config)

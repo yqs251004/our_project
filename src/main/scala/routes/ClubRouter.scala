@@ -3,15 +3,14 @@ package routes
 import java.time.{Duration, Instant}
 import java.util.NoSuchElementException
 
-import api.contracts.ApiContracts.*
-import api.contracts.JsonSupport.given
-import json.JsonCodecs.given
-import riichinexus.api.ApiModels.given
 import cats.effect.IO
-import model.DomainModels.*
 import org.http4s.HttpRoutes
 import org.http4s.Status
 import org.http4s.dsl.io.*
+import riichinexus.api.*
+import riichinexus.api.ApiModels.given
+import riichinexus.domain.model.*
+import riichinexus.infrastructure.json.JsonCodecs.given
 
 object ClubRouter:
   private val RecentTournamentWindow = Duration.ofDays(90)
@@ -155,10 +154,8 @@ object ClubRouter:
           throw IllegalArgumentException("operatorId or guestSessionId is required")
         val actor = support.requestActor(guestSessionId, operatorId)
         val currentApplication = club.membershipApplications
-          .filter(_.isPending)
-          .sortBy(_.submittedAt)
-          .reverse
-          .find(application => support.ownsClubApplication(actor, application))
+          .filter(application => application.isPending && support.ownsClubApplication(actor, application))
+          .maxByOption(_.submittedAt)
           .map(application => support.buildClubMembershipApplicationView(club, application, actor))
         support.optionJsonResponse(currentApplication)
       }

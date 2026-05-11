@@ -2,7 +2,7 @@ package riichinexus
 
 import java.time.Instant
 
-import _root_.database.ApplicationContext
+import riichinexus.bootstrap.ApplicationContext
 
 @main def riichiNexusDemo(): Unit =
   val app = ApplicationContext.fromEnvironment()

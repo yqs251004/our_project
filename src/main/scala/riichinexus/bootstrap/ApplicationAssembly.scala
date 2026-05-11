@@ -1,8 +1,7 @@
-package database
+package riichinexus.bootstrap
 
-import _root_.riichinexus.bootstrap.{ApplicationContext => BootstrapApplicationContext}
-import database.memory.*
-import database.postgres.{
+import riichinexus.infrastructure.memory.*
+import riichinexus.infrastructure.postgres.{
   DatabaseConfig as PostgresRuntimeConfig,
   JdbcConnectionFactory,
   JdbcTransactionManager,
@@ -29,12 +28,12 @@ import database.postgres.{
   PostgresTournamentRepository,
   PostgresTournamentSettlementRepository
 }
-import domain.*
-import events.*
-import ports.*
-import services.*
+import riichinexus.application.ports.*
+import riichinexus.application.service.*
+import riichinexus.domain.service.*
+import riichinexus.infrastructure.events.OutboxBackedDomainEventBus
 
-private[database] object ApplicationAssembly:
+object ApplicationAssembly:
 
   private final case class RepositoryBundle(
       playerRepository: PlayerRepository,
@@ -105,7 +104,7 @@ private[database] object ApplicationAssembly:
       )
     )
 
-  def postgres(config: DatabaseConfig): ApplicationContext =
+  def postgres(config: TemplateDatabaseConfig): ApplicationContext =
     postgres(
       PostgresRuntimeConfig(
         url = config.url,
@@ -339,7 +338,7 @@ private[database] object ApplicationAssembly:
       matchRecordRepository = instrumentedRepositories.matchRecordRepository
     )
 
-    BootstrapApplicationContext(
+    ApplicationContext(
       playerService = playerService,
       authService = authService,
       guestSessionService = guestSessionService,

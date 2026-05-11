@@ -2,8 +2,8 @@ package riichinexus
 
 import java.util.concurrent.CountDownLatch
 
-import _root_.api.{ApiServer, ApiServerConfig}
-import _root_.database.ApplicationContext
+import riichinexus.api.{ApiServer, ApiServerConfig}
+import riichinexus.bootstrap.ApplicationContext
 
 @main def riichiNexusApi(): Unit =
   val app = ApplicationContext.fromEnvironment()

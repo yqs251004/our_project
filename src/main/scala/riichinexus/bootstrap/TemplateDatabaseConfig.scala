@@ -1,8 +1,8 @@
-package database
+package riichinexus.bootstrap
 
 import java.nio.file.Paths
 
-final case class DatabaseConfig(
+final case class TemplateDatabaseConfig(
     host: String,
     port: Int,
     databaseName: String,
@@ -15,7 +15,7 @@ final case class DatabaseConfig(
   def url: String =
     s"jdbc:postgresql://$host:$port/$databaseName"
 
-object DatabaseConfig:
+object TemplateDatabaseConfig:
 
   private def inferredDatabaseName: String =
     Option(Paths.get(sys.props.getOrElse("user.dir", ".")).getFileName)
@@ -23,8 +23,8 @@ object DatabaseConfig:
       .filter(_.nonEmpty)
       .getOrElse("riichi_nexus")
 
-  def default(env: collection.Map[String, String] = sys.env): DatabaseConfig =
-    DatabaseConfig(
+  def default(env: collection.Map[String, String] = sys.env): TemplateDatabaseConfig =
+    TemplateDatabaseConfig(
       host = env.get("DB_HOST").orElse(env.get("RIICHI_DB_HOST")).getOrElse("127.0.0.1"),
       port = env.get("DB_PORT").orElse(env.get("RIICHI_DB_PORT")).flatMap(_.toIntOption).getOrElse(5432),
       databaseName = env.get("DB_NAME").orElse(env.get("RIICHI_DB_NAME")).getOrElse(inferredDatabaseName),

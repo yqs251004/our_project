@@ -1,8 +1,8 @@
-package database.memory
+package riichinexus.infrastructure.memory
 
 import scala.collection.mutable
 
-import ports.*
+import riichinexus.application.ports.*
 import riichinexus.domain.model.*
 
 private object InMemoryAggregateRepositoryLockSupport:

@@ -2,7 +2,7 @@ package objects
 
 import java.time.Instant
 
-import api.contracts.JsonSupport.given
+import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.*
 
 final case class HealthResponse(

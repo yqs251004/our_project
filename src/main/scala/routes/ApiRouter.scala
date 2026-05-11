@@ -2,8 +2,8 @@ package routes
 
 import cats.effect.IO
 import cats.syntax.all.*
-import database.ApplicationContext
 import org.http4s.HttpApp
+import riichinexus.bootstrap.ApplicationContext
 
 object ApiRouter:
 

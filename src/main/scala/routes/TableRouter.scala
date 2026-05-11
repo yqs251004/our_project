@@ -2,12 +2,13 @@ package routes
 
 import java.time.Instant
 
-import api.contracts.ApiContracts.*
-import api.contracts.JsonSupport.given
 import cats.effect.IO
-import model.DomainModels.*
 import org.http4s.HttpRoutes
 import org.http4s.dsl.io.*
+import riichinexus.api.*
+import riichinexus.api.ApiModels.given
+import riichinexus.domain.model.*
+import riichinexus.infrastructure.json.JsonCodecs.given
 
 object TableRouter:
 

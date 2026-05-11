@@ -1,4 +1,4 @@
-package database.postgres
+package riichinexus.infrastructure.postgres
 
 import java.sql.Connection
 import java.sql.PreparedStatement
@@ -6,7 +6,7 @@ import java.sql.Types
 
 import scala.util.Using
 
-import ports.OptimisticConcurrencyException
+import riichinexus.application.ports.OptimisticConcurrencyException
 import upickle.default.*
 
 trait JdbcRepositorySupport:
