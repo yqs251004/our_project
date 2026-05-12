@@ -16,12 +16,12 @@ object JsonCodecs:
   given [A: ReadWriter]: ReadWriter[Option[A]] =
     readwriter[ujson.Value].bimap[Option[A]](
       _.map(writeJs(_)).getOrElse(ujson.Null),
-      json =>
-        json match
-          case ujson.Null => None
-          case arr: ujson.Arr if arr.value.isEmpty => None
-          case arr: ujson.Arr if arr.value.size == 1 => Some(read[A](arr.value.head))
-          case _ => Some(read[A](json))
+      {
+        case ujson.Null => None
+        case arr: ujson.Arr if arr.value.isEmpty => None
+        case arr: ujson.Arr if arr.value.size == 1 => Some(read[A](arr.value.head))
+        case json => Some(read[A](json))
+      }
     )
 
   given ReadWriter[Instant] =
