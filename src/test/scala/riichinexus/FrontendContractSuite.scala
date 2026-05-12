@@ -226,6 +226,9 @@ class FrontendContractSuite extends FunSuite:
 
       val publicClubResponse = get(s"$baseUrl/public/clubs/${club.id.value}")
       assertEquals(publicClubResponse.statusCode(), 200)
+      val publicClubJson = ujson.read(publicClubResponse.body())
+      assertEquals(publicClubJson("applicationPolicy")("requirementsText").str, "Please share your latest ranked match link.")
+      assertEquals(publicClubJson("applicationPolicy")("expectedReviewSlaHours").num.toInt, 48)
       val publicClub = read[PublicClubDetailView](publicClubResponse.body())
       assertEquals(publicClub.applicationPolicy.applicationsOpen, true)
       assertEquals(publicClub.applicationPolicy.requirementsText, Some("Please share your latest ranked match link."))
