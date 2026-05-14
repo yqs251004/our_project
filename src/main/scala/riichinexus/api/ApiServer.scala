@@ -5,7 +5,6 @@ import cats.effect.unsafe.implicits.global
 import com.comcast.ip4s.{Host, Port, host, port}
 import org.http4s.ember.server.EmberServerBuilder
 import org.http4s.server.Server
-import riichinexus.bootstrap.ApplicationContext
 
 import scala.concurrent.duration.*
 
@@ -51,7 +50,7 @@ object ApiServerConfig:
 object ApiServer:
 
   def resource(
-      app: ApplicationContext,
+      runtime: ApiRuntimeContext,
       config: ApiServerConfig
   ): Resource[IO, Server] =
     EmberServerBuilder
@@ -61,15 +60,13 @@ object ApiServer:
       .withShutdownTimeout(100.millis)
       .withHttpApp(
         ApiHttpApp.build(
-          app = app,
-          storageLabel = config.storageLabel,
-          corsAllowOrigin = config.corsAllowOrigin
+          runtime = runtime
         )
       )
       .build
 
 final class ApiServer(
-    app: ApplicationContext,
+    runtime: ApiRuntimeContext,
     config: ApiServerConfig
 ):
   private var primaryServer: Option[Server] = None
@@ -77,7 +74,7 @@ final class ApiServer(
 
   def start(): Unit =
     if primaryServer.isEmpty then
-      val (server, release) = ApiServer.resource(app, config).allocated.unsafeRunSync()
+      val (server, release) = ApiServer.resource(runtime, config).allocated.unsafeRunSync()
       primaryServer = Some(server)
       primaryRelease = Some(release)
 
@@ -90,10 +87,10 @@ final class ApiServer(
     primaryServer.map(_.address.getPort).getOrElse(config.port)
 
 final class RiichiNexusApiServer(
-    app: ApplicationContext,
+    runtime: ApiRuntimeContext,
     config: ApiServerConfig
 ):
-  private val underlying = new ApiServer(app, config)
+  private val underlying = new ApiServer(runtime, config)
 
   def start(): Unit =
     underlying.start()

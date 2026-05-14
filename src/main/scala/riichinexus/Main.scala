@@ -6,7 +6,7 @@ import riichinexus.bootstrap.ApplicationContext
 
 @main def riichiNexusDemo(): Unit =
   val app = ApplicationContext.fromEnvironment()
-  val snapshot = app.demoScenarioService.bootstrapBasicScenario()
+  val snapshot = app.opsAnalyticsModule.demoScenarioService.bootstrapBasicScenario()
 
   println("== Updated Players ==")
   snapshot.players.foreach { player =>

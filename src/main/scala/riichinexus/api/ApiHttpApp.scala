@@ -5,8 +5,7 @@ import cats.effect.IO
 import org.http4s.HttpApp
 import org.http4s.Request
 import org.http4s.server.middleware.Logger
-import riichinexus.bootstrap.ApplicationContext
-import routes.ApiRouter
+import riichinexus.api.http.ApiRouter
 
 object ApiHttpApp:
 
@@ -42,7 +41,7 @@ object ApiHttpApp:
     if segments.isEmpty then "/" else s"/${segments.mkString("/")}"
 
   private def instrumentRequests(
-      app: ApplicationContext,
+      runtime: ApiRuntimeContext,
       httpApp: HttpApp[IO]
   ): HttpApp[IO] =
     Kleisli { (request: Request[IO]) =>
@@ -50,7 +49,7 @@ object ApiHttpApp:
         httpApp(request).attempt.flatMap {
           case Right(response) =>
             IO.monotonic.flatMap { finishedAt =>
-              IO(app.performanceDiagnosticsService.recordRequest(
+              IO(runtime.performanceDiagnosticsService.recordRequest(
                 method = request.method.name,
                 path = normalizePath(request.uri.path.renderString),
                 statusCode = response.status.code,
@@ -59,7 +58,7 @@ object ApiHttpApp:
             }
           case Left(error) =>
             IO.monotonic.flatMap { finishedAt =>
-              IO(app.performanceDiagnosticsService.recordRequest(
+              IO(runtime.performanceDiagnosticsService.recordRequest(
                 method = request.method.name,
                 path = normalizePath(request.uri.path.renderString),
                 statusCode = 500,
@@ -71,13 +70,11 @@ object ApiHttpApp:
     }
 
   def build(
-      app: ApplicationContext,
-      storageLabel: String,
-      corsAllowOrigin: String = "*",
+      runtime: ApiRuntimeContext,
       logHeaders: Boolean = true,
       logBody: Boolean = false
   ): HttpApp[IO] =
-    val routed = ApiRouter.httpApp(app, storageLabel, corsAllowOrigin)
+    val routed = ApiRouter.httpApp(runtime.routeContext)
     Logger.httpApp(logHeaders = logHeaders, logBody = logBody)(
-      instrumentRequests(app, routed)
+      instrumentRequests(runtime, routed)
     )

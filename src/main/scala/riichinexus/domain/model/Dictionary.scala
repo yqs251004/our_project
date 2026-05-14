@@ -18,7 +18,7 @@ final case class GlobalDictionarySchemaEntry(
     examples: Vector[String]
 ) derives CanEqual
 
-final case class GlobalDictionarySchemaView(
+final case class GlobalDictionarySchema(
     entries: Vector[GlobalDictionarySchemaEntry],
     unknownKeyPolicy: String
 ) derives CanEqual
@@ -158,23 +158,6 @@ final case class DictionaryNamespaceRegistration(
       reviewedAt = Some(at),
       reviewNote = note
     )
-
-final case class DictionaryNamespaceOwnerBacklog(
-    ownerPlayerId: PlayerId,
-    pendingCount: Int,
-    overdueCount: Int,
-    dueSoonCount: Int
-) derives CanEqual
-
-final case class DictionaryNamespaceBacklogView(
-    asOf: java.time.Instant,
-    pendingCount: Int,
-    overdueCount: Int,
-    dueSoonCount: Int,
-    oldestPendingRequestedAt: Option[java.time.Instant],
-    nextDueAt: Option[java.time.Instant],
-    ownerBacklog: Vector[DictionaryNamespaceOwnerBacklog]
-) derives CanEqual
 
 enum DictionaryNamespaceReminderKind derives CanEqual:
   case DueSoon

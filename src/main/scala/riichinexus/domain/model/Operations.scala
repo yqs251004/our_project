@@ -350,9 +350,3 @@ final case class DomainEventOutboxBatchOperationResult(
 
   def failedCount: Int =
     failures.size
-
-final case class DomainEventOutboxHistoryView(
-    record: DomainEventOutboxRecord,
-    auditTrail: Vector[AuditEventEntry],
-    deliveryReceipts: Vector[DomainEventDeliveryReceipt]
-) derives CanEqual

@@ -84,19 +84,3 @@ object AuthenticatedSession:
     val bytes = new Array[Byte](32)
     random.nextBytes(bytes)
     Base64.getUrlEncoder.withoutPadding().encodeToString(bytes)
-
-final case class AuthSuccessView(
-    userId: PlayerId,
-    username: String,
-    displayName: String,
-    token: String,
-    roles: CurrentSessionRoleFlags
-) derives CanEqual
-
-final case class AuthSessionView(
-    userId: PlayerId,
-    username: String,
-    displayName: String,
-    authenticated: Boolean,
-    roles: CurrentSessionRoleFlags
-) derives CanEqual

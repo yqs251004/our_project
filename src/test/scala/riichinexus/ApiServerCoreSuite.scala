@@ -8,12 +8,19 @@ import java.time.Instant
 
 import munit.FunSuite
 
-import riichinexus.api.*
-import riichinexus.api.ApiModels.given
-import riichinexus.application.service.PerformanceDiagnosticsSnapshot
 import riichinexus.bootstrap.ApplicationContext
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.auth.api.requests.CreateGuestSessionRequest
+import riichinexus.microservices.club.api.requests.*
+import riichinexus.microservices.club.api.responses.*
+import riichinexus.microservices.club.api.responses.ClubTournamentResponses.given
+import riichinexus.microservices.dictionary.api.requests.*
+import riichinexus.microservices.dictionary.api.responses.*
+import riichinexus.microservices.dictionary.api.responses.DictionaryResponses.given
+import riichinexus.microservices.opsanalytics.api.PerformanceDiagnosticsSnapshot
+import riichinexus.microservices.opsanalytics.api.requests.{ProcessAdvancedStatsTasksRequest, RecomputeAdvancedStatsRequest}
+import riichinexus.microservices.tournament.appeal.api.requests.*
 import upickle.default.*
 
 class ApiServerCoreSuite extends FunSuite with ApiServerSuiteSupport:
@@ -22,8 +29,8 @@ class ApiServerCoreSuite extends FunSuite with ApiServerSuiteSupport:
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-15T08:30:00Z")
 
-    val owner = app.playerService.registerPlayer("guest-api-owner", "GuestApiOwner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
-    val club = app.clubService.createClub("Guest API Club", owner.id, now, owner.asPrincipal)
+    val owner = playerService(app).registerPlayer("guest-api-owner", "GuestApiOwner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
+    val club = clubService(app).createClub("Guest API Club", owner.id, now, owner.asPrincipal)
 
     withServer(app) { baseUrl =>
       val createResponse = postJson(
@@ -66,9 +73,9 @@ class ApiServerCoreSuite extends FunSuite with ApiServerSuiteSupport:
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-15T08:45:00Z")
 
-    val owner = app.playerService.registerPlayer("api-withdraw-owner", "ApiWithdrawOwner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
-    val applicant = app.playerService.registerPlayer("api-withdraw-player", "ApiWithdrawPlayer", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1500)
-    val club = app.clubService.createClub("Withdraw API Club", owner.id, now, owner.asPrincipal)
+    val owner = playerService(app).registerPlayer("api-withdraw-owner", "ApiWithdrawOwner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
+    val applicant = playerService(app).registerPlayer("api-withdraw-player", "ApiWithdrawPlayer", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1500)
+    val club = clubService(app).createClub("Withdraw API Club", owner.id, now, owner.asPrincipal)
 
     withServer(app) { baseUrl =>
       val createResponse = postJson(
@@ -111,10 +118,10 @@ class ApiServerCoreSuite extends FunSuite with ApiServerSuiteSupport:
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-15T08:00:00Z")
 
-    val owner = app.playerService.registerPlayer("owner-1", "Owner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
-    val club = app.clubService.createClub("Application Club", owner.id, now, owner.asPrincipal)
+    val owner = playerService(app).registerPlayer("owner-1", "Owner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
+    val club = clubService(app).createClub("Application Club", owner.id, now, owner.asPrincipal)
 
-    app.clubService.applyForMembership(
+    clubService(app).applyForMembership(
       clubId = club.id,
       applicantUserId = Some("guest-1"),
       displayName = "Guest Applicant",
@@ -136,21 +143,21 @@ class ApiServerCoreSuite extends FunSuite with ApiServerSuiteSupport:
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-15T09:00:00Z")
 
-    val admin = app.playerService.registerPlayer("admin-1", "Admin", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1700)
+    val admin = playerService(app).registerPlayer("admin-1", "Admin", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1700)
     val players = Vector(
       admin,
-      app.playerService.registerPlayer("p2", "Bravo", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1650),
-      app.playerService.registerPlayer("p3", "Charlie", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1620),
-      app.playerService.registerPlayer("p4", "Delta", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1580)
+      playerService(app).registerPlayer("p2", "Bravo", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1650),
+      playerService(app).registerPlayer("p3", "Charlie", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1620),
+      playerService(app).registerPlayer("p4", "Delta", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1580)
     )
 
-    val club = app.clubService.createClub("Whitelist Club", admin.id, now, admin.asPrincipal)
+    val club = clubService(app).createClub("Whitelist Club", admin.id, now, admin.asPrincipal)
     players.tail.foreach(player =>
-      app.clubService.addMember(club.id, player.id, principalFor(app, admin.id))
+      clubService(app).addMember(club.id, player.id, principalFor(app, admin.id))
     )
 
     val stage = TournamentStage(IdGenerator.stageId(), "Swiss Stage", StageFormat.Swiss, 1, 1)
-    val tournament = app.tournamentService.createTournament(
+    val tournament = tournamentService(app).createTournament(
       "Whitelist Cup",
       "QA",
       now,
@@ -159,12 +166,12 @@ class ApiServerCoreSuite extends FunSuite with ApiServerSuiteSupport:
       adminId = Some(admin.id)
     )
 
-    app.tournamentService.whitelistClub(tournament.id, club.id, principalFor(app, admin.id))
+    tournamentService(app).whitelistClub(tournament.id, club.id, principalFor(app, admin.id))
     players.foreach(player =>
-      app.tournamentService.registerPlayer(tournament.id, player.id, principalFor(app, admin.id))
+      tournamentService(app).registerPlayer(tournament.id, player.id, principalFor(app, admin.id))
     )
-    app.tournamentService.publishTournament(tournament.id, principalFor(app, admin.id))
-    app.tournamentService.scheduleStageTables(tournament.id, stage.id, principalFor(app, admin.id))
+    tournamentService(app).publishTournament(tournament.id, principalFor(app, admin.id))
+    tournamentService(app).scheduleStageTables(tournament.id, stage.id, principalFor(app, admin.id))
 
     withServer(app) { baseUrl =>
       val whitelistResponse = get(s"$baseUrl/tournaments/${tournament.id.value}/whitelist")
@@ -188,16 +195,16 @@ class ApiServerCoreSuite extends FunSuite with ApiServerSuiteSupport:
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-15T10:00:00Z")
 
-    val admin = app.playerService.registerPlayer("admin-2", "Admin2", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1700)
+    val admin = playerService(app).registerPlayer("admin-2", "Admin2", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1700)
     val players = Vector(
       admin,
-      app.playerService.registerPlayer("q2", "Echo", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1650),
-      app.playerService.registerPlayer("q3", "Foxtrot", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1620),
-      app.playerService.registerPlayer("q4", "Golf", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1580)
+      playerService(app).registerPlayer("q2", "Echo", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1650),
+      playerService(app).registerPlayer("q3", "Foxtrot", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1620),
+      playerService(app).registerPlayer("q4", "Golf", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1580)
     )
 
     val stage = TournamentStage(IdGenerator.stageId(), "Operational Stage", StageFormat.Swiss, 1, 1)
-    val tournament = app.tournamentService.createTournament(
+    val tournament = tournamentService(app).createTournament(
       "Operations Cup",
       "QA",
       now,
@@ -207,18 +214,18 @@ class ApiServerCoreSuite extends FunSuite with ApiServerSuiteSupport:
     )
 
     players.foreach(player =>
-      app.tournamentService.registerPlayer(tournament.id, player.id, principalFor(app, admin.id))
+      tournamentService(app).registerPlayer(tournament.id, player.id, principalFor(app, admin.id))
     )
-    app.tournamentService.publishTournament(tournament.id, principalFor(app, admin.id))
-    val table = app.tournamentService.scheduleStageTables(
+    tournamentService(app).publishTournament(tournament.id, principalFor(app, admin.id))
+    val table = tournamentService(app).scheduleStageTables(
       tournament.id,
       stage.id,
       principalFor(app, admin.id)
     ).head
 
-    app.tableService.startTable(table.id, now.plusSeconds(60), principalFor(app, admin.id))
+    tableService(app).startTable(table.id, now.plusSeconds(60), principalFor(app, admin.id))
 
-    val appeal = app.appealService.fileAppeal(
+    val appeal = appealService(app).fileAppeal(
       tableId = table.id,
       openedBy = players(1).id,
       description = "disconnect happened",
@@ -227,7 +234,7 @@ class ApiServerCoreSuite extends FunSuite with ApiServerSuiteSupport:
     ).getOrElse(fail("appeal was not created"))
 
     val adminPrincipal = principalFor(app, admin.id)
-    app.appealService.adjudicateAppeal(
+    appealService(app).adjudicateAppeal(
       ticketId = appeal.id,
       decision = AppealDecisionType.Resolve,
       verdict = "table reset approved",
@@ -236,9 +243,9 @@ class ApiServerCoreSuite extends FunSuite with ApiServerSuiteSupport:
       adjudicatedAt = now.plusSeconds(120)
     )
 
-    val resetTable = app.tableRepository.findById(table.id).getOrElse(fail("table missing after reset"))
-    app.tableService.startTable(resetTable.id, now.plusSeconds(180), adminPrincipal)
-    app.tableService.recordCompletedTable(
+    val resetTable = tableRepository(app).findById(table.id).getOrElse(fail("table missing after reset"))
+    tableService(app).startTable(resetTable.id, now.plusSeconds(180), adminPrincipal)
+    tableService(app).recordCompletedTable(
       resetTable.id,
       demoPaifuForResult(
         resetTable,
@@ -251,7 +258,7 @@ class ApiServerCoreSuite extends FunSuite with ApiServerSuiteSupport:
       adminPrincipal
     )
 
-    val record = app.matchRecordRepository.findByTable(table.id).getOrElse(fail("match record missing"))
+    val record = matchRecordRepository(app).findByTable(table.id).getOrElse(fail("match record missing"))
 
     withServer(app) { baseUrl =>
       val appealResponse = get(s"$baseUrl/appeals/${appeal.id.value}")
@@ -276,16 +283,16 @@ class ApiServerCoreSuite extends FunSuite with ApiServerSuiteSupport:
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-15T10:20:00Z")
 
-    val admin = app.playerService.registerPlayer("api-appeal-admin", "ApiAppealAdmin", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1810)
+    val admin = playerService(app).registerPlayer("api-appeal-admin", "ApiAppealAdmin", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1810)
     val players = Vector(
       admin,
-      app.playerService.registerPlayer("api-appeal-b", "ApiAppealB", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1700),
-      app.playerService.registerPlayer("api-appeal-c", "ApiAppealC", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600),
-      app.playerService.registerPlayer("api-appeal-d", "ApiAppealD", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1500)
+      playerService(app).registerPlayer("api-appeal-b", "ApiAppealB", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1700),
+      playerService(app).registerPlayer("api-appeal-c", "ApiAppealC", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600),
+      playerService(app).registerPlayer("api-appeal-d", "ApiAppealD", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1500)
     )
 
     val stage = TournamentStage(IdGenerator.stageId(), "API Appeal Workflow", StageFormat.Swiss, 1, 1)
-    val tournament = app.tournamentService.createTournament(
+    val tournament = tournamentService(app).createTournament(
       "API Appeal Cup",
       "QA",
       now,
@@ -295,18 +302,18 @@ class ApiServerCoreSuite extends FunSuite with ApiServerSuiteSupport:
     )
 
     players.foreach(player =>
-      app.tournamentService.registerPlayer(tournament.id, player.id, principalFor(app, admin.id))
+      tournamentService(app).registerPlayer(tournament.id, player.id, principalFor(app, admin.id))
     )
-    app.tournamentService.publishTournament(tournament.id, principalFor(app, admin.id))
-    val table = app.tournamentService.scheduleStageTables(
+    tournamentService(app).publishTournament(tournament.id, principalFor(app, admin.id))
+    val table = tournamentService(app).scheduleStageTables(
       tournament.id,
       stage.id,
       principalFor(app, admin.id)
     ).head
-    app.tableService.startTable(table.id, now.plusSeconds(60), principalFor(app, admin.id))
+    tableService(app).startTable(table.id, now.plusSeconds(60), principalFor(app, admin.id))
     val openerId = table.seats.head.playerId
 
-    val appeal = app.appealService.fileAppeal(
+    val appeal = appealService(app).fileAppeal(
       tableId = table.id,
       openedBy = openerId,
       description = "disconnect happened again",
@@ -384,12 +391,12 @@ class ApiServerCoreSuite extends FunSuite with ApiServerSuiteSupport:
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-15T11:00:00Z")
 
-    val owner = app.playerService.registerPlayer("dash-1", "Owner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
-    val intruder = app.playerService.registerPlayer("dash-2", "Intruder", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1500)
-    val member = app.playerService.registerPlayer("dash-3", "Member", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1520)
+    val owner = playerService(app).registerPlayer("dash-1", "Owner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
+    val intruder = playerService(app).registerPlayer("dash-2", "Intruder", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1500)
+    val member = playerService(app).registerPlayer("dash-3", "Member", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1520)
 
-    val club = app.clubService.createClub("Dashboard Club", owner.id, now, owner.asPrincipal)
-    app.clubService.addMember(club.id, member.id, principalFor(app, owner.id))
+    val club = clubService(app).createClub("Dashboard Club", owner.id, now, owner.asPrincipal)
+    clubService(app).addMember(club.id, member.id, principalFor(app, owner.id))
 
     withServer(app) { baseUrl =>
       val forbiddenPlayer = get(
@@ -418,33 +425,33 @@ class ApiServerCoreSuite extends FunSuite with ApiServerSuiteSupport:
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-15T11:45:00Z")
 
-    val owner = app.playerService.registerPlayer("adv-owner", "AdvOwner", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1800)
-    val root = app.playerService.registerPlayer("adv-root", "AdvRoot", RankSnapshot(RankPlatform.Custom, "S"), now, 2100)
-    val rootAdmin = app.playerRepository.save(root.grantRole(RoleGrant.superAdmin(now)))
-    val member = app.playerService.registerPlayer("adv-member", "AdvMember", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1520)
-    val intruder = app.playerService.registerPlayer("adv-intruder", "AdvIntruder", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1490)
-    val extraA = app.playerService.registerPlayer("adv-extra-a", "AdvExtraA", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1510)
-    val extraB = app.playerService.registerPlayer("adv-extra-b", "AdvExtraB", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1500)
+    val owner = playerService(app).registerPlayer("adv-owner", "AdvOwner", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1800)
+    val root = playerService(app).registerPlayer("adv-root", "AdvRoot", RankSnapshot(RankPlatform.Custom, "S"), now, 2100)
+    val rootAdmin = playerRepository(app).save(root.grantRole(RoleGrant.superAdmin(now)))
+    val member = playerService(app).registerPlayer("adv-member", "AdvMember", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1520)
+    val intruder = playerService(app).registerPlayer("adv-intruder", "AdvIntruder", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1490)
+    val extraA = playerService(app).registerPlayer("adv-extra-a", "AdvExtraA", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1510)
+    val extraB = playerService(app).registerPlayer("adv-extra-b", "AdvExtraB", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1500)
 
-    val club = app.clubService.createClub("Advanced Stats Club", owner.id, now, owner.asPrincipal)
-    app.clubService.addMember(club.id, member.id, principalFor(app, owner.id))
-    app.clubService.addMember(club.id, extraA.id, principalFor(app, owner.id))
-    app.clubService.addMember(club.id, extraB.id, principalFor(app, owner.id))
+    val club = clubService(app).createClub("Advanced Stats Club", owner.id, now, owner.asPrincipal)
+    clubService(app).addMember(club.id, member.id, principalFor(app, owner.id))
+    clubService(app).addMember(club.id, extraA.id, principalFor(app, owner.id))
+    clubService(app).addMember(club.id, extraB.id, principalFor(app, owner.id))
 
     val stage = TournamentStage(IdGenerator.stageId(), "Advanced Stats Stage", StageFormat.Swiss, 1, 1)
-    val tournament = app.tournamentService.createTournament(
+    val tournament = tournamentService(app).createTournament(
       "Advanced Stats Cup",
       "QA",
       now,
       now.plusSeconds(7200),
       Vector(stage)
     )
-    Vector(owner, member, extraA, extraB).foreach(player => app.tournamentService.registerPlayer(tournament.id, player.id))
-    app.tournamentService.publishTournament(tournament.id)
+    Vector(owner, member, extraA, extraB).foreach(player => tournamentService(app).registerPlayer(tournament.id, player.id))
+    tournamentService(app).publishTournament(tournament.id)
 
-    val table = app.tournamentService.scheduleStageTables(tournament.id, stage.id).head
-    app.tableService.startTable(table.id, now.plusSeconds(60))
-    app.tableService.recordCompletedTable(
+    val table = tournamentService(app).scheduleStageTables(tournament.id, stage.id).head
+    tableService(app).startTable(table.id, now.plusSeconds(60))
+    tableService(app).recordCompletedTable(
       table.id,
       demoPaifuForResult(
         table,
@@ -488,9 +495,9 @@ class ApiServerCoreSuite extends FunSuite with ApiServerSuiteSupport:
         write(ProcessAdvancedStatsTasksRequest(rootAdmin.id.value, 20))
       )
       assertEquals(processTasks.statusCode(), 200)
-      app.advancedStatsPipelineService.enqueueOwnerRecompute(DashboardOwner.Player(owner.id), "api-test-player-read")
-      app.advancedStatsPipelineService.enqueueOwnerRecompute(DashboardOwner.Club(club.id), "api-test-club-read")
-      app.advancedStatsPipelineService.processPending(limit = 20, processedAt = Instant.now())
+      advancedStatsPipelineService(app).enqueueOwnerRecompute(DashboardOwner.Player(owner.id), "api-test-player-read")
+      advancedStatsPipelineService(app).enqueueOwnerRecompute(DashboardOwner.Club(club.id), "api-test-club-read")
+      advancedStatsPipelineService(app).processPending(limit = 20, processedAt = Instant.now())
 
       val ownPlayerStats = get(
         s"$baseUrl/advanced-stats/players/${owner.id.value}?operatorId=${owner.id.value}"
@@ -522,11 +529,11 @@ class ApiServerCoreSuite extends FunSuite with ApiServerSuiteSupport:
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-15T12:05:00Z")
 
-    val root = app.playerService.registerPlayer("adv-summary-root", "AdvSummaryRoot", RankSnapshot(RankPlatform.Custom, "S"), now, 2100)
-    val rootAdmin = app.playerRepository.save(root.grantRole(RoleGrant.superAdmin(now)))
-    val playerA = app.playerService.registerPlayer("adv-summary-a", "AdvSummaryA", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
-    val playerB = app.playerService.registerPlayer("adv-summary-b", "AdvSummaryB", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1580)
-    app.advancedStatsBoardRepository.save(AdvancedStatsBoard.empty(DashboardOwner.Player(playerA.id), now))
+    val root = playerService(app).registerPlayer("adv-summary-root", "AdvSummaryRoot", RankSnapshot(RankPlatform.Custom, "S"), now, 2100)
+    val rootAdmin = playerRepository(app).save(root.grantRole(RoleGrant.superAdmin(now)))
+    val playerA = playerService(app).registerPlayer("adv-summary-a", "AdvSummaryA", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
+    val playerB = playerService(app).registerPlayer("adv-summary-b", "AdvSummaryB", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1580)
+    advancedStatsBoardRepository(app).save(AdvancedStatsBoard.empty(DashboardOwner.Player(playerA.id), now))
 
     withServer(app) { baseUrl =>
       val recomputeResponse = postJson(
@@ -559,12 +566,12 @@ class ApiServerCoreSuite extends FunSuite with ApiServerSuiteSupport:
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-15T12:15:00Z")
 
-    val root = app.playerService.registerPlayer("perf-root", "PerfRoot", RankSnapshot(RankPlatform.Custom, "S"), now, 2100)
-    val admin = app.playerRepository.save(root.grantRole(RoleGrant.superAdmin(now)))
-    val owner = app.playerService.registerPlayer("perf-owner", "PerfOwner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1650)
-    val member = app.playerService.registerPlayer("perf-member", "PerfMember", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1580)
-    val club = app.clubService.createClub("Perf Club", owner.id, now, owner.asPrincipal)
-    app.clubService.addMember(club.id, member.id, principalFor(app, owner.id))
+    val root = playerService(app).registerPlayer("perf-root", "PerfRoot", RankSnapshot(RankPlatform.Custom, "S"), now, 2100)
+    val admin = playerRepository(app).save(root.grantRole(RoleGrant.superAdmin(now)))
+    val owner = playerService(app).registerPlayer("perf-owner", "PerfOwner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1650)
+    val member = playerService(app).registerPlayer("perf-member", "PerfMember", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1580)
+    val club = clubService(app).createClub("Perf Club", owner.id, now, owner.asPrincipal)
+    clubService(app).addMember(club.id, member.id, principalFor(app, owner.id))
 
     withServer(app) { baseUrl =>
       val playersResponse = get(s"$baseUrl/players?clubId=${club.id.value}")
@@ -602,8 +609,8 @@ class ApiServerCoreSuite extends FunSuite with ApiServerSuiteSupport:
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-16T15:20:00Z")
 
-    val root = app.playerService.registerPlayer("runtime-root", "RuntimeRoot", RankSnapshot(RankPlatform.Custom, "S"), now, 2000)
-    val admin = app.playerRepository.save(root.grantRole(RoleGrant.superAdmin(now)))
+    val root = playerService(app).registerPlayer("runtime-root", "RuntimeRoot", RankSnapshot(RankPlatform.Custom, "S"), now, 2000)
+    val admin = playerRepository(app).save(root.grantRole(RoleGrant.superAdmin(now)))
 
     withServer(app) { baseUrl =>
       val response = postJson(
@@ -626,10 +633,10 @@ class ApiServerCoreSuite extends FunSuite with ApiServerSuiteSupport:
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-16T15:30:00Z")
 
-    val root = app.playerService.registerPlayer("ns-root", "NsRoot", RankSnapshot(RankPlatform.Custom, "S"), now, 2000)
-    val owner = app.playerService.registerPlayer("ns-owner", "NsOwner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
-    val transferee = app.playerService.registerPlayer("ns-transferee", "NsTransferee", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1580)
-    val superAdmin = app.playerRepository.save(root.grantRole(RoleGrant.superAdmin(now)))
+    val root = playerService(app).registerPlayer("ns-root", "NsRoot", RankSnapshot(RankPlatform.Custom, "S"), now, 2000)
+    val owner = playerService(app).registerPlayer("ns-owner", "NsOwner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
+    val transferee = playerService(app).registerPlayer("ns-transferee", "NsTransferee", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1580)
+    val superAdmin = playerRepository(app).save(root.grantRole(RoleGrant.superAdmin(now)))
 
     withServer(app) { baseUrl =>
       val requestResponse = postJson(
@@ -762,12 +769,12 @@ class ApiServerCoreSuite extends FunSuite with ApiServerSuiteSupport:
     val now = Instant.parse("2026-03-16T16:35:00Z")
     val requestNow = Instant.now()
 
-    val root = app.playerService.registerPlayer("ns-collab-root", "NsCollabRoot", RankSnapshot(RankPlatform.Custom, "S"), now, 2000)
-    val owner = app.playerService.registerPlayer("ns-collab-owner", "NsCollabOwner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
-    val coOwner = app.playerService.registerPlayer("ns-collab-coowner", "NsCollabCoOwner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1590)
-    val editor = app.playerService.registerPlayer("ns-collab-editor", "NsCollabEditor", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1580)
-    val replacementEditor = app.playerService.registerPlayer("ns-collab-replacement", "NsCollabReplacement", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1570)
-    val superAdmin = app.playerRepository.save(root.grantRole(RoleGrant.superAdmin(now)))
+    val root = playerService(app).registerPlayer("ns-collab-root", "NsCollabRoot", RankSnapshot(RankPlatform.Custom, "S"), now, 2000)
+    val owner = playerService(app).registerPlayer("ns-collab-owner", "NsCollabOwner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
+    val coOwner = playerService(app).registerPlayer("ns-collab-coowner", "NsCollabCoOwner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1590)
+    val editor = playerService(app).registerPlayer("ns-collab-editor", "NsCollabEditor", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1580)
+    val replacementEditor = playerService(app).registerPlayer("ns-collab-replacement", "NsCollabReplacement", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1570)
+    val superAdmin = playerRepository(app).save(root.grantRole(RoleGrant.superAdmin(now)))
 
     withServer(app) { baseUrl =>
       val requestResponse = postJson(
@@ -877,16 +884,16 @@ class ApiServerCoreSuite extends FunSuite with ApiServerSuiteSupport:
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-16T16:37:00Z")
 
-    val root = app.playerService.registerPlayer("ns-context-root", "NsContextRoot", RankSnapshot(RankPlatform.Custom, "S"), now, 2000)
-    val owner = app.playerService.registerPlayer("ns-context-owner", "NsContextOwner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
-    val coOwner = app.playerService.registerPlayer("ns-context-coowner", "NsContextCoOwner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1590)
-    val editor = app.playerService.registerPlayer("ns-context-editor", "NsContextEditor", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1580)
-    val outsider = app.playerService.registerPlayer("ns-context-outsider", "NsContextOutsider", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1570)
-    val superAdmin = app.playerRepository.save(root.grantRole(RoleGrant.superAdmin(now)))
+    val root = playerService(app).registerPlayer("ns-context-root", "NsContextRoot", RankSnapshot(RankPlatform.Custom, "S"), now, 2000)
+    val owner = playerService(app).registerPlayer("ns-context-owner", "NsContextOwner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
+    val coOwner = playerService(app).registerPlayer("ns-context-coowner", "NsContextCoOwner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1590)
+    val editor = playerService(app).registerPlayer("ns-context-editor", "NsContextEditor", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1580)
+    val outsider = playerService(app).registerPlayer("ns-context-outsider", "NsContextOutsider", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1570)
+    val superAdmin = playerRepository(app).save(root.grantRole(RoleGrant.superAdmin(now)))
 
-    val club = app.clubService.createClub("API Namespace Context Club", owner.id, now, owner.asPrincipal)
-    app.clubService.addMember(club.id, coOwner.id, principalFor(app, owner.id))
-    app.clubService.addMember(club.id, editor.id, principalFor(app, owner.id))
+    val club = clubService(app).createClub("API Namespace Context Club", owner.id, now, owner.asPrincipal)
+    clubService(app).addMember(club.id, coOwner.id, principalFor(app, owner.id))
+    clubService(app).addMember(club.id, editor.id, principalFor(app, owner.id))
 
     withServer(app) { baseUrl =>
       val requestResponse = postJson(
@@ -990,12 +997,12 @@ class ApiServerCoreSuite extends FunSuite with ApiServerSuiteSupport:
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-16T16:40:00Z")
 
-    val root = app.playerService.registerPlayer("ns-transfer-root", "NsTransferRoot", RankSnapshot(RankPlatform.Custom, "S"), now, 2000)
-    val owner = app.playerService.registerPlayer("ns-transfer-owner", "NsTransferOwner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
-    val suspended = app.playerService.registerPlayer("ns-transfer-suspended", "NsTransferSuspended", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1500)
-    val superAdmin = app.playerRepository.save(root.grantRole(RoleGrant.superAdmin(now)))
-    val suspendedMember = app.playerRepository.findById(suspended.id).getOrElse(fail("suspended member missing"))
-    app.playerRepository.save(suspendedMember.copy(status = PlayerStatus.Suspended))
+    val root = playerService(app).registerPlayer("ns-transfer-root", "NsTransferRoot", RankSnapshot(RankPlatform.Custom, "S"), now, 2000)
+    val owner = playerService(app).registerPlayer("ns-transfer-owner", "NsTransferOwner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
+    val suspended = playerService(app).registerPlayer("ns-transfer-suspended", "NsTransferSuspended", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1500)
+    val superAdmin = playerRepository(app).save(root.grantRole(RoleGrant.superAdmin(now)))
+    val suspendedMember = playerRepository(app).findById(suspended.id).getOrElse(fail("suspended member missing"))
+    playerRepository(app).save(suspendedMember.copy(status = PlayerStatus.Suspended))
 
     withServer(app) { baseUrl =>
       val requestResponse = postJson(
@@ -1047,10 +1054,10 @@ class ApiServerCoreSuite extends FunSuite with ApiServerSuiteSupport:
     val secondDueAt = requestNow.plusSeconds(8 * 3600)
     val asOf = requestNow.plusSeconds(3 * 3600)
 
-    val root = app.playerService.registerPlayer("ns-backlog-root", "NsBacklogRoot", RankSnapshot(RankPlatform.Custom, "S"), now, 2000)
-    val ownerA = app.playerService.registerPlayer("ns-backlog-owner-a", "NsBacklogOwnerA", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
-    val ownerB = app.playerService.registerPlayer("ns-backlog-owner-b", "NsBacklogOwnerB", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1580)
-    val superAdmin = app.playerRepository.save(root.grantRole(RoleGrant.superAdmin(now)))
+    val root = playerService(app).registerPlayer("ns-backlog-root", "NsBacklogRoot", RankSnapshot(RankPlatform.Custom, "S"), now, 2000)
+    val ownerA = playerService(app).registerPlayer("ns-backlog-owner-a", "NsBacklogOwnerA", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
+    val ownerB = playerService(app).registerPlayer("ns-backlog-owner-b", "NsBacklogOwnerB", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1580)
+    val superAdmin = playerRepository(app).save(root.grantRole(RoleGrant.superAdmin(now)))
 
     withServer(app) { baseUrl =>
       val firstRequest = postJson(
@@ -1103,18 +1110,18 @@ class ApiServerCoreSuite extends FunSuite with ApiServerSuiteSupport:
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-15T12:00:00Z")
 
-    val root = app.playerService.registerPlayer("root-1", "Root", RankSnapshot(RankPlatform.Custom, "S"), now, 2000)
-    val viewer = app.playerService.registerPlayer("root-2", "Viewer", RankSnapshot(RankPlatform.Custom, "A"), now, 1700)
-    val admin = app.playerRepository.save(root.grantRole(RoleGrant.superAdmin(now)))
+    val root = playerService(app).registerPlayer("root-1", "Root", RankSnapshot(RankPlatform.Custom, "S"), now, 2000)
+    val viewer = playerService(app).registerPlayer("root-2", "Viewer", RankSnapshot(RankPlatform.Custom, "A"), now, 1700)
+    val admin = playerRepository(app).save(root.grantRole(RoleGrant.superAdmin(now)))
     val adminPrincipal = principalFor(app, admin.id)
 
-    app.superAdminService.requestDictionaryNamespace(
+    dictionaryGovernance(app).requestDictionaryNamespace(
       namespacePrefix = "rank.formula",
       actor = adminPrincipal,
       note = Some("bootstrap metadata namespace"),
       requestedAt = now
     )
-    app.superAdminService.reviewDictionaryNamespace(
+    dictionaryGovernance(app).reviewDictionaryNamespace(
       namespacePrefix = "rank.formula",
       approve = true,
       actor = adminPrincipal,
@@ -1122,7 +1129,7 @@ class ApiServerCoreSuite extends FunSuite with ApiServerSuiteSupport:
       reviewedAt = now.plusSeconds(1)
     )
 
-    val dictionaryEntry = app.superAdminService.upsertDictionary(
+    val dictionaryEntry = dictionaryGovernance(app).upsertDictionary(
       key = "rank.formula.current",
       value = "uma+oka-v2",
       actor = adminPrincipal,

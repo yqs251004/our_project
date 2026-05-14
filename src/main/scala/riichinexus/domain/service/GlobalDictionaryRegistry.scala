@@ -139,8 +139,8 @@ object GlobalDictionaryRegistry:
     MetadataSchema
   )
 
-  val schemaView: GlobalDictionarySchemaView =
-    GlobalDictionarySchemaView(
+  val schemaView: GlobalDictionarySchema =
+    GlobalDictionarySchema(
       entries = schemaEntries,
       unknownKeyPolicy = UnknownKeyPolicy
     )

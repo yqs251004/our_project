@@ -3,6 +3,8 @@ ThisBuild / organization := "com.riichinexus"
 ThisBuild / scalaVersion := "3.3.4"
 ThisBuild / version := "0.1.0-SNAPSHOT"
 
+Global / excludeLintKeys += Compile / runMain / fork
+
 lazy val root = (project in file("."))
   .settings(
     name := "riichi-nexus",

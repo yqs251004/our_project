@@ -100,12 +100,10 @@ object JsonCodecs:
   given ReadWriter[GlobalDictionaryValueType] =
     stringEnumReadWriter(GlobalDictionaryValueType.valueOf, _.toString)
   given ReadWriter[GlobalDictionarySchemaEntry] = macroRW
-  given ReadWriter[GlobalDictionarySchemaView] = macroRW
+  given ReadWriter[GlobalDictionarySchema] = macroRW
   given ReadWriter[DictionaryNamespaceReviewStatus] =
     stringEnumReadWriter(DictionaryNamespaceReviewStatus.valueOf, _.toString)
   given ReadWriter[DictionaryNamespaceRegistration] = macroRW
-  given ReadWriter[DictionaryNamespaceOwnerBacklog] = macroRW
-  given ReadWriter[DictionaryNamespaceBacklogView] = macroRW
   given ReadWriter[DictionaryNamespaceReminderKind] =
     stringEnumReadWriter(DictionaryNamespaceReminderKind.valueOf, _.toString)
   given ReadWriter[DictionaryNamespaceReminderAction] = macroRW
@@ -222,7 +220,6 @@ object JsonCodecs:
   given ReadWriter[DomainEventSubscriberPartitionStatus] = macroRW
   given ReadWriter[DomainEventOutboxOperationFailure] = macroRW
   given ReadWriter[DomainEventOutboxBatchOperationResult] = macroRW
-  given ReadWriter[DomainEventOutboxHistoryView] = macroRW
   given ReadWriter[MatchRecordArchived] = macroRW
   given ReadWriter[AppealTicketFiled] = macroRW
   given ReadWriter[AppealTicketResolved] = macroRW
@@ -234,55 +231,3 @@ object JsonCodecs:
   given ReadWriter[PlayerBanned] = macroRW
   given ReadWriter[ClubDissolved] = macroRW
   given ReadWriter[DomainEvent] = macroRW
-  given ReadWriter[PublicScheduleView] = macroRW
-  given ReadWriter[PublicClubDirectoryEntry] = macroRW
-  given ReadWriter[PlayerLeaderboardEntry] = macroRW
-  given ReadWriter[ClubLeaderboardEntry] = macroRW
-  given ReadWriter[SessionPrincipalKind] =
-    readwriter[String].bimap[SessionPrincipalKind](
-      _.toString,
-      SessionPrincipalKind.valueOf
-    )
-  given ReadWriter[CurrentSessionRoleFlags] = macroRW
-  given ReadWriter[CurrentSessionView] = macroRW
-  given ReadWriter[AuthSuccessView] = macroRW
-  given ReadWriter[AuthSessionView] = macroRW
-  given ReadWriter[ClubMembershipApplicantView] = macroRW
-  given ReadWriter[ClubMembershipApplicationView] = macroRW
-  given ReadWriter[ClubApplicationPolicyView] = macroRW
-  given ReadWriter[PublicClubLineupMemberView] = macroRW
-  given ReadWriter[PublicClubRecentMatchSeatView] = macroRW
-  given ReadWriter[PublicClubRecentMatchView] = macroRW
-  given ReadWriter[PublicClubDetailView] = macroRW
-  given ReadWriter[TournamentStageDirectoryEntry] = macroRW
-
-  given ReadWriter[PublicTournamentSummaryView] = macroRW
-  given ReadWriter[PublicTournamentStageView] = macroRW
-  given ReadWriter[PublicTournamentDetailView] = macroRW
-  given ReadWriter[DemoScenarioVariant] =
-    readwriter[String].bimap[DemoScenarioVariant](
-      _.toString,
-      DemoScenarioVariant.valueOf
-    )
-  given ReadWriter[DemoScenarioActionCode] =
-    readwriter[String].bimap[DemoScenarioActionCode](
-      _.toString,
-      DemoScenarioActionCode.valueOf
-    )
-  given ReadWriter[DemoScenarioDashboardSummary] = macroRW
-  given ReadWriter[DemoScenarioAdvancedStatsSummary] = macroRW
-  given ReadWriter[DemoScenarioPlayerView] = macroRW
-  given ReadWriter[DemoScenarioClubView] = macroRW
-  given ReadWriter[DemoScenarioTableSeatView] = macroRW
-  given ReadWriter[DemoScenarioTableView] = macroRW
-  given ReadWriter[DemoScenarioTournamentView] = macroRW
-  given ReadWriter[DemoScenarioReadiness] = macroRW
-  given ReadWriter[DemoScenarioApiRequest] = macroRW
-  given ReadWriter[DemoScenarioWidgetMetric] = macroRW
-  given ReadWriter[DemoScenarioWidgetCount] = macroRW
-  given ReadWriter[DemoScenarioWidgets] = macroRW
-  given ReadWriter[DemoScenarioActionSpec] = macroRW
-  given ReadWriter[DemoScenarioActionResult] = macroRW
-  given ReadWriter[DemoScenarioGuideStep] = macroRW
-  given ReadWriter[DemoScenarioGuide] = macroRW
-  given ReadWriter[DemoScenarioSnapshot] = macroRW

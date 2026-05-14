@@ -8,23 +8,25 @@ import java.time.Instant
 
 import munit.FunSuite
 
-import riichinexus.api.*
-import riichinexus.api.ApiModels.given
-import riichinexus.application.service.PerformanceDiagnosticsSnapshot
+import riichinexus.api.{ApiRuntimeContext, ApiServerConfig, RiichiNexusApiServer}
 import riichinexus.bootstrap.ApplicationContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.opsanalytics.api.PerformanceDiagnosticsSnapshot
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.dictionary.api.DictionaryGovernanceService
+import riichinexus.microservices.shared.api.responses.PagedResponse
 import upickle.default.*
 
-trait ApiServerSuiteSupport:
+trait ApiServerSuiteSupport extends TestApplicationAccess:
   self: FunSuite =>
 
   protected val client: HttpClient = HttpClient.newHttpClient()
 
   protected def withServer[A](app: ApplicationContext)(f: String => A): A =
+    val config = ApiServerConfig(host = "127.0.0.1", port = 0, storageLabel = "memory")
     val server = RiichiNexusApiServer(
-      app,
-      ApiServerConfig(host = "127.0.0.1", port = 0, storageLabel = "memory")
+      ApiRuntimeContext.fromApplication(app, config),
+      config
     )
 
     server.start()
@@ -51,7 +53,10 @@ trait ApiServerSuiteSupport:
     )
 
   protected def principalFor(app: ApplicationContext, playerId: PlayerId): AccessPrincipal =
-    app.playerRepository.findById(playerId).getOrElse(fail(s"player ${playerId.value} missing")).asPrincipal
+    playerRepository(app).findById(playerId).getOrElse(fail(s"player ${playerId.value} missing")).asPrincipal
+
+  protected def dictionaryGovernance(app: ApplicationContext): DictionaryGovernanceService =
+    dictionaryGovernanceService(app)
 
   protected def readPage[T: Reader](body: String): PagedResponse[T] =
     read[PagedResponse[T]](body)

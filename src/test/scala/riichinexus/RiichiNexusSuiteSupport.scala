@@ -7,8 +7,9 @@ import munit.FunSuite
 import riichinexus.application.ports.GlobalDictionaryRepository
 import riichinexus.bootstrap.ApplicationContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.dictionary.api.DictionaryGovernanceService
 
-trait RiichiNexusSuiteSupport:
+trait RiichiNexusSuiteSupport extends TestApplicationAccess:
   self: FunSuite =>
 
   protected final class CountingGlobalDictionaryRepository(delegate: GlobalDictionaryRepository)
@@ -26,13 +27,13 @@ trait RiichiNexusSuiteSupport:
       delegate.findAll()
 
   protected def repositoryCallCount(app: ApplicationContext, key: String): Long =
-    app.performanceDiagnosticsService.snapshot(limit = 100).busiestRepositoryCalls
+    performanceDiagnosticsService(app).snapshot(limit = 100).busiestRepositoryCalls
       .find(_.key == key)
       .map(_.count)
       .getOrElse(0L)
 
   protected def repositoryTotalMillis(app: ApplicationContext, key: String): Double =
-    app.performanceDiagnosticsService.snapshot(limit = 100).busiestRepositoryCalls
+    performanceDiagnosticsService(app).snapshot(limit = 100).busiestRepositoryCalls
       .find(_.key == key)
       .map(_.totalMillis)
       .getOrElse(0.0)
@@ -48,7 +49,10 @@ trait RiichiNexusSuiteSupport:
     result.getOrElse(throw AssertionError(message))
 
   protected def principalFor(app: ApplicationContext, playerId: PlayerId): AccessPrincipal =
-    app.playerRepository.findById(playerId).get.asPrincipal
+    playerRepository(app).findById(playerId).get.asPrincipal
+
+  protected def dictionaryGovernance(app: ApplicationContext): DictionaryGovernanceService =
+    dictionaryGovernanceService(app)
 
   protected def detailedAnalyticsPaifu(
       table: Table,
