@@ -49,6 +49,8 @@
 - `PostgresOperationalRepositories.scala` 已按 repository ownership 拆分为多个 `Postgres*Repository.scala` 文件。
 - `DemoScenarioService.scala` 已拆成对外服务入口和 bootstrap、snapshot、guide/action、共享配置等 support 文件。
 - `PostgresRuntime.scala` 已拆分为 `JdbcRuntime.scala`、`PostgresSchemaInitializer.scala` 和 `PostgresAdminService.scala`。
+- `AdvancedStatsSupport.scala` 已拆分为对外 facade、`AdvancedStatsMetrics.scala` 和 `AdvancedStatsExactAnalyzer.scala`。
+- `TournamentMicroserviceRouter.scala` 已拆分为轻量组合入口，以及 table / query / management / stage 路由文件。
 
 ## 当前验证基线
 
@@ -72,14 +74,11 @@ sbt test
 
 - `src/main/scala/riichinexus/domain/model/Competition.scala`
 - `src/main/scala/riichinexus/domain/service/TournamentRuleEngine.scala`
-- `src/main/scala/riichinexus/microservices/opsanalytics/api/AdvancedStatsSupport.scala`
-- `src/main/scala/riichinexus/microservices/tournament/router/TournamentMicroserviceRouter.scala`
 
 建议顺序：
 
-1. 先处理 `AdvancedStatsSupport.scala` 或 `TournamentMicroserviceRouter.scala` 这类模块内支撑大文件。
-2. 再处理领域大文件，例如 `Competition.scala` 和 `TournamentRuleEngine.scala`，拆分时要更保守。
-3. 如果继续整理 PostgreSQL schema，可把 `PostgresSchemaInitializer.scala` 中的 SQL 按表族移动到声明式 schema definition 文件。
+1. 处理领域大文件，例如 `Competition.scala` 和 `TournamentRuleEngine.scala`，拆分时要更保守。
+2. 如果继续整理 PostgreSQL schema，可把 `PostgresSchemaInitializer.scala` 中的 SQL 按表族移动到声明式 schema definition 文件。
 
 ### 2. 继续收口 application service 中的纯读编排
 
