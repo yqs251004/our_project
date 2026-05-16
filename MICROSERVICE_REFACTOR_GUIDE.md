@@ -44,7 +44,7 @@
 - `opsanalytics` 的横切装配已拆分为 diagnostics、repository instrumentation、advanced stats pipeline、projection subscribers、demo scenario 和最终 module context 组装。
 - 已完成一轮纯读 repository 编排收口示例：`club member privilege snapshot(s)` 已从 application service 移到 `ClubTables`。
 - tournament stage standings / advancement preview / knockout bracket 纯读计算已收口到 `TournamentStageQueryService`，HTTP 读入口和 public detail view 不再依赖 `TournamentApplicationService`。
-- 测试大文件已开始按领域拆分：club operations 相关用例已从 `RiichiNexusCompetitionSuite` 拆到 `RiichiNexusClubOperationsSuite`。
+- 测试大文件已按领域继续拆分：club operations、tournament dictionary、stage lineup / scheduling / rules、table seat workflow 和 round settlement 相关用例已从旧 tournament 大 suite 拆到独立 suite。
 - 已删除旧版本残留文件 `api/ApiPlan.scala`、`tables/SchemaVersionTable.scala` 和空旧目录。
 - `PostgresOperationalRepositories.scala` 已按 repository ownership 拆分为多个 `Postgres*Repository.scala` 文件。
 - `DemoScenarioService.scala` 已拆成对外服务入口和 bootstrap、snapshot、guide/action、共享配置等 support 文件。
@@ -52,7 +52,7 @@
 - `AdvancedStatsSupport.scala` 已拆分为对外 facade、`AdvancedStatsMetrics.scala` 和 `AdvancedStatsExactAnalyzer.scala`。
 - `TournamentMicroserviceRouter.scala` 已拆分为轻量组合入口，以及 table / query / management / stage 路由文件。
 - `TournamentRuleEngine.scala` 已拆分为对外接口与默认 facade，以及 ranking builder、advancement projector、knockout bracket builder。
-- 原 `Competition.scala` 已按领域概念族拆分，并重命名为 `Tournaments.scala`：stage、settlement、table/match、appeal 模型已分别移动到独立模型文件。
+- 原赛事聚合模型大文件已按领域概念族拆分，并重命名为 `Tournaments.scala`：stage、settlement、table/match、appeal 模型已分别移动到独立模型文件。
 - `PostgresSchemaInitializer.scala` 已瘦身为执行入口，SQL 已按表族移动到 `PostgresSchemaDefinitions.scala`。
 - domain event outbox / subscriber 纯读入口已从 `DomainEventOperationsService` 收口到 `DomainEventQueryService`，operations service 只保留 replay / acknowledge / quarantine 写操作。
 
@@ -91,10 +91,9 @@ sbt test
 当前测试 suite 体积偏大：
 
 - `RiichiNexusCoreSuite.scala`
-- `ApiServerOperationsSuite.scala`
-- `ApiServerCoreSuite.scala`
 - `FrontendContractSuite.scala`
-- `RiichiNexusCompetitionSuite.scala`
+- `RiichiNexusDictionaryNamespaceSuite.scala`
+- `ApiServerStageRulesApiSuite.scala`
 
 `RiichiNexusCoreSuite.scala` 已先拆出：
 
@@ -102,6 +101,38 @@ sbt test
 - `RiichiNexusAppealWorkflowSuite.scala`
 - `RiichiNexusSettlementSuite.scala`
 - `RiichiNexusAdvancedStatsSuite.scala`
+
+旧 tournament 大 suite 已按领域拆出并移除原大文件：
+
+- `RiichiNexusTournamentDictionarySuite.scala`
+- `RiichiNexusStageLineupSuite.scala`
+- `RiichiNexusStageRoundSchedulingSuite.scala`
+- `RiichiNexusStageRuleBehaviorSuite.scala`
+- `RiichiNexusTableSeatWorkflowSuite.scala`
+- `RiichiNexusRoundSettlementSuite.scala`
+
+`ApiServerOperationsSuite.scala` 已按 endpoint 领域拆出并移除原大文件：
+
+- `ApiServerDictionarySuite.scala`
+- `ApiServerClubOperationsSuite.scala`
+- `ApiServerTournamentListingSuite.scala`
+- `ApiServerTournamentCollectionSuite.scala`
+- `ApiServerTournamentSettlementApiSuite.scala`
+- `ApiServerTournamentAdminSuite.scala`
+- `ApiServerStageRulesApiSuite.scala`
+- `ApiServerTableSeatApiSuite.scala`
+
+`ApiServerCoreSuite.scala` 已按 endpoint 领域拆出并移除原大文件：
+
+- `ApiServerSessionAndApplicationSuite.scala`
+- `ApiServerTournamentReadSuite.scala`
+- `ApiServerAppealApiSuite.scala`
+- `ApiServerDashboardStatsSuite.scala`
+- `ApiServerAdminDiagnosticsSuite.scala`
+- `ApiServerDictionaryAdminSuite.scala`
+- `ApiServerDictionaryNamespaceWorkflowSuite.scala`
+- `ApiServerDictionaryNamespaceCollaborationSuite.scala`
+- `ApiServerDictionaryNamespaceReviewSuite.scala`
 
 这不是生产结构问题，但后续维护成本会升高。
 

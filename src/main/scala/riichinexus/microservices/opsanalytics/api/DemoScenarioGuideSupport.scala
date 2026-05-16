@@ -42,7 +42,7 @@ private[opsanalytics] trait DemoScenarioGuideSupport extends DemoScenarioSupport
           request = summaryRequest
         ),
         DemoScenarioGuideStep(
-          title = "Show the public competition widgets",
+          title = "Show the public tournament widgets",
           description = "Use the widget payload together with schedules and leaderboards to demonstrate the read-only visitor experience.",
           request = widgetsRequest.orElse(schedulesRequest).orElse(playerLeaderboardRequest)
         ),
