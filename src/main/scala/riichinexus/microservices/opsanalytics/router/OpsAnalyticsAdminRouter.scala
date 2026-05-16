@@ -11,6 +11,7 @@ import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.opsanalytics.api.{
   AdvancedStatsApi,
   AdvancedStatsPipelineService,
+  DomainEventQueryService,
   DomainEventOperationsService,
   DomainEventOpsApi,
   PerformanceApi,
@@ -26,6 +27,7 @@ object OpsAnalyticsAdminRouter:
   private final case class Dependencies(
       tables: OpsAnalyticsTables,
       advancedStatsService: AdvancedStatsPipelineService,
+      domainEventQueryService: DomainEventQueryService,
       domainEventService: DomainEventOperationsService,
       performanceDiagnosticsService: PerformanceDiagnosticsService
   )
@@ -35,6 +37,7 @@ object OpsAnalyticsAdminRouter:
     Dependencies(
       tables = module.tables,
       advancedStatsService = module.advancedStatsService,
+      domainEventQueryService = module.domainEventQueryService,
       domainEventService = module.domainEventService,
       performanceDiagnosticsService = module.performanceDiagnosticsService
     )
@@ -94,7 +97,7 @@ object OpsAnalyticsAdminRouter:
         val operator = support.queryPrincipal(req)
         support.requirePermission(operator, Permission.ManageGlobalDictionary)
         val asOf = support.queryParam(req, "asOf").filter(_.nonEmpty).map(Instant.parse).getOrElse(Instant.now())
-        support.jsonResponse(Status.Ok, DomainEventOpsApi.summary(deps.domainEventService, asOf))
+        support.jsonResponse(Status.Ok, DomainEventOpsApi.summary(deps.domainEventQueryService, asOf))
       }
 
     case req @ GET -> Root / "admin" / "domain-events" / "outbox" =>
@@ -115,7 +118,7 @@ object OpsAnalyticsAdminRouter:
         require(query.subscriberId.nonEmpty || query.delivered.isEmpty, "Query parameter delivered requires subscriberId")
         require(query.subscriberId.nonEmpty || query.partitionKey.isEmpty, "Query parameter partitionKey requires subscriberId")
         require(query.subscriberId.nonEmpty || !query.blockedOnly, "Query parameter blockedOnly requires subscriberId")
-        val records = DomainEventOpsApi.outboxRecords(deps.domainEventService, query)
+        val records = DomainEventOpsApi.outboxRecords(deps.domainEventQueryService, query)
         support.pagedJsonResponse(
           req,
           records,
@@ -163,7 +166,7 @@ object OpsAnalyticsAdminRouter:
         val operator = support.queryPrincipal(req)
         support.jsonResponse(
           Status.Ok,
-          DomainEventOpsApi.outboxHistory(deps.domainEventService, DomainEventOutboxRecordId(recordId), operator)
+          DomainEventOpsApi.outboxHistory(deps.domainEventQueryService, DomainEventOutboxRecordId(recordId), operator)
         )
       }
 
@@ -206,7 +209,7 @@ object OpsAnalyticsAdminRouter:
         support.requirePermission(operator, Permission.ManageGlobalDictionary)
         val asOf = support.queryParam(req, "asOf").filter(_.nonEmpty).map(Instant.parse).getOrElse(Instant.now())
         val subscriberIdFilter = support.queryParam(req, "subscriberId").filter(_.nonEmpty)
-        val subscribers = DomainEventOpsApi.subscriberStatuses(deps.domainEventService, asOf, subscriberIdFilter)
+        val subscribers = DomainEventOpsApi.subscriberStatuses(deps.domainEventQueryService, asOf, subscriberIdFilter)
         support.pagedJsonResponse(req, subscribers, support.activeFilters(req, "asOf", "subscriberId"))
       }
 
@@ -219,7 +222,7 @@ object OpsAnalyticsAdminRouter:
         val blockedOnly = support.queryBooleanParam(req, "blockedOnly").getOrElse(false)
         val partitionKeyFilter = support.queryParam(req, "partitionKey").filter(_.nonEmpty)
         val partitions = DomainEventOpsApi.subscriberPartitionStatuses(
-          deps.domainEventService,
+          deps.domainEventQueryService,
           subscriberId = subscriberId,
           asOf = asOf,
           lagOnly = lagOnly,

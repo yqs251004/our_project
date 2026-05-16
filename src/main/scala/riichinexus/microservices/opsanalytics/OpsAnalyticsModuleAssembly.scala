@@ -11,7 +11,9 @@ import riichinexus.microservices.auth.api.GuestSessionApplicationService
 import riichinexus.microservices.club.api.ClubApplicationService
 import riichinexus.microservices.opsanalytics.api.{
   AdvancedStatsPipelineService,
+  DomainEventQueryService,
   DomainEventOperationsService,
+  DomainEventSubscriberStatusService,
   PerformanceDiagnosticsService
 }
 import riichinexus.microservices.opsanalytics.tables.OpsAnalyticsTables
@@ -37,11 +39,21 @@ object OpsAnalyticsModuleAssembly:
       tableService: TableLifecycleService,
       appealService: AppealApplicationService
   ): OpsAnalyticsModuleContext =
-    val domainEventOperationsService = DomainEventOperationsService(
+    val subscriberStatusService = DomainEventSubscriberStatusService(
       repositories.domainEventOutboxRepository,
       repositories.domainEventDeliveryReceiptRepository,
       repositories.domainEventSubscriberCursorRepository,
-      domainEventSubscribers,
+      domainEventSubscribers
+    )
+    val domainEventQueryService = DomainEventQueryService(
+      outboxRepository = repositories.domainEventOutboxRepository,
+      deliveryReceiptRepository = repositories.domainEventDeliveryReceiptRepository,
+      auditEventRepository = repositories.auditEventRepository,
+      authorizationService = authorizationService,
+      subscriberStatusService = subscriberStatusService
+    )
+    val domainEventOperationsService = DomainEventOperationsService(
+      repositories.domainEventOutboxRepository,
       repositories.auditEventRepository,
       transactionManager,
       authorizationService
@@ -67,6 +79,7 @@ object OpsAnalyticsModuleAssembly:
         tableService = tableService,
         appealService = appealService
       ),
+      domainEventQueryService = domainEventQueryService,
       domainEventService = domainEventOperationsService,
       performanceDiagnosticsService = diagnostics
     )

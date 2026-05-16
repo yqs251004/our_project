@@ -11,13 +11,13 @@ import riichinexus.microservices.opsanalytics.tables.OpsAnalyticsTables
 object DomainEventOpsApi:
 
   def summary(
-      service: DomainEventOperationsService,
+      service: DomainEventQueryService,
       asOf: Instant
   ): DomainEventBusSummary =
     service.summary(asOf)
 
   def outboxRecords(
-      service: DomainEventOperationsService,
+      service: DomainEventQueryService,
       query: DomainEventOutboxQuery
   ): Vector[DomainEventOutboxRecord] =
     service.outboxRecords(
@@ -73,7 +73,7 @@ object DomainEventOpsApi:
     )
 
   def outboxHistory(
-      service: DomainEventOperationsService,
+      service: DomainEventQueryService,
       recordId: DomainEventOutboxRecordId,
       actor: AccessPrincipal
   ): DomainEventOutboxHistoryView =
@@ -123,14 +123,14 @@ object DomainEventOpsApi:
     )
 
   def subscriberStatuses(
-      service: DomainEventOperationsService,
+      service: DomainEventQueryService,
       asOf: Instant,
       subscriberId: Option[String]
   ): Vector[DomainEventSubscriberStatus] =
     service.subscriberStatuses(asOf = asOf, subscriberId = subscriberId)
 
   def subscriberPartitionStatuses(
-      service: DomainEventOperationsService,
+      service: DomainEventQueryService,
       subscriberId: String,
       asOf: Instant,
       lagOnly: Boolean,

@@ -51,6 +51,10 @@
 - `PostgresRuntime.scala` 已拆分为 `JdbcRuntime.scala`、`PostgresSchemaInitializer.scala` 和 `PostgresAdminService.scala`。
 - `AdvancedStatsSupport.scala` 已拆分为对外 facade、`AdvancedStatsMetrics.scala` 和 `AdvancedStatsExactAnalyzer.scala`。
 - `TournamentMicroserviceRouter.scala` 已拆分为轻量组合入口，以及 table / query / management / stage 路由文件。
+- `TournamentRuleEngine.scala` 已拆分为对外接口与默认 facade，以及 ranking builder、advancement projector、knockout bracket builder。
+- 原 `Competition.scala` 已按领域概念族拆分，并重命名为 `Tournaments.scala`：stage、settlement、table/match、appeal 模型已分别移动到独立模型文件。
+- `PostgresSchemaInitializer.scala` 已瘦身为执行入口，SQL 已按表族移动到 `PostgresSchemaDefinitions.scala`。
+- domain event outbox / subscriber 纯读入口已从 `DomainEventOperationsService` 收口到 `DomainEventQueryService`，operations service 只保留 replay / acknowledge / quarantine 写操作。
 
 ## 当前验证基线
 
@@ -68,21 +72,9 @@ sbt test
 
 ## 待实现事项
 
-### 1. 继续拆大文件
+### 1. 继续收口 application service 中的纯读编排
 
-当前生产代码中最值得拆的文件：
-
-- `src/main/scala/riichinexus/domain/model/Competition.scala`
-- `src/main/scala/riichinexus/domain/service/TournamentRuleEngine.scala`
-
-建议顺序：
-
-1. 处理领域大文件，例如 `Competition.scala` 和 `TournamentRuleEngine.scala`，拆分时要更保守。
-2. 如果继续整理 PostgreSQL schema，可把 `PostgresSchemaInitializer.scala` 中的 SQL 按表族移动到声明式 schema definition 文件。
-
-### 2. 继续收口 application service 中的纯读编排
-
-已完成 `ClubTables.memberPrivilegeSnapshot(s)` 和 tournament stage 读模型作为示例。
+已完成 `ClubTables.memberPrivilegeSnapshot(s)`、tournament stage 读模型和 domain event outbox / subscriber 读模型作为示例。
 
 后续可继续寻找低风险纯读入口：
 
@@ -94,7 +86,7 @@ sbt test
 
 这类逻辑应逐步移动到模块自己的 `tables` / query API / view assembler 中，让 application service 更聚焦写路径、授权、事务和业务流程。
 
-### 3. 继续整理测试大文件
+### 2. 继续整理测试大文件
 
 当前测试 suite 体积偏大：
 
@@ -103,6 +95,13 @@ sbt test
 - `ApiServerCoreSuite.scala`
 - `FrontendContractSuite.scala`
 - `RiichiNexusCompetitionSuite.scala`
+
+`RiichiNexusCoreSuite.scala` 已先拆出：
+
+- `RiichiNexusDictionaryNamespaceSuite.scala`
+- `RiichiNexusAppealWorkflowSuite.scala`
+- `RiichiNexusSettlementSuite.scala`
+- `RiichiNexusAdvancedStatsSuite.scala`
 
 这不是生产结构问题，但后续维护成本会升高。
 

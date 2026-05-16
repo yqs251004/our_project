@@ -9,6 +9,7 @@ import riichinexus.microservices.dictionary.tables.DictionaryTables
 import riichinexus.microservices.opsanalytics.api.{
   AdvancedStatsPipelineService,
   DemoScenarioService,
+  DomainEventQueryService,
   DomainEventOperationsService,
   PerformanceDiagnosticsService
 }
@@ -72,6 +73,7 @@ final case class OpsAnalyticsModuleContext(
     tables: OpsAnalyticsTables,
     advancedStatsService: AdvancedStatsPipelineService,
     demoScenarioService: DemoScenarioService,
+    domainEventQueryService: DomainEventQueryService,
     domainEventService: DomainEventOperationsService,
     performanceDiagnosticsService: PerformanceDiagnosticsService
 )

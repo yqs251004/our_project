@@ -11,7 +11,7 @@ import riichinexus.application.ports.{
 }
 import riichinexus.domain.model.*
 
-private[api] final class DomainEventSubscriberStatusService(
+final class DomainEventSubscriberStatusService(
     outboxRepository: DomainEventOutboxRepository,
     deliveryReceiptRepository: DomainEventDeliveryReceiptRepository,
     subscriberCursorRepository: DomainEventSubscriberCursorRepository,
