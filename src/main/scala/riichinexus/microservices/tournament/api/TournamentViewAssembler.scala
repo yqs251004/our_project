@@ -158,7 +158,7 @@ final class TournamentViewAssembler(
     buildTournamentDetailView(tournamentId).map(detail =>
       TournamentMutationView(
         tournament = detail,
-        scheduledTables = scheduledTables.sortBy(table => (table.stageRoundNumber, table.tableNo, table.id.value))
+        scheduledTables = scheduledTables.sortBy(table => (table.stageRoundNumber, table.tableNo, table.id.value)).map(TournamentTableView.fromDomain)
       )
     )
 

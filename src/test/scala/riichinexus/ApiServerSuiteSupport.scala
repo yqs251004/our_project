@@ -42,13 +42,14 @@ trait ApiServerSuiteSupport extends TestApplicationAccess:
       HttpResponse.BodyHandlers.ofString()
     )
 
-  protected def postJson(url: String, body: String): HttpResponse[String] =
+  protected def postJson(url: String, body: String, headers: (String, String)*): HttpResponse[String] =
+    val builder = HttpRequest
+      .newBuilder(URI.create(url))
+      .header("Content-Type", "application/json")
+      .POST(HttpRequest.BodyPublishers.ofString(body))
+    headers.foreach { case (name, value) => builder.header(name, value) }
     client.send(
-      HttpRequest
-        .newBuilder(URI.create(url))
-        .header("Content-Type", "application/json")
-        .POST(HttpRequest.BodyPublishers.ofString(body))
-        .build(),
+      builder.build(),
       HttpResponse.BodyHandlers.ofString()
     )
 

@@ -23,6 +23,7 @@ object ApiRouter:
     val support = RouteSupport(routeContext)
     (
       DocsRouter.routes(support) <+>
+        ApiMessageRouter.routes(support) <+>
         DemoScenarioRouter.routes(support) <+>
         AuthMicroserviceRouter.authRoutes(support) <+>
         AuthMicroserviceRouter.publicRoutes(support) <+>
