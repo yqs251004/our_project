@@ -26,6 +26,8 @@ xxxApiMessage(input)
 - 前端函数通过统一 transport 推导路径，不手写 REST path。
 - 前端 input/output 类型在 `src/objects/<service>`。
 - 后端 registry 注册了同名 handler。
+- 后端导出的 message registry/contract 清单包含该 message。
+- 前端 `ApiMessageRegistry` 由后端导出生成，或构建/测试会校验它与后端导出一致。
 - 后端 handler 复用现有 application service 或 query API。
 - 前后端字段名、可选字段、枚举字符串一致。
 - 成功响应和错误响应都能被前端现有 `ApiError` 处理。
@@ -116,15 +118,17 @@ authUpgradeGuestSessionApiMessage
 ## 联调步骤
 
 1. 后端新增 message handler，并保留旧 REST route。
-2. 后端运行：
+2. 后端把 message 加入可导出的 registry/contract 清单。
+3. 后端运行：
 
    ```powershell
    sbt compile
    sbt test
    ```
 
-3. 前端新增对应 registry 和 API function。
-4. 前端运行：
+4. 前端从后端导出生成 registry，或运行校验确保本地 registry 与后端导出一致。
+5. 前端新增对应 API function。
+6. 前端运行：
 
    ```powershell
    npm.cmd run build
@@ -132,9 +136,9 @@ authUpgradeGuestSessionApiMessage
    npm.cmd run lint
    ```
 
-5. 手动请求一个成功样例和一个失败样例。
-6. 在浏览器里跑对应业务流程。
-7. 用搜索确认前端服务模块不再手写旧 REST path。
+7. 手动请求一个成功样例和一个失败样例。
+8. 在浏览器里跑对应业务流程。
+9. 用搜索确认前端服务模块不再手写旧 REST path。
 
 ## 常用检查命令
 
@@ -152,10 +156,14 @@ rg "authLoginApiMessage|ApiMessageRegistry|ApiMessageRouter" our_project/src/mai
 sbt compile
 ```
 
-## 风险点
+## Registry 必做项
 
-- TypeScript 编译只能保证前端 registry 内部一致，不能天然保证后端已注册。
-- 真正的跨端保证需要后端导出 message registry，前端由它生成类型或至少生成 message 名称清单。
+- 后端必须导出 message registry/contract 清单，覆盖已迁移 message 的 `messageName`、`inputType`、`outputType`、`ownerService`、`oldRestRoute`、`status`。
+- 前端必须从后端导出生成 registry，或在构建/测试中校验本地 registry 与后端导出一致。
+- 缺失、重名、拼写漂移、input/output 类型不一致都必须让验收失败。
+- 没有 registry 导出或校验结果的 message 不能标记为 done。
+
+## 风险点
 - GET 迁成 POST 后，浏览器缓存语义会变化；当前业务后台型接口可以接受，公开列表如需缓存再单独设计。
 - REST 删除要晚于前后端 message 全量迁移，避免手动测试漏掉旧入口依赖。
 
@@ -166,6 +174,6 @@ sbt compile
 - `auth` 全部 message 化。
 - 前端 auth API module 不再出现 `/auth`、`/session`、`/guest-sessions`。
 - 后端 auth message handler 和旧 REST route 结果一致。
+- 后端 auth message registry 已导出，并被前端生成/校验流程消费。
 - 前后端编译通过。
 - 登录、注册、恢复会话、游客会话核心流程手测通过。
-

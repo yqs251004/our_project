@@ -46,7 +46,15 @@ src/main/scala/riichinexus/microservices/player/api/messages/
   PlayerApiMessages.scala
 ```
 
-如果后续做代码生成，可以把可导出的契约元数据集中到 shared API 层。
+后端 message registry 导出是必做项，不是后续优化。每个已迁移 message 必须在 registry 中暴露稳定契约元数据，供前端生成或校验 registry 使用。
+
+最低导出字段：
+
+```text
+messageName | inputType | outputType | ownerService | oldRestRoute | status
+```
+
+导出结果可以先是 JSON、OpenAPI extension 或构建产物中的静态清单；形式可以迭代，但迁移验收必须能让前端在构建/测试中校验 message 名称和 input/output 契约。
 
 ## Message Handler 形态
 
@@ -71,6 +79,18 @@ object ApiMessageRegistry:
       AuthApiMessages.authRegisterApiMessage,
       AuthApiMessages.authRestoreSessionApiMessage
     ).map(handler => handler.name -> handler).toMap
+
+  def contracts: Vector[ApiMessageContract] =
+    Vector(
+      ApiMessageContract(
+        messageName = "authLoginApiMessage",
+        inputType = "LoginRequest",
+        outputType = "AuthSuccessResponse",
+        ownerService = "auth",
+        oldRestRoute = "POST /auth/login",
+        status = "done"
+      )
+    )
 ```
 
 router 负责兜底 unknown message：
@@ -203,6 +223,9 @@ sbt test
 - REST 旧路由仍可用，直到前端完全迁完。
 - message handler 没有复制业务逻辑，只复用现有 API/application service。
 - request/response codec 明确 import，不依赖偶然的通配符顺序。
+- 后端导出 message registry/contract 清单，且覆盖本次迁移的所有 message。
+- 导出的 message name、inputType、outputType、ownerService 与实际 handler 和 response codec 一致。
+- 前端能够基于导出清单生成或校验 `ApiMessageRegistry`；不能校验时，该服务不能视为迁移完成。
 
 ## 什么时候可以删除 REST 路由
 
@@ -210,7 +233,7 @@ sbt test
 
 - 前端 `src/api/<service>` 已全部迁到 message 调用。
 - 对接文档里的 message 清单已覆盖该服务所有当前使用接口。
+- 后端导出的 message registry 已覆盖该服务所有当前使用接口，并已被前端生成/校验流程消费。
 - 前后端测试都通过。
 - 手动验证核心流程通过。
 - 没有外部客户端还依赖旧 REST 路径。
-
