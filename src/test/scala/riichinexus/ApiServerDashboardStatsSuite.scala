@@ -11,16 +11,25 @@ import munit.FunSuite
 import riichinexus.bootstrap.ApplicationContext
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.auth.api.requests.CreateGuestSessionRequest
-import riichinexus.microservices.club.api.requests.*
-import riichinexus.microservices.club.api.responses.*
-import riichinexus.microservices.club.api.responses.ClubTournamentResponses.given
-import riichinexus.microservices.dictionary.api.requests.*
-import riichinexus.microservices.dictionary.api.responses.*
-import riichinexus.microservices.dictionary.api.responses.DictionaryResponses.given
-import riichinexus.microservices.opsanalytics.api.PerformanceDiagnosticsSnapshot
-import riichinexus.microservices.opsanalytics.api.requests.{ProcessAdvancedStatsTasksRequest, RecomputeAdvancedStatsRequest}
-import riichinexus.microservices.tournament.appeal.api.requests.*
+import riichinexus.microservices.auth.objects.apiTypes.CreateGuestSessionRequest
+import riichinexus.microservices.club.objects.apiTypes.*
+import riichinexus.microservices.club.objects.apiTypes.*
+import riichinexus.microservices.club.objects.apiTypes.ClubTournamentResponses.given
+import riichinexus.microservices.dictionary.objects.apiTypes.*
+import riichinexus.microservices.dictionary.objects.apiTypes.*
+import riichinexus.microservices.dictionary.objects.apiTypes.DictionaryResponses.given
+import riichinexus.microservices.opsanalytics.api.{
+  OpsAnalyticsAdvancedStatsSummaryAPIMessage,
+  OpsAnalyticsClubAdvancedStatsAPIMessage,
+  OpsAnalyticsClubDashboardAPIMessage,
+  OpsAnalyticsListAdvancedStatsTasksAPIMessage,
+  OpsAnalyticsPlayerAdvancedStatsAPIMessage,
+  OpsAnalyticsPlayerDashboardAPIMessage,
+  OpsAnalyticsProcessAdvancedStatsAPIMessage,
+  OpsAnalyticsRecomputeAdvancedStatsAPIMessage
+}
+import riichinexus.microservices.opsanalytics.objects.apiTypes.PerformanceDiagnosticsSnapshot
+import riichinexus.microservices.tournament.appeal.objects.apiTypes.*
 import upickle.default.*
 
 class ApiServerDashboardStatsSuite extends FunSuite with ApiServerSuiteSupport:
@@ -33,27 +42,31 @@ class ApiServerDashboardStatsSuite extends FunSuite with ApiServerSuiteSupport:
     val intruder = playerService(app).registerPlayer("dash-2", "Intruder", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1500)
     val member = playerService(app).registerPlayer("dash-3", "Member", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1520)
 
-    val club = clubService(app).createClub("Dashboard Club", owner.id, now, owner.asPrincipal)
-    clubService(app).addMember(club.id, member.id, principalFor(app, owner.id))
+    val club = clubApi(app).createClub("Dashboard Club", owner.id, now, owner.asPrincipal)
+    clubApi(app).addMember(club.id, member.id, principalFor(app, owner.id))
 
     withServer(app) { baseUrl =>
-      val forbiddenPlayer = get(
-        s"$baseUrl/dashboards/players/${owner.id.value}?operatorId=${intruder.id.value}"
+      val forbiddenPlayer = postJson(
+        s"$baseUrl/api/opsanalyticsplayerdashboardapi",
+        write(OpsAnalyticsPlayerDashboardAPIMessage(owner.id, intruder.id))
       )
       assertEquals(forbiddenPlayer.statusCode(), 403)
 
-      val ownPlayer = get(
-        s"$baseUrl/dashboards/players/${owner.id.value}?operatorId=${owner.id.value}"
+      val ownPlayer = postJson(
+        s"$baseUrl/api/opsanalyticsplayerdashboardapi",
+        write(OpsAnalyticsPlayerDashboardAPIMessage(owner.id, owner.id))
       )
       assertEquals(ownPlayer.statusCode(), 200)
 
-      val ownClub = get(
-        s"$baseUrl/dashboards/clubs/${club.id.value}?operatorId=${owner.id.value}"
+      val ownClub = postJson(
+        s"$baseUrl/api/opsanalyticsclubdashboardapi",
+        write(OpsAnalyticsClubDashboardAPIMessage(club.id, owner.id))
       )
       assertEquals(ownClub.statusCode(), 200)
 
-      val forbiddenClub = get(
-        s"$baseUrl/dashboards/clubs/${club.id.value}?operatorId=${member.id.value}"
+      val forbiddenClub = postJson(
+        s"$baseUrl/api/opsanalyticsclubdashboardapi",
+        write(OpsAnalyticsClubDashboardAPIMessage(club.id, member.id))
       )
       assertEquals(forbiddenClub.statusCode(), 403)
     }
@@ -71,10 +84,10 @@ class ApiServerDashboardStatsSuite extends FunSuite with ApiServerSuiteSupport:
     val extraA = playerService(app).registerPlayer("adv-extra-a", "AdvExtraA", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1510)
     val extraB = playerService(app).registerPlayer("adv-extra-b", "AdvExtraB", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1500)
 
-    val club = clubService(app).createClub("Advanced Stats Club", owner.id, now, owner.asPrincipal)
-    clubService(app).addMember(club.id, member.id, principalFor(app, owner.id))
-    clubService(app).addMember(club.id, extraA.id, principalFor(app, owner.id))
-    clubService(app).addMember(club.id, extraB.id, principalFor(app, owner.id))
+    val club = clubApi(app).createClub("Advanced Stats Club", owner.id, now, owner.asPrincipal)
+    clubApi(app).addMember(club.id, member.id, principalFor(app, owner.id))
+    clubApi(app).addMember(club.id, extraA.id, principalFor(app, owner.id))
+    clubApi(app).addMember(club.id, extraB.id, principalFor(app, owner.id))
 
     val stage = TournamentStage(IdGenerator.stageId(), "Advanced Stats Stage", StageFormat.Swiss, 1, 1)
     val tournament = tournamentService(app).createTournament(
@@ -102,17 +115,18 @@ class ApiServerDashboardStatsSuite extends FunSuite with ApiServerSuiteSupport:
     )
 
     withServer(app) { baseUrl =>
-      val taskIndex = get(
-        s"$baseUrl/admin/advanced-stats/tasks?operatorId=${rootAdmin.id.value}"
+      val taskIndex = postJson(
+        s"$baseUrl/api/opsanalyticslistadvancedstatstasksapi",
+        write(OpsAnalyticsListAdvancedStatsTasksAPIMessage(rootAdmin.id))
       )
       assertEquals(taskIndex.statusCode(), 200)
       assert(readPage[AdvancedStatsRecomputeTask](taskIndex.body()).total >= 0)
 
       val recomputeTasks = postJson(
-        s"$baseUrl/admin/advanced-stats/recompute",
+        s"$baseUrl/api/opsanalyticsrecomputeadvancedstatsapi",
         write(
-          RecomputeAdvancedStatsRequest(
-            operatorId = rootAdmin.id.value,
+          OpsAnalyticsRecomputeAdvancedStatsAPIMessage(
+            operatorId = rootAdmin.id,
             ownerType = Some("player"),
             ownerId = Some(owner.id.value),
             reason = Some("api-test-backfill")
@@ -122,42 +136,67 @@ class ApiServerDashboardStatsSuite extends FunSuite with ApiServerSuiteSupport:
       assertEquals(recomputeTasks.statusCode(), 202)
       assert(read[Vector[AdvancedStatsRecomputeTask]](recomputeTasks.body()).nonEmpty)
 
-      val taskIndexAfter = get(
-        s"$baseUrl/admin/advanced-stats/tasks?operatorId=${rootAdmin.id.value}"
+      val taskIndexAfter = postJson(
+        s"$baseUrl/api/opsanalyticslistadvancedstatstasksapi",
+        write(OpsAnalyticsListAdvancedStatsTasksAPIMessage(rootAdmin.id))
       )
       assertEquals(taskIndexAfter.statusCode(), 200)
       assert(readPage[AdvancedStatsRecomputeTask](taskIndexAfter.body()).total > 0)
 
       val processTasks = postJson(
-        s"$baseUrl/admin/advanced-stats/process",
-        write(ProcessAdvancedStatsTasksRequest(rootAdmin.id.value, 20))
+        s"$baseUrl/api/opsanalyticsprocessadvancedstatsapi",
+        write(OpsAnalyticsProcessAdvancedStatsAPIMessage(rootAdmin.id, 20))
       )
       assertEquals(processTasks.statusCode(), 200)
-      advancedStatsPipelineService(app).enqueueOwnerRecompute(DashboardOwner.Player(owner.id), "api-test-player-read")
-      advancedStatsPipelineService(app).enqueueOwnerRecompute(DashboardOwner.Club(club.id), "api-test-club-read")
-      advancedStatsPipelineService(app).processPending(limit = 20, processedAt = Instant.now())
 
-      val ownPlayerStats = get(
-        s"$baseUrl/advanced-stats/players/${owner.id.value}?operatorId=${owner.id.value}"
+      val playerReadRecompute = postApi(
+        baseUrl,
+        OpsAnalyticsRecomputeAdvancedStatsAPIMessage(
+          operatorId = rootAdmin.id,
+          ownerType = Some("player"),
+          ownerId = Some(owner.id.value),
+          reason = Some("api-test-player-read")
+        )
+      )
+      assertEquals(playerReadRecompute.statusCode(), 202)
+      val clubReadRecompute = postApi(
+        baseUrl,
+        OpsAnalyticsRecomputeAdvancedStatsAPIMessage(
+          operatorId = rootAdmin.id,
+          ownerType = Some("club"),
+          ownerId = Some(club.id.value),
+          reason = Some("api-test-club-read")
+        )
+      )
+      assertEquals(clubReadRecompute.statusCode(), 202)
+      val processReadTasks = postApi(baseUrl, OpsAnalyticsProcessAdvancedStatsAPIMessage(rootAdmin.id, 20))
+      assertEquals(processReadTasks.statusCode(), 200)
+
+      val ownPlayerStats = postJson(
+        s"$baseUrl/api/opsanalyticsplayeradvancedstatsapi",
+        write(OpsAnalyticsPlayerAdvancedStatsAPIMessage(owner.id, owner.id))
       )
       assertEquals(ownPlayerStats.statusCode(), 200)
       val playerBoard = read[AdvancedStatsBoard](ownPlayerStats.body())
       assert(playerBoard.sampleSize > 0)
 
-      val ownClubStats = get(
-        s"$baseUrl/advanced-stats/clubs/${club.id.value}?operatorId=${owner.id.value}"
+      val ownClubStats = postJson(
+        s"$baseUrl/api/opsanalyticsclubadvancedstatsapi",
+        write(OpsAnalyticsClubAdvancedStatsAPIMessage(club.id, owner.id))
       )
       assertEquals(ownClubStats.statusCode(), 200)
       val clubBoard = read[AdvancedStatsBoard](ownClubStats.body())
       assert(clubBoard.sampleSize > 0)
 
-      val forbiddenPlayerStats = get(
-        s"$baseUrl/advanced-stats/players/${owner.id.value}?operatorId=${intruder.id.value}"
+      val forbiddenPlayerStats = postJson(
+        s"$baseUrl/api/opsanalyticsplayeradvancedstatsapi",
+        write(OpsAnalyticsPlayerAdvancedStatsAPIMessage(owner.id, intruder.id))
       )
       assertEquals(forbiddenPlayerStats.statusCode(), 403)
 
-      val forbiddenClubStats = get(
-        s"$baseUrl/advanced-stats/clubs/${club.id.value}?operatorId=${member.id.value}"
+      val forbiddenClubStats = postJson(
+        s"$baseUrl/api/opsanalyticsclubadvancedstatsapi",
+        write(OpsAnalyticsClubAdvancedStatsAPIMessage(club.id, member.id))
       )
       assertEquals(forbiddenClubStats.statusCode(), 403)
     }
@@ -175,11 +214,11 @@ class ApiServerDashboardStatsSuite extends FunSuite with ApiServerSuiteSupport:
 
     withServer(app) { baseUrl =>
       val recomputeResponse = postJson(
-        s"$baseUrl/admin/advanced-stats/recompute",
+        s"$baseUrl/api/opsanalyticsrecomputeadvancedstatsapi",
         write(
-          RecomputeAdvancedStatsRequest(
-            operatorId = rootAdmin.id.value,
-            mode = AdvancedStatsBackfillMode.Missing.toString,
+          OpsAnalyticsRecomputeAdvancedStatsAPIMessage(
+            operatorId = rootAdmin.id,
+            mode = AdvancedStatsBackfillMode.Missing,
             reason = Some("missing-only-backfill"),
             limit = 10
           )
@@ -190,8 +229,9 @@ class ApiServerDashboardStatsSuite extends FunSuite with ApiServerSuiteSupport:
       assert(tasks.exists(_.owner == DashboardOwner.Player(playerB.id)))
       assert(!tasks.exists(_.owner == DashboardOwner.Player(playerA.id)))
 
-      val summaryResponse = get(
-        s"$baseUrl/admin/advanced-stats/summary?operatorId=${rootAdmin.id.value}"
+      val summaryResponse = postJson(
+        s"$baseUrl/api/opsanalyticsadvancedstatssummaryapi",
+        write(OpsAnalyticsAdvancedStatsSummaryAPIMessage(rootAdmin.id))
       )
       assertEquals(summaryResponse.statusCode(), 200)
       val summary = read[AdvancedStatsTaskQueueSummary](summaryResponse.body())

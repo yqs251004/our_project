@@ -13,21 +13,22 @@ import munit.FunSuite
 import riichinexus.bootstrap.ApplicationContext
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.api.responses.*
-import riichinexus.microservices.club.api.responses.ClubTournamentResponses.given
-import riichinexus.microservices.club.api.requests.*
-import riichinexus.microservices.dictionary.api.requests.UpsertDictionaryRequest
-import riichinexus.microservices.opsanalytics.api.PerformanceDiagnosticsSnapshot
-import riichinexus.microservices.shared.api.requests.OperatorRequest
-import riichinexus.microservices.shared.api.requests.OperatorRequest.given
-import riichinexus.microservices.publicquery.api.responses.*
-import riichinexus.microservices.publicquery.api.responses.PublicQueryResponses.given
-import riichinexus.microservices.tournament.api.responses.*
-import riichinexus.microservices.tournament.api.responses.TournamentOperationResponses.given
-import riichinexus.microservices.tournament.api.requests.SettlementRequests.given
-import riichinexus.microservices.tournament.api.requests.StageRequests.given
-import riichinexus.microservices.tournament.api.requests.TableRequests.given
-import riichinexus.microservices.tournament.api.requests.*
+import riichinexus.microservices.club.objects.apiTypes.*
+import riichinexus.microservices.club.objects.apiTypes.ClubTournamentResponses.given
+import riichinexus.microservices.club.objects.apiTypes.*
+import riichinexus.microservices.dictionary.objects.apiTypes.UpsertDictionaryRequest
+import riichinexus.microservices.opsanalytics.objects.apiTypes.PerformanceDiagnosticsSnapshot
+import riichinexus.system.objects.apiTypes.OperatorRequest
+import riichinexus.system.objects.apiTypes.OperatorRequest.given
+import riichinexus.microservices.publicquery.objects.apiTypes.*
+import riichinexus.microservices.publicquery.objects.apiTypes.PublicQueryResponses.given
+import riichinexus.microservices.tournament.api.*
+import riichinexus.microservices.tournament.objects.apiTypes.*
+import riichinexus.microservices.tournament.objects.apiTypes.TournamentOperationResponses.given
+import riichinexus.microservices.tournament.objects.apiTypes.SettlementRequests.given
+import riichinexus.microservices.tournament.objects.apiTypes.StageRequests.given
+import riichinexus.microservices.tournament.objects.apiTypes.TableRequests.given
+import riichinexus.microservices.tournament.objects.apiTypes.*
 import upickle.default.*
 
 class ApiServerTournamentAdminSuite extends FunSuite with ApiServerSuiteSupport:
@@ -54,14 +55,14 @@ class ApiServerTournamentAdminSuite extends FunSuite with ApiServerSuiteSupport:
     )
 
     withServer(app) { baseUrl =>
-      val revokeResponse = postJson(
-        s"$baseUrl/tournaments/${tournament.id.value}/admins/${adminB.id.value}/revoke",
-        write(OperatorRequest(Some(adminA.id.value)))
+      val revokeResponse = postApi(
+        baseUrl,
+        TournamentRevokeAdminAPIMessage(tournament.id.value, adminB.id.value, Some(adminA.id.value))
       )
       assertEquals(revokeResponse.statusCode(), 200)
 
-      val updatedTournament = read[Tournament](revokeResponse.body())
-      assertEquals(updatedTournament.admins, Vector(adminA.id))
+      val updatedTournament = read[TournamentSummaryView](revokeResponse.body())
+      assertEquals(updatedTournament.adminIds, Vector(adminA.id))
       val updatedAdmin = playerRepository(app).findById(adminB.id).getOrElse(fail("missing adminB"))
       assert(!updatedAdmin.roleGrants.exists(grant =>
         grant.role == RoleKind.TournamentAdmin && grant.tournamentId.contains(tournament.id)

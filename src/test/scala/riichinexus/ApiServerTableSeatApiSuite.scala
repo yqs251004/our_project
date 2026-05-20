@@ -13,21 +13,22 @@ import munit.FunSuite
 import riichinexus.bootstrap.ApplicationContext
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.api.responses.*
-import riichinexus.microservices.club.api.responses.ClubTournamentResponses.given
-import riichinexus.microservices.club.api.requests.*
-import riichinexus.microservices.dictionary.api.requests.UpsertDictionaryRequest
-import riichinexus.microservices.opsanalytics.api.PerformanceDiagnosticsSnapshot
-import riichinexus.microservices.shared.api.requests.OperatorRequest
-import riichinexus.microservices.shared.api.requests.OperatorRequest.given
-import riichinexus.microservices.publicquery.api.responses.*
-import riichinexus.microservices.publicquery.api.responses.PublicQueryResponses.given
-import riichinexus.microservices.tournament.api.responses.*
-import riichinexus.microservices.tournament.api.responses.TournamentOperationResponses.given
-import riichinexus.microservices.tournament.api.requests.SettlementRequests.given
-import riichinexus.microservices.tournament.api.requests.StageRequests.given
-import riichinexus.microservices.tournament.api.requests.TableRequests.given
-import riichinexus.microservices.tournament.api.requests.*
+import riichinexus.microservices.club.objects.apiTypes.*
+import riichinexus.microservices.club.objects.apiTypes.ClubTournamentResponses.given
+import riichinexus.microservices.club.objects.apiTypes.*
+import riichinexus.microservices.dictionary.objects.apiTypes.UpsertDictionaryRequest
+import riichinexus.microservices.opsanalytics.objects.apiTypes.PerformanceDiagnosticsSnapshot
+import riichinexus.system.objects.apiTypes.OperatorRequest
+import riichinexus.system.objects.apiTypes.OperatorRequest.given
+import riichinexus.microservices.publicquery.objects.apiTypes.*
+import riichinexus.microservices.publicquery.objects.apiTypes.PublicQueryResponses.given
+import riichinexus.microservices.tournament.api.*
+import riichinexus.microservices.tournament.objects.apiTypes.*
+import riichinexus.microservices.tournament.objects.apiTypes.TournamentOperationResponses.given
+import riichinexus.microservices.tournament.objects.apiTypes.SettlementRequests.given
+import riichinexus.microservices.tournament.objects.apiTypes.StageRequests.given
+import riichinexus.microservices.tournament.objects.apiTypes.TableRequests.given
+import riichinexus.microservices.tournament.objects.apiTypes.*
 import upickle.default.*
 
 class ApiServerTableSeatApiSuite extends FunSuite with ApiServerSuiteSupport:
@@ -58,44 +59,60 @@ class ApiServerTableSeatApiSuite extends FunSuite with ApiServerSuiteSupport:
 
     withServer(app) { baseUrl =>
       val disconnectedSeat = table.seats(0)
-      val disconnectResponse = postJson(
-        s"$baseUrl/tables/${table.id.value}/seats/${disconnectedSeat.seat.toString}/state",
-        write(UpdateTableSeatStateRequest(disconnectedSeat.playerId.value, disconnected = Some(true), note = Some("wifi down")))
+      val disconnectResponse = postApi(
+        baseUrl,
+        TournamentTableUpdateSeatStateAPIMessage(
+          table.id.value,
+          disconnectedSeat.seat.toString,
+          UpdateTableSeatStateRequest(disconnectedSeat.playerId.value, disconnected = Some(true), note = Some("wifi down"))
+        )
       )
       assertEquals(disconnectResponse.statusCode(), 200)
-      assert(read[Table](disconnectResponse.body()).seats.find(_.seat == disconnectedSeat.seat).exists(_.disconnected))
+      assert(read[TournamentTableView](disconnectResponse.body()).seats.find(_.seat == disconnectedSeat.seat).exists(_.disconnected))
 
       table.seats.tail.foreach { seat =>
-        val readyResponse = postJson(
-          s"$baseUrl/tables/${table.id.value}/seats/${seat.seat.toString}/state",
-          write(UpdateTableSeatStateRequest(seat.playerId.value, ready = Some(true)))
+        val readyResponse = postApi(
+          baseUrl,
+          TournamentTableUpdateSeatStateAPIMessage(
+            table.id.value,
+            seat.seat.toString,
+            UpdateTableSeatStateRequest(seat.playerId.value, ready = Some(true))
+          )
         )
         assertEquals(readyResponse.statusCode(), 200)
       }
 
-      val stillBlocked = postJson(
-        s"$baseUrl/tables/${table.id.value}/start",
-        write(OperatorRequest(Some(admin.id.value)))
+      val stillBlocked = postApi(
+        baseUrl,
+        TournamentTableStartAPIMessage(table.id.value, Some(admin.id.value))
       )
       assertEquals(stillBlocked.statusCode(), 400)
 
-      val reconnectResponse = postJson(
-        s"$baseUrl/tables/${table.id.value}/seats/${disconnectedSeat.seat.toString}/state",
-        write(UpdateTableSeatStateRequest(disconnectedSeat.playerId.value, disconnected = Some(false)))
+      val reconnectResponse = postApi(
+        baseUrl,
+        TournamentTableUpdateSeatStateAPIMessage(
+          table.id.value,
+          disconnectedSeat.seat.toString,
+          UpdateTableSeatStateRequest(disconnectedSeat.playerId.value, disconnected = Some(false))
+        )
       )
       assertEquals(reconnectResponse.statusCode(), 200)
-      val finalReady = postJson(
-        s"$baseUrl/tables/${table.id.value}/seats/${disconnectedSeat.seat.toString}/state",
-        write(UpdateTableSeatStateRequest(disconnectedSeat.playerId.value, ready = Some(true)))
+      val finalReady = postApi(
+        baseUrl,
+        TournamentTableUpdateSeatStateAPIMessage(
+          table.id.value,
+          disconnectedSeat.seat.toString,
+          UpdateTableSeatStateRequest(disconnectedSeat.playerId.value, ready = Some(true))
+        )
       )
       assertEquals(finalReady.statusCode(), 200)
 
-      val started = postJson(
-        s"$baseUrl/tables/${table.id.value}/start",
-        write(OperatorRequest(Some(admin.id.value)))
+      val started = postApi(
+        baseUrl,
+        TournamentTableStartAPIMessage(table.id.value, Some(admin.id.value))
       )
       assertEquals(started.statusCode(), 200)
-      val startedTable = read[Table](started.body())
+      val startedTable = read[TournamentTableView](started.body())
       assertEquals(startedTable.status, TableStatus.InProgress)
       assert(startedTable.seats.forall(_.ready))
       assert(!startedTable.seats.exists(_.disconnected))
@@ -130,18 +147,18 @@ class ApiServerTableSeatApiSuite extends FunSuite with ApiServerSuiteSupport:
     val actorSeat = table.seats(1)
 
     withServer(app) { baseUrl =>
-      val readyResponse = postJson(
-        s"$baseUrl/tables/${table.id.value}/ready",
-        write(UpdateOwnTableReadyStateRequest(actorSeat.playerId.value))
+      val readyResponse = postApi(
+        baseUrl,
+        TournamentTableUpdateOwnReadyAPIMessage(table.id.value, UpdateOwnTableReadyStateRequest(actorSeat.playerId.value))
       )
       assertEquals(readyResponse.statusCode(), 200)
-      val updatedTable = read[Table](readyResponse.body())
+      val updatedTable = read[TournamentTableView](readyResponse.body())
       assert(updatedTable.seats.find(_.seat == actorSeat.seat).exists(_.ready))
       assertEquals(updatedTable.seats.count(_.ready), 1)
 
-      val outsiderResponse = postJson(
-        s"$baseUrl/tables/${table.id.value}/ready",
-        write(UpdateOwnTableReadyStateRequest(outsider.id.value))
+      val outsiderResponse = postApi(
+        baseUrl,
+        TournamentTableUpdateOwnReadyAPIMessage(table.id.value, UpdateOwnTableReadyStateRequest(outsider.id.value))
       )
       assertEquals(outsiderResponse.statusCode(), 400)
     }

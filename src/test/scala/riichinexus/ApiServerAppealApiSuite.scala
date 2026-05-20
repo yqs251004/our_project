@@ -11,16 +11,21 @@ import munit.FunSuite
 import riichinexus.bootstrap.ApplicationContext
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.auth.api.requests.CreateGuestSessionRequest
-import riichinexus.microservices.club.api.requests.*
-import riichinexus.microservices.club.api.responses.*
-import riichinexus.microservices.club.api.responses.ClubTournamentResponses.given
-import riichinexus.microservices.dictionary.api.requests.*
-import riichinexus.microservices.dictionary.api.responses.*
-import riichinexus.microservices.dictionary.api.responses.DictionaryResponses.given
-import riichinexus.microservices.opsanalytics.api.PerformanceDiagnosticsSnapshot
-import riichinexus.microservices.opsanalytics.api.requests.{ProcessAdvancedStatsTasksRequest, RecomputeAdvancedStatsRequest}
-import riichinexus.microservices.tournament.appeal.api.requests.*
+import riichinexus.microservices.auth.objects.apiTypes.CreateGuestSessionRequest
+import riichinexus.microservices.club.objects.apiTypes.*
+import riichinexus.microservices.club.objects.apiTypes.*
+import riichinexus.microservices.club.objects.apiTypes.ClubTournamentResponses.given
+import riichinexus.microservices.dictionary.objects.apiTypes.*
+import riichinexus.microservices.dictionary.objects.apiTypes.*
+import riichinexus.microservices.dictionary.objects.apiTypes.DictionaryResponses.given
+import riichinexus.microservices.opsanalytics.objects.apiTypes.PerformanceDiagnosticsSnapshot
+import riichinexus.microservices.tournament.api.*
+import riichinexus.microservices.tournament.appeal.api.*
+import riichinexus.microservices.tournament.appeal.objects.apiTypes.*
+import riichinexus.microservices.tournament.appeal.objects.apiTypes.TournamentAppealResponses.given
+import riichinexus.microservices.tournament.objects.apiTypes.*
+import riichinexus.microservices.tournament.objects.apiTypes.TournamentOperationResponses.given
+import riichinexus.system.objects.apiTypes.PagedResponse
 import upickle.default.*
 
 class ApiServerAppealApiSuite extends FunSuite with ApiServerSuiteSupport:
@@ -95,21 +100,30 @@ class ApiServerAppealApiSuite extends FunSuite with ApiServerSuiteSupport:
     val record = matchRecordRepository(app).findByTable(table.id).getOrElse(fail("match record missing"))
 
     withServer(app) { baseUrl =>
-      val appealResponse = get(s"$baseUrl/appeals/${appeal.id.value}")
+      val appealResponse = postJson(
+        s"$baseUrl/api/appealgetapi",
+        write(AppealGetAPIMessage(appeal.id.value))
+      )
       assertEquals(appealResponse.statusCode(), 200)
-      val storedAppeal = read[AppealTicket](appealResponse.body())
-      assertEquals(storedAppeal.id, appeal.id)
+      val storedAppeal = read[AppealTicketView](appealResponse.body())
+      assertEquals(storedAppeal.appealId, appeal.id)
       assertEquals(storedAppeal.status, AppealStatus.Resolved)
 
-      val recordByIdResponse = get(s"$baseUrl/records/${record.id.value}")
+      val recordByIdResponse = postApi(
+        baseUrl,
+        TournamentRecordGetAPIMessage(record.id.value)
+      )
       assertEquals(recordByIdResponse.statusCode(), 200)
-      val recordById = read[MatchRecord](recordByIdResponse.body())
-      assertEquals(recordById.id, record.id)
+      val recordById = read[TournamentMatchRecordView](recordByIdResponse.body())
+      assertEquals(recordById.recordId, record.id)
 
-      val recordByTableResponse = get(s"$baseUrl/records/table/${table.id.value}")
+      val recordByTableResponse = postApi(
+        baseUrl,
+        TournamentRecordGetByTableAPIMessage(table.id.value)
+      )
       assertEquals(recordByTableResponse.statusCode(), 200)
-      val recordByTable = read[MatchRecord](recordByTableResponse.body())
-      assertEquals(recordByTable.id, record.id)
+      val recordByTable = read[TournamentMatchRecordView](recordByTableResponse.body())
+      assertEquals(recordByTable.recordId, record.id)
     }
   }
 
@@ -161,9 +175,10 @@ class ApiServerAppealApiSuite extends FunSuite with ApiServerSuiteSupport:
     withServer(app) { baseUrl =>
       val workflowDueAt = Instant.now().plusSeconds(600)
       val workflowResponse = postJson(
-        s"$baseUrl/appeals/${appeal.id.value}/workflow",
+        s"$baseUrl/api/appealupdateworkflowapi",
         write(
-          UpdateAppealWorkflowRequest(
+          AppealUpdateWorkflowAPIMessage(
+            appealId = appeal.id.value,
             operatorId = admin.id.value,
             assigneeId = Some(admin.id.value),
             priority = Some("Critical"),
@@ -173,22 +188,31 @@ class ApiServerAppealApiSuite extends FunSuite with ApiServerSuiteSupport:
         )
       )
       assertEquals(workflowResponse.statusCode(), 200)
-      val triaged = read[AppealTicket](workflowResponse.body())
+      val triaged = read[AppealTicketView](workflowResponse.body())
       assertEquals(triaged.assigneeId, Some(admin.id))
       assertEquals(triaged.priority, AppealPriority.Critical)
 
-      val filteredResponse = get(
-        s"$baseUrl/appeals?priority=Critical&assigneeId=${admin.id.value}&overdueOnly=true&asOf=${workflowDueAt.plusSeconds(60)}"
+      val filteredResponse = postJson(
+        s"$baseUrl/api/appeallistapi",
+        write(
+          AppealListAPIMessage(
+            priority = Some("Critical"),
+            assigneeId = Some(admin.id.value),
+            overdueOnly = Some(true),
+            asOf = Some(workflowDueAt.plusSeconds(60).toString)
+          )
+        )
       )
       assertEquals(filteredResponse.statusCode(), 200)
-      val filteredPage = readPage[AppealTicket](filteredResponse.body())
+      val filteredPage = read[PagedResponse[AppealTicketView]](filteredResponse.body())
       assertEquals(filteredPage.total, 1)
-      assertEquals(filteredPage.items.head.id, appeal.id)
+      assertEquals(filteredPage.items.head.appealId, appeal.id)
 
       val rejectResponse = postJson(
-        s"$baseUrl/appeals/${appeal.id.value}/adjudicate",
+        s"$baseUrl/api/appealadjudicateapi",
         write(
-          AdjudicateAppealRequest(
+          AppealAdjudicateAPIMessage(
+            appealId = appeal.id.value,
             operatorId = admin.id.value,
             decision = "Reject",
             verdict = "need stronger evidence",
@@ -197,12 +221,13 @@ class ApiServerAppealApiSuite extends FunSuite with ApiServerSuiteSupport:
         )
       )
       assertEquals(rejectResponse.statusCode(), 200)
-      assertEquals(read[AppealTicket](rejectResponse.body()).status, AppealStatus.Rejected)
+      assertEquals(read[AppealTicketView](rejectResponse.body()).status, AppealStatus.Rejected)
 
       val reopenResponse = postJson(
-        s"$baseUrl/appeals/${appeal.id.value}/reopen",
+        s"$baseUrl/api/appealreopenapi",
         write(
-          ReopenAppealRequest(
+          AppealReopenAPIMessage(
+            appealId = appeal.id.value,
             operatorId = openerId.value,
             reason = "new screenshot uploaded",
             note = Some("please review updated proof")
@@ -210,13 +235,16 @@ class ApiServerAppealApiSuite extends FunSuite with ApiServerSuiteSupport:
         )
       )
       assertEquals(reopenResponse.statusCode(), 200)
-      val reopened = read[AppealTicket](reopenResponse.body())
+      val reopened = read[AppealTicketView](reopenResponse.body())
       assertEquals(reopened.status, AppealStatus.Open)
       assertEquals(reopened.reopenCount, 1)
       assertEquals(reopened.assigneeId, Some(admin.id))
 
-      val detailResponse = get(s"$baseUrl/appeals/${appeal.id.value}")
+      val detailResponse = postJson(
+        s"$baseUrl/api/appealgetapi",
+        write(AppealGetAPIMessage(appeal.id.value))
+      )
       assertEquals(detailResponse.statusCode(), 200)
-      assertEquals(read[AppealTicket](detailResponse.body()).reopenCount, 1)
+      assertEquals(read[AppealTicketView](detailResponse.body()).reopenCount, 1)
     }
   }

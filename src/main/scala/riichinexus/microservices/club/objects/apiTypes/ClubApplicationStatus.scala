@@ -1,0 +1,5 @@
+package riichinexus.microservices.club.objects.apiTypes
+
+import riichinexus.domain.model.ClubMembershipApplicationStatus
+
+type ClubApplicationStatus = ClubMembershipApplicationStatus

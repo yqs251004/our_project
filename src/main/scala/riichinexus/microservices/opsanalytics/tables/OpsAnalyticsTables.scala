@@ -2,7 +2,6 @@ package riichinexus.microservices.opsanalytics.tables
 
 import riichinexus.application.ports.{AdvancedStatsBoardRepository, AdvancedStatsRecomputeTaskRepository, AuditEventRepository, DashboardRepository, EventCascadeRecordRepository}
 import riichinexus.domain.model.*
-import riichinexus.microservices.opsanalytics.objects.AuditTrailQuery
 
 final class OpsAnalyticsTables(
     advancedStatsRecomputeTaskRepository: AdvancedStatsRecomputeTaskRepository,
@@ -23,22 +22,28 @@ final class OpsAnalyticsTables(
   def findAdvancedStatsBoard(owner: DashboardOwner): Option[AdvancedStatsBoard] =
     advancedStatsBoardRepository.findByOwner(owner)
 
-  def listAuditEvents(query: AuditTrailQuery): Vector[AuditEventEntry] =
+  def listAuditEvents(
+      aggregateType: Option[String],
+      aggregateId: Option[String],
+      actorId: Option[PlayerId],
+      eventType: Option[String]
+  ): Vector[AuditEventEntry] =
     auditEventRepository.findAll()
-      .filter(entry => query.aggregateType.forall(_ == entry.aggregateType))
-      .filter(entry => query.aggregateId.forall(_ == entry.aggregateId))
-      .filter(entry => query.actorId.forall(entry.actorId.contains))
-      .filter(entry => query.eventType.forall(_ == entry.eventType))
+      .filter(entry => aggregateType.forall(_ == entry.aggregateType))
+      .filter(entry => aggregateId.forall(_ == entry.aggregateId))
+      .filter(entry => actorId.forall(entry.actorId.contains))
+      .filter(entry => eventType.forall(_ == entry.eventType))
       .sortBy(entry => (entry.occurredAt, entry.id.value))
 
   def listAuditEventsByAggregate(
       aggregateType: String,
       aggregateId: String,
-      query: AuditTrailQuery
+      actorId: Option[PlayerId],
+      eventType: Option[String]
   ): Vector[AuditEventEntry] =
     auditEventRepository.findByAggregate(aggregateType, aggregateId)
-      .filter(entry => query.actorId.forall(entry.actorId.contains))
-      .filter(entry => query.eventType.forall(_ == entry.eventType))
+      .filter(entry => actorId.forall(entry.actorId.contains))
+      .filter(entry => eventType.forall(_ == entry.eventType))
       .sortBy(entry => (entry.occurredAt, entry.id.value))
 
 object OpsAnalyticsTables:

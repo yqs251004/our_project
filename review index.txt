@@ -1,0 +1,33 @@
+当前刚刚重构完成一轮，还有若干细节问题/ api 接口重构没有解决
+
+auth：账号和会话。负责注册、登录、恢复登录态、退出登录、游客会话创建/撤销/升级。
+
+player：玩家资料。负责玩家创建、玩家列表、玩家详情、当前玩家查询。
+
+club：俱乐部。负责俱乐部创建、成员管理、申请入会、管理员、称号、贡献、积分池、招募政策、俱乐部参赛邀请等。
+
+publicquery：公开查询门户。负责给前端/游客看的公开赛程、公开赛事详情、公开俱乐部目录、排行榜等。基本是纯读模块。
+
+dictionary：字典/配置数据。负责业务字典项、字典 namespace 申请、审核、协作者、上下文、提醒等治理流程。
+
+tournament：赛事核心。负责赛事创建、发布、开始、报名/白名单、阶段规则、排桌、桌子状态、牌谱、记录、结算、晋级、淘汰赛等。
+
+tournament/appeal：赛事申诉子模块。负责牌桌申诉、申诉列表、详情、处理、裁决、重开、工作流更新。
+
+platformadmin：平台超级管理。负责封禁玩家、解散俱乐部、授予超级管理员等高权限操作。
+
+opsanalytics：运营和分析。负责 dashboard、审计记录、性能诊断、domain event outbox 管理、高级统计任务、demo 场景数据等。
+
+shared：共享支撑。不是业务微服务，主要放通用 request/response、OpenAPI 文档模型、公共 API 支撑结构。
+
+一句话概括：auth/player/club/tournament/dictionary 是核心业务，publicquery 是公开读模型，platformadmin 是超级后台，opsanalytics 是运营诊断和事件分析，shared 是公共基础件。
+
+api/requests  = body input / command DTO
+objects       = query/filter DTO
+api/responses = output view / API contract DTO
+domain/model  = 核心业务实体，有时也被直接返回
+
+
+这个项目里 objects/ 现在基本被当成“查询条件 / filter DTO”目录用，而不是“所有 API 对象”的目录
+写的 input/request，返回的 view/response 在 api
+后面要更严格，优先给 player、platformadmin、tournament/appeal 补 response view

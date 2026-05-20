@@ -7,7 +7,6 @@ import munit.FunSuite
 import riichinexus.application.ports.GlobalDictionaryRepository
 import riichinexus.bootstrap.ApplicationContext
 import riichinexus.domain.model.*
-import riichinexus.microservices.publicquery.api.PublicQueryService
 
 class RiichiNexusStageRoundSchedulingSuite extends FunSuite with RiichiNexusSuiteSupport:
 

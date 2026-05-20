@@ -11,10 +11,10 @@ import munit.FunSuite
 import riichinexus.api.{ApiRuntimeContext, ApiServerConfig, RiichiNexusApiServer}
 import riichinexus.bootstrap.ApplicationContext
 import riichinexus.domain.model.*
-import riichinexus.microservices.opsanalytics.api.PerformanceDiagnosticsSnapshot
+import riichinexus.microservices.opsanalytics.objects.apiTypes.PerformanceDiagnosticsSnapshot
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.dictionary.api.DictionaryGovernanceService
-import riichinexus.microservices.shared.api.responses.PagedResponse
+import riichinexus.microservices.dictionary.objects.DictionaryTestClient
+import riichinexus.system.objects.apiTypes.PagedResponse
 import upickle.default.*
 
 trait ApiServerSuiteSupport extends TestApplicationAccess:
@@ -37,6 +37,7 @@ trait ApiServerSuiteSupport extends TestApplicationAccess:
     client.send(
       HttpRequest
         .newBuilder(URI.create(url))
+        .version(HttpClient.Version.HTTP_1_1)
         .GET()
         .build(),
       HttpResponse.BodyHandlers.ofString()
@@ -45,6 +46,7 @@ trait ApiServerSuiteSupport extends TestApplicationAccess:
   protected def postJson(url: String, body: String, headers: (String, String)*): HttpResponse[String] =
     val builder = HttpRequest
       .newBuilder(URI.create(url))
+      .version(HttpClient.Version.HTTP_1_1)
       .header("Content-Type", "application/json")
       .POST(HttpRequest.BodyPublishers.ofString(body))
     headers.foreach { case (name, value) => builder.header(name, value) }
@@ -53,11 +55,19 @@ trait ApiServerSuiteSupport extends TestApplicationAccess:
       HttpResponse.BodyHandlers.ofString()
     )
 
+  protected def postApi[Message: Writer](baseUrl: String, message: Message): HttpResponse[String] =
+    postJson(s"$baseUrl/api/${apiNameOf(message)}", write(message))
+
+  private def apiNameOf(message: Any): String =
+    val className = message.getClass.getSimpleName.stripSuffix("$")
+    val baseName = className.stripSuffix("APIMessage")
+    s"${baseName}API".toLowerCase
+
   protected def principalFor(app: ApplicationContext, playerId: PlayerId): AccessPrincipal =
     playerRepository(app).findById(playerId).getOrElse(fail(s"player ${playerId.value} missing")).asPrincipal
 
-  protected def dictionaryGovernance(app: ApplicationContext): DictionaryGovernanceService =
-    dictionaryGovernanceService(app)
+  protected def dictionaryApi(app: ApplicationContext): DictionaryTestClient =
+    dictionaryApiClient(app)
 
   protected def readPage[T: Reader](body: String): PagedResponse[T] =
     read[PagedResponse[T]](body)

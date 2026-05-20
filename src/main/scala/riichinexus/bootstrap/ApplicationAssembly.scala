@@ -1,6 +1,10 @@
 package riichinexus.bootstrap
 
 import riichinexus.infrastructure.memory.*
+import riichinexus.bootstrap.instrumentation.{
+  PerformanceDiagnosticsService,
+  PerformanceRepositoryInstrumentation
+}
 import riichinexus.infrastructure.postgres.{
   DatabaseConfig as PostgresRuntimeConfig,
   JdbcConnectionFactory,
@@ -31,21 +35,28 @@ import riichinexus.infrastructure.postgres.{
 import riichinexus.application.ports.*
 import riichinexus.domain.service.*
 import riichinexus.infrastructure.events.OutboxBackedDomainEventBus
-import riichinexus.microservices.auth.AuthModuleAssembly
-import riichinexus.microservices.club.ClubModuleAssembly
-import riichinexus.microservices.dictionary.DictionaryModuleAssembly
-import riichinexus.microservices.opsanalytics.{
-  AdvancedStatsPipelineAssembly,
-  OpsAnalyticsDiagnosticsAssembly,
-  OpsAnalyticsModuleAssembly,
-  OpsAnalyticsProjectionAssembly,
-  OpsAnalyticsRepositoryInstrumentation
+import riichinexus.microservices.auth.tables.guestsession.GuestSessionTable
+import riichinexus.microservices.auth.tables.player.AuthPlayerTable
+import riichinexus.microservices.club.tables.ClubTables
+import riichinexus.microservices.dictionary.domain.DictionaryBackedRatingConfigProvider
+import riichinexus.microservices.dictionary.tables.DictionaryTables
+import riichinexus.microservices.opsanalytics.projections.{
+  AdvancedStatsProjectionSubscriber,
+  ClubProjectionSubscriber,
+  DashboardProjectionSubscriber,
+  EventCascadeProjectionSubscriber,
+  RatingProjectionSubscriber
 }
-import riichinexus.microservices.platformadmin.PlatformAdminModuleAssembly
-import riichinexus.microservices.player.PlayerModuleAssembly
-import riichinexus.microservices.publicquery.PublicQueryModuleAssembly
-import riichinexus.microservices.tournament.TournamentModuleAssembly
-import riichinexus.microservices.tournament.appeal.TournamentAppealModuleAssembly
+import riichinexus.microservices.opsanalytics.tables.OpsAnalyticsTables
+import riichinexus.microservices.platformadmin.tables.PlatformAdminTables
+import riichinexus.microservices.player.domain.PlayerRegistrationOperations
+import riichinexus.microservices.player.tables.PlayerTables
+import riichinexus.microservices.publicquery.tables.PublicQueryTables
+import riichinexus.microservices.tournament.appeal.domain.AppealApplicationService
+import riichinexus.microservices.tournament.appeal.tables.TournamentAppealTables
+import riichinexus.microservices.tournament.domain.KnockoutStageCoordinator
+import riichinexus.microservices.tournament.domain.TournamentStageQueryService
+import riichinexus.microservices.tournament.tables.TournamentTables
 
 object ApplicationAssembly:
 
@@ -140,8 +151,8 @@ object ApplicationAssembly:
   private def buildContext(
       wiring: WiringBundle
   ): ApplicationContext =
-    val diagnostics = OpsAnalyticsDiagnosticsAssembly.build()
-    val repositories = OpsAnalyticsRepositoryInstrumentation.instrument(wiring.repositories, diagnostics)
+    val diagnostics = PerformanceDiagnosticsService()
+    val repositories = PerformanceRepositoryInstrumentation.instrument(wiring.repositories, diagnostics)
     val eventBus = OutboxBackedDomainEventBus(
       repositories.domainEventOutboxRepository,
       repositories.domainEventDeliveryReceiptRepository,
@@ -150,91 +161,210 @@ object ApplicationAssembly:
       eagerDrainOnPublish = wiring.transactionManager == NoOpTransactionManager
     )
 
-    val playerModule = PlayerModuleAssembly.build(
-      repositories = repositories,
+    val playerRegistration = PlayerRegistrationOperations(
+      repositories.playerRepository,
+      repositories.dashboardRepository,
+      wiring.transactionManager
+    )
+    val playerModule = PlayerModuleContext(
+      tables = PlayerTables(
+        playerRepository = repositories.playerRepository
+      ),
+      registration = playerRegistration
+    )
+    val authModule = AuthModuleContext(
+      playerTable = AuthPlayerTable(repositories.playerRepository),
+      guestSessionTable = GuestSessionTable(repositories.guestSessionRepository),
+      playerRegistration = playerRegistration,
+      playerRepository = repositories.playerRepository,
+      accountCredentialRepository = repositories.accountCredentialRepository,
+      authenticatedSessionRepository = repositories.authenticatedSessionRepository,
+      guestSessionRepository = repositories.guestSessionRepository,
+      clubRepository = repositories.clubRepository,
+      auditEventRepository = repositories.auditEventRepository,
       transactionManager = wiring.transactionManager
     )
-    val authModule = AuthModuleAssembly.build(
-      repositories = repositories,
-      transactionManager = wiring.transactionManager,
-      playerService = playerModule.service
+    val clubTables = ClubTables(
+      clubRepository = repositories.clubRepository,
+      playerRepository = repositories.playerRepository,
+      tournamentRepository = repositories.tournamentRepository,
+      matchRecordRepository = repositories.matchRecordRepository
     )
-    val advancedStatsService = AdvancedStatsPipelineAssembly.build(
-      repositories = repositories,
-      transactionManager = wiring.transactionManager
+    val tournamentRuleEngine = DefaultTournamentRuleEngine()
+    val knockoutStageCoordinator = KnockoutStageCoordinator(
+      repositories.tournamentRepository,
+      repositories.playerRepository,
+      repositories.clubRepository,
+      repositories.tableRepository,
+      repositories.matchRecordRepository,
+      tournamentRuleEngine,
+      wiring.transactionManager
     )
-    val clubModuleCore = ClubModuleAssembly.buildCore(
-      repositories = repositories,
-      transactionManager = wiring.transactionManager,
-      authorizationService = wiring.authorizationService
+    val tournamentTables = TournamentTables(
+      tournamentRepository = repositories.tournamentRepository,
+      tableRepository = repositories.tableRepository,
+      matchRecordRepository = repositories.matchRecordRepository,
+      paifuRepository = repositories.paifuRepository,
+      tournamentSettlementRepository = repositories.tournamentSettlementRepository,
+      playerRepository = repositories.playerRepository,
+      clubRepository = repositories.clubRepository
     )
-    val tournamentModule = TournamentModuleAssembly.build(
-      repositories = repositories,
-      clubViews = clubModuleCore.views,
+    val tournamentStageQueries = TournamentStageQueryService(
+      tournamentTables,
+      tournamentRuleEngine,
+      knockoutStageCoordinator
+    )
+    val tournamentModule = TournamentModuleContext(
+      tables = tournamentTables,
+      tournamentRepository = repositories.tournamentRepository,
+      playerRepository = repositories.playerRepository,
+      clubRepository = repositories.clubRepository,
+      globalDictionaryRepository = repositories.globalDictionaryRepository,
+      tableRepository = repositories.tableRepository,
+      matchRecordRepository = repositories.matchRecordRepository,
+      paifuRepository = repositories.paifuRepository,
+      tournamentSettlementRepository = repositories.tournamentSettlementRepository,
+      auditEventRepository = repositories.auditEventRepository,
+      seatingPolicy = BalancedEloSeatingPolicy(),
+      tournamentRuleEngine = tournamentRuleEngine,
+      knockoutStageCoordinator = knockoutStageCoordinator,
+      stageQueries = tournamentStageQueries,
       eventBus = eventBus,
       transactionManager = wiring.transactionManager,
       authorizationService = wiring.authorizationService
     )
-    val clubModule = ClubModuleAssembly.context(
-      core = clubModuleCore,
-      tournamentService = tournamentModule.service,
-      tournamentViews = tournamentModule.views
-    )
-    val tournamentAppealModule = TournamentAppealModuleAssembly.build(
-      repositories = repositories,
-      knockoutStageCoordinator = tournamentModule.knockoutStageCoordinator,
-      eventBus = eventBus,
+    val clubModule = ClubModuleContext(
+      tables = clubTables,
+      clubRepository = repositories.clubRepository,
+      playerRepository = repositories.playerRepository,
+      globalDictionaryRepository = repositories.globalDictionaryRepository,
+      dashboardRepository = repositories.dashboardRepository,
+      auditEventRepository = repositories.auditEventRepository,
       transactionManager = wiring.transactionManager,
-      authorizationService = wiring.authorizationService
-    )
-    val publicQueryModule = PublicQueryModuleAssembly.build(
-      repositories = repositories,
       authorizationService = wiring.authorizationService,
-      clubViews = clubModuleCore.views,
-      tournamentViews = tournamentModule.views
+      tournamentModule = tournamentModule
     )
-    val platformAdminModule = PlatformAdminModuleAssembly.build(
-      repositories = repositories,
+    val tournamentAppealModule = TournamentAppealModuleContext(
+      tables = TournamentAppealTables(
+        appealTicketRepository = repositories.appealTicketRepository
+      ),
+      service = AppealApplicationService(
+        repositories.appealTicketRepository,
+        repositories.tableRepository,
+        repositories.playerRepository,
+        knockoutStageCoordinator,
+        repositories.auditEventRepository,
+        eventBus,
+        wiring.transactionManager,
+        wiring.authorizationService
+      )
+    )
+    val publicQueryTables = PublicQueryTables(
+      tournamentRepository = repositories.tournamentRepository,
+      tableRepository = repositories.tableRepository,
+      playerRepository = repositories.playerRepository,
+      clubRepository = repositories.clubRepository,
+      globalDictionaryRepository = repositories.globalDictionaryRepository
+    )
+    val publicQueryModule = PublicQueryModuleContext(
+      tables = publicQueryTables
+    )
+    val platformAdminModule = PlatformAdminModuleContext(
+      tables = PlatformAdminTables(
+        playerRepository = repositories.playerRepository,
+        clubRepository = repositories.clubRepository
+      ),
+      playerRepository = repositories.playerRepository,
+      clubRepository = repositories.clubRepository,
+      auditEventRepository = repositories.auditEventRepository,
       eventBus = eventBus,
       transactionManager = wiring.transactionManager,
       authorizationService = wiring.authorizationService
     )
-    val domainEventSubscribers = OpsAnalyticsProjectionAssembly.subscribers(
-      repositories = repositories,
-      advancedStatsService = advancedStatsService
+    val domainEventSubscribers = Vector[DomainEventSubscriber](
+      RatingProjectionSubscriber(
+        repositories.playerRepository,
+        PairwiseEloRatingService(DictionaryBackedRatingConfigProvider(repositories.globalDictionaryRepository))
+      ),
+      ClubProjectionSubscriber(
+        repositories.clubRepository,
+        repositories.playerRepository,
+        repositories.globalDictionaryRepository
+      ),
+      DashboardProjectionSubscriber(
+        repositories.matchRecordRepository,
+        repositories.paifuRepository,
+        repositories.playerRepository,
+        repositories.clubRepository,
+        repositories.dashboardRepository
+      ),
+      AdvancedStatsProjectionSubscriber(
+        repositories.paifuRepository,
+        repositories.matchRecordRepository,
+        repositories.playerRepository,
+        repositories.clubRepository,
+        repositories.advancedStatsBoardRepository,
+        repositories.advancedStatsRecomputeTaskRepository,
+        wiring.transactionManager
+      ),
+      EventCascadeProjectionSubscriber(
+        repositories.paifuRepository,
+        repositories.matchRecordRepository,
+        repositories.playerRepository,
+        repositories.clubRepository,
+        repositories.dashboardRepository,
+        repositories.advancedStatsBoardRepository,
+        repositories.eventCascadeRecordRepository,
+        repositories.globalDictionaryRepository
+      )
     )
     domainEventSubscribers.foreach(eventBus.register)
-    val dictionaryModule = DictionaryModuleAssembly.build(
-      repositories = repositories,
+    val dictionaryModule = DictionaryModuleContext(
+      tables = DictionaryTables(
+        globalDictionaryRepository = repositories.globalDictionaryRepository,
+        dictionaryNamespaceRepository = repositories.dictionaryNamespaceRepository
+      ),
+      playerRepository = repositories.playerRepository,
+      clubRepository = repositories.clubRepository,
+      globalDictionaryRepository = repositories.globalDictionaryRepository,
+      dictionaryNamespaceRepository = repositories.dictionaryNamespaceRepository,
+      auditEventRepository = repositories.auditEventRepository,
       eventBus = eventBus,
       transactionManager = wiring.transactionManager,
       authorizationService = wiring.authorizationService
     )
-    val opsAnalyticsModule = OpsAnalyticsModuleAssembly.build(
-      repositories = repositories,
-      diagnostics = diagnostics,
-      advancedStatsService = advancedStatsService,
+    val opsAnalyticsModule = OpsAnalyticsModuleContext(
+      tables = OpsAnalyticsTables(
+        advancedStatsRecomputeTaskRepository = repositories.advancedStatsRecomputeTaskRepository,
+        eventCascadeRecordRepository = repositories.eventCascadeRecordRepository,
+        dashboardRepository = repositories.dashboardRepository,
+        advancedStatsBoardRepository = repositories.advancedStatsBoardRepository,
+        auditEventRepository = repositories.auditEventRepository
+      ),
+      paifuRepository = repositories.paifuRepository,
+      matchRecordRepository = repositories.matchRecordRepository,
+      playerRepository = repositories.playerRepository,
+      clubRepository = repositories.clubRepository,
+      advancedStatsBoardRepository = repositories.advancedStatsBoardRepository,
+      advancedStatsRecomputeTaskRepository = repositories.advancedStatsRecomputeTaskRepository,
+      domainEventOutboxRepository = repositories.domainEventOutboxRepository,
+      domainEventDeliveryReceiptRepository = repositories.domainEventDeliveryReceiptRepository,
+      domainEventSubscriberCursorRepository = repositories.domainEventSubscriberCursorRepository,
       domainEventSubscribers = domainEventSubscribers,
-      eventBus = eventBus,
+      auditEventRepository = repositories.auditEventRepository,
       transactionManager = wiring.transactionManager,
       authorizationService = wiring.authorizationService,
-      playerService = playerModule.service,
-      guestSessionService = authModule.guestSessionService,
-      publicQueryService = publicQueryModule.service,
-      clubService = clubModuleCore.service,
-      tournamentService = tournamentModule.service,
-      tableService = tournamentModule.tableService,
-      appealService = tournamentAppealModule.service
+      performanceDiagnosticsService = diagnostics
     )
 
     new ApplicationContext(
       authModule = authModule,
-      playerModule = playerModule.context,
+      playerModule = playerModule,
       clubModule = clubModule,
       dictionaryModule = dictionaryModule,
-      publicQueryModule = publicQueryModule.context,
+      publicQueryModule = publicQueryModule,
       opsAnalyticsModule = opsAnalyticsModule,
-      tournamentModule = tournamentModule.context,
+      tournamentModule = tournamentModule,
       platformAdminModule = platformAdminModule,
       tournamentAppealModule = tournamentAppealModule,
       repositories = repositories,

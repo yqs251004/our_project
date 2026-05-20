@@ -7,7 +7,7 @@ import munit.FunSuite
 import riichinexus.application.ports.GlobalDictionaryRepository
 import riichinexus.bootstrap.ApplicationContext
 import riichinexus.domain.model.*
-import riichinexus.microservices.dictionary.api.DictionaryGovernanceService
+import riichinexus.microservices.dictionary.objects.DictionaryTestClient
 
 trait RiichiNexusSuiteSupport extends TestApplicationAccess:
   self: FunSuite =>
@@ -51,8 +51,8 @@ trait RiichiNexusSuiteSupport extends TestApplicationAccess:
   protected def principalFor(app: ApplicationContext, playerId: PlayerId): AccessPrincipal =
     playerRepository(app).findById(playerId).get.asPrincipal
 
-  protected def dictionaryGovernance(app: ApplicationContext): DictionaryGovernanceService =
-    dictionaryGovernanceService(app)
+  protected def dictionaryApi(app: ApplicationContext): DictionaryTestClient =
+    dictionaryApiClient(app)
 
   protected def detailedAnalyticsPaifu(
       table: Table,

@@ -10,7 +10,7 @@ import riichinexus.application.ports.{
   TournamentSettlementRepository
 }
 import riichinexus.domain.model.*
-import riichinexus.microservices.tournament.objects.{StageTableQuery, TournamentSettlementQuery}
+import riichinexus.microservices.tournament.objects.apiTypes.{StageTableQuery, TournamentSettlementQuery}
 
 final class TournamentTables(
     tournamentRepository: TournamentRepository,

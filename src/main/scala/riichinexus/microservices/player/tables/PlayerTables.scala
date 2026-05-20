@@ -2,7 +2,7 @@ package riichinexus.microservices.player.tables
 
 import riichinexus.application.ports.PlayerRepository
 import riichinexus.domain.model.*
-import riichinexus.microservices.player.objects.PlayerListQuery
+import riichinexus.microservices.player.objects.apiTypes.PlayerListQuery
 
 final class PlayerTables(
     playerRepository: PlayerRepository

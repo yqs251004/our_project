@@ -6,8 +6,6 @@ import munit.FunSuite
 
 import riichinexus.bootstrap.ApplicationContext
 import riichinexus.domain.model.*
-import riichinexus.microservices.club.api.ClubQueryApi
-import riichinexus.microservices.club.objects.ClubPrivilegeSnapshotQuery
 
 class RiichiNexusClubOperationsSuite extends FunSuite with RiichiNexusSuiteSupport:
   test("club operations update treasury point pool and rank tree") {
@@ -15,9 +13,9 @@ class RiichiNexusClubOperationsSuite extends FunSuite with RiichiNexusSuiteSuppo
     val now = Instant.parse("2026-03-13T14:00:00Z")
 
     val owner = playerService(app).registerPlayer("club-ops-owner", "Owner", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1800)
-    val club = clubService(app).createClub("Operations Club", owner.id, now, owner.asPrincipal)
+    val club = clubApi(app).createClub("Operations Club", owner.id, now, owner.asPrincipal)
 
-    val afterTreasury = clubService(app).adjustTreasury(
+    val afterTreasury = clubApi(app).adjustTreasury(
       club.id,
       delta = 5000L,
       actor = principalFor(app, owner.id),
@@ -26,7 +24,7 @@ class RiichiNexusClubOperationsSuite extends FunSuite with RiichiNexusSuiteSuppo
     ).getOrElse(fail("treasury update failed"))
     assertEquals(afterTreasury.treasuryBalance, 5000L)
 
-    val afterPointPool = clubService(app).adjustPointPool(
+    val afterPointPool = clubApi(app).adjustPointPool(
       club.id,
       delta = 320,
       actor = principalFor(app, owner.id),
@@ -35,7 +33,7 @@ class RiichiNexusClubOperationsSuite extends FunSuite with RiichiNexusSuiteSuppo
     ).getOrElse(fail("point pool update failed"))
     assertEquals(afterPointPool.pointPool, 320)
 
-    val updatedRankTree = clubService(app).updateRankTree(
+    val updatedRankTree = clubApi(app).updateRankTree(
       club.id,
       rankTree = Vector(
         ClubRankNode("rookie", "Rookie", 0),
@@ -61,10 +59,10 @@ class RiichiNexusClubOperationsSuite extends FunSuite with RiichiNexusSuiteSuppo
 
     val owner = playerService(app).registerPlayer("club-rank-owner", "RankOwner", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1800)
     val member = playerService(app).registerPlayer("club-rank-member", "RankMember", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
-    val club = clubService(app).createClub("Ranked Club", owner.id, now, owner.asPrincipal)
-    clubService(app).addMember(club.id, member.id, principalFor(app, owner.id))
+    val club = clubApi(app).createClub("Ranked Club", owner.id, now, owner.asPrincipal)
+    clubApi(app).addMember(club.id, member.id, principalFor(app, owner.id))
 
-    clubService(app).updateRankTree(
+    clubApi(app).updateRankTree(
       club.id,
       Vector(
         ClubRankNode("rookie", "Rookie", 0),
@@ -75,7 +73,7 @@ class RiichiNexusClubOperationsSuite extends FunSuite with RiichiNexusSuiteSuppo
       occurredAt = now.plusSeconds(30)
     )
 
-    clubService(app).adjustMemberContribution(
+    clubApi(app).adjustMemberContribution(
       club.id,
       member.id,
       delta = 260,
@@ -84,14 +82,14 @@ class RiichiNexusClubOperationsSuite extends FunSuite with RiichiNexusSuiteSuppo
       note = Some("league operations")
     )
 
-    val snapshot = ClubQueryApi.privilegeSnapshot(clubTables(app), club.id, member.id)
+    val snapshot = clubTables(app).memberPrivilegeSnapshot(club.id, member.id)
       .getOrElse(fail("member privilege snapshot missing"))
     assertEquals(snapshot.contribution, 260)
     assertEquals(snapshot.rankCode, "officer")
     assertEquals(snapshot.privileges, Vector("approve-roster", "manage-bank"))
     assertEquals(snapshot.isAdmin, false)
 
-    val listed = ClubQueryApi.listPrivilegeSnapshots(clubTables(app), club.id, ClubPrivilegeSnapshotQuery())
+    val listed = clubTables(app).listMemberPrivilegeSnapshots(club.id)
     assert(listed.exists(_.playerId == member.id))
 
     val auditTypes = auditEventRepository(app).findByAggregate("club", club.id.value).map(_.eventType)
@@ -108,12 +106,12 @@ class RiichiNexusClubOperationsSuite extends FunSuite with RiichiNexusSuiteSuppo
     val fourth = playerService(app).registerPlayer("delegated-fourth", "DelegatedFourth", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1620)
     val applicant = playerService(app).registerPlayer("delegated-applicant", "DelegatedApplicant", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1580)
 
-    val club = clubService(app).createClub("Delegated Club", owner.id, now, owner.asPrincipal)
+    val club = clubApi(app).createClub("Delegated Club", owner.id, now, owner.asPrincipal)
     Vector(delegate, third, fourth).foreach(player =>
-      clubService(app).addMember(club.id, player.id, principalFor(app, owner.id))
+      clubApi(app).addMember(club.id, player.id, principalFor(app, owner.id))
     )
 
-    clubService(app).updateRankTree(
+    clubApi(app).updateRankTree(
       club.id,
       Vector(
         ClubRankNode("rookie", "Rookie", 0),
@@ -127,7 +125,7 @@ class RiichiNexusClubOperationsSuite extends FunSuite with RiichiNexusSuiteSuppo
       principalFor(app, owner.id),
       occurredAt = now.plusSeconds(10)
     )
-    clubService(app).adjustMemberContribution(
+    clubApi(app).adjustMemberContribution(
       club.id,
       delegate.id,
       delta = 120,
@@ -137,7 +135,7 @@ class RiichiNexusClubOperationsSuite extends FunSuite with RiichiNexusSuiteSuppo
 
     val delegatePrincipal = principalFor(app, delegate.id)
 
-    val application = clubService(app).applyForMembership(
+    val application = clubApi(app).applyForMembership(
       club.id,
       applicantUserId = Some(applicant.userId),
       displayName = applicant.nickname,
@@ -146,7 +144,7 @@ class RiichiNexusClubOperationsSuite extends FunSuite with RiichiNexusSuiteSuppo
       actor = principalFor(app, applicant.id)
     ).getOrElse(fail("application missing"))
 
-    val afterApproval = clubService(app).approveMembershipApplication(
+    val afterApproval = clubApi(app).approveMembershipApplication(
       club.id,
       application.id,
       applicant.id,
@@ -156,7 +154,7 @@ class RiichiNexusClubOperationsSuite extends FunSuite with RiichiNexusSuiteSuppo
     ).getOrElse(fail("approval failed"))
     assert(afterApproval.members.contains(applicant.id))
 
-    val afterTreasury = clubService(app).adjustTreasury(
+    val afterTreasury = clubApi(app).adjustTreasury(
       club.id,
       delta = 2000,
       actor = delegatePrincipal,
@@ -205,10 +203,10 @@ class RiichiNexusClubOperationsSuite extends FunSuite with RiichiNexusSuiteSuppo
 
     val ownerA = playerService(app).registerPlayer("relation-a", "RelationA", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1650)
     val ownerB = playerService(app).registerPlayer("relation-b", "RelationB", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1640)
-    val clubA = clubService(app).createClub("Alliance A", ownerA.id, now, ownerA.asPrincipal)
-    val clubB = clubService(app).createClub("Alliance B", ownerB.id, now, ownerB.asPrincipal)
+    val clubA = clubApi(app).createClub("Alliance A", ownerA.id, now, ownerA.asPrincipal)
+    val clubB = clubApi(app).createClub("Alliance B", ownerB.id, now, ownerB.asPrincipal)
 
-    clubService(app).updateRelation(
+    clubApi(app).updateRelation(
       clubA.id,
       ClubRelation(clubB.id, ClubRelationKind.Alliance, now, Some("shared training")),
       principalFor(app, ownerA.id),
@@ -222,7 +220,7 @@ class RiichiNexusClubOperationsSuite extends FunSuite with RiichiNexusSuiteSuppo
     assertEquals(alliedB.relations.map(_.targetClubId), Vector(clubA.id))
     assertEquals(alliedB.relations.map(_.relation), Vector(ClubRelationKind.Alliance))
 
-    clubService(app).updateRelation(
+    clubApi(app).updateRelation(
       clubA.id,
       ClubRelation(clubB.id, ClubRelationKind.Neutral, now.plusSeconds(60), Some("season reset")),
       principalFor(app, ownerA.id),
@@ -240,9 +238,9 @@ class RiichiNexusClubOperationsSuite extends FunSuite with RiichiNexusSuiteSuppo
     val now = Instant.parse("2026-03-13T14:30:00Z")
 
     val owner = playerService(app).registerPlayer("club-honor-owner", "HonorOwner", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1800)
-    val club = clubService(app).createClub("Honor Club", owner.id, now, owner.asPrincipal)
+    val club = clubApi(app).createClub("Honor Club", owner.id, now, owner.asPrincipal)
 
-    val afterAward = clubService(app).awardHonor(
+    val afterAward = clubApi(app).awardHonor(
       club.id,
       ClubHonor("Spring Split Champion", now.plusSeconds(60), Some("won grand finals")),
       principalFor(app, owner.id),
@@ -250,7 +248,7 @@ class RiichiNexusClubOperationsSuite extends FunSuite with RiichiNexusSuiteSuppo
     ).getOrElse(fail("honor award failed"))
     assertEquals(afterAward.honors.map(_.title), Vector("Spring Split Champion"))
 
-    val afterUpdate = clubService(app).awardHonor(
+    val afterUpdate = clubApi(app).awardHonor(
       club.id,
       ClubHonor("Spring Split Champion", now.plusSeconds(120), Some("updated note")),
       principalFor(app, owner.id),
@@ -259,7 +257,7 @@ class RiichiNexusClubOperationsSuite extends FunSuite with RiichiNexusSuiteSuppo
     assertEquals(afterUpdate.honors.size, 1)
     assertEquals(afterUpdate.honors.head.note, Some("updated note"))
 
-    val afterRevoke = clubService(app).revokeHonor(
+    val afterRevoke = clubApi(app).revokeHonor(
       club.id,
       "Spring Split Champion",
       principalFor(app, owner.id),

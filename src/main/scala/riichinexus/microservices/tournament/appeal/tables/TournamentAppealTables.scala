@@ -2,7 +2,7 @@ package riichinexus.microservices.tournament.appeal.tables
 
 import riichinexus.application.ports.AppealTicketRepository
 import riichinexus.domain.model.*
-import riichinexus.microservices.tournament.appeal.objects.AppealListQuery
+import riichinexus.microservices.tournament.appeal.objects.apiTypes.AppealListQuery
 
 final class TournamentAppealTables(
     appealTicketRepository: AppealTicketRepository

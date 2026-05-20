@@ -13,21 +13,26 @@ import munit.FunSuite
 import riichinexus.bootstrap.ApplicationContext
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.api.responses.*
-import riichinexus.microservices.club.api.responses.ClubTournamentResponses.given
-import riichinexus.microservices.club.api.requests.*
-import riichinexus.microservices.dictionary.api.requests.UpsertDictionaryRequest
-import riichinexus.microservices.opsanalytics.api.PerformanceDiagnosticsSnapshot
-import riichinexus.microservices.shared.api.requests.OperatorRequest
-import riichinexus.microservices.shared.api.requests.OperatorRequest.given
-import riichinexus.microservices.publicquery.api.responses.*
-import riichinexus.microservices.publicquery.api.responses.PublicQueryResponses.given
-import riichinexus.microservices.tournament.api.responses.*
-import riichinexus.microservices.tournament.api.responses.TournamentOperationResponses.given
-import riichinexus.microservices.tournament.api.requests.SettlementRequests.given
-import riichinexus.microservices.tournament.api.requests.StageRequests.given
-import riichinexus.microservices.tournament.api.requests.TableRequests.given
-import riichinexus.microservices.tournament.api.requests.*
+import riichinexus.microservices.club.objects.apiTypes.*
+import riichinexus.microservices.club.objects.apiTypes.ClubTournamentResponses.given
+import riichinexus.microservices.club.objects.apiTypes.*
+import riichinexus.microservices.dictionary.objects.apiTypes.UpsertDictionaryRequest
+import riichinexus.microservices.opsanalytics.objects.apiTypes.PerformanceDiagnosticsSnapshot
+import riichinexus.system.objects.apiTypes.OperatorRequest
+import riichinexus.system.objects.apiTypes.OperatorRequest.given
+import riichinexus.system.objects.apiTypes.PagedResponse
+import riichinexus.microservices.publicquery.objects.apiTypes.*
+import riichinexus.microservices.publicquery.objects.apiTypes.PublicQueryResponses.given
+import riichinexus.microservices.tournament.api.*
+import riichinexus.microservices.tournament.objects.apiTypes.*
+import riichinexus.microservices.tournament.objects.apiTypes.TournamentOperationResponses.given
+import riichinexus.microservices.tournament.appeal.api.*
+import riichinexus.microservices.tournament.appeal.objects.apiTypes.*
+import riichinexus.microservices.tournament.appeal.objects.apiTypes.TournamentAppealResponses.given
+import riichinexus.microservices.tournament.objects.apiTypes.SettlementRequests.given
+import riichinexus.microservices.tournament.objects.apiTypes.StageRequests.given
+import riichinexus.microservices.tournament.objects.apiTypes.TableRequests.given
+import riichinexus.microservices.tournament.objects.apiTypes.*
 import upickle.default.*
 
 class ApiServerTournamentCollectionSuite extends FunSuite with ApiServerSuiteSupport:
@@ -86,27 +91,30 @@ class ApiServerTournamentCollectionSuite extends FunSuite with ApiServerSuiteSup
     )
 
     withServer(app) { baseUrl =>
-      val tablesResponse = get(
-        s"$baseUrl/tables?tournamentId=${tournament.id.value}&status=AppealInProgress&limit=5"
+      val tablesResponse = postApi(
+        baseUrl,
+        TournamentTableListAPIMessage(tournamentId = Some(tournament.id.value), status = Some("AppealInProgress"), limit = Some(5))
       )
       assertEquals(tablesResponse.statusCode(), 200)
-      val tablesPage = readPage[Table](tablesResponse.body())
+      val tablesPage = readPage[TournamentTableView](tablesResponse.body())
       assertEquals(tablesPage.total, 1)
-      assertEquals(tablesPage.items.map(_.id), Vector(secondTable.id))
+      assertEquals(tablesPage.items.map(_.tableId), Vector(secondTable.id))
 
-      val recordsResponse = get(
-        s"$baseUrl/records?tournamentId=${tournament.id.value}&playerId=${winner.value}&limit=1"
+      val recordsResponse = postApi(
+        baseUrl,
+        TournamentRecordListAPIMessage(tournamentId = Some(tournament.id.value), playerId = Some(winner.value), limit = Some(1))
       )
       assertEquals(recordsResponse.statusCode(), 200)
-      val recordsPage = readPage[MatchRecord](recordsResponse.body())
+      val recordsPage = readPage[TournamentMatchRecordView](recordsResponse.body())
       assertEquals(recordsPage.total, 1)
       assertEquals(recordsPage.items.head.tableId, firstTable.id)
 
-      val appealsResponse = get(
-        s"$baseUrl/appeals?tournamentId=${tournament.id.value}&status=Open&limit=1"
+      val appealsResponse = postJson(
+        s"$baseUrl/api/appeallistapi",
+        write(AppealListAPIMessage(tournamentId = Some(tournament.id.value), status = Some("Open"), limit = Some(1)))
       )
       assertEquals(appealsResponse.statusCode(), 200)
-      val appealsPage = readPage[AppealTicket](appealsResponse.body())
+      val appealsPage = read[PagedResponse[AppealTicketView]](appealsResponse.body())
       assertEquals(appealsPage.total, 1)
       assertEquals(appealsPage.items.head.tableId, secondTable.id)
       assertEquals(appealsPage.appliedFilters("status"), "Open")

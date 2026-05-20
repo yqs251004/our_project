@@ -13,21 +13,23 @@ import munit.FunSuite
 import riichinexus.bootstrap.ApplicationContext
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.api.responses.*
-import riichinexus.microservices.club.api.responses.ClubTournamentResponses.given
-import riichinexus.microservices.club.api.requests.*
-import riichinexus.microservices.dictionary.api.requests.UpsertDictionaryRequest
-import riichinexus.microservices.opsanalytics.api.PerformanceDiagnosticsSnapshot
-import riichinexus.microservices.shared.api.requests.OperatorRequest
-import riichinexus.microservices.shared.api.requests.OperatorRequest.given
-import riichinexus.microservices.publicquery.api.responses.*
-import riichinexus.microservices.publicquery.api.responses.PublicQueryResponses.given
-import riichinexus.microservices.tournament.api.responses.*
-import riichinexus.microservices.tournament.api.responses.TournamentOperationResponses.given
-import riichinexus.microservices.tournament.api.requests.SettlementRequests.given
-import riichinexus.microservices.tournament.api.requests.StageRequests.given
-import riichinexus.microservices.tournament.api.requests.TableRequests.given
-import riichinexus.microservices.tournament.api.requests.*
+import riichinexus.microservices.club.objects.apiTypes.*
+import riichinexus.microservices.club.objects.apiTypes.ClubTournamentResponses.given
+import riichinexus.microservices.club.objects.apiTypes.*
+import riichinexus.microservices.dictionary.objects.apiTypes.UpsertDictionaryRequest
+import riichinexus.microservices.opsanalytics.objects.apiTypes.PerformanceDiagnosticsSnapshot
+import riichinexus.system.objects.apiTypes.OperatorRequest
+import riichinexus.system.objects.apiTypes.OperatorRequest.given
+import riichinexus.microservices.publicquery.api.ListPublicSchedulesAPIMessage
+import riichinexus.microservices.publicquery.objects.apiTypes.*
+import riichinexus.microservices.publicquery.objects.apiTypes.PublicQueryResponses.given
+import riichinexus.microservices.tournament.api.*
+import riichinexus.microservices.tournament.objects.apiTypes.*
+import riichinexus.microservices.tournament.objects.apiTypes.TournamentOperationResponses.given
+import riichinexus.microservices.tournament.objects.apiTypes.SettlementRequests.given
+import riichinexus.microservices.tournament.objects.apiTypes.StageRequests.given
+import riichinexus.microservices.tournament.objects.apiTypes.TableRequests.given
+import riichinexus.microservices.tournament.objects.apiTypes.*
 import upickle.default.*
 
 class ApiServerTournamentListingSuite extends FunSuite with ApiServerSuiteSupport:
@@ -77,16 +79,18 @@ class ApiServerTournamentListingSuite extends FunSuite with ApiServerSuiteSuppor
     )
 
     withServer(app) { baseUrl =>
-      val tournamentsResponse = get(
-        s"$baseUrl/tournaments?adminId=${admin.id.value}&status=InProgress&organizer=QA"
+      val tournamentsResponse = postApi(
+        baseUrl,
+        TournamentListAPIMessage(adminId = Some(admin.id.value), status = Some("InProgress"), organizer = Some("QA"))
       )
       assertEquals(tournamentsResponse.statusCode(), 200)
-      val tournamentsPage = readPage[Tournament](tournamentsResponse.body())
+      val tournamentsPage = readPage[TournamentSummaryView](tournamentsResponse.body())
       assertEquals(tournamentsPage.total, 1)
-      assertEquals(tournamentsPage.items.map(_.id), Vector(publishedTournament.id))
+      assertEquals(tournamentsPage.items.map(_.tournamentId), Vector(publishedTournament.id))
 
-      val schedulesResponse = get(
-        s"$baseUrl/public/schedules?tournamentStatus=InProgress"
+      val schedulesResponse = postJson(
+        s"$baseUrl/api/listpublicschedulesapi",
+        write(ListPublicSchedulesAPIMessage(tournamentStatus = Some("InProgress")))
       )
       assertEquals(schedulesResponse.statusCode(), 200)
       val schedulesPage = readPage[PublicScheduleView](schedulesResponse.body())

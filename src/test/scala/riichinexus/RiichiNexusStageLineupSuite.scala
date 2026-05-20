@@ -7,7 +7,6 @@ import munit.FunSuite
 import riichinexus.application.ports.GlobalDictionaryRepository
 import riichinexus.bootstrap.ApplicationContext
 import riichinexus.domain.model.*
-import riichinexus.microservices.publicquery.api.PublicQueryService
 
 class RiichiNexusStageLineupSuite extends FunSuite with RiichiNexusSuiteSupport:
 
@@ -20,9 +19,9 @@ class RiichiNexusStageLineupSuite extends FunSuite with RiichiNexusSuiteSupport:
     val west = playerService(app).registerPlayer("wind-west", "West", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
     val north = playerService(app).registerPlayer("wind-north", "North", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now)
 
-    val club = clubService(app).createClub("Preferred Wind Club", owner.id, now, owner.asPrincipal)
+    val club = clubApi(app).createClub("Preferred Wind Club", owner.id, now, owner.asPrincipal)
     Vector(south, west, north).foreach(player =>
-      clubService(app).addMember(club.id, player.id, principalFor(app, owner.id))
+      clubApi(app).addMember(club.id, player.id, principalFor(app, owner.id))
     )
 
     val stage = TournamentStage(IdGenerator.stageId(), "Preferred Wind Stage", StageFormat.Swiss, 1, 1)
@@ -73,9 +72,9 @@ class RiichiNexusStageLineupSuite extends FunSuite with RiichiNexusSuiteSupport:
     val absent = playerService(app).registerPlayer("reserve-absent", "Absent", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now)
     val reserve = playerService(app).registerPlayer("reserve-bench", "Reserve", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1550)
 
-    val club = clubService(app).createClub("Reserve Club", owner.id, now, owner.asPrincipal)
+    val club = clubApi(app).createClub("Reserve Club", owner.id, now, owner.asPrincipal)
     Vector(alpha, bravo, absent, reserve).foreach(player =>
-      clubService(app).addMember(club.id, player.id, principalFor(app, owner.id))
+      clubApi(app).addMember(club.id, player.id, principalFor(app, owner.id))
     )
 
     val stage = TournamentStage(IdGenerator.stageId(), "Reserve Stage", StageFormat.Swiss, 1, 1)

@@ -5,6 +5,7 @@ import java.time.Instant
 import munit.FunSuite
 
 import riichinexus.bootstrap.ApplicationContext
+import riichinexus.domain.event.PlayerBanned
 import riichinexus.domain.model.*
 
 class RiichiNexusCoreSuite extends FunSuite with RiichiNexusSuiteSupport:
@@ -14,10 +15,10 @@ class RiichiNexusCoreSuite extends FunSuite with RiichiNexusSuiteSupport:
     val now = Instant.parse("2026-03-15T17:00:00Z")
 
     val owner = playerService(app).registerPlayer("guest-owner", "GuestOwner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
-    val club = clubService(app).createClub("Guest Friendly Club", owner.id, now, owner.asPrincipal)
-    val session = guestSessionService(app).createSession("LobbyVisitor", now.plusSeconds(30))
+    val club = clubApi(app).createClub("Guest Friendly Club", owner.id, now, owner.asPrincipal)
+    val session = createGuestSession(app, "LobbyVisitor")
 
-    val application = clubService(app).applyForMembership(
+    val application = clubApi(app).applyForMembership(
       clubId = club.id,
       applicantUserId = Some(s"guest:${session.id.value}"),
       displayName = session.displayName,
@@ -26,7 +27,7 @@ class RiichiNexusCoreSuite extends FunSuite with RiichiNexusSuiteSupport:
       actor = AccessPrincipal.guest(session)
     ).getOrElse(fail("guest application missing"))
 
-    assertEquals(guestSessionService(app).findSession(session.id), Some(session))
+    assertEquals(app.authModule.guestSessionRepository.findById(session.id), Some(session))
     assertEquals(application.displayName, "LobbyVisitor")
     assertEquals(application.applicantUserId, Some(s"guest:${session.id.value}"))
     assertEquals(
@@ -41,9 +42,9 @@ class RiichiNexusCoreSuite extends FunSuite with RiichiNexusSuiteSupport:
 
     val owner = playerService(app).registerPlayer("withdraw-owner", "WithdrawOwner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
     val applicant = playerService(app).registerPlayer("withdraw-player", "WithdrawPlayer", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1500)
-    val club = clubService(app).createClub("Withdraw Club", owner.id, now, owner.asPrincipal)
+    val club = clubApi(app).createClub("Withdraw Club", owner.id, now, owner.asPrincipal)
 
-    val application = clubService(app).applyForMembership(
+    val application = clubApi(app).applyForMembership(
       clubId = club.id,
       applicantUserId = Some(applicant.userId),
       displayName = applicant.nickname,
@@ -51,7 +52,7 @@ class RiichiNexusCoreSuite extends FunSuite with RiichiNexusSuiteSupport:
       submittedAt = now.plusSeconds(30)
     ).getOrElse(fail("application missing"))
 
-    val withdrawn = clubService(app).withdrawMembershipApplication(
+    val withdrawn = clubApi(app).withdrawMembershipApplication(
       clubId = club.id,
       applicationId = application.id,
       actor = applicant.asPrincipal,
@@ -153,8 +154,7 @@ class RiichiNexusCoreSuite extends FunSuite with RiichiNexusSuiteSupport:
 
     val paifu = demoPaifu(table, tournament.id, stage.id, now.plusSeconds(120))
     tableService(app).recordCompletedTable(table.id, paifu)
-    val pendingTasks = advancedStatsRecomputeTaskRepository(app).findPending(20)
-    advancedStatsPipelineService(app).processPending(limit = 20, processedAt = now.plusSeconds(180))
+    val advancedStatsTasks = advancedStatsRecomputeTaskRepository(app).findAll()
 
     val updatedAlice = playerRepository(app).findById(alice.id).get
     val updatedBob = playerRepository(app).findById(bob.id).get
@@ -165,7 +165,7 @@ class RiichiNexusCoreSuite extends FunSuite with RiichiNexusSuiteSupport:
 
     assertNotEquals(updatedAlice.elo, alice.elo)
     assertNotEquals(updatedBob.elo, bob.elo)
-    assert(pendingTasks.exists(_.owner == DashboardOwner.Player(alice.id)))
+    assert(advancedStatsTasks.exists(_.owner == DashboardOwner.Player(alice.id)))
     assert(aliceDashboard.nonEmpty)
     assert(bobDashboard.nonEmpty)
     assert(aliceAdvancedStats.nonEmpty)
@@ -182,13 +182,13 @@ class RiichiNexusCoreSuite extends FunSuite with RiichiNexusSuiteSupport:
     val gamma = playerService(app).registerPlayer("u3", "Gamma", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1560)
     val delta = playerService(app).registerPlayer("u4", "Delta", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1540)
 
-    val clubA = clubService(app).createClub("Club A", alpha.id, now, alpha.asPrincipal)
-    val clubB = clubService(app).createClub("Club B", gamma.id, now, gamma.asPrincipal)
-    val clubC = clubService(app).createClub("Club C", delta.id, now, delta.asPrincipal)
+    val clubA = clubApi(app).createClub("Club A", alpha.id, now, alpha.asPrincipal)
+    val clubB = clubApi(app).createClub("Club B", gamma.id, now, gamma.asPrincipal)
+    val clubC = clubApi(app).createClub("Club C", delta.id, now, delta.asPrincipal)
 
-    clubService(app).addMember(clubA.id, beta.id, principalFor(app, alpha.id))
-    clubService(app).addMember(clubB.id, alpha.id, principalFor(app, gamma.id))
-    clubService(app).assignAdmin(clubB.id, alpha.id, principalFor(app, gamma.id))
+    clubApi(app).addMember(clubA.id, beta.id, principalFor(app, alpha.id))
+    clubApi(app).addMember(clubB.id, alpha.id, principalFor(app, gamma.id))
+    clubApi(app).assignAdmin(clubB.id, alpha.id, principalFor(app, gamma.id))
 
     val stage = TournamentStage(IdGenerator.stageId(), "Lineup Swiss", StageFormat.Swiss, 1, 1)
     val tournament = tournamentService(app).createTournament(
@@ -272,9 +272,9 @@ class RiichiNexusCoreSuite extends FunSuite with RiichiNexusSuiteSupport:
     val delta = playerService(app).registerPlayer("u4", "Delta", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1540)
     val epsilon = playerService(app).registerPlayer("u5", "Epsilon", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1520)
 
-    clubService(app).createClub("Primary Club", alpha.id, now, alpha.asPrincipal)
-    val secondaryClub = clubService(app).createClub("Secondary Club", epsilon.id, now, epsilon.asPrincipal)
-    clubService(app).addMember(secondaryClub.id, alpha.id, principalFor(app, epsilon.id))
+    clubApi(app).createClub("Primary Club", alpha.id, now, alpha.asPrincipal)
+    val secondaryClub = clubApi(app).createClub("Secondary Club", epsilon.id, now, epsilon.asPrincipal)
+    clubApi(app).addMember(secondaryClub.id, alpha.id, principalFor(app, epsilon.id))
 
     val stage = TournamentStage(IdGenerator.stageId(), "Dashboard Swiss", StageFormat.Swiss, 1, 1)
     val tournament = tournamentService(app).createTournament(
@@ -315,10 +315,10 @@ class RiichiNexusCoreSuite extends FunSuite with RiichiNexusSuiteSupport:
 
     val owner = playerService(app).registerPlayer("title-owner", "TitleOwner", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1800)
     val member = playerService(app).registerPlayer("title-member", "TitleMember", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
-    val club = clubService(app).createClub("Title Club", owner.id, now, owner.asPrincipal)
-    clubService(app).addMember(club.id, member.id, principalFor(app, owner.id))
+    val club = clubApi(app).createClub("Title Club", owner.id, now, owner.asPrincipal)
+    clubApi(app).addMember(club.id, member.id, principalFor(app, owner.id))
 
-    clubService(app).setInternalTitle(
+    clubApi(app).setInternalTitle(
       club.id,
       member.id,
       "Vice Captain",
@@ -326,7 +326,7 @@ class RiichiNexusCoreSuite extends FunSuite with RiichiNexusSuiteSupport:
       now.plusSeconds(30),
       Some("promotion")
     )
-    val clearedClub = clubService(app).clearInternalTitle(
+    val clearedClub = clubApi(app).clearInternalTitle(
       club.id,
       member.id,
       principalFor(app, owner.id),
@@ -350,16 +350,16 @@ class RiichiNexusCoreSuite extends FunSuite with RiichiNexusSuiteSupport:
     assertEquals(dashboardRepository(app).findByOwner(DashboardOwner.Player(owner.id)).map(_.sampleSize), Some(0))
     assertEquals(dashboardRepository(app).findByOwner(DashboardOwner.Player(member.id)).map(_.sampleSize), Some(0))
 
-    val club = clubService(app).createClub("Projection Club", owner.id, now, owner.asPrincipal)
+    val club = clubApi(app).createClub("Projection Club", owner.id, now, owner.asPrincipal)
     val createdClub = clubRepository(app).findById(club.id).getOrElse(fail("club missing after creation"))
     assertEquals(createdClub.powerRating, 1800.0)
     assertEquals(dashboardRepository(app).findByOwner(DashboardOwner.Club(club.id)).map(_.sampleSize), Some(0))
 
-    clubService(app).addMember(club.id, member.id, principalFor(app, owner.id))
+    clubApi(app).addMember(club.id, member.id, principalFor(app, owner.id))
     val expandedClub = clubRepository(app).findById(club.id).getOrElse(fail("club missing after add member"))
     assertEquals(expandedClub.powerRating, 1700.0)
 
-    clubService(app).removeMember(club.id, member.id, principalFor(app, owner.id))
+    clubApi(app).removeMember(club.id, member.id, principalFor(app, owner.id))
     val reducedClub = clubRepository(app).findById(club.id).getOrElse(fail("club missing after remove member"))
     assertEquals(reducedClub.powerRating, 1800.0)
   }
@@ -368,7 +368,7 @@ class RiichiNexusCoreSuite extends FunSuite with RiichiNexusSuiteSupport:
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-16T12:00:00Z")
 
-    dictionaryGovernance(app).upsertDictionary(
+    dictionaryApi(app).upsertDictionary(
       key = "club.power.baseBonus",
       value = "25",
       actor = AccessPrincipal.system,
@@ -378,10 +378,10 @@ class RiichiNexusCoreSuite extends FunSuite with RiichiNexusSuiteSupport:
     val owner = playerService(app).registerPlayer("dict-power-owner", "DictPowerOwner", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1800)
     val member = playerService(app).registerPlayer("dict-power-member", "DictPowerMember", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
 
-    val club = clubService(app).createClub("Dictionary Power Club", owner.id, now, owner.asPrincipal)
+    val club = clubApi(app).createClub("Dictionary Power Club", owner.id, now, owner.asPrincipal)
     assertEquals(clubRepository(app).findById(club.id).map(_.powerRating), Some(1825.0))
 
-    clubService(app).addMember(club.id, member.id, principalFor(app, owner.id))
+    clubApi(app).addMember(club.id, member.id, principalFor(app, owner.id))
     assertEquals(clubRepository(app).findById(club.id).map(_.powerRating), Some(1725.0))
   }
 
@@ -391,7 +391,7 @@ class RiichiNexusCoreSuite extends FunSuite with RiichiNexusSuiteSupport:
       val now = Instant.parse("2026-03-16T12:10:00Z")
 
       kFactor.foreach { value =>
-        dictionaryGovernance(app).upsertDictionary(
+        dictionaryApi(app).upsertDictionary(
           key = "rating.elo.kFactor",
           value = value.toString,
           actor = AccessPrincipal.system,
@@ -448,12 +448,12 @@ class RiichiNexusCoreSuite extends FunSuite with RiichiNexusSuiteSupport:
 
     val owner = playerService(app).registerPlayer("repair-owner", "RepairOwner", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1800)
     val member = playerService(app).registerPlayer("repair-member", "RepairMember", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
-    val club = clubService(app).createClub("Repair Club", owner.id, now, owner.asPrincipal)
-    clubService(app).addMember(club.id, member.id, principalFor(app, owner.id))
+    val club = clubApi(app).createClub("Repair Club", owner.id, now, owner.asPrincipal)
+    clubApi(app).addMember(club.id, member.id, principalFor(app, owner.id))
 
     val powerBefore = clubRepository(app).findById(club.id).getOrElse(fail("club missing before update")).powerRating
 
-    dictionaryGovernance(app).upsertDictionary(
+    dictionaryApi(app).upsertDictionary(
       key = "club.power.baseBonus",
       value = "50",
       actor = AccessPrincipal.system,
@@ -463,11 +463,10 @@ class RiichiNexusCoreSuite extends FunSuite with RiichiNexusSuiteSupport:
     val boostedClub = clubRepository(app).findById(club.id).getOrElse(fail("club missing after dictionary update"))
     assert(boostedClub.powerRating > powerBefore)
 
-    superAdminService(app).banPlayer(
-      playerId = owner.id,
-      reason = "rules violation",
-      actor = AccessPrincipal.system,
-      at = now.plusSeconds(60)
+    val currentOwner = playerRepository(app).findById(owner.id).getOrElse(fail("owner missing before ban"))
+    playerRepository(app).save(currentOwner.ban("rules violation"))
+    app.platformAdminModule.eventBus.publish(
+      PlayerBanned(owner.id, "rules violation", now.plusSeconds(60))
     )
 
     val repairedClub = clubRepository(app).findById(club.id).getOrElse(fail("club missing after ban"))

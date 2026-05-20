@@ -1,11 +1,12 @@
 package riichinexus.api.http
 
+import java.time.Instant
 import java.util.NoSuchElementException
 
 import org.http4s.Request
 import cats.effect.IO
 import riichinexus.domain.model.*
-import riichinexus.microservices.auth.api.responses.*
+import riichinexus.microservices.auth.objects.apiTypes.*
 
 trait AuthSupport:
   protected def routeContext: RouteContext
@@ -13,8 +14,8 @@ trait AuthSupport:
   private def authModule = routeContext.authModule
 
   def principal(playerId: PlayerId): AccessPrincipal =
-    authModule.tables
-      .findPlayer(playerId)
+    authModule.playerTable
+      .find(playerId)
       .map(_.asPrincipal)
       .getOrElse(throw NoSuchElementException(s"Player ${playerId.value} was not found"))
 
@@ -25,8 +26,7 @@ trait AuthSupport:
     principal(operatorId)
 
   def guestPrincipal(sessionId: GuestSessionId): AccessPrincipal =
-    authModule.guestSessionService
-      .touchActiveSession(sessionId)
+    touchActiveGuestSession(sessionId)
       .map(AccessPrincipal.guest)
       .getOrElse(throw NoSuchElementException(s"Guest session ${sessionId.value} was not found"))
 
@@ -61,7 +61,7 @@ trait AuthSupport:
       throw IllegalArgumentException("guestSessionId and operatorId cannot be provided together")
 
     operatorId.map(playerId =>
-      authModule.tables.findPlayer(playerId)
+      authModule.playerTable.find(playerId)
         .getOrElse(throw NoSuchElementException(s"Player ${playerId.value} was not found"))
     ) match
       case Some(player) =>
@@ -75,7 +75,7 @@ trait AuthSupport:
         )
       case None =>
         guestSessionId.map(sessionId =>
-          authModule.guestSessionService.touchActiveSession(sessionId)
+          touchActiveGuestSession(sessionId)
             .getOrElse(throw NoSuchElementException(s"Guest session ${sessionId.value} was not found"))
         ) match
           case Some(session) =>
@@ -116,5 +116,26 @@ trait AuthSupport:
       isTournamentAdmin = player.roleGrants.exists(_.role == RoleKind.TournamentAdmin),
       isSuperAdmin = player.roleGrants.exists(_.role == RoleKind.SuperAdmin)
     )
+
+  private def touchActiveGuestSession(
+      sessionId: GuestSessionId,
+      seenAt: Instant = Instant.now()
+  ): Option[GuestAccessSession] =
+    authModule.transactionManager.inTransaction {
+      authModule.guestSessionRepository.findById(sessionId).map { session =>
+        require(session.canAuthenticate(seenAt), inactiveSessionMessage(session, seenAt))
+        authModule.guestSessionRepository.save(session.touch(seenAt))
+      }
+    }
+
+  private def inactiveSessionMessage(session: GuestAccessSession, at: Instant): String =
+    if session.isRevoked then
+      s"Guest session ${session.id.value} has been revoked"
+    else if session.isUpgraded then
+      s"Guest session ${session.id.value} has already been upgraded to player access"
+    else if session.isExpired(at) then
+      s"Guest session ${session.id.value} expired at ${session.expiresAt}"
+    else
+      s"Guest session ${session.id.value} cannot be used for authentication"
 
   protected def queryParam(request: Request[IO], key: String): Option[String]

@@ -1,86 +1,115 @@
 package riichinexus.bootstrap
 
-import riichinexus.microservices.auth.api.{AuthApplicationService, GuestSessionApplicationService}
-import riichinexus.microservices.auth.tables.AuthTables
-import riichinexus.microservices.club.api.{ClubApplicationService, ClubViewAssembler}
+import riichinexus.application.ports.*
+import riichinexus.bootstrap.instrumentation.PerformanceDiagnosticsService
+import riichinexus.microservices.auth.tables.guestsession.GuestSessionTable
+import riichinexus.microservices.auth.tables.player.AuthPlayerTable
 import riichinexus.microservices.club.tables.ClubTables
-import riichinexus.microservices.dictionary.api.DictionaryGovernanceService
 import riichinexus.microservices.dictionary.tables.DictionaryTables
-import riichinexus.microservices.opsanalytics.api.{
-  AdvancedStatsPipelineService,
-  DemoScenarioService,
-  DomainEventQueryService,
-  DomainEventOperationsService,
-  PerformanceDiagnosticsService
-}
 import riichinexus.microservices.opsanalytics.tables.OpsAnalyticsTables
-import riichinexus.microservices.platformadmin.api.SuperAdminService
 import riichinexus.microservices.platformadmin.tables.PlatformAdminTables
-import riichinexus.microservices.player.api.PlayerApplicationService
+import riichinexus.microservices.player.domain.PlayerRegistrationOperations
 import riichinexus.microservices.player.tables.PlayerTables
-import riichinexus.microservices.publicquery.api.PublicQueryService
 import riichinexus.microservices.publicquery.tables.PublicQueryTables
-import riichinexus.microservices.tournament.api.{
-  TableLifecycleService,
-  TournamentApplicationService,
-  TournamentStageQueryService,
-  TournamentViewAssembler
-}
-import riichinexus.microservices.tournament.appeal.api.AppealApplicationService
+import riichinexus.microservices.tournament.domain.KnockoutStageCoordinator
+import riichinexus.microservices.tournament.domain.TournamentStageQueryService
+import riichinexus.microservices.tournament.appeal.domain.AppealApplicationService
 import riichinexus.microservices.tournament.appeal.tables.TournamentAppealTables
 import riichinexus.microservices.tournament.tables.TournamentTables
+import riichinexus.domain.service.*
 
 final case class AuthModuleContext(
-    tables: AuthTables,
-    authService: AuthApplicationService,
-    guestSessionService: GuestSessionApplicationService
+    playerTable: AuthPlayerTable,
+    guestSessionTable: GuestSessionTable,
+    playerRegistration: PlayerRegistrationOperations,
+    playerRepository: PlayerRepository,
+    accountCredentialRepository: AccountCredentialRepository,
+    authenticatedSessionRepository: AuthenticatedSessionRepository,
+    guestSessionRepository: GuestSessionRepository,
+    clubRepository: ClubRepository,
+    auditEventRepository: AuditEventRepository,
+    transactionManager: TransactionManager,
 )
 
 final case class PlayerModuleContext(
     tables: PlayerTables,
-    service: PlayerApplicationService
+    registration: PlayerRegistrationOperations
 )
 
 final case class ClubModuleContext(
     tables: ClubTables,
-    service: ClubApplicationService,
-    views: ClubViewAssembler,
-    tournamentService: TournamentApplicationService,
-    tournamentViews: TournamentViewAssembler
+    clubRepository: ClubRepository,
+    playerRepository: PlayerRepository,
+    globalDictionaryRepository: GlobalDictionaryRepository,
+    dashboardRepository: DashboardRepository,
+    auditEventRepository: AuditEventRepository,
+    transactionManager: TransactionManager,
+    authorizationService: AuthorizationService,
+    tournamentModule: TournamentModuleContext
 )
 
 final case class DictionaryModuleContext(
     tables: DictionaryTables,
-    governance: DictionaryGovernanceService
+    playerRepository: PlayerRepository,
+    clubRepository: ClubRepository,
+    globalDictionaryRepository: GlobalDictionaryRepository,
+    dictionaryNamespaceRepository: DictionaryNamespaceRepository,
+    auditEventRepository: AuditEventRepository,
+    eventBus: DomainEventBus,
+    transactionManager: TransactionManager,
+    authorizationService: AuthorizationService
 )
 
 final case class PublicQueryModuleContext(
-    tables: PublicQueryTables,
-    service: PublicQueryService,
-    clubViews: ClubViewAssembler,
-    tournamentViews: TournamentViewAssembler
+    tables: PublicQueryTables
 )
 
 final case class TournamentModuleContext(
     tables: TournamentTables,
-    service: TournamentApplicationService,
+    tournamentRepository: TournamentRepository,
+    playerRepository: PlayerRepository,
+    clubRepository: ClubRepository,
+    globalDictionaryRepository: GlobalDictionaryRepository,
+    tableRepository: TableRepository,
+    matchRecordRepository: MatchRecordRepository,
+    paifuRepository: PaifuRepository,
+    tournamentSettlementRepository: TournamentSettlementRepository,
+    auditEventRepository: AuditEventRepository,
+    seatingPolicy: SeatingPolicy,
+    tournamentRuleEngine: TournamentRuleEngine,
+    knockoutStageCoordinator: KnockoutStageCoordinator,
     stageQueries: TournamentStageQueryService,
-    views: TournamentViewAssembler,
-    tableService: TableLifecycleService
+    eventBus: DomainEventBus,
+    transactionManager: TransactionManager,
+    authorizationService: AuthorizationService
 )
 
 final case class OpsAnalyticsModuleContext(
     tables: OpsAnalyticsTables,
-    advancedStatsService: AdvancedStatsPipelineService,
-    demoScenarioService: DemoScenarioService,
-    domainEventQueryService: DomainEventQueryService,
-    domainEventService: DomainEventOperationsService,
+    paifuRepository: PaifuRepository,
+    matchRecordRepository: MatchRecordRepository,
+    playerRepository: PlayerRepository,
+    clubRepository: ClubRepository,
+    advancedStatsBoardRepository: AdvancedStatsBoardRepository,
+    advancedStatsRecomputeTaskRepository: AdvancedStatsRecomputeTaskRepository,
+    domainEventOutboxRepository: DomainEventOutboxRepository,
+    domainEventDeliveryReceiptRepository: DomainEventDeliveryReceiptRepository,
+    domainEventSubscriberCursorRepository: DomainEventSubscriberCursorRepository,
+    domainEventSubscribers: Vector[DomainEventSubscriber],
+    auditEventRepository: AuditEventRepository,
+    transactionManager: TransactionManager,
+    authorizationService: AuthorizationService,
     performanceDiagnosticsService: PerformanceDiagnosticsService
 )
 
 final case class PlatformAdminModuleContext(
     tables: PlatformAdminTables,
-    service: SuperAdminService
+    playerRepository: PlayerRepository,
+    clubRepository: ClubRepository,
+    auditEventRepository: AuditEventRepository,
+    eventBus: DomainEventBus,
+    transactionManager: TransactionManager,
+    authorizationService: AuthorizationService
 )
 
 final case class TournamentAppealModuleContext(

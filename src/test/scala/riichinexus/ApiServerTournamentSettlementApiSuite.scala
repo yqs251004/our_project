@@ -13,21 +13,23 @@ import munit.FunSuite
 import riichinexus.bootstrap.ApplicationContext
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.api.responses.*
-import riichinexus.microservices.club.api.responses.ClubTournamentResponses.given
-import riichinexus.microservices.club.api.requests.*
-import riichinexus.microservices.dictionary.api.requests.UpsertDictionaryRequest
-import riichinexus.microservices.opsanalytics.api.PerformanceDiagnosticsSnapshot
-import riichinexus.microservices.shared.api.requests.OperatorRequest
-import riichinexus.microservices.shared.api.requests.OperatorRequest.given
-import riichinexus.microservices.publicquery.api.responses.*
-import riichinexus.microservices.publicquery.api.responses.PublicQueryResponses.given
-import riichinexus.microservices.tournament.api.responses.*
-import riichinexus.microservices.tournament.api.responses.TournamentOperationResponses.given
-import riichinexus.microservices.tournament.api.requests.SettlementRequests.given
-import riichinexus.microservices.tournament.api.requests.StageRequests.given
-import riichinexus.microservices.tournament.api.requests.TableRequests.given
-import riichinexus.microservices.tournament.api.requests.*
+import riichinexus.microservices.club.objects.apiTypes.*
+import riichinexus.microservices.club.objects.apiTypes.ClubTournamentResponses.given
+import riichinexus.microservices.club.objects.apiTypes.*
+import riichinexus.microservices.dictionary.objects.apiTypes.UpsertDictionaryRequest
+import riichinexus.microservices.dictionary.api.*
+import riichinexus.microservices.opsanalytics.objects.apiTypes.PerformanceDiagnosticsSnapshot
+import riichinexus.system.objects.apiTypes.OperatorRequest
+import riichinexus.system.objects.apiTypes.OperatorRequest.given
+import riichinexus.microservices.publicquery.objects.apiTypes.*
+import riichinexus.microservices.publicquery.objects.apiTypes.PublicQueryResponses.given
+import riichinexus.microservices.tournament.api.*
+import riichinexus.microservices.tournament.objects.apiTypes.*
+import riichinexus.microservices.tournament.objects.apiTypes.TournamentOperationResponses.given
+import riichinexus.microservices.tournament.objects.apiTypes.SettlementRequests.given
+import riichinexus.microservices.tournament.objects.apiTypes.StageRequests.given
+import riichinexus.microservices.tournament.objects.apiTypes.TableRequests.given
+import riichinexus.microservices.tournament.objects.apiTypes.*
 import upickle.default.*
 
 class ApiServerTournamentSettlementApiSuite extends FunSuite with ApiServerSuiteSupport:
@@ -45,8 +47,8 @@ class ApiServerTournamentSettlementApiSuite extends FunSuite with ApiServerSuite
       playerService(app).registerPlayer("settle-api-d", "SettleApiD", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1500)
     )
 
-    val club = clubService(app).createClub("Settlement API Club", admin.id, now, admin.asPrincipal)
-    players.tail.foreach(player => clubService(app).addMember(club.id, player.id, principalFor(app, admin.id)))
+    val club = clubApi(app).createClub("Settlement API Club", admin.id, now, admin.asPrincipal)
+    players.tail.foreach(player => clubApi(app).addMember(club.id, player.id, principalFor(app, admin.id)))
 
     val stage = TournamentStage(IdGenerator.stageId(), "Settlement API Stage", StageFormat.Swiss, 1, 1)
     val tournament = tournamentService(app).createTournament(
@@ -82,9 +84,10 @@ class ApiServerTournamentSettlementApiSuite extends FunSuite with ApiServerSuite
     )
 
     withServer(app) { baseUrl =>
-      val draftResponse = postJson(
-        s"$baseUrl/tournaments/${tournament.id.value}/settle",
-        write(
+      val draftResponse = postApi(
+        baseUrl,
+        TournamentSettleAPIMessage(
+          tournament.id.value,
           SettleTournamentRequest(
             operatorId = admin.id.value,
             finalStageId = stage.id.value,
@@ -102,23 +105,28 @@ class ApiServerTournamentSettlementApiSuite extends FunSuite with ApiServerSuite
         )
       )
       assertEquals(draftResponse.statusCode(), 200)
-      val draft = read[TournamentSettlementSnapshot](draftResponse.body())
+      val draft = read[TournamentSettlementView](draftResponse.body())
       assertEquals(draft.status, TournamentSettlementStatus.Draft)
       assertEquals(draft.revision, 1)
       assertEquals(draft.houseFeeAmount, 100L)
       assertEquals(draft.entries.head.baseAwardAmount, 540L)
 
-      val finalizeResponse = postJson(
-        s"$baseUrl/tournaments/${tournament.id.value}/settlements/${draft.id.value}/finalize",
-        write(FinalizeTournamentSettlementRequest(admin.id.value, Some("finance approved")))
+      val finalizeResponse = postApi(
+        baseUrl,
+        TournamentSettlementFinalizeAPIMessage(
+          tournament.id.value,
+          draft.settlementId.value,
+          FinalizeTournamentSettlementRequest(admin.id.value, Some("finance approved"))
+        )
       )
       assertEquals(finalizeResponse.statusCode(), 200)
-      val finalized = read[TournamentSettlementSnapshot](finalizeResponse.body())
+      val finalized = read[TournamentSettlementView](finalizeResponse.body())
       assertEquals(finalized.status, TournamentSettlementStatus.Finalized)
 
-      val revisedResponse = postJson(
-        s"$baseUrl/tournaments/${tournament.id.value}/settle",
-        write(
+      val revisedResponse = postApi(
+        baseUrl,
+        TournamentSettleAPIMessage(
+          tournament.id.value,
           SettleTournamentRequest(
             operatorId = admin.id.value,
             finalStageId = stage.id.value,
@@ -133,34 +141,37 @@ class ApiServerTournamentSettlementApiSuite extends FunSuite with ApiServerSuite
         )
       )
       assertEquals(revisedResponse.statusCode(), 200)
-      val revised = read[TournamentSettlementSnapshot](revisedResponse.body())
+      val revised = read[TournamentSettlementView](revisedResponse.body())
       assertEquals(revised.revision, 2)
       assertEquals(revised.status, TournamentSettlementStatus.Finalized)
-      assertEquals(revised.supersedesSettlementId, Some(draft.id))
+      assertEquals(revised.supersedesSettlementId, Some(draft.settlementId))
 
-      val settlementIndex = get(
-        s"$baseUrl/tournaments/${tournament.id.value}/settlements?status=Superseded"
+      val settlementIndex = postApi(
+        baseUrl,
+        TournamentSettlementListAPIMessage(tournament.id.value, status = Some("Superseded"))
       )
       assertEquals(settlementIndex.statusCode(), 200)
-      val supersededPage = readPage[TournamentSettlementSnapshot](settlementIndex.body())
+      val supersededPage = readPage[TournamentSettlementView](settlementIndex.body())
       assertEquals(supersededPage.total, 1)
-      assertEquals(supersededPage.items.head.id, draft.id)
+      assertEquals(supersededPage.items.head.settlementId, draft.settlementId)
 
-      val latestResponse = get(
-        s"$baseUrl/tournaments/${tournament.id.value}/settlements/${stage.id.value}"
+      val latestResponse = postApi(
+        baseUrl,
+        TournamentSettlementGetAPIMessage(tournament.id.value, stage.id.value)
       )
       assertEquals(latestResponse.statusCode(), 200)
-      assertEquals(read[TournamentSettlementSnapshot](latestResponse.body()).id, revised.id)
+      assertEquals(read[TournamentSettlementView](latestResponse.body()).settlementId, revised.settlementId)
 
-      val auditPage = get(
-        s"$baseUrl/tournaments/${tournament.id.value}/settlements?status=Finalized&championId=${revised.championId.value}"
+      val auditPage = postApi(
+        baseUrl,
+        TournamentSettlementListAPIMessage(tournament.id.value, status = Some("Finalized"), championId = Some(revised.championId.value))
       )
       assertEquals(auditPage.statusCode(), 200)
-      assert(readPage[TournamentSettlementSnapshot](auditPage.body()).items.exists(_.id == revised.id))
+      assert(readPage[TournamentSettlementView](auditPage.body()).items.exists(_.settlementId == revised.settlementId))
 
-      val runtimeDictionaryResponse = postJson(
-        s"$baseUrl/admin/dictionary",
-        write(UpsertDictionaryRequest(superAdmin.id.value, "settlement.defaultPayoutRatios", "0.6,0.25,0.15", Some("runtime payout tuning")))
+      val runtimeDictionaryResponse = postApi(
+        baseUrl,
+        DictionaryUpsertEntryAPIMessage(superAdmin.id.value, "settlement.defaultPayoutRatios", "0.6,0.25,0.15", Some("runtime payout tuning"))
       )
       assertEquals(runtimeDictionaryResponse.statusCode(), 201)
     }

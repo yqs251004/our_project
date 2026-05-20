@@ -13,21 +13,23 @@ import munit.FunSuite
 import riichinexus.bootstrap.ApplicationContext
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.api.responses.*
-import riichinexus.microservices.club.api.responses.ClubTournamentResponses.given
-import riichinexus.microservices.club.api.requests.*
-import riichinexus.microservices.dictionary.api.requests.UpsertDictionaryRequest
-import riichinexus.microservices.opsanalytics.api.PerformanceDiagnosticsSnapshot
-import riichinexus.microservices.shared.api.requests.OperatorRequest
-import riichinexus.microservices.shared.api.requests.OperatorRequest.given
-import riichinexus.microservices.publicquery.api.responses.*
-import riichinexus.microservices.publicquery.api.responses.PublicQueryResponses.given
-import riichinexus.microservices.tournament.api.responses.*
-import riichinexus.microservices.tournament.api.responses.TournamentOperationResponses.given
-import riichinexus.microservices.tournament.api.requests.SettlementRequests.given
-import riichinexus.microservices.tournament.api.requests.StageRequests.given
-import riichinexus.microservices.tournament.api.requests.TableRequests.given
-import riichinexus.microservices.tournament.api.requests.*
+import riichinexus.microservices.club.objects.apiTypes.*
+import riichinexus.microservices.club.objects.apiTypes.ClubTournamentResponses.given
+import riichinexus.microservices.club.objects.apiTypes.*
+import riichinexus.microservices.dictionary.api.*
+import riichinexus.microservices.dictionary.objects.apiTypes.UpsertDictionaryRequest
+import riichinexus.microservices.opsanalytics.objects.apiTypes.PerformanceDiagnosticsSnapshot
+import riichinexus.system.objects.apiTypes.OperatorRequest
+import riichinexus.system.objects.apiTypes.OperatorRequest.given
+import riichinexus.microservices.publicquery.objects.apiTypes.*
+import riichinexus.microservices.publicquery.objects.apiTypes.PublicQueryResponses.given
+import riichinexus.microservices.tournament.api.*
+import riichinexus.microservices.tournament.objects.apiTypes.*
+import riichinexus.microservices.tournament.objects.apiTypes.TournamentOperationResponses.given
+import riichinexus.microservices.tournament.objects.apiTypes.SettlementRequests.given
+import riichinexus.microservices.tournament.objects.apiTypes.StageRequests.given
+import riichinexus.microservices.tournament.objects.apiTypes.TableRequests.given
+import riichinexus.microservices.tournament.objects.apiTypes.*
 import upickle.default.*
 
 class ApiServerStageRulesApiSuite extends FunSuite with ApiServerSuiteSupport:
@@ -76,19 +78,21 @@ class ApiServerStageRulesApiSuite extends FunSuite with ApiServerSuiteSupport:
     tournamentService(app).scheduleStageTables(tournament.id, stage.id, principalFor(app, admin.id))
 
     withServer(app) { baseUrl =>
-      val stageTablesResponse = get(
-        s"$baseUrl/tournaments/${tournament.id.value}/stages/${stage.id.value}/tables?roundNumber=2"
+      val stageTablesResponse = postApi(
+        baseUrl,
+        TournamentStageTablesAPIMessage(tournament.id.value, stage.id.value, roundNumber = Some(2))
       )
       assertEquals(stageTablesResponse.statusCode(), 200)
-      val stageTables = readPage[Table](stageTablesResponse.body())
+      val stageTables = readPage[TournamentTableView](stageTablesResponse.body())
       assertEquals(stageTables.total, 1)
       assertEquals(stageTables.items.head.stageRoundNumber, 2)
 
-      val globalTablesResponse = get(
-        s"$baseUrl/tables?tournamentId=${tournament.id.value}&roundNumber=2"
+      val globalTablesResponse = postApi(
+        baseUrl,
+        TournamentTableListAPIMessage(tournamentId = Some(tournament.id.value), roundNumber = Some(2))
       )
       assertEquals(globalTablesResponse.statusCode(), 200)
-      val globalTables = readPage[Table](globalTablesResponse.body())
+      val globalTables = readPage[TournamentTableView](globalTablesResponse.body())
       assertEquals(globalTables.total, 1)
       assertEquals(globalTables.items.head.stageRoundNumber, 2)
     }
@@ -125,22 +129,22 @@ class ApiServerStageRulesApiSuite extends FunSuite with ApiServerSuiteSupport:
     tournamentService(app).publishTournament(tournament.id, principalFor(app, admin.id))
 
     withServer(app) { baseUrl =>
-      val dictionaryResponse = postJson(
-        s"$baseUrl/admin/dictionary",
-        write(
-          UpsertDictionaryRequest(
-            operatorId = superAdmin.id.value,
-            key = "tournament.rule-template.swiss-snake-template",
-            value = "advancement=SwissCut;cutSize=8;pairingMethod=snake;maxRounds=2;schedulingPoolSize=2;note=template backed",
-            note = Some("template seed")
-          )
+      val dictionaryResponse = postApi(
+        baseUrl,
+        DictionaryUpsertEntryAPIMessage(
+          operatorId = superAdmin.id.value,
+          key = "tournament.rule-template.swiss-snake-template",
+          value = "advancement=SwissCut;cutSize=8;pairingMethod=snake;maxRounds=2;schedulingPoolSize=2;note=template backed",
+          note = Some("template seed")
         )
       )
       assertEquals(dictionaryResponse.statusCode(), 201)
 
-      val rulesResponse = postJson(
-        s"$baseUrl/tournaments/${tournament.id.value}/stages/${stage.id.value}/rules",
-        write(
+      val rulesResponse = postApi(
+        baseUrl,
+        TournamentStageConfigureRulesAPIMessage(
+          tournament.id.value,
+          stage.id.value,
           ConfigureStageRulesRequest(
             operatorId = admin.id.value,
             advancementRuleType = None,
@@ -150,7 +154,8 @@ class ApiServerStageRulesApiSuite extends FunSuite with ApiServerSuiteSupport:
         )
       )
       assertEquals(rulesResponse.statusCode(), 200)
-      val updatedStage = read[Tournament](rulesResponse.body()).stages.head
+      read[TournamentSummaryView](rulesResponse.body())
+      val updatedStage = tournamentRepository(app).findById(tournament.id).getOrElse(fail("missing tournament")).stages.head
       assertEquals(updatedStage.advancementRule.cutSize, Some(8))
       assertEquals(updatedStage.swissRule.map(_.pairingMethod), Some("snake"))
       assertEquals(updatedStage.swissRule.flatMap(_.maxRounds), Some(2))
@@ -187,9 +192,11 @@ class ApiServerStageRulesApiSuite extends FunSuite with ApiServerSuiteSupport:
     tournamentService(app).publishTournament(tournament.id, principalFor(app, admin.id))
 
     withServer(app) { baseUrl =>
-      val rulesResponse = postJson(
-        s"$baseUrl/tournaments/${tournament.id.value}/stages/${stage.id.value}/rules",
-        write(
+      val rulesResponse = postApi(
+        baseUrl,
+        TournamentStageConfigureRulesAPIMessage(
+          tournament.id.value,
+          stage.id.value,
           ConfigureStageRulesRequest(
             operatorId = admin.id.value,
             advancementRuleType = Some("SwissCut"),
@@ -199,11 +206,15 @@ class ApiServerStageRulesApiSuite extends FunSuite with ApiServerSuiteSupport:
         )
       )
       assertEquals(rulesResponse.statusCode(), 200)
-      assertEquals(read[Tournament](rulesResponse.body()).stages.head.swissRule.map(_.pairingMethod), Some("snake"))
+      read[TournamentSummaryView](rulesResponse.body())
+      assertEquals(
+        tournamentRepository(app).findById(tournament.id).getOrElse(fail("missing tournament")).stages.head.swissRule.map(_.pairingMethod),
+        Some("snake")
+      )
 
-      val scheduleResponse = postJson(
-        s"$baseUrl/tournaments/${tournament.id.value}/stages/${stage.id.value}/schedule",
-        write(OperatorRequest(Some(admin.id.value)))
+      val scheduleResponse = postApi(
+        baseUrl,
+        TournamentStageScheduleTablesAPIMessage(tournament.id.value, stage.id.value, Some(admin.id.value))
       )
       assertEquals(scheduleResponse.statusCode(), 200)
       val scheduled = read[TournamentMutationView](scheduleResponse.body())
@@ -249,9 +260,11 @@ class ApiServerStageRulesApiSuite extends FunSuite with ApiServerSuiteSupport:
     tournamentService(app).publishTournament(tournament.id, principalFor(app, admin.id))
 
     withServer(app) { baseUrl =>
-      val rulesResponse = postJson(
-        s"$baseUrl/tournaments/${tournament.id.value}/stages/${stage.id.value}/rules",
-        write(
+      val rulesResponse = postApi(
+        baseUrl,
+        TournamentStageConfigureRulesAPIMessage(
+          tournament.id.value,
+          stage.id.value,
           ConfigureStageRulesRequest(
             operatorId = admin.id.value,
             advancementRuleType = Some("Custom"),
@@ -262,9 +275,9 @@ class ApiServerStageRulesApiSuite extends FunSuite with ApiServerSuiteSupport:
       )
       assertEquals(rulesResponse.statusCode(), 200)
 
-      val scheduleResponse = postJson(
-        s"$baseUrl/tournaments/${tournament.id.value}/stages/${stage.id.value}/schedule",
-        write(OperatorRequest(Some(admin.id.value)))
+      val scheduleResponse = postApi(
+        baseUrl,
+        TournamentStageScheduleTablesAPIMessage(tournament.id.value, stage.id.value, Some(admin.id.value))
       )
       assertEquals(scheduleResponse.statusCode(), 200)
       val scheduled = read[TournamentMutationView](scheduleResponse.body())
@@ -331,7 +344,10 @@ class ApiServerStageRulesApiSuite extends FunSuite with ApiServerSuiteSupport:
     )
 
     withServer(app) { baseUrl =>
-      val response = get(s"$baseUrl/tournaments/${tournament.id.value}/stages/${stage.id.value}/standings")
+      val response = postApi(
+        baseUrl,
+        TournamentStageStandingsAPIMessage(tournament.id.value, stage.id.value)
+      )
       assertEquals(response.statusCode(), 200)
       val standings = read[StageRankingSnapshot](response.body())
       assertEquals(standings.entries.map(_.playerId).take(4), Vector(

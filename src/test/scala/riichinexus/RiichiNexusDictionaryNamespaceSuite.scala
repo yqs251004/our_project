@@ -19,7 +19,7 @@ class RiichiNexusDictionaryNamespaceSuite extends FunSuite with RiichiNexusSuite
     val superAdmin = playerRepository(app).save(root.grantRole(RoleGrant.superAdmin(now)))
 
     intercept[IllegalArgumentException] {
-      dictionaryGovernance(app).upsertDictionary(
+      dictionaryApi(app).upsertDictionary(
         key = "rating.elo.kFactor",
         value = "oops",
         actor = AccessPrincipal.system,
@@ -28,7 +28,7 @@ class RiichiNexusDictionaryNamespaceSuite extends FunSuite with RiichiNexusSuite
     }
 
     intercept[IllegalArgumentException] {
-      dictionaryGovernance(app).upsertDictionary(
+      dictionaryApi(app).upsertDictionary(
         key = "rating.elo.experimentalFactor",
         value = "72",
         actor = principalFor(app, superAdmin.id),
@@ -36,7 +36,7 @@ class RiichiNexusDictionaryNamespaceSuite extends FunSuite with RiichiNexusSuite
       )
     }
 
-    val pendingNamespace = dictionaryGovernance(app).requestDictionaryNamespace(
+    val pendingNamespace = dictionaryApi(app).requestDictionaryNamespace(
       namespacePrefix = "ui.banner",
       actor = owner.asPrincipal,
       requestedAt = now.plusSeconds(20),
@@ -45,7 +45,7 @@ class RiichiNexusDictionaryNamespaceSuite extends FunSuite with RiichiNexusSuite
     assertEquals(pendingNamespace.status, DictionaryNamespaceReviewStatus.Pending)
 
     intercept[IllegalArgumentException] {
-      dictionaryGovernance(app).upsertDictionary(
+      dictionaryApi(app).upsertDictionary(
         key = "ui.banner.message",
         value = "Spring finals this weekend",
         actor = owner.asPrincipal,
@@ -53,7 +53,7 @@ class RiichiNexusDictionaryNamespaceSuite extends FunSuite with RiichiNexusSuite
       )
     }
 
-    val approvedNamespace = dictionaryGovernance(app).reviewDictionaryNamespace(
+    val approvedNamespace = dictionaryApi(app).reviewDictionaryNamespace(
       namespacePrefix = "ui.banner",
       approve = true,
       actor = principalFor(app, superAdmin.id),
@@ -62,7 +62,7 @@ class RiichiNexusDictionaryNamespaceSuite extends FunSuite with RiichiNexusSuite
     ).getOrElse(fail("namespace approval missing"))
     assertEquals(approvedNamespace.status, DictionaryNamespaceReviewStatus.Approved)
 
-    val metadata = dictionaryGovernance(app).upsertDictionary(
+    val metadata = dictionaryApi(app).upsertDictionary(
       key = "ui.banner.message",
       value = "Spring finals this weekend",
       actor = owner.asPrincipal,
@@ -70,7 +70,7 @@ class RiichiNexusDictionaryNamespaceSuite extends FunSuite with RiichiNexusSuite
     )
 
     intercept[IllegalArgumentException] {
-      dictionaryGovernance(app).upsertDictionary(
+      dictionaryApi(app).upsertDictionary(
         key = "ui.banner.message",
         value = "tampered",
         actor = outsider.asPrincipal,
@@ -78,7 +78,7 @@ class RiichiNexusDictionaryNamespaceSuite extends FunSuite with RiichiNexusSuite
       )
     }
 
-    val transferredNamespace = dictionaryGovernance(app).transferDictionaryNamespace(
+    val transferredNamespace = dictionaryApi(app).transferDictionaryNamespace(
       namespacePrefix = "ui.banner",
       newOwnerId = outsider.id,
       actor = principalFor(app, superAdmin.id),
@@ -88,21 +88,21 @@ class RiichiNexusDictionaryNamespaceSuite extends FunSuite with RiichiNexusSuite
     assertEquals(transferredNamespace.ownerPlayerId, outsider.id)
     assertEquals(transferredNamespace.status, DictionaryNamespaceReviewStatus.Approved)
 
-    val formerOwnerWrite = dictionaryGovernance(app).upsertDictionary(
+    val formerOwnerWrite = dictionaryApi(app).upsertDictionary(
       key = "ui.banner.message",
       value = "former owner co-owner write",
       actor = owner.asPrincipal,
       updatedAt = now.plusSeconds(80)
     )
 
-    val transferredWrite = dictionaryGovernance(app).upsertDictionary(
+    val transferredWrite = dictionaryApi(app).upsertDictionary(
       key = "ui.banner.message",
       value = "Summer finals this weekend",
       actor = outsider.asPrincipal,
       updatedAt = now.plusSeconds(90)
     )
 
-    val revokedNamespace = dictionaryGovernance(app).revokeDictionaryNamespace(
+    val revokedNamespace = dictionaryApi(app).revokeDictionaryNamespace(
       namespacePrefix = "ui.banner",
       actor = principalFor(app, superAdmin.id),
       note = Some("namespace retired"),
@@ -111,7 +111,7 @@ class RiichiNexusDictionaryNamespaceSuite extends FunSuite with RiichiNexusSuite
     assertEquals(revokedNamespace.status, DictionaryNamespaceReviewStatus.Revoked)
 
     intercept[IllegalArgumentException] {
-      dictionaryGovernance(app).upsertDictionary(
+      dictionaryApi(app).upsertDictionary(
         key = "ui.banner.message",
         value = "revoked namespace blocked",
         actor = outsider.asPrincipal,
@@ -140,7 +140,7 @@ class RiichiNexusDictionaryNamespaceSuite extends FunSuite with RiichiNexusSuite
     val outsider = playerService(app).registerPlayer("dict-collab-outsider", "DictCollabOutsider", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1560)
     val superAdmin = playerRepository(app).save(root.grantRole(RoleGrant.superAdmin(now)))
 
-    val pending = dictionaryGovernance(app).requestDictionaryNamespace(
+    val pending = dictionaryApi(app).requestDictionaryNamespace(
       namespacePrefix = "ui.banner",
       actor = owner.asPrincipal,
       coOwnerPlayerIds = Vector(coOwner.id),
@@ -150,20 +150,20 @@ class RiichiNexusDictionaryNamespaceSuite extends FunSuite with RiichiNexusSuite
     assertEquals(pending.coOwnerPlayerIds, Vector(coOwner.id))
     assertEquals(pending.editorPlayerIds, Vector(editor.id))
 
-    dictionaryGovernance(app).reviewDictionaryNamespace(
+    dictionaryApi(app).reviewDictionaryNamespace(
       namespacePrefix = "ui.banner",
       approve = true,
       actor = principalFor(app, superAdmin.id),
       reviewedAt = now.plusSeconds(20)
     ).getOrElse(fail("namespace approval missing"))
 
-    val coOwnerWrite = dictionaryGovernance(app).upsertDictionary(
+    val coOwnerWrite = dictionaryApi(app).upsertDictionary(
       key = "ui.banner.message",
       value = "co-owner copy",
       actor = coOwner.asPrincipal,
       updatedAt = now.plusSeconds(30)
     )
-    val editorWrite = dictionaryGovernance(app).upsertDictionary(
+    val editorWrite = dictionaryApi(app).upsertDictionary(
       key = "ui.banner.subtitle",
       value = "editor copy",
       actor = editor.asPrincipal,
@@ -171,7 +171,7 @@ class RiichiNexusDictionaryNamespaceSuite extends FunSuite with RiichiNexusSuite
     )
 
     intercept[IllegalArgumentException] {
-      dictionaryGovernance(app).upsertDictionary(
+      dictionaryApi(app).upsertDictionary(
         key = "ui.banner.subtitle",
         value = "outsider blocked",
         actor = outsider.asPrincipal,
@@ -179,7 +179,7 @@ class RiichiNexusDictionaryNamespaceSuite extends FunSuite with RiichiNexusSuite
       )
     }
 
-    val updatedCollaborators = dictionaryGovernance(app).updateDictionaryNamespaceCollaborators(
+    val updatedCollaborators = dictionaryApi(app).updateDictionaryNamespaceCollaborators(
       namespacePrefix = "ui.banner",
       coOwnerPlayerIds = Vector(coOwner.id),
       editorPlayerIds = Vector(replacementEditor.id),
@@ -190,7 +190,7 @@ class RiichiNexusDictionaryNamespaceSuite extends FunSuite with RiichiNexusSuite
     assertEquals(updatedCollaborators.editorPlayerIds, Vector(replacementEditor.id))
 
     intercept[IllegalArgumentException] {
-      dictionaryGovernance(app).upsertDictionary(
+      dictionaryApi(app).upsertDictionary(
         key = "ui.banner.subtitle",
         value = "old editor blocked",
         actor = editor.asPrincipal,
@@ -198,7 +198,7 @@ class RiichiNexusDictionaryNamespaceSuite extends FunSuite with RiichiNexusSuite
       )
     }
 
-    val replacementWrite = dictionaryGovernance(app).upsertDictionary(
+    val replacementWrite = dictionaryApi(app).upsertDictionary(
       key = "ui.banner.subtitle",
       value = "replacement editor copy",
       actor = replacementEditor.asPrincipal,
@@ -225,7 +225,7 @@ class RiichiNexusDictionaryNamespaceSuite extends FunSuite with RiichiNexusSuite
     playerRepository(app).save(banned.ban("policy violation"))
 
     intercept[IllegalArgumentException] {
-      dictionaryGovernance(app).requestDictionaryNamespace(
+      dictionaryApi(app).requestDictionaryNamespace(
         namespacePrefix = "ui.suspended-owner",
         actor = principalFor(app, superAdmin.id),
         ownerPlayerId = Some(suspended.id),
@@ -233,12 +233,12 @@ class RiichiNexusDictionaryNamespaceSuite extends FunSuite with RiichiNexusSuite
       )
     }
 
-    dictionaryGovernance(app).requestDictionaryNamespace(
+    dictionaryApi(app).requestDictionaryNamespace(
       namespacePrefix = "ui.banner",
       actor = owner.asPrincipal,
       requestedAt = now.plusSeconds(20)
     )
-    dictionaryGovernance(app).reviewDictionaryNamespace(
+    dictionaryApi(app).reviewDictionaryNamespace(
       namespacePrefix = "ui.banner",
       approve = true,
       actor = principalFor(app, superAdmin.id),
@@ -246,7 +246,7 @@ class RiichiNexusDictionaryNamespaceSuite extends FunSuite with RiichiNexusSuite
     ).getOrElse(fail("namespace approval missing"))
 
     intercept[IllegalArgumentException] {
-      dictionaryGovernance(app).transferDictionaryNamespace(
+      dictionaryApi(app).transferDictionaryNamespace(
         namespacePrefix = "ui.banner",
         newOwnerId = suspended.id,
         actor = principalFor(app, superAdmin.id),
@@ -255,7 +255,7 @@ class RiichiNexusDictionaryNamespaceSuite extends FunSuite with RiichiNexusSuite
     }
 
     intercept[IllegalArgumentException] {
-      dictionaryGovernance(app).transferDictionaryNamespace(
+      dictionaryApi(app).transferDictionaryNamespace(
         namespacePrefix = "ui.banner",
         newOwnerId = banned.id,
         actor = principalFor(app, superAdmin.id),
@@ -273,21 +273,21 @@ class RiichiNexusDictionaryNamespaceSuite extends FunSuite with RiichiNexusSuite
     val ownerB = playerService(app).registerPlayer("dict-backlog-owner-b", "OwnerB", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1580)
     val superAdmin = playerRepository(app).save(root.grantRole(RoleGrant.superAdmin(now)))
 
-    dictionaryGovernance(app).requestDictionaryNamespace(
+    dictionaryApi(app).requestDictionaryNamespace(
       namespacePrefix = "ui.banner",
       actor = ownerA.asPrincipal,
       requestedAt = now,
       reviewDueAt = Some(now.plusSeconds(3600)),
       note = Some("banner family")
     )
-    dictionaryGovernance(app).requestDictionaryNamespace(
+    dictionaryApi(app).requestDictionaryNamespace(
       namespacePrefix = "ui.notice",
       actor = ownerA.asPrincipal,
       requestedAt = now.plusSeconds(60),
       reviewDueAt = Some(now.plusSeconds(8 * 3600)),
       note = Some("notice family")
     )
-    dictionaryGovernance(app).requestDictionaryNamespace(
+    dictionaryApi(app).requestDictionaryNamespace(
       namespacePrefix = "ui.card",
       actor = ownerB.asPrincipal,
       requestedAt = now.plusSeconds(120),
@@ -295,7 +295,7 @@ class RiichiNexusDictionaryNamespaceSuite extends FunSuite with RiichiNexusSuite
       note = Some("card family")
     )
 
-    val backlog = dictionaryGovernance(app).dictionaryNamespaceBacklog(
+    val backlog = dictionaryApi(app).dictionaryNamespaceBacklog(
       actor = principalFor(app, superAdmin.id),
       asOf = now.plusSeconds(5 * 3600),
       dueSoonWindow = java.time.Duration.ofHours(6)
@@ -320,20 +320,20 @@ class RiichiNexusDictionaryNamespaceSuite extends FunSuite with RiichiNexusSuite
     val ownerB = playerService(app).registerPlayer("dict-reminder-owner-b", "DictReminderOwnerB", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1590)
     val superAdmin = playerRepository(app).save(root.grantRole(RoleGrant.superAdmin(now)))
 
-    dictionaryGovernance(app).requestDictionaryNamespace(
+    dictionaryApi(app).requestDictionaryNamespace(
       namespacePrefix = "ui.soon",
       actor = ownerA.asPrincipal,
       requestedAt = now.minusSeconds(600),
       reviewDueAt = Some(now.plusSeconds(2 * 3600))
     )
-    dictionaryGovernance(app).requestDictionaryNamespace(
+    dictionaryApi(app).requestDictionaryNamespace(
       namespacePrefix = "ui.legacy",
       actor = ownerB.asPrincipal,
       requestedAt = now.minusSeconds(120 * 3600),
       reviewDueAt = Some(now.minusSeconds(80 * 3600))
     )
 
-    val firstBatch = dictionaryGovernance(app).processDictionaryNamespaceReminders(
+    val firstBatch = dictionaryApi(app).processDictionaryNamespaceReminders(
       actor = principalFor(app, superAdmin.id),
       asOf = now,
       dueSoonWindow = java.time.Duration.ofHours(6),
@@ -343,7 +343,7 @@ class RiichiNexusDictionaryNamespaceSuite extends FunSuite with RiichiNexusSuite
     assertEquals(firstBatch.map(_.reminderKind.toString).sorted, Vector(DictionaryNamespaceReminderKind.DueSoon.toString, DictionaryNamespaceReminderKind.Escalated.toString).sorted)
     assertEquals(firstBatch.map(_.namespacePrefix).sorted, Vector("ui.legacy.", "ui.soon."))
 
-    val secondBatch = dictionaryGovernance(app).processDictionaryNamespaceReminders(
+    val secondBatch = dictionaryApi(app).processDictionaryNamespaceReminders(
       actor = principalFor(app, superAdmin.id),
       asOf = now.plusSeconds(3600),
       dueSoonWindow = java.time.Duration.ofHours(6),
@@ -367,11 +367,11 @@ class RiichiNexusDictionaryNamespaceSuite extends FunSuite with RiichiNexusSuite
     val outsider = playerService(app).registerPlayer("dict-context-outsider", "DictContextOutsider", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1570)
     val superAdmin = playerRepository(app).save(root.grantRole(RoleGrant.superAdmin(now)))
 
-    val club = clubService(app).createClub("Namespace Context Club", owner.id, now, owner.asPrincipal)
-    clubService(app).addMember(club.id, coOwner.id, principalFor(app, owner.id))
-    clubService(app).addMember(club.id, editor.id, principalFor(app, owner.id))
+    val club = clubApi(app).createClub("Namespace Context Club", owner.id, now, owner.asPrincipal)
+    clubApi(app).addMember(club.id, coOwner.id, principalFor(app, owner.id))
+    clubApi(app).addMember(club.id, editor.id, principalFor(app, owner.id))
 
-    val pending = dictionaryGovernance(app).requestDictionaryNamespace(
+    val pending = dictionaryApi(app).requestDictionaryNamespace(
       namespacePrefix = "ui.banner",
       actor = owner.asPrincipal,
       contextClubId = Some(club.id),
@@ -381,14 +381,14 @@ class RiichiNexusDictionaryNamespaceSuite extends FunSuite with RiichiNexusSuite
     )
     assertEquals(pending.contextClubId, Some(club.id))
 
-    dictionaryGovernance(app).reviewDictionaryNamespace(
+    dictionaryApi(app).reviewDictionaryNamespace(
       namespacePrefix = "ui.banner",
       approve = true,
       actor = principalFor(app, superAdmin.id),
       reviewedAt = now.plusSeconds(20)
     ).getOrElse(fail("namespace approval missing"))
 
-    val editorWrite = dictionaryGovernance(app).upsertDictionary(
+    val editorWrite = dictionaryApi(app).upsertDictionary(
       key = "ui.banner.message",
       value = "club editor write",
       actor = editor.asPrincipal,
@@ -397,7 +397,7 @@ class RiichiNexusDictionaryNamespaceSuite extends FunSuite with RiichiNexusSuite
     assertEquals(editorWrite.updatedBy, editor.id)
 
     intercept[IllegalArgumentException] {
-      dictionaryGovernance(app).updateDictionaryNamespaceCollaborators(
+      dictionaryApi(app).updateDictionaryNamespaceCollaborators(
         namespacePrefix = "ui.banner",
         coOwnerPlayerIds = Vector(coOwner.id),
         editorPlayerIds = Vector(outsider.id),
@@ -407,7 +407,7 @@ class RiichiNexusDictionaryNamespaceSuite extends FunSuite with RiichiNexusSuite
     }
 
     intercept[IllegalArgumentException] {
-      dictionaryGovernance(app).transferDictionaryNamespace(
+      dictionaryApi(app).transferDictionaryNamespace(
         namespacePrefix = "ui.banner",
         newOwnerId = outsider.id,
         actor = principalFor(app, superAdmin.id),
@@ -415,10 +415,10 @@ class RiichiNexusDictionaryNamespaceSuite extends FunSuite with RiichiNexusSuite
       )
     }
 
-    clubService(app).removeMember(club.id, editor.id, principalFor(app, owner.id))
+    clubApi(app).removeMember(club.id, editor.id, principalFor(app, owner.id))
 
     intercept[IllegalArgumentException] {
-      dictionaryGovernance(app).upsertDictionary(
+      dictionaryApi(app).upsertDictionary(
         key = "ui.banner.message",
         value = "removed editor blocked",
         actor = editor.asPrincipal,
@@ -426,7 +426,7 @@ class RiichiNexusDictionaryNamespaceSuite extends FunSuite with RiichiNexusSuite
       )
     }
 
-    val contextCleared = dictionaryGovernance(app).updateDictionaryNamespaceContext(
+    val contextCleared = dictionaryApi(app).updateDictionaryNamespaceContext(
       namespacePrefix = "ui.banner",
       contextClubId = None,
       actor = owner.asPrincipal,
@@ -435,7 +435,7 @@ class RiichiNexusDictionaryNamespaceSuite extends FunSuite with RiichiNexusSuite
     ).getOrElse(fail("namespace context update missing"))
     assertEquals(contextCleared.contextClubId, None)
 
-    val transferred = dictionaryGovernance(app).transferDictionaryNamespace(
+    val transferred = dictionaryApi(app).transferDictionaryNamespace(
       namespacePrefix = "ui.banner",
       newOwnerId = outsider.id,
       actor = principalFor(app, superAdmin.id),
@@ -443,7 +443,7 @@ class RiichiNexusDictionaryNamespaceSuite extends FunSuite with RiichiNexusSuite
     ).getOrElse(fail("namespace transfer missing"))
     assertEquals(transferred.ownerPlayerId, outsider.id)
 
-    val postClearWrite = dictionaryGovernance(app).upsertDictionary(
+    val postClearWrite = dictionaryApi(app).upsertDictionary(
       key = "ui.banner.message",
       value = "editor restored after context clear",
       actor = editor.asPrincipal,

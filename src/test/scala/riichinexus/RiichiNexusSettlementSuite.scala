@@ -13,7 +13,7 @@ class RiichiNexusSettlementSuite extends FunSuite with RiichiNexusSuiteSupport:
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-16T12:20:00Z")
 
-    dictionaryGovernance(app).upsertDictionary(
+    dictionaryApi(app).upsertDictionary(
       key = "settlement.defaultPayoutRatios",
       value = "0.7,0.2,0.1",
       actor = AccessPrincipal.system,
@@ -92,8 +92,8 @@ class RiichiNexusSettlementSuite extends FunSuite with RiichiNexusSuiteSupport:
       playerService(app).registerPlayer("settle-d", "SettleD", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1500)
     )
 
-    val club = clubService(app).createClub("Settlement Club", admin.id, now, admin.asPrincipal)
-    players.tail.foreach(player => clubService(app).addMember(club.id, player.id, principalFor(app, admin.id)))
+    val club = clubApi(app).createClub("Settlement Club", admin.id, now, admin.asPrincipal)
+    players.tail.foreach(player => clubApi(app).addMember(club.id, player.id, principalFor(app, admin.id)))
 
     val stage = TournamentStage(IdGenerator.stageId(), "Settlement Revision Stage", StageFormat.Swiss, 1, 1)
     val tournament = tournamentService(app).createTournament(

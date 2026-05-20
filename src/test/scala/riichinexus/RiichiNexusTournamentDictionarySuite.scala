@@ -7,7 +7,7 @@ import munit.FunSuite
 import riichinexus.application.ports.GlobalDictionaryRepository
 import riichinexus.bootstrap.ApplicationContext
 import riichinexus.domain.model.*
-import riichinexus.microservices.publicquery.api.PublicQueryService
+import riichinexus.microservices.publicquery.tables.PublicQueryTables
 
 class RiichiNexusTournamentDictionarySuite extends FunSuite with RiichiNexusSuiteSupport:
 
@@ -15,19 +15,19 @@ class RiichiNexusTournamentDictionarySuite extends FunSuite with RiichiNexusSuit
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-16T12:30:00Z")
 
-    dictionaryGovernance(app).upsertDictionary(
+    dictionaryApi(app).upsertDictionary(
       key = "rank.normalization.tenhou.5-dan",
       value = "550",
       actor = AccessPrincipal.system,
       updatedAt = now
     )
-    dictionaryGovernance(app).upsertDictionary(
+    dictionaryApi(app).upsertDictionary(
       key = "rank.normalization.mahjongsoul.master",
       value = "600",
       actor = AccessPrincipal.system,
       updatedAt = now.plusSeconds(1)
     )
-    dictionaryGovernance(app).upsertDictionary(
+    dictionaryApi(app).upsertDictionary(
       key = "rank.normalization.mahjongsoul.starWeight",
       value = "10",
       actor = AccessPrincipal.system,
@@ -37,7 +37,7 @@ class RiichiNexusTournamentDictionarySuite extends FunSuite with RiichiNexusSuit
     val tenhou = playerService(app).registerPlayer("rank-dict-a", "RankA", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1700)
     val soul = playerService(app).registerPlayer("rank-dict-b", "RankB", RankSnapshot(RankPlatform.MahjongSoul, "Master", Some(2)), now, 1700)
 
-    val leaderboard = publicQueryService(app).publicPlayerLeaderboard(10)
+    val leaderboard = publicQueryOperations(app).publicPlayerLeaderboard(10)
     val soulEntry = leaderboard.find(_.playerId == soul.id).getOrElse(fail("soul entry missing"))
     val tenhouEntry = leaderboard.find(_.playerId == tenhou.id).getOrElse(fail("tenhou entry missing"))
 
@@ -50,19 +50,19 @@ class RiichiNexusTournamentDictionarySuite extends FunSuite with RiichiNexusSuit
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-16T12:35:00Z")
 
-    dictionaryGovernance(app).upsertDictionary(
+    dictionaryApi(app).upsertDictionary(
       key = "rank.normalization.tenhou.5-dan",
       value = "550",
       actor = AccessPrincipal.system,
       updatedAt = now
     )
-    dictionaryGovernance(app).upsertDictionary(
+    dictionaryApi(app).upsertDictionary(
       key = "rank.normalization.mahjongsoul.master",
       value = "600",
       actor = AccessPrincipal.system,
       updatedAt = now.plusSeconds(1)
     )
-    dictionaryGovernance(app).upsertDictionary(
+    dictionaryApi(app).upsertDictionary(
       key = "rank.normalization.mahjongsoul.starWeight",
       value = "10",
       actor = AccessPrincipal.system,
@@ -73,7 +73,7 @@ class RiichiNexusTournamentDictionarySuite extends FunSuite with RiichiNexusSuit
     playerService(app).registerPlayer("rank-cache-b", "RankCacheB", RankSnapshot(RankPlatform.MahjongSoul, "Master", Some(2)), now, 1700)
 
     val countingDictionaryRepository = new CountingGlobalDictionaryRepository(globalDictionaryRepository(app))
-    val publicQueryService = new PublicQueryService(
+    val publicQueryTables = PublicQueryTables(
       tournamentRepository(app),
       tableRepository(app),
       playerRepository(app),
@@ -81,7 +81,7 @@ class RiichiNexusTournamentDictionarySuite extends FunSuite with RiichiNexusSuit
       countingDictionaryRepository
     )
 
-    val leaderboard = publicQueryService.publicPlayerLeaderboard(10)
+    val leaderboard = publicQueryTables.publicPlayerLeaderboard(10)
 
     assertEquals(leaderboard.size, 2)
     assertEquals(countingDictionaryRepository.findAllCalls, 1)
@@ -91,7 +91,7 @@ class RiichiNexusTournamentDictionarySuite extends FunSuite with RiichiNexusSuit
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-16T12:40:00Z")
 
-    dictionaryGovernance(app).upsertDictionary(
+    dictionaryApi(app).upsertDictionary(
       key = "rank.normalization.tenhou.5-dan",
       value = "550",
       actor = AccessPrincipal.system,
@@ -99,7 +99,7 @@ class RiichiNexusTournamentDictionarySuite extends FunSuite with RiichiNexusSuit
     )
     playerService(app).registerPlayer("rank-diag-a", "RankDiagA", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1700)
 
-    publicQueryService(app).publicPlayerLeaderboard(10)
+    publicQueryOperations(app).publicPlayerLeaderboard(10)
 
     assertEquals(repositoryCallCount(app, "GlobalDictionaryRepository.findAll"), 1L)
     assert(repositoryTotalMillis(app, "GlobalDictionaryRepository.findAll") >= 0.0)
@@ -111,12 +111,12 @@ class RiichiNexusTournamentDictionarySuite extends FunSuite with RiichiNexusSuit
 
     val ownerA = playerService(app).registerPlayer("club-power-owner-a", "ClubPowerOwnerA", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1800)
     val ownerB = playerService(app).registerPlayer("club-power-owner-b", "ClubPowerOwnerB", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1750)
-    clubService(app).createClub("Club Power A", ownerA.id, now, ownerA.asPrincipal)
-    clubService(app).createClub("Club Power B", ownerB.id, now.plusSeconds(1), ownerB.asPrincipal)
+    clubApi(app).createClub("Club Power A", ownerA.id, now, ownerA.asPrincipal)
+    clubApi(app).createClub("Club Power B", ownerB.id, now.plusSeconds(1), ownerB.asPrincipal)
 
     val beforeCalls = repositoryCallCount(app, "GlobalDictionaryRepository.findAll")
 
-    dictionaryGovernance(app).upsertDictionary(
+    dictionaryApi(app).upsertDictionary(
       key = "club.power.eloWeight",
       value = "1.15",
       actor = AccessPrincipal.system,
@@ -131,7 +131,7 @@ class RiichiNexusTournamentDictionarySuite extends FunSuite with RiichiNexusSuit
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-16T12:50:00Z")
 
-    dictionaryGovernance(app).upsertDictionary(
+    dictionaryApi(app).upsertDictionary(
       key = "tournament.rule-template.swiss-snake-template",
       value = "advancement=SwissCut;cutSize=8;pairingMethod=snake;maxRounds=2;schedulingPoolSize=2;note=template backed",
       actor = AccessPrincipal.system,

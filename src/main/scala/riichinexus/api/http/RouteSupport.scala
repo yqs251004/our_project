@@ -5,8 +5,7 @@ import riichinexus.bootstrap.*
 final class RouteSupport(
     val routeContext: RouteContext
 ) extends HttpResponseSupport
-    with AuthSupport
-    with DemoScenarioSupport:
+    with AuthSupport:
   val authModule: AuthModuleContext = routeContext.authModule
   val playerModule: PlayerModuleContext = routeContext.playerModule
   val clubModule: ClubModuleContext = routeContext.clubModule

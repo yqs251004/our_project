@@ -11,16 +11,16 @@ import munit.FunSuite
 import riichinexus.bootstrap.ApplicationContext
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.auth.api.requests.CreateGuestSessionRequest
-import riichinexus.microservices.club.api.requests.*
-import riichinexus.microservices.club.api.responses.*
-import riichinexus.microservices.club.api.responses.ClubTournamentResponses.given
-import riichinexus.microservices.dictionary.api.requests.*
-import riichinexus.microservices.dictionary.api.responses.*
-import riichinexus.microservices.dictionary.api.responses.DictionaryResponses.given
-import riichinexus.microservices.opsanalytics.api.PerformanceDiagnosticsSnapshot
-import riichinexus.microservices.opsanalytics.api.requests.{ProcessAdvancedStatsTasksRequest, RecomputeAdvancedStatsRequest}
-import riichinexus.microservices.tournament.appeal.api.requests.*
+import riichinexus.microservices.auth.objects.apiTypes.CreateGuestSessionRequest
+import riichinexus.microservices.club.objects.apiTypes.*
+import riichinexus.microservices.club.objects.apiTypes.*
+import riichinexus.microservices.club.objects.apiTypes.ClubTournamentResponses.given
+import riichinexus.microservices.dictionary.api.*
+import riichinexus.microservices.dictionary.objects.apiTypes.*
+import riichinexus.microservices.dictionary.objects.apiTypes.*
+import riichinexus.microservices.dictionary.objects.apiTypes.DictionaryResponses.given
+import riichinexus.microservices.opsanalytics.objects.apiTypes.PerformanceDiagnosticsSnapshot
+import riichinexus.microservices.tournament.appeal.objects.apiTypes.*
 import upickle.default.*
 
 class ApiServerDictionaryNamespaceReviewSuite extends FunSuite with ApiServerSuiteSupport:
@@ -36,40 +36,34 @@ class ApiServerDictionaryNamespaceReviewSuite extends FunSuite with ApiServerSui
     playerRepository(app).save(suspendedMember.copy(status = PlayerStatus.Suspended))
 
     withServer(app) { baseUrl =>
-      val requestResponse = postJson(
-        s"$baseUrl/dictionary/namespaces",
-        write(
-          RequestDictionaryNamespaceRequest(
-            operatorId = owner.id.value,
-            namespacePrefix = "ui.banner",
-            note = Some("frontend banners")
-          )
+      val requestResponse = postApi(
+        baseUrl,
+        DictionaryRequestNamespaceAPIMessage(
+          operatorId = owner.id.value,
+          namespacePrefix = "ui.banner",
+          note = Some("frontend banners")
         )
       )
       assertEquals(requestResponse.statusCode(), 201)
 
-      val reviewResponse = postJson(
-        s"$baseUrl/dictionary/namespaces/review",
-        write(
-          ReviewDictionaryNamespaceRequest(
-            operatorId = superAdmin.id.value,
-            namespacePrefix = "ui.banner",
-            approve = true,
-            note = Some("approved")
-          )
+      val reviewResponse = postApi(
+        baseUrl,
+        DictionaryReviewNamespaceAPIMessage(
+          operatorId = superAdmin.id.value,
+          namespacePrefix = "ui.banner",
+          approve = true,
+          note = Some("approved")
         )
       )
       assertEquals(reviewResponse.statusCode(), 200)
 
-      val transferResponse = postJson(
-        s"$baseUrl/dictionary/namespaces/transfer",
-        write(
-          TransferDictionaryNamespaceRequest(
-            operatorId = superAdmin.id.value,
-            namespacePrefix = "ui.banner",
-            newOwnerPlayerId = suspended.id.value,
-            note = Some("should fail")
-          )
+      val transferResponse = postApi(
+        baseUrl,
+        DictionaryTransferNamespaceAPIMessage(
+          operatorId = superAdmin.id.value,
+          namespacePrefix = "ui.banner",
+          newOwnerPlayerId = suspended.id.value,
+          note = Some("should fail")
         )
       )
       assertEquals(transferResponse.statusCode(), 400)
@@ -91,34 +85,31 @@ class ApiServerDictionaryNamespaceReviewSuite extends FunSuite with ApiServerSui
     val superAdmin = playerRepository(app).save(root.grantRole(RoleGrant.superAdmin(now)))
 
     withServer(app) { baseUrl =>
-      val firstRequest = postJson(
-        s"$baseUrl/dictionary/namespaces",
-        write(
-          RequestDictionaryNamespaceRequest(
-            operatorId = ownerA.id.value,
-            namespacePrefix = "ui.alert",
-            note = Some("alert family"),
-            reviewDueAt = Some(firstDueAt.toString)
-          )
+      val firstRequest = postApi(
+        baseUrl,
+        DictionaryRequestNamespaceAPIMessage(
+          operatorId = ownerA.id.value,
+          namespacePrefix = "ui.alert",
+          note = Some("alert family"),
+          reviewDueAt = Some(firstDueAt.toString)
         )
       )
       assertEquals(firstRequest.statusCode(), 201)
 
-      val secondRequest = postJson(
-        s"$baseUrl/dictionary/namespaces",
-        write(
-          RequestDictionaryNamespaceRequest(
-            operatorId = ownerB.id.value,
-            namespacePrefix = "ui.scoreboard",
-            note = Some("scoreboard family"),
-            reviewDueAt = Some(secondDueAt.toString)
-          )
+      val secondRequest = postApi(
+        baseUrl,
+        DictionaryRequestNamespaceAPIMessage(
+          operatorId = ownerB.id.value,
+          namespacePrefix = "ui.scoreboard",
+          note = Some("scoreboard family"),
+          reviewDueAt = Some(secondDueAt.toString)
         )
       )
       assertEquals(secondRequest.statusCode(), 201)
 
-      val backlogResponse = get(
-        s"$baseUrl/dictionary/namespaces/backlog?operatorId=${superAdmin.id.value}&asOf=$asOf&dueSoonHours=8"
+      val backlogResponse = postApi(
+        baseUrl,
+        DictionaryNamespaceBacklogAPIMessage(superAdmin.id.value, asOf = Some(asOf.toString), dueSoonHours = Some(8))
       )
       assertEquals(backlogResponse.statusCode(), 200)
       val backlog = read[DictionaryNamespaceBacklogView](backlogResponse.body())
@@ -127,8 +118,9 @@ class ApiServerDictionaryNamespaceReviewSuite extends FunSuite with ApiServerSui
       assertEquals(backlog.dueSoonCount, 1)
       assertEquals(backlog.ownerBacklog.map(_.ownerPlayerId), Vector(ownerA.id, ownerB.id))
 
-      val overdueResponse = get(
-        s"$baseUrl/dictionary/namespaces?operatorId=${superAdmin.id.value}&status=Pending&overdueOnly=true&asOf=$asOf"
+      val overdueResponse = postApi(
+        baseUrl,
+        DictionaryListNamespacesAPIMessage(superAdmin.id.value, status = Some("Pending"), overdueOnly = Some(true), asOf = Some(asOf.toString))
       )
       assertEquals(overdueResponse.statusCode(), 200)
       val overduePage = readPage[DictionaryNamespaceRegistration](overdueResponse.body())

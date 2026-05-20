@@ -11,16 +11,17 @@ import munit.FunSuite
 import riichinexus.bootstrap.ApplicationContext
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.auth.api.requests.CreateGuestSessionRequest
-import riichinexus.microservices.club.api.requests.*
-import riichinexus.microservices.club.api.responses.*
-import riichinexus.microservices.club.api.responses.ClubTournamentResponses.given
-import riichinexus.microservices.dictionary.api.requests.*
-import riichinexus.microservices.dictionary.api.responses.*
-import riichinexus.microservices.dictionary.api.responses.DictionaryResponses.given
-import riichinexus.microservices.opsanalytics.api.PerformanceDiagnosticsSnapshot
-import riichinexus.microservices.opsanalytics.api.requests.{ProcessAdvancedStatsTasksRequest, RecomputeAdvancedStatsRequest}
-import riichinexus.microservices.tournament.appeal.api.requests.*
+import riichinexus.microservices.auth.objects.apiTypes.CreateGuestSessionRequest
+import riichinexus.microservices.club.objects.apiTypes.*
+import riichinexus.microservices.club.objects.apiTypes.*
+import riichinexus.microservices.club.objects.apiTypes.ClubTournamentResponses.given
+import riichinexus.microservices.dictionary.api.*
+import riichinexus.microservices.dictionary.objects.apiTypes.*
+import riichinexus.microservices.dictionary.objects.apiTypes.*
+import riichinexus.microservices.dictionary.objects.apiTypes.DictionaryResponses.given
+import riichinexus.microservices.opsanalytics.api.OpsAnalyticsListAggregateAuditsAPIMessage
+import riichinexus.microservices.opsanalytics.objects.apiTypes.PerformanceDiagnosticsSnapshot
+import riichinexus.microservices.tournament.appeal.objects.apiTypes.*
 import upickle.default.*
 
 class ApiServerDictionaryAdminSuite extends FunSuite with ApiServerSuiteSupport:
@@ -32,15 +33,13 @@ class ApiServerDictionaryAdminSuite extends FunSuite with ApiServerSuiteSupport:
     val admin = playerRepository(app).save(root.grantRole(RoleGrant.superAdmin(now)))
 
     withServer(app) { baseUrl =>
-      val response = postJson(
-        s"$baseUrl/admin/dictionary",
-        write(
-          UpsertDictionaryRequest(
-            operatorId = admin.id.value,
-            key = "rating.elo.experimentalFactor",
-            value = "72",
-            note = Some("should fail until registered")
-          )
+      val response = postApi(
+        baseUrl,
+        DictionaryUpsertEntryAPIMessage(
+          operatorId = admin.id.value,
+          key = "rating.elo.experimentalFactor",
+          value = "72",
+          note = Some("should fail until registered")
         )
       )
       assertEquals(response.statusCode(), 400)
@@ -57,13 +56,13 @@ class ApiServerDictionaryAdminSuite extends FunSuite with ApiServerSuiteSupport:
     val admin = playerRepository(app).save(root.grantRole(RoleGrant.superAdmin(now)))
     val adminPrincipal = principalFor(app, admin.id)
 
-    dictionaryGovernance(app).requestDictionaryNamespace(
+    dictionaryApi(app).requestDictionaryNamespace(
       namespacePrefix = "rank.formula",
       actor = adminPrincipal,
       note = Some("bootstrap metadata namespace"),
       requestedAt = now
     )
-    dictionaryGovernance(app).reviewDictionaryNamespace(
+    dictionaryApi(app).reviewDictionaryNamespace(
       namespacePrefix = "rank.formula",
       approve = true,
       actor = adminPrincipal,
@@ -71,7 +70,7 @@ class ApiServerDictionaryAdminSuite extends FunSuite with ApiServerSuiteSupport:
       reviewedAt = now.plusSeconds(1)
     )
 
-    val dictionaryEntry = dictionaryGovernance(app).upsertDictionary(
+    val dictionaryEntry = dictionaryApi(app).upsertDictionary(
       key = "rank.formula.current",
       value = "uma+oka-v2",
       actor = adminPrincipal,
@@ -80,18 +79,36 @@ class ApiServerDictionaryAdminSuite extends FunSuite with ApiServerSuiteSupport:
     )
 
     withServer(app) { baseUrl =>
-      val dictionaryResponse = get(s"$baseUrl/dictionary/${dictionaryEntry.key}")
+      val dictionaryResponse = postApi(
+        baseUrl,
+        DictionaryGetEntryAPIMessage(dictionaryEntry.key)
+      )
       assertEquals(dictionaryResponse.statusCode(), 200)
       val storedEntry = read[GlobalDictionaryEntry](dictionaryResponse.body())
       assertEquals(storedEntry.value, dictionaryEntry.value)
 
-      val forbiddenAudit = get(
-        s"$baseUrl/audits/dictionary/${dictionaryEntry.key}?operatorId=${viewer.id.value}"
+      val forbiddenAudit = postJson(
+        s"$baseUrl/api/opsanalyticslistaggregateauditsapi",
+        write(
+          OpsAnalyticsListAggregateAuditsAPIMessage(
+            operatorId = viewer.id,
+            aggregateType = "dictionary",
+            aggregateId = dictionaryEntry.key
+          )
+        )
       )
       assertEquals(forbiddenAudit.statusCode(), 403)
 
-      val auditResponse = get(
-        s"$baseUrl/audits/dictionary/${dictionaryEntry.key}?operatorId=${admin.id.value}&eventType=GlobalDictionaryUpserted"
+      val auditResponse = postJson(
+        s"$baseUrl/api/opsanalyticslistaggregateauditsapi",
+        write(
+          OpsAnalyticsListAggregateAuditsAPIMessage(
+            operatorId = admin.id,
+            aggregateType = "dictionary",
+            aggregateId = dictionaryEntry.key,
+            eventType = Some("GlobalDictionaryUpserted")
+          )
+        )
       )
       assertEquals(auditResponse.statusCode(), 200)
       val auditEntries = readPage[AuditEventEntry](auditResponse.body())

@@ -8,7 +8,7 @@ import io.circe.syntax.*
 import org.http4s.HttpRoutes
 import org.http4s.circe.CirceEntityEncoder.*
 import org.http4s.dsl.io.*
-import riichinexus.microservices.shared.api.responses.HealthResponse
+import riichinexus.system.objects.apiTypes.HealthResponse
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
 object HealthRouter:

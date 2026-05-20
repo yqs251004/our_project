@@ -1,8 +1,8 @@
 package riichinexus.api
 
 import riichinexus.bootstrap.ApplicationContext
+import riichinexus.bootstrap.instrumentation.PerformanceDiagnosticsService
 import riichinexus.api.http.RouteContext
-import riichinexus.microservices.opsanalytics.api.PerformanceDiagnosticsService
 
 final case class ApiRuntimeContext(
     routeContext: RouteContext,

@@ -11,16 +11,16 @@ import munit.FunSuite
 import riichinexus.bootstrap.ApplicationContext
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.auth.api.requests.CreateGuestSessionRequest
-import riichinexus.microservices.club.api.requests.*
-import riichinexus.microservices.club.api.responses.*
-import riichinexus.microservices.club.api.responses.ClubTournamentResponses.given
-import riichinexus.microservices.dictionary.api.requests.*
-import riichinexus.microservices.dictionary.api.responses.*
-import riichinexus.microservices.dictionary.api.responses.DictionaryResponses.given
-import riichinexus.microservices.opsanalytics.api.PerformanceDiagnosticsSnapshot
-import riichinexus.microservices.opsanalytics.api.requests.{ProcessAdvancedStatsTasksRequest, RecomputeAdvancedStatsRequest}
-import riichinexus.microservices.tournament.appeal.api.requests.*
+import riichinexus.microservices.auth.objects.apiTypes.CreateGuestSessionRequest
+import riichinexus.microservices.club.objects.apiTypes.*
+import riichinexus.microservices.club.objects.apiTypes.*
+import riichinexus.microservices.club.objects.apiTypes.ClubTournamentResponses.given
+import riichinexus.microservices.dictionary.api.*
+import riichinexus.microservices.dictionary.objects.apiTypes.*
+import riichinexus.microservices.dictionary.objects.apiTypes.*
+import riichinexus.microservices.dictionary.objects.apiTypes.DictionaryResponses.given
+import riichinexus.microservices.opsanalytics.objects.apiTypes.PerformanceDiagnosticsSnapshot
+import riichinexus.microservices.tournament.appeal.objects.apiTypes.*
 import upickle.default.*
 
 class ApiServerDictionaryNamespaceWorkflowSuite extends FunSuite with ApiServerSuiteSupport:
@@ -34,14 +34,12 @@ class ApiServerDictionaryNamespaceWorkflowSuite extends FunSuite with ApiServerS
     val superAdmin = playerRepository(app).save(root.grantRole(RoleGrant.superAdmin(now)))
 
     withServer(app) { baseUrl =>
-      val requestResponse = postJson(
-        s"$baseUrl/dictionary/namespaces",
-        write(
-          RequestDictionaryNamespaceRequest(
-            operatorId = owner.id.value,
-            namespacePrefix = "ui.banner",
-            note = Some("frontend banners")
-          )
+      val requestResponse = postApi(
+        baseUrl,
+        DictionaryRequestNamespaceAPIMessage(
+          operatorId = owner.id.value,
+          namespacePrefix = "ui.banner",
+          note = Some("frontend banners")
         )
       )
       assertEquals(requestResponse.statusCode(), 201)
@@ -49,45 +47,39 @@ class ApiServerDictionaryNamespaceWorkflowSuite extends FunSuite with ApiServerS
       assertEquals(pending.status, DictionaryNamespaceReviewStatus.Pending)
       assertEquals(pending.ownerPlayerId, owner.id)
 
-      val reviewResponse = postJson(
-        s"$baseUrl/dictionary/namespaces/review",
-        write(
-          ReviewDictionaryNamespaceRequest(
-            operatorId = superAdmin.id.value,
-            namespacePrefix = "ui.banner",
-            approve = true,
-            note = Some("approved")
-          )
+      val reviewResponse = postApi(
+        baseUrl,
+        DictionaryReviewNamespaceAPIMessage(
+          operatorId = superAdmin.id.value,
+          namespacePrefix = "ui.banner",
+          approve = true,
+          note = Some("approved")
         )
       )
       assertEquals(reviewResponse.statusCode(), 200)
       val approved = read[DictionaryNamespaceRegistration](reviewResponse.body())
       assertEquals(approved.status, DictionaryNamespaceReviewStatus.Approved)
 
-      val upsertResponse = postJson(
-        s"$baseUrl/admin/dictionary",
-        write(
-          UpsertDictionaryRequest(
-            operatorId = owner.id.value,
-            key = "ui.banner.message",
-            value = "Spring finals this weekend",
-            note = Some("owned metadata")
-          )
+      val upsertResponse = postApi(
+        baseUrl,
+        DictionaryUpsertEntryAPIMessage(
+          operatorId = owner.id.value,
+          key = "ui.banner.message",
+          value = "Spring finals this weekend",
+          note = Some("owned metadata")
         )
       )
       assertEquals(upsertResponse.statusCode(), 201)
       val metadata = read[GlobalDictionaryEntry](upsertResponse.body())
       assertEquals(metadata.key, "ui.banner.message")
 
-      val transferResponse = postJson(
-        s"$baseUrl/dictionary/namespaces/transfer",
-        write(
-          TransferDictionaryNamespaceRequest(
-            operatorId = superAdmin.id.value,
-            namespacePrefix = "ui.banner",
-            newOwnerPlayerId = transferee.id.value,
-            note = Some("handoff to content ops")
-          )
+      val transferResponse = postApi(
+        baseUrl,
+        DictionaryTransferNamespaceAPIMessage(
+          operatorId = superAdmin.id.value,
+          namespacePrefix = "ui.banner",
+          newOwnerPlayerId = transferee.id.value,
+          note = Some("handoff to content ops")
         )
       )
       assertEquals(transferResponse.statusCode(), 200)
@@ -95,61 +87,54 @@ class ApiServerDictionaryNamespaceWorkflowSuite extends FunSuite with ApiServerS
       assertEquals(transferred.ownerPlayerId, transferee.id)
       assertEquals(transferred.status, DictionaryNamespaceReviewStatus.Approved)
 
-      val formerOwnerWrite = postJson(
-        s"$baseUrl/admin/dictionary",
-        write(
-          UpsertDictionaryRequest(
-            operatorId = owner.id.value,
-            key = "ui.banner.message",
-            value = "former owner co-owner write",
-            note = Some("should still succeed")
-          )
+      val formerOwnerWrite = postApi(
+        baseUrl,
+        DictionaryUpsertEntryAPIMessage(
+          operatorId = owner.id.value,
+          key = "ui.banner.message",
+          value = "former owner co-owner write",
+          note = Some("should still succeed")
         )
       )
       assertEquals(formerOwnerWrite.statusCode(), 201)
 
-      val transfereeWrite = postJson(
-        s"$baseUrl/admin/dictionary",
-        write(
-          UpsertDictionaryRequest(
-            operatorId = transferee.id.value,
-            key = "ui.banner.message",
-            value = "Transferred owner content",
-            note = Some("new owner write")
-          )
+      val transfereeWrite = postApi(
+        baseUrl,
+        DictionaryUpsertEntryAPIMessage(
+          operatorId = transferee.id.value,
+          key = "ui.banner.message",
+          value = "Transferred owner content",
+          note = Some("new owner write")
         )
       )
       assertEquals(transfereeWrite.statusCode(), 201)
 
-      val revokeResponse = postJson(
-        s"$baseUrl/dictionary/namespaces/revoke",
-        write(
-          RevokeDictionaryNamespaceRequest(
-            operatorId = superAdmin.id.value,
-            namespacePrefix = "ui.banner",
-            note = Some("retired family")
-          )
+      val revokeResponse = postApi(
+        baseUrl,
+        DictionaryRevokeNamespaceAPIMessage(
+          operatorId = superAdmin.id.value,
+          namespacePrefix = "ui.banner",
+          note = Some("retired family")
         )
       )
       assertEquals(revokeResponse.statusCode(), 200)
       val revoked = read[DictionaryNamespaceRegistration](revokeResponse.body())
       assertEquals(revoked.status, DictionaryNamespaceReviewStatus.Revoked)
 
-      val revokedDenied = postJson(
-        s"$baseUrl/admin/dictionary",
-        write(
-          UpsertDictionaryRequest(
-            operatorId = transferee.id.value,
-            key = "ui.banner.message",
-            value = "revoked blocked",
-            note = Some("should fail")
-          )
+      val revokedDenied = postApi(
+        baseUrl,
+        DictionaryUpsertEntryAPIMessage(
+          operatorId = transferee.id.value,
+          key = "ui.banner.message",
+          value = "revoked blocked",
+          note = Some("should fail")
         )
       )
       assertEquals(revokedDenied.statusCode(), 400)
 
-      val listResponse = get(
-        s"$baseUrl/dictionary/namespaces?operatorId=${superAdmin.id.value}&status=Revoked&reviewedBy=${superAdmin.id.value}"
+      val listResponse = postApi(
+        baseUrl,
+        DictionaryListNamespacesAPIMessage(superAdmin.id.value, status = Some("Revoked"), reviewedBy = Some(superAdmin.id.value))
       )
       assertEquals(listResponse.statusCode(), 200)
       val page = readPage[DictionaryNamespaceRegistration](listResponse.body())

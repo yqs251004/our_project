@@ -11,16 +11,16 @@ import munit.FunSuite
 import riichinexus.bootstrap.ApplicationContext
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.auth.api.requests.CreateGuestSessionRequest
-import riichinexus.microservices.club.api.requests.*
-import riichinexus.microservices.club.api.responses.*
-import riichinexus.microservices.club.api.responses.ClubTournamentResponses.given
-import riichinexus.microservices.dictionary.api.requests.*
-import riichinexus.microservices.dictionary.api.responses.*
-import riichinexus.microservices.dictionary.api.responses.DictionaryResponses.given
-import riichinexus.microservices.opsanalytics.api.PerformanceDiagnosticsSnapshot
-import riichinexus.microservices.opsanalytics.api.requests.{ProcessAdvancedStatsTasksRequest, RecomputeAdvancedStatsRequest}
-import riichinexus.microservices.tournament.appeal.api.requests.*
+import riichinexus.microservices.auth.api.*
+import riichinexus.microservices.club.api.*
+import riichinexus.microservices.club.objects.apiTypes.*
+import riichinexus.microservices.club.objects.apiTypes.*
+import riichinexus.microservices.club.objects.apiTypes.ClubTournamentResponses.given
+import riichinexus.microservices.dictionary.objects.apiTypes.*
+import riichinexus.microservices.dictionary.objects.apiTypes.*
+import riichinexus.microservices.dictionary.objects.apiTypes.DictionaryResponses.given
+import riichinexus.microservices.opsanalytics.objects.apiTypes.PerformanceDiagnosticsSnapshot
+import riichinexus.microservices.tournament.appeal.objects.apiTypes.*
 import upickle.default.*
 
 class ApiServerSessionAndApplicationSuite extends FunSuite with ApiServerSuiteSupport:
@@ -30,25 +30,29 @@ class ApiServerSessionAndApplicationSuite extends FunSuite with ApiServerSuiteSu
     val now = Instant.parse("2026-03-15T08:30:00Z")
 
     val owner = playerService(app).registerPlayer("guest-api-owner", "GuestApiOwner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
-    val club = clubService(app).createClub("Guest API Club", owner.id, now, owner.asPrincipal)
+    val club = clubApi(app).createClub("Guest API Club", owner.id, now, owner.asPrincipal)
 
     withServer(app) { baseUrl =>
       val createResponse = postJson(
-        s"$baseUrl/guest-sessions",
-        write(CreateGuestSessionRequest(Some("AnonymousFan")))
+        s"$baseUrl/api/createguestsessionauthapi",
+        write(CreateGuestSessionAuthAPIMessage(displayName = Some("AnonymousFan")))
       )
       assertEquals(createResponse.statusCode(), 201)
       val session = read[GuestAccessSession](createResponse.body())
       assertEquals(session.displayName, "AnonymousFan")
 
-      val detailResponse = get(s"$baseUrl/guest-sessions/${session.id.value}")
+      val detailResponse = postJson(
+        s"$baseUrl/api/getguestsessionauthapi",
+        write(GetGuestSessionAuthAPIMessage(session.id.value))
+      )
       assertEquals(detailResponse.statusCode(), 200)
       assertEquals(read[GuestAccessSession](detailResponse.body()).id, session.id)
 
       val applicationResponse = postJson(
-        s"$baseUrl/clubs/${club.id.value}/applications",
+        s"$baseUrl/api/submitclubapplicationapi",
         write(
-          ClubMembershipApplicationRequest(
+          SubmitClubApplicationAPIMessage(
+            clubId = club.id.value,
             applicantUserId = None,
             displayName = "ignored-by-session",
             message = Some("guest route test"),
@@ -61,7 +65,10 @@ class ApiServerSessionAndApplicationSuite extends FunSuite with ApiServerSuiteSu
       assertEquals(application.displayName, "AnonymousFan")
       assertEquals(application.applicantUserId, Some(s"guest:${session.id.value}"))
 
-      val listResponse = get(s"$baseUrl/clubs/${club.id.value}/applications?operatorId=${owner.id.value}")
+      val listResponse = postJson(
+        s"$baseUrl/api/listclubapplicationsapi",
+        write(ListClubApplicationsAPIMessage(club.id.value, operatorId = Some(owner.id.value)))
+      )
       assertEquals(listResponse.statusCode(), 200)
       val applications = readPage[ClubMembershipApplicationView](listResponse.body())
       assertEquals(applications.total, 1)
@@ -75,13 +82,14 @@ class ApiServerSessionAndApplicationSuite extends FunSuite with ApiServerSuiteSu
 
     val owner = playerService(app).registerPlayer("api-withdraw-owner", "ApiWithdrawOwner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
     val applicant = playerService(app).registerPlayer("api-withdraw-player", "ApiWithdrawPlayer", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1500)
-    val club = clubService(app).createClub("Withdraw API Club", owner.id, now, owner.asPrincipal)
+    val club = clubApi(app).createClub("Withdraw API Club", owner.id, now, owner.asPrincipal)
 
     withServer(app) { baseUrl =>
       val createResponse = postJson(
-        s"$baseUrl/clubs/${club.id.value}/applications",
+        s"$baseUrl/api/submitclubapplicationapi",
         write(
-          ClubMembershipApplicationRequest(
+          SubmitClubApplicationAPIMessage(
+            clubId = club.id.value,
             applicantUserId = None,
             displayName = "fallback-name",
             message = Some("registered path"),
@@ -96,16 +104,17 @@ class ApiServerSessionAndApplicationSuite extends FunSuite with ApiServerSuiteSu
       assertEquals(created.displayName, applicant.nickname)
 
       val withdrawResponse = postJson(
-        s"$baseUrl/clubs/${club.id.value}/applications/${created.id.value}/withdraw",
-        write(WithdrawClubApplicationRequest(operatorId = Some(applicant.id.value), note = Some("not this season")))
+        s"$baseUrl/api/withdrawclubapplicationapi",
+        write(WithdrawClubApplicationAPIMessage(club.id.value, created.id.value, operatorId = Some(applicant.id.value), note = Some("not this season")))
       )
       assertEquals(withdrawResponse.statusCode(), 200)
       val withdrawn = read[ClubMembershipApplication](withdrawResponse.body())
       assertEquals(withdrawn.status, ClubMembershipApplicationStatus.Withdrawn)
       assertEquals(withdrawn.withdrawnByPrincipalId, Some(applicant.id.value))
 
-      val filteredResponse = get(
-        s"$baseUrl/clubs/${club.id.value}/applications?operatorId=${owner.id.value}&status=Withdrawn&applicantUserId=${applicant.userId}"
+      val filteredResponse = postJson(
+        s"$baseUrl/api/listclubapplicationsapi",
+        write(ListClubApplicationsAPIMessage(club.id.value, operatorId = Some(owner.id.value), status = Some("Withdrawn"), applicantUserId = Some(applicant.userId)))
       )
       assertEquals(filteredResponse.statusCode(), 200)
       val applications = readPage[ClubMembershipApplicationView](filteredResponse.body())
@@ -119,9 +128,9 @@ class ApiServerSessionAndApplicationSuite extends FunSuite with ApiServerSuiteSu
     val now = Instant.parse("2026-03-15T08:00:00Z")
 
     val owner = playerService(app).registerPlayer("owner-1", "Owner", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
-    val club = clubService(app).createClub("Application Club", owner.id, now, owner.asPrincipal)
+    val club = clubApi(app).createClub("Application Club", owner.id, now, owner.asPrincipal)
 
-    clubService(app).applyForMembership(
+    clubApi(app).applyForMembership(
       clubId = club.id,
       applicantUserId = Some("guest-1"),
       displayName = "Guest Applicant",
@@ -129,7 +138,10 @@ class ApiServerSessionAndApplicationSuite extends FunSuite with ApiServerSuiteSu
     )
 
     withServer(app) { baseUrl =>
-      val response = get(s"$baseUrl/clubs/${club.id.value}/applications?operatorId=${owner.id.value}")
+      val response = postJson(
+        s"$baseUrl/api/listclubapplicationsapi",
+        write(ListClubApplicationsAPIMessage(club.id.value, operatorId = Some(owner.id.value)))
+      )
       assertEquals(response.statusCode(), 200)
 
       val applications = readPage[ClubMembershipApplicationView](response.body())

@@ -12,20 +12,31 @@ import riichinexus.api.{ApiRuntimeContext, ApiServerConfig, RiichiNexusApiServer
 import riichinexus.bootstrap.ApplicationContext
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.auth.api.responses.*
-import riichinexus.microservices.auth.api.responses.AuthResponses.given
-import riichinexus.microservices.club.api.responses.*
-import riichinexus.microservices.club.api.responses.ClubTournamentResponses.given
-import riichinexus.microservices.club.api.requests.*
-import riichinexus.microservices.publicquery.api.responses.*
-import riichinexus.microservices.publicquery.api.responses.PublicQueryResponses.given
-import riichinexus.microservices.shared.api.requests.OperatorRequest
-import riichinexus.microservices.shared.api.requests.OperatorRequest.given
-import riichinexus.microservices.shared.api.responses.{ErrorResponse, PagedResponse}
-import riichinexus.microservices.tournament.api.responses.*
-import riichinexus.microservices.tournament.api.responses.TournamentOperationResponses.given
-import riichinexus.microservices.tournament.api.requests.StageRequests.given
-import riichinexus.microservices.tournament.api.requests.*
+import riichinexus.microservices.auth.api.CurrentSessionAuthAPIMessage
+import riichinexus.microservices.auth.objects.apiTypes.*
+import riichinexus.microservices.auth.objects.apiTypes.AuthResponses.given
+import riichinexus.microservices.club.api.*
+import riichinexus.microservices.club.objects.apiTypes.*
+import riichinexus.microservices.club.objects.apiTypes.ClubTournamentResponses.given
+import riichinexus.microservices.club.objects.apiTypes.*
+import riichinexus.microservices.publicquery.api.{
+  GetPublicClubAPIMessage,
+  GetPublicTournamentAPIMessage,
+  ListPublicTournamentsAPIMessage
+}
+import riichinexus.microservices.publicquery.objects.apiTypes.*
+import riichinexus.microservices.publicquery.objects.apiTypes.PublicQueryResponses.given
+import riichinexus.microservices.player.api.GetCurrentPlayerAPIMessage
+import riichinexus.microservices.player.objects.apiTypes.*
+import riichinexus.microservices.player.objects.apiTypes.PlayerResponses.given
+import riichinexus.system.objects.apiTypes.OperatorRequest
+import riichinexus.system.objects.apiTypes.OperatorRequest.given
+import riichinexus.system.objects.apiTypes.{ErrorResponse, PagedResponse}
+import riichinexus.microservices.tournament.api.*
+import riichinexus.microservices.tournament.objects.apiTypes.*
+import riichinexus.microservices.tournament.objects.apiTypes.TournamentOperationResponses.given
+import riichinexus.microservices.tournament.objects.apiTypes.StageRequests.given
+import riichinexus.microservices.tournament.objects.apiTypes.*
 import upickle.default.*
 
 class FrontendContractSuite extends FunSuite with TestApplicationAccess:
@@ -39,13 +50,13 @@ class FrontendContractSuite extends FunSuite with TestApplicationAccess:
       assertEquals(openApiResponse.statusCode(), 200)
       val openApi = ujson.read(openApiResponse.body())
       val paths = openApi("paths").obj.keySet
-      assert(paths.contains("/session"))
-      assert(paths.contains("/players/me"))
-      assert(paths.contains("/clubs/{clubId}/applications"))
-      assert(paths.contains("/clubs/{clubId}/tournaments"))
-      assert(paths.contains("/tournaments/{id}"))
-      assert(paths.contains("/public/tournaments/{id}"))
-      assert(paths.contains("/public/clubs/{clubId}"))
+      assert(paths.contains("/api/currentsessionauthapi"))
+      assert(paths.contains("/api/getcurrentplayerapi"))
+      assert(paths.contains("/api/listclubapplicationsapi"))
+      assert(paths.contains("/api/listclubtournamentsapi"))
+      assert(!paths.contains("/tournaments/{id}"))
+      assert(paths.contains("/api/getpublictournamentapi"))
+      assert(paths.contains("/api/getpublicclubapi"))
 
       val swaggerResponse = get(s"$baseUrl/swagger")
       assertEquals(swaggerResponse.statusCode(), 200)
@@ -65,30 +76,42 @@ class FrontendContractSuite extends FunSuite with TestApplicationAccess:
       now,
       1620
     )
-    val guest = guestSessionService(app).createSession("ContractGuest")
+    val guest = createGuestSession(app, "ContractGuest")
 
     withServer(app) { baseUrl =>
-      val registeredResponse = get(s"$baseUrl/session?operatorId=${player.id.value}")
+      val registeredResponse = postJson(
+        s"$baseUrl/api/currentsessionauthapi",
+        write(CurrentSessionAuthAPIMessage(operatorId = Some(player.id.value)))
+      )
       assertEquals(registeredResponse.statusCode(), 200)
       val registeredSession = read[CurrentSessionView](registeredResponse.body())
       assertEquals(registeredSession.principalKind, SessionPrincipalKind.RegisteredPlayer)
       assertEquals(registeredSession.player.map(_.id), Some(player.id))
       assert(registeredSession.roles.isRegisteredPlayer)
 
-      val guestResponse = get(s"$baseUrl/session?guestSessionId=${guest.id.value}")
+      val guestResponse = postJson(
+        s"$baseUrl/api/currentsessionauthapi",
+        write(CurrentSessionAuthAPIMessage(guestSessionId = Some(guest.id.value)))
+      )
       assertEquals(guestResponse.statusCode(), 200)
       val guestSession = read[CurrentSessionView](guestResponse.body())
       assertEquals(guestSession.principalKind, SessionPrincipalKind.Guest)
       assertEquals(guestSession.guestSession.map(_.id), Some(guest.id))
       assert(guestSession.roles.isGuest)
 
-      val anonymousResponse = get(s"$baseUrl/session")
+      val anonymousResponse = postJson(
+        s"$baseUrl/api/currentsessionauthapi",
+        write(CurrentSessionAuthAPIMessage())
+      )
       assertEquals(anonymousResponse.statusCode(), 200)
       assertEquals(read[CurrentSessionView](anonymousResponse.body()).principalKind, SessionPrincipalKind.Anonymous)
 
-      val meResponse = get(s"$baseUrl/players/me?operatorId=${player.id.value}")
+      val meResponse = postJson(
+        s"$baseUrl/api/getcurrentplayerapi",
+        write(GetCurrentPlayerAPIMessage(player.id.value))
+      )
       assertEquals(meResponse.statusCode(), 200)
-      assertEquals(read[Player](meResponse.body()).id, player.id)
+      assertEquals(read[PlayerProfileView](meResponse.body()).playerId, player.id)
     }
   }
 
@@ -99,15 +122,16 @@ class FrontendContractSuite extends FunSuite with TestApplicationAccess:
     val owner = playerService(app).registerPlayer("contract-owner", "ContractOwner", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1800)
     val applicant = playerService(app).registerPlayer("contract-applicant", "ContractApplicant", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1560)
     val reserve = playerService(app).registerPlayer("contract-reserve", "ContractReserve", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1490)
-    val club = clubService(app).createClub("Contract Club", owner.id, now, owner.asPrincipal)
-    clubService(app).addMember(club.id, reserve.id, principalFor(app, owner.id))
-    val guest = guestSessionService(app).createSession("ContractGuestApplicant")
+    val club = clubApi(app).createClub("Contract Club", owner.id, now, owner.asPrincipal)
+    clubApi(app).addMember(club.id, reserve.id, principalFor(app, owner.id))
+    val guest = createGuestSession(app, "ContractGuestApplicant")
 
     withServer(app) { baseUrl =>
       val closePolicyResponse = postJson(
-        s"$baseUrl/clubs/${club.id.value}/recruitment-policy",
+        s"$baseUrl/api/updateclubrecruitmentpolicyapi",
         write(
-          UpdateClubRecruitmentPolicyRequest(
+          UpdateClubRecruitmentPolicyAPIMessage(
+            clubId = club.id.value,
             operatorId = owner.id.value,
             applicationsOpen = false,
             note = Some("closed during review freeze")
@@ -117,14 +141,18 @@ class FrontendContractSuite extends FunSuite with TestApplicationAccess:
       assertEquals(closePolicyResponse.statusCode(), 200)
       assert(!read[Club](closePolicyResponse.body()).recruitmentPolicy.applicationsOpen)
 
-      val closedJoinableResponse = get(s"$baseUrl/clubs?joinableOnly=true")
+      val closedJoinableResponse = postJson(
+        s"$baseUrl/api/listclubsapi",
+        write(ListClubsAPIMessage(joinableOnly = Some(true)))
+      )
       assertEquals(closedJoinableResponse.statusCode(), 200)
       assertEquals(readPage[Club](closedJoinableResponse.body()).total, 0)
 
       val blockedApplicationResponse = postJson(
-        s"$baseUrl/clubs/${club.id.value}/applications",
+        s"$baseUrl/api/submitclubapplicationapi",
         write(
-          ClubMembershipApplicationRequest(
+          SubmitClubApplicationAPIMessage(
+            clubId = club.id.value,
             applicantUserId = None,
             displayName = "ignored-by-session",
             message = Some("please let me in"),
@@ -136,9 +164,10 @@ class FrontendContractSuite extends FunSuite with TestApplicationAccess:
       assertEquals(read[ErrorResponse](blockedApplicationResponse.body()).code, "invalid_request")
 
       val openPolicyResponse = postJson(
-        s"$baseUrl/clubs/${club.id.value}/recruitment-policy",
+        s"$baseUrl/api/updateclubrecruitmentpolicyapi",
         write(
-          UpdateClubRecruitmentPolicyRequest(
+          UpdateClubRecruitmentPolicyAPIMessage(
+            clubId = club.id.value,
             operatorId = owner.id.value,
             applicationsOpen = true,
             requirementsText = Some("Please share your latest ranked match link."),
@@ -153,9 +182,10 @@ class FrontendContractSuite extends FunSuite with TestApplicationAccess:
       assertEquals(updatedClub.recruitmentPolicy.expectedReviewSlaHours, Some(48))
 
       val applicationResponse = postJson(
-        s"$baseUrl/clubs/${club.id.value}/applications",
+        s"$baseUrl/api/submitclubapplicationapi",
         write(
-          ClubMembershipApplicationRequest(
+          SubmitClubApplicationAPIMessage(
+            clubId = club.id.value,
             applicantUserId = None,
             displayName = "ignored-by-session",
             message = Some("guest-origin contract flow"),
@@ -166,13 +196,17 @@ class FrontendContractSuite extends FunSuite with TestApplicationAccess:
       assertEquals(applicationResponse.statusCode(), 200)
       val submitted = read[ClubMembershipApplication](applicationResponse.body())
 
-      val joinableResponse = get(s"$baseUrl/clubs?activeOnly=true&joinableOnly=true")
+      val joinableResponse = postJson(
+        s"$baseUrl/api/listclubsapi",
+        write(ListClubsAPIMessage(activeOnly = Some(true), joinableOnly = Some(true)))
+      )
       assertEquals(joinableResponse.statusCode(), 200)
       val joinableClubs = readPage[Club](joinableResponse.body())
       assert(joinableClubs.items.exists(_.id == club.id))
 
-      val inboxResponse = get(
-        s"$baseUrl/clubs/${club.id.value}/applications?operatorId=${owner.id.value}&status=Pending&limit=20"
+      val inboxResponse = postJson(
+        s"$baseUrl/api/listclubapplicationsapi",
+        write(ListClubApplicationsAPIMessage(club.id.value, operatorId = Some(owner.id.value), status = Some("Pending"), limit = Some(20)))
       )
       assertEquals(inboxResponse.statusCode(), 200)
       val inbox = readPage[ClubMembershipApplicationView](inboxResponse.body())
@@ -181,8 +215,9 @@ class FrontendContractSuite extends FunSuite with TestApplicationAccess:
       assert(inbox.items.head.canReview)
       assertEquals(inbox.items.head.applicant.applicantUserId, Some(s"guest:${guest.id.value}"))
 
-      val applicantDetailResponse = get(
-        s"$baseUrl/clubs/${club.id.value}/applications/${submitted.id.value}?guestSessionId=${guest.id.value}"
+      val applicantDetailResponse = postJson(
+        s"$baseUrl/api/getclubapplicationapi",
+        write(GetClubApplicationAPIMessage(club.id.value, submitted.id.value, guestSessionId = Some(guest.id.value)))
       )
       assertEquals(applicantDetailResponse.statusCode(), 200)
       val applicantDetail = read[ClubMembershipApplicationView](applicantDetailResponse.body())
@@ -190,9 +225,11 @@ class FrontendContractSuite extends FunSuite with TestApplicationAccess:
       assertEquals(applicantDetail.applicant.displayName, "ContractGuestApplicant")
 
       val reviewResponse = postJson(
-        s"$baseUrl/clubs/${club.id.value}/applications/${submitted.id.value}/review",
+        s"$baseUrl/api/reviewclubapplicationapi",
         write(
-          ReviewClubApplicationRequest(
+          ReviewClubApplicationAPIMessage(
+            clubId = club.id.value,
+            membershipId = submitted.id.value,
             operatorId = owner.id.value,
             decision = "approve",
             playerId = Some(applicant.id.value),
@@ -237,7 +274,10 @@ class FrontendContractSuite extends FunSuite with TestApplicationAccess:
         principalFor(app, owner.id)
       )
 
-      val publicClubResponse = get(s"$baseUrl/public/clubs/${club.id.value}")
+      val publicClubResponse = postJson(
+        s"$baseUrl/api/getpublicclubapi",
+        write(GetPublicClubAPIMessage(club.id.value))
+      )
       assertEquals(publicClubResponse.statusCode(), 200)
       val publicClubJson = ujson.read(publicClubResponse.body())
       assertEquals(publicClubJson("applicationPolicy")("requirementsText").str, "Please share your latest ranked match link.")
@@ -279,17 +319,26 @@ class FrontendContractSuite extends FunSuite with TestApplicationAccess:
     tournamentService(app).scheduleStageTables(tournament.id, stage.id, principalFor(app, admin.id))
 
     withServer(app) { baseUrl =>
-      val publicIndexResponse = get(s"$baseUrl/public/tournaments")
+      val publicIndexResponse = postJson(
+        s"$baseUrl/api/listpublictournamentsapi",
+        write(ListPublicTournamentsAPIMessage())
+      )
       assertEquals(publicIndexResponse.statusCode(), 200)
       val tournamentIndex = readPage[PublicTournamentSummaryView](publicIndexResponse.body())
       assert(tournamentIndex.items.exists(_.tournamentId == tournament.id))
 
-      val stagesResponse = get(s"$baseUrl/tournaments/${tournament.id.value}/stages")
+      val stagesResponse = postApi(
+        baseUrl,
+        TournamentStageDirectoryAPIMessage(tournament.id.value)
+      )
       assertEquals(stagesResponse.statusCode(), 200)
       val stages = read[Vector[TournamentStageDirectoryEntry]](stagesResponse.body())
       assertEquals(stages.map(_.stageId), Vector(stage.id))
 
-      val operationsDetailResponse = get(s"$baseUrl/tournaments/${tournament.id.value}")
+      val operationsDetailResponse = postApi(
+        baseUrl,
+        TournamentGetAPIMessage(tournament.id.value)
+      )
       assertEquals(operationsDetailResponse.statusCode(), 200)
       val operationsDetail = read[TournamentDetailView](operationsDetailResponse.body())
       assertEquals(operationsDetail.tournamentId, tournament.id)
@@ -298,7 +347,10 @@ class FrontendContractSuite extends FunSuite with TestApplicationAccess:
       assertEquals(operationsDetail.stages.head.scheduledTableCount, 1)
       assert(operationsDetail.stages.head.lineupSubmissions.isEmpty)
 
-      val publicDetailResponse = get(s"$baseUrl/public/tournaments/${tournament.id.value}")
+      val publicDetailResponse = postJson(
+        s"$baseUrl/api/getpublictournamentapi",
+        write(GetPublicTournamentAPIMessage(tournament.id.value))
+      )
       assertEquals(publicDetailResponse.statusCode(), 200)
       val publicDetail = read[PublicTournamentDetailView](publicDetailResponse.body())
       assertEquals(publicDetail.tournamentId, tournament.id)
@@ -313,7 +365,7 @@ class FrontendContractSuite extends FunSuite with TestApplicationAccess:
     val now = Instant.parse("2026-03-29T10:45:00Z")
 
     val owner = playerService(app).registerPlayer("auto-stage-owner", "AutoStageOwner", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1820)
-    val club = clubService(app).createClub("Auto Stage Club", owner.id, now, owner.asPrincipal)
+    val club = clubApi(app).createClub("Auto Stage Club", owner.id, now, owner.asPrincipal)
     val lineupMembers = Vector(
       owner,
       playerService(app).registerPlayer("auto-stage-b", "AutoStageB", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1710),
@@ -321,61 +373,71 @@ class FrontendContractSuite extends FunSuite with TestApplicationAccess:
       playerService(app).registerPlayer("auto-stage-d", "AutoStageD", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1670)
     )
     lineupMembers.tail.foreach(member =>
-      clubService(app).addMember(club.id, member.id, principalFor(app, owner.id))
+      clubApi(app).addMember(club.id, member.id, principalFor(app, owner.id))
     )
 
     withServer(app) { baseUrl =>
-      val createResponse = postJson(
-        s"$baseUrl/tournaments",
-        write(
-          CreateTournamentRequest(
-            name = "Auto Stage Cup",
-            organizer = "QA",
-            startsAt = now,
-            endsAt = now.plusSeconds(7200),
-            stages = Vector.empty,
-            adminId = Some(owner.id.value)
-          )
+      val createResponse = postApi(
+        baseUrl,
+        TournamentCreateAPIMessage(
+          name = "Auto Stage Cup",
+          organizer = "QA",
+          startsAt = now,
+          endsAt = now.plusSeconds(7200),
+          stages = Vector.empty,
+          adminId = Some(owner.id.value)
         )
       )
       assertEquals(createResponse.statusCode(), 201)
-      val created = read[Tournament](createResponse.body())
+      val created = read[TournamentSummaryView](createResponse.body())
       assertEquals(created.stages.size, 1)
       assertEquals(created.stages.head.name, "Swiss Stage 1")
 
-      val stageId = created.stages.head.id
+      val stageId = created.stages.head.stageId
 
-      tournamentService(app).whitelistClub(created.id, club.id, principalFor(app, owner.id))
-      tournamentService(app).publishTournament(created.id, principalFor(app, owner.id))
+      tournamentService(app).whitelistClub(created.tournamentId, club.id, principalFor(app, owner.id))
+      tournamentService(app).publishTournament(created.tournamentId, principalFor(app, owner.id))
 
-      val detailResponse = get(s"$baseUrl/tournaments/${created.id.value}")
+      val detailResponse = postApi(
+        baseUrl,
+        TournamentGetAPIMessage(created.tournamentId.value)
+      )
       assertEquals(detailResponse.statusCode(), 200)
       val detail = read[TournamentDetailView](detailResponse.body())
       assertEquals(detail.stages.map(_.stageId), Vector(stageId))
       assertEquals(detail.stages.head.name, "Swiss Stage 1")
 
-      val stagesResponse = get(s"$baseUrl/tournaments/${created.id.value}/stages")
+      val stagesResponse = postApi(
+        baseUrl,
+        TournamentStageDirectoryAPIMessage(created.tournamentId.value)
+      )
       assertEquals(stagesResponse.statusCode(), 200)
       val stages = read[Vector[TournamentStageDirectoryEntry]](stagesResponse.body())
       assertEquals(stages.map(_.stageId), Vector(stageId))
       assertEquals(stages.head.name, "Swiss Stage 1")
 
-      val publicDetailResponse = get(s"$baseUrl/public/tournaments/${created.id.value}")
+      val publicDetailResponse = postJson(
+        s"$baseUrl/api/getpublictournamentapi",
+        write(GetPublicTournamentAPIMessage(created.tournamentId.value))
+      )
       assertEquals(publicDetailResponse.statusCode(), 200)
       val publicDetail = read[PublicTournamentDetailView](publicDetailResponse.body())
       assertEquals(publicDetail.stages.map(_.stageId), Vector(stageId))
 
-      val invitedResponse = get(
-        s"$baseUrl/clubs/${club.id.value}/tournaments?viewer=${owner.id.value}&scope=all"
+      val invitedResponse = postJson(
+        s"$baseUrl/api/listclubtournamentsapi",
+        write(ListClubTournamentsAPIMessage(club.id.value, viewer = Some(owner.id.value), scope = Some("all")))
       )
       assertEquals(invitedResponse.statusCode(), 200)
       val invited = readPage[ClubTournamentParticipationView](invitedResponse.body())
       assertEquals(invited.items.head.clubParticipationStatus, ClubTournamentParticipationStatus.Invited)
       assert(invited.items.head.canSubmitLineup)
 
-      val lineupResponse = postJson(
-        s"$baseUrl/tournaments/${created.id.value}/stages/${stageId.value}/lineups",
-        write(
+      val lineupResponse = postApi(
+        baseUrl,
+        TournamentStageSubmitLineupAPIMessage(
+          created.tournamentId.value,
+          stageId.value,
           SubmitStageLineupRequest(
             clubId = club.id.value,
             operatorId = owner.id.value,
@@ -396,7 +458,7 @@ class FrontendContractSuite extends FunSuite with TestApplicationAccess:
     val now = Instant.parse("2026-03-29T11:00:00Z")
 
     val admin = playerService(app).registerPlayer("ops-admin", "OpsAdmin", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1830)
-    val club = clubService(app).createClub("Ops Club", admin.id, now, admin.asPrincipal)
+    val club = clubApi(app).createClub("Ops Club", admin.id, now, admin.asPrincipal)
     val lineupMembers = Vector(
       admin,
       playerService(app).registerPlayer("ops-b", "OpsB", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1700),
@@ -404,7 +466,7 @@ class FrontendContractSuite extends FunSuite with TestApplicationAccess:
       playerService(app).registerPlayer("ops-d", "OpsD", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1660)
     )
     lineupMembers.tail.foreach(member =>
-      clubService(app).addMember(club.id, member.id, principalFor(app, admin.id))
+      clubApi(app).addMember(club.id, member.id, principalFor(app, admin.id))
     )
 
     val stage = TournamentStage(IdGenerator.stageId(), "Ops Stage", StageFormat.Swiss, 1, 1)
@@ -418,24 +480,26 @@ class FrontendContractSuite extends FunSuite with TestApplicationAccess:
     )
 
     withServer(app) { baseUrl =>
-      val registerClubResponse = postJson(
-        s"$baseUrl/tournaments/${tournament.id.value}/clubs/${club.id.value}",
-        write(OperatorRequest(Some(admin.id.value)))
+      val registerClubResponse = postApi(
+        baseUrl,
+        TournamentRegisterClubAPIMessage(tournament.id.value, club.id.value, Some(admin.id.value))
       )
       assertEquals(registerClubResponse.statusCode(), 200)
       val clubRegistered = read[TournamentMutationView](registerClubResponse.body())
       assertEquals(clubRegistered.tournament.participatingClubs.map(_.clubId), Vector(club.id))
 
-      val publishResponse = postJson(
-        s"$baseUrl/tournaments/${tournament.id.value}/publish",
-        write(OperatorRequest(Some(admin.id.value)))
+      val publishResponse = postApi(
+        baseUrl,
+        TournamentPublishAPIMessage(tournament.id.value, Some(admin.id.value))
       )
       assertEquals(publishResponse.statusCode(), 200)
       assertEquals(read[TournamentMutationView](publishResponse.body()).tournament.status, TournamentStatus.RegistrationOpen)
 
-      val lineupResponse = postJson(
-        s"$baseUrl/tournaments/${tournament.id.value}/stages/${stage.id.value}/lineups",
-        write(
+      val lineupResponse = postApi(
+        baseUrl,
+        TournamentStageSubmitLineupAPIMessage(
+          tournament.id.value,
+          stage.id.value,
           SubmitStageLineupRequest(
             clubId = club.id.value,
             operatorId = admin.id.value,
@@ -449,9 +513,9 @@ class FrontendContractSuite extends FunSuite with TestApplicationAccess:
       assertEquals(lineupMutation.tournament.stages.head.lineupSubmissions.size, 1)
       assertEquals(lineupMutation.tournament.stages.head.lineupSubmissions.head.clubId, club.id)
 
-      val scheduleResponse = postJson(
-        s"$baseUrl/tournaments/${tournament.id.value}/stages/${stage.id.value}/schedule",
-        write(OperatorRequest(Some(admin.id.value)))
+      val scheduleResponse = postApi(
+        baseUrl,
+        TournamentStageScheduleTablesAPIMessage(tournament.id.value, stage.id.value, Some(admin.id.value))
       )
       assertEquals(scheduleResponse.statusCode(), 200)
       val scheduled = read[TournamentMutationView](scheduleResponse.body())
@@ -466,7 +530,7 @@ class FrontendContractSuite extends FunSuite with TestApplicationAccess:
     val now = Instant.parse("2026-03-29T11:30:00Z")
 
     val owner = playerService(app).registerPlayer("club-tour-owner", "ClubTourOwner", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1810)
-    val club = clubService(app).createClub("Participation Club", owner.id, now, owner.asPrincipal)
+    val club = clubApi(app).createClub("Participation Club", owner.id, now, owner.asPrincipal)
     val stage = TournamentStage(IdGenerator.stageId(), "Participation Stage", StageFormat.Swiss, 1, 1)
     val tournament = tournamentService(app).createTournament(
       "Participation Cup",
@@ -480,8 +544,9 @@ class FrontendContractSuite extends FunSuite with TestApplicationAccess:
     tournamentService(app).publishTournament(tournament.id, principalFor(app, owner.id))
 
     withServer(app) { baseUrl =>
-      val invitedResponse = get(
-        s"$baseUrl/clubs/${club.id.value}/tournaments?viewer=${owner.id.value}&scope=all"
+      val invitedResponse = postJson(
+        s"$baseUrl/api/listclubtournamentsapi",
+        write(ListClubTournamentsAPIMessage(club.id.value, viewer = Some(owner.id.value), scope = Some("all")))
       )
       assertEquals(invitedResponse.statusCode(), 200)
       val invited = readPage[ClubTournamentParticipationView](invitedResponse.body())
@@ -490,27 +555,29 @@ class FrontendContractSuite extends FunSuite with TestApplicationAccess:
       assert(invited.items.head.canSubmitLineup)
 
       val acceptResponse = postJson(
-        s"$baseUrl/clubs/${club.id.value}/tournaments/${tournament.id.value}/accept",
-        write(OperatorRequest(Some(owner.id.value)))
+        s"$baseUrl/api/acceptclubtournamentapi",
+        write(AcceptClubTournamentAPIMessage(club.id.value, tournament.id.value, operatorId = Some(owner.id.value)))
       )
       assertEquals(acceptResponse.statusCode(), 200)
       val accepted = read[TournamentMutationView](acceptResponse.body())
       assert(accepted.tournament.participatingClubs.exists(_.clubId == club.id))
 
-      val participatingResponse = get(
-        s"$baseUrl/clubs/${club.id.value}/tournaments?viewer=${owner.id.value}&scope=all"
+      val participatingResponse = postJson(
+        s"$baseUrl/api/listclubtournamentsapi",
+        write(ListClubTournamentsAPIMessage(club.id.value, viewer = Some(owner.id.value), scope = Some("all")))
       )
       val participating = readPage[ClubTournamentParticipationView](participatingResponse.body())
       assertEquals(participating.items.head.clubParticipationStatus, ClubTournamentParticipationStatus.Participating)
 
       val declineResponse = postJson(
-        s"$baseUrl/clubs/${club.id.value}/tournaments/${tournament.id.value}/decline",
-        write(OperatorRequest(Some(owner.id.value)))
+        s"$baseUrl/api/declineclubtournamentapi",
+        write(DeclineClubTournamentAPIMessage(club.id.value, tournament.id.value, operatorId = Some(owner.id.value)))
       )
       assertEquals(declineResponse.statusCode(), 200)
 
-      val afterDeclineResponse = get(
-        s"$baseUrl/clubs/${club.id.value}/tournaments?viewer=${owner.id.value}&scope=all"
+      val afterDeclineResponse = postJson(
+        s"$baseUrl/api/listclubtournamentsapi",
+        write(ListClubTournamentsAPIMessage(club.id.value, viewer = Some(owner.id.value), scope = Some("all")))
       )
       assertEquals(readPage[ClubTournamentParticipationView](afterDeclineResponse.body()).total, 0)
     }
@@ -521,7 +588,7 @@ class FrontendContractSuite extends FunSuite with TestApplicationAccess:
     val now = Instant.now()
 
     val owner = playerService(app).registerPlayer("club-tour-recent-owner", "ClubTourRecentOwner", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now.minusSeconds(120), 1810)
-    val club = clubService(app).createClub("Recent Participation Club", owner.id, now.minusSeconds(120), owner.asPrincipal)
+    val club = clubApi(app).createClub("Recent Participation Club", owner.id, now.minusSeconds(120), owner.asPrincipal)
     val recentStage = TournamentStage(IdGenerator.stageId(), "Recent Participation Stage", StageFormat.Swiss, 1, 1)
     val historicalStage = TournamentStage(IdGenerator.stageId(), "Historical Participation Stage", StageFormat.Swiss, 1, 1)
 
@@ -546,15 +613,17 @@ class FrontendContractSuite extends FunSuite with TestApplicationAccess:
     tournamentService(app).whitelistClub(historicalTournament.id, club.id, principalFor(app, owner.id))
 
     withServer(app) { baseUrl =>
-      val recentResponse = get(
-        s"$baseUrl/clubs/${club.id.value}/tournaments?viewer=${owner.id.value}&scope=recent"
+      val recentResponse = postJson(
+        s"$baseUrl/api/listclubtournamentsapi",
+        write(ListClubTournamentsAPIMessage(club.id.value, viewer = Some(owner.id.value), scope = Some("recent")))
       )
       assertEquals(recentResponse.statusCode(), 200)
       val recentPage = readPage[ClubTournamentParticipationView](recentResponse.body())
       assertEquals(recentPage.items.map(_.tournamentId), Vector(recentTournament.id))
 
-      val allResponse = get(
-        s"$baseUrl/clubs/${club.id.value}/tournaments?viewer=${owner.id.value}&scope=all"
+      val allResponse = postJson(
+        s"$baseUrl/api/listclubtournamentsapi",
+        write(ListClubTournamentsAPIMessage(club.id.value, viewer = Some(owner.id.value), scope = Some("all")))
       )
       assertEquals(allResponse.statusCode(), 200)
       val allPage = readPage[ClubTournamentParticipationView](allResponse.body())
@@ -592,6 +661,14 @@ class FrontendContractSuite extends FunSuite with TestApplicationAccess:
         .build(),
       HttpResponse.BodyHandlers.ofString()
     )
+
+  private def postApi[Message: Writer](baseUrl: String, message: Message): HttpResponse[String] =
+    postJson(s"$baseUrl/api/${apiNameOf(message)}", write(message))
+
+  private def apiNameOf(message: Any): String =
+    val className = message.getClass.getSimpleName.stripSuffix("$")
+    val baseName = className.stripSuffix("APIMessage")
+    s"${baseName}API".toLowerCase
 
   private def principalFor(app: ApplicationContext, playerId: PlayerId): AccessPrincipal =
     playerRepository(app).findById(playerId).getOrElse(fail(s"player ${playerId.value} missing")).asPrincipal

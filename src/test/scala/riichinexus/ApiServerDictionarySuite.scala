@@ -13,21 +13,24 @@ import munit.FunSuite
 import riichinexus.bootstrap.ApplicationContext
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.api.responses.*
-import riichinexus.microservices.club.api.responses.ClubTournamentResponses.given
-import riichinexus.microservices.club.api.requests.*
-import riichinexus.microservices.dictionary.api.requests.UpsertDictionaryRequest
-import riichinexus.microservices.opsanalytics.api.PerformanceDiagnosticsSnapshot
-import riichinexus.microservices.shared.api.requests.OperatorRequest
-import riichinexus.microservices.shared.api.requests.OperatorRequest.given
-import riichinexus.microservices.publicquery.api.responses.*
-import riichinexus.microservices.publicquery.api.responses.PublicQueryResponses.given
-import riichinexus.microservices.tournament.api.responses.*
-import riichinexus.microservices.tournament.api.responses.TournamentOperationResponses.given
-import riichinexus.microservices.tournament.api.requests.SettlementRequests.given
-import riichinexus.microservices.tournament.api.requests.StageRequests.given
-import riichinexus.microservices.tournament.api.requests.TableRequests.given
-import riichinexus.microservices.tournament.api.requests.*
+import riichinexus.microservices.club.objects.apiTypes.*
+import riichinexus.microservices.club.objects.apiTypes.ClubTournamentResponses.given
+import riichinexus.microservices.club.objects.apiTypes.*
+import riichinexus.microservices.dictionary.api.*
+import riichinexus.microservices.dictionary.objects.apiTypes.UpsertDictionaryRequest
+import riichinexus.microservices.opsanalytics.api.OpsAnalyticsListAuditsAPIMessage
+import riichinexus.microservices.opsanalytics.objects.apiTypes.PerformanceDiagnosticsSnapshot
+import riichinexus.system.objects.apiTypes.OperatorRequest
+import riichinexus.system.objects.apiTypes.OperatorRequest.given
+import riichinexus.microservices.publicquery.objects.apiTypes.*
+import riichinexus.microservices.publicquery.objects.apiTypes.PublicQueryResponses.given
+import riichinexus.microservices.tournament.api.*
+import riichinexus.microservices.tournament.objects.apiTypes.*
+import riichinexus.microservices.tournament.objects.apiTypes.TournamentOperationResponses.given
+import riichinexus.microservices.tournament.objects.apiTypes.SettlementRequests.given
+import riichinexus.microservices.tournament.objects.apiTypes.StageRequests.given
+import riichinexus.microservices.tournament.objects.apiTypes.TableRequests.given
+import riichinexus.microservices.tournament.objects.apiTypes.*
 import upickle.default.*
 
 class ApiServerDictionarySuite extends FunSuite with ApiServerSuiteSupport:
@@ -39,39 +42,39 @@ class ApiServerDictionarySuite extends FunSuite with ApiServerSuiteSupport:
     val admin = playerRepository(app).save(root.grantRole(RoleGrant.superAdmin(now)))
     val adminPrincipal = principalFor(app, admin.id)
 
-    dictionaryGovernance(app).requestDictionaryNamespace(
+    dictionaryApi(app).requestDictionaryNamespace(
       namespacePrefix = "rank.formula",
       actor = adminPrincipal,
       note = Some("bootstrap metadata namespace"),
       requestedAt = now
     )
-    dictionaryGovernance(app).requestDictionaryNamespace(
+    dictionaryApi(app).requestDictionaryNamespace(
       namespacePrefix = "rank.scale",
       actor = adminPrincipal,
       note = Some("bootstrap metadata namespace"),
       requestedAt = now.plusSeconds(2)
     )
-    dictionaryGovernance(app).requestDictionaryNamespace(
+    dictionaryApi(app).requestDictionaryNamespace(
       namespacePrefix = "stage.schedulingpoolsize",
       actor = adminPrincipal,
       note = Some("bootstrap metadata namespace"),
       requestedAt = now.plusSeconds(3)
     )
-    dictionaryGovernance(app).reviewDictionaryNamespace(
+    dictionaryApi(app).reviewDictionaryNamespace(
       namespacePrefix = "rank.formula",
       approve = true,
       actor = adminPrincipal,
       note = Some("bootstrap metadata namespace"),
       reviewedAt = now.plusSeconds(4)
     )
-    dictionaryGovernance(app).reviewDictionaryNamespace(
+    dictionaryApi(app).reviewDictionaryNamespace(
       namespacePrefix = "rank.scale",
       approve = true,
       actor = adminPrincipal,
       note = Some("bootstrap metadata namespace"),
       reviewedAt = now.plusSeconds(5)
     )
-    dictionaryGovernance(app).reviewDictionaryNamespace(
+    dictionaryApi(app).reviewDictionaryNamespace(
       namespacePrefix = "stage.schedulingpoolsize",
       approve = true,
       actor = adminPrincipal,
@@ -79,19 +82,19 @@ class ApiServerDictionarySuite extends FunSuite with ApiServerSuiteSupport:
       reviewedAt = now.plusSeconds(6)
     )
 
-    val rankFormula = dictionaryGovernance(app).upsertDictionary(
+    val rankFormula = dictionaryApi(app).upsertDictionary(
       key = "rank.formula.current",
       value = "uma+oka-v3",
       actor = adminPrincipal,
       updatedAt = now.plusSeconds(10)
     )
-    dictionaryGovernance(app).upsertDictionary(
+    dictionaryApi(app).upsertDictionary(
       key = "rank.scale.mode",
       value = "aggressive",
       actor = adminPrincipal,
       updatedAt = now.plusSeconds(60)
     )
-    dictionaryGovernance(app).upsertDictionary(
+    dictionaryApi(app).upsertDictionary(
       key = "stage.schedulingpoolsize.default",
       value = "4",
       actor = adminPrincipal,
@@ -99,15 +102,26 @@ class ApiServerDictionarySuite extends FunSuite with ApiServerSuiteSupport:
     )
 
     withServer(app) { baseUrl =>
-      val dictionaryResponse = get(s"$baseUrl/dictionary?prefix=rank.&limit=1")
+      val dictionaryResponse = postApi(
+        baseUrl,
+        DictionaryListEntriesAPIMessage(prefix = Some("rank."), limit = Some(1))
+      )
       assertEquals(dictionaryResponse.statusCode(), 200)
       val dictionaryPage = readPage[GlobalDictionaryEntry](dictionaryResponse.body())
       assertEquals(dictionaryPage.total, 2)
       assertEquals(dictionaryPage.items.size, 1)
       assertEquals(dictionaryPage.items.head.key, "rank.formula.current")
 
-      val auditResponse = get(
-        s"$baseUrl/audits?operatorId=${admin.id.value}&aggregateType=dictionary&actorId=${admin.id.value}&limit=1"
+      val auditResponse = postJson(
+        s"$baseUrl/api/opsanalyticslistauditsapi",
+        write(
+          OpsAnalyticsListAuditsAPIMessage(
+            operatorId = admin.id,
+            aggregateType = Some("dictionary"),
+            actorId = Some(admin.id),
+            limit = Some(1)
+          )
+        )
       )
       assertEquals(auditResponse.statusCode(), 200)
       val auditPage = readPage[AuditEventEntry](auditResponse.body())
@@ -166,18 +180,18 @@ class ApiServerDictionarySuite extends FunSuite with ApiServerSuiteSupport:
     )
 
     withServer(app) { baseUrl =>
-      val dictionaryResponse = postJson(
-        s"$baseUrl/admin/dictionary",
-        write(UpsertDictionaryRequest(superAdmin.id.value, "settlement.defaultPayoutRatios", "0.6,0.25,0.15", Some("runtime payout tuning")))
+      val dictionaryResponse = postApi(
+        baseUrl,
+        DictionaryUpsertEntryAPIMessage(superAdmin.id.value, "settlement.defaultPayoutRatios", "0.6,0.25,0.15", Some("runtime payout tuning"))
       )
       assertEquals(dictionaryResponse.statusCode(), 201)
 
-      val settleResponse = postJson(
-        s"$baseUrl/tournaments/${tournament.id.value}/settle",
-        write(SettleTournamentRequest(admin.id.value, stage.id.value, 1000))
+      val settleResponse = postApi(
+        baseUrl,
+        TournamentSettleAPIMessage(tournament.id.value, SettleTournamentRequest(admin.id.value, stage.id.value, 1000))
       )
       assertEquals(settleResponse.statusCode(), 200)
-      val settlement = read[TournamentSettlementSnapshot](settleResponse.body())
+      val settlement = read[TournamentSettlementView](settleResponse.body())
       assertEquals(settlement.entries.take(3).map(_.awardAmount), Vector(600L, 250L, 150L))
     }
   }

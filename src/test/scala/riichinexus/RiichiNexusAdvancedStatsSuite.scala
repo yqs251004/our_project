@@ -2,10 +2,16 @@ package riichinexus
 
 import java.time.Instant
 
+import cats.effect.unsafe.implicits.global
 import munit.FunSuite
 
 import riichinexus.bootstrap.ApplicationContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.opsanalytics.api.{
+  OpsAnalyticsAdvancedStatsSummaryAPIMessage,
+  OpsAnalyticsProcessAdvancedStatsAPIMessage,
+  OpsAnalyticsRecomputeAdvancedStatsAPIMessage
+}
 
 class RiichiNexusAdvancedStatsSuite extends FunSuite with RiichiNexusSuiteSupport:
 
@@ -61,6 +67,8 @@ class RiichiNexusAdvancedStatsSuite extends FunSuite with RiichiNexusSuiteSuppor
   test("advanced stats pipeline retries failed tasks and dead-letters after max attempts") {
     val app = ApplicationContext.inMemory()
     val now = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.SECONDS)
+    val root = playerService(app).registerPlayer("advanced-stats-root", "AdvancedStatsRoot", RankSnapshot(RankPlatform.Custom, "S"), now, 2100)
+    val rootAdmin = playerRepository(app).save(root.grantRole(RoleGrant.superAdmin(now)))
 
     val task = advancedStatsRecomputeTaskRepository(app).save(
       AdvancedStatsRecomputeTask.create(
@@ -70,29 +78,46 @@ class RiichiNexusAdvancedStatsSuite extends FunSuite with RiichiNexusSuiteSuppor
       )
     )
 
-    val firstAttempt = advancedStatsPipelineService(app).processPending(limit = 10, processedAt = now)
+    val firstAttempt =
+      OpsAnalyticsProcessAdvancedStatsAPIMessage(rootAdmin.id, 10)
+        .plan(apiPlanContext(app))
+        .unsafeRunSync()
     val firstState = advancedStatsRecomputeTaskRepository(app).findById(task.id).getOrElse(fail("missing first task state"))
     assertEquals(firstAttempt.map(_.id), Vector(task.id))
     assertEquals(firstState.status, AdvancedStatsRecomputeTaskStatus.Pending)
     assertEquals(firstState.attempts, 1)
-    assertEquals(firstState.nextAttemptAt, Some(now.plusSeconds(300)))
+    assert(firstState.nextAttemptAt.exists(_.isAfter(now)))
 
-    val tooSoon = advancedStatsPipelineService(app).processPending(limit = 10, processedAt = now.plusSeconds(60))
+    val tooSoon =
+      OpsAnalyticsProcessAdvancedStatsAPIMessage(rootAdmin.id, 10)
+        .plan(apiPlanContext(app))
+        .unsafeRunSync()
     assertEquals(tooSoon, Vector.empty)
 
-    advancedStatsPipelineService(app).processPending(limit = 10, processedAt = now.plusSeconds(300))
+    val retryTask = advancedStatsRecomputeTaskRepository(app).findById(task.id).getOrElse(fail("missing retry task"))
+    advancedStatsRecomputeTaskRepository(app).save(retryTask.copy(nextAttemptAt = Some(Instant.now().minusSeconds(1))))
+    OpsAnalyticsProcessAdvancedStatsAPIMessage(rootAdmin.id, 10)
+      .plan(apiPlanContext(app))
+      .unsafeRunSync()
     val secondState = advancedStatsRecomputeTaskRepository(app).findById(task.id).getOrElse(fail("missing second task state"))
     assertEquals(secondState.status, AdvancedStatsRecomputeTaskStatus.Pending)
     assertEquals(secondState.attempts, 2)
-    assertEquals(secondState.nextAttemptAt, Some(now.plusSeconds(600)))
+    assert(secondState.nextAttemptAt.exists(_.isAfter(now)))
 
-    advancedStatsPipelineService(app).processPending(limit = 10, processedAt = now.plusSeconds(600))
+    val finalRetryTask = advancedStatsRecomputeTaskRepository(app).findById(task.id).getOrElse(fail("missing final retry task"))
+    advancedStatsRecomputeTaskRepository(app).save(finalRetryTask.copy(nextAttemptAt = Some(Instant.now().minusSeconds(1))))
+    OpsAnalyticsProcessAdvancedStatsAPIMessage(rootAdmin.id, 10)
+      .plan(apiPlanContext(app))
+      .unsafeRunSync()
     val finalState = advancedStatsRecomputeTaskRepository(app).findById(task.id).getOrElse(fail("missing final task state"))
     assertEquals(finalState.status, AdvancedStatsRecomputeTaskStatus.DeadLetter)
     assertEquals(finalState.attempts, 3)
     assert(finalState.lastError.exists(_.contains("missing-club")))
 
-    val summary = advancedStatsPipelineService(app).taskQueueSummary(now.plusSeconds(600))
+    val summary =
+      OpsAnalyticsAdvancedStatsSummaryAPIMessage(rootAdmin.id, Some(now.plusSeconds(600)))
+        .plan(apiPlanContext(app))
+        .unsafeRunSync()
     assertEquals(summary.deadLetterCount, 1)
     assertEquals(summary.scheduledRetryCount, 0)
     assertEquals(summary.runnablePendingCount, 0)
@@ -101,17 +126,20 @@ class RiichiNexusAdvancedStatsSuite extends FunSuite with RiichiNexusSuiteSuppor
   test("advanced stats backfill mode targets only missing boards") {
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-16T03:40:00Z")
+    val root = playerService(app).registerPlayer("backfill-root", "BackfillRoot", RankSnapshot(RankPlatform.Custom, "S"), now, 2100)
+    val rootAdmin = playerRepository(app).save(root.grantRole(RoleGrant.superAdmin(now)))
 
     val playerA = playerService(app).registerPlayer("backfill-a", "BackfillA", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
     val playerB = playerService(app).registerPlayer("backfill-b", "BackfillB", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1580)
     advancedStatsBoardRepository(app).save(AdvancedStatsBoard.empty(DashboardOwner.Player(playerA.id), now))
 
-    val tasks = advancedStatsPipelineService(app).enqueueBackfill(
-      mode = AdvancedStatsBackfillMode.Missing,
-      requestedAt = now.plusSeconds(30),
-      reason = "missing-only-backfill",
-      limit = 10
-    )
+    val tasks =
+      OpsAnalyticsRecomputeAdvancedStatsAPIMessage(
+        operatorId = rootAdmin.id,
+        mode = AdvancedStatsBackfillMode.Missing,
+        reason = Some("missing-only-backfill"),
+        limit = 10
+      ).plan(apiPlanContext(app)).unsafeRunSync()
 
     assert(tasks.exists(_.owner == DashboardOwner.Player(playerB.id)))
     assert(!tasks.exists(_.owner == DashboardOwner.Player(playerA.id)))

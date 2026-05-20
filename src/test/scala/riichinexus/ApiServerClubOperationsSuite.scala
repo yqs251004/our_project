@@ -13,21 +13,26 @@ import munit.FunSuite
 import riichinexus.bootstrap.ApplicationContext
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.api.responses.*
-import riichinexus.microservices.club.api.responses.ClubTournamentResponses.given
-import riichinexus.microservices.club.api.requests.*
-import riichinexus.microservices.dictionary.api.requests.UpsertDictionaryRequest
-import riichinexus.microservices.opsanalytics.api.PerformanceDiagnosticsSnapshot
-import riichinexus.microservices.shared.api.requests.OperatorRequest
-import riichinexus.microservices.shared.api.requests.OperatorRequest.given
-import riichinexus.microservices.publicquery.api.responses.*
-import riichinexus.microservices.publicquery.api.responses.PublicQueryResponses.given
-import riichinexus.microservices.tournament.api.responses.*
-import riichinexus.microservices.tournament.api.responses.TournamentOperationResponses.given
-import riichinexus.microservices.tournament.api.requests.SettlementRequests.given
-import riichinexus.microservices.tournament.api.requests.StageRequests.given
-import riichinexus.microservices.tournament.api.requests.TableRequests.given
-import riichinexus.microservices.tournament.api.requests.*
+import riichinexus.microservices.club.api.*
+import riichinexus.microservices.club.objects.apiTypes.*
+import riichinexus.microservices.club.objects.apiTypes.ClubTournamentResponses.given
+import riichinexus.microservices.club.objects.apiTypes.*
+import riichinexus.microservices.dictionary.objects.apiTypes.UpsertDictionaryRequest
+import riichinexus.microservices.opsanalytics.objects.apiTypes.PerformanceDiagnosticsSnapshot
+import riichinexus.system.objects.apiTypes.OperatorRequest
+import riichinexus.system.objects.apiTypes.OperatorRequest.given
+import riichinexus.microservices.player.api.ListPlayersAPIMessage
+import riichinexus.microservices.player.objects.apiTypes.*
+import riichinexus.microservices.player.objects.apiTypes.PlayerResponses.given
+import riichinexus.microservices.publicquery.api.ListPublicClubsAPIMessage
+import riichinexus.microservices.publicquery.objects.apiTypes.*
+import riichinexus.microservices.publicquery.objects.apiTypes.PublicQueryResponses.given
+import riichinexus.microservices.tournament.objects.apiTypes.*
+import riichinexus.microservices.tournament.objects.apiTypes.TournamentOperationResponses.given
+import riichinexus.microservices.tournament.objects.apiTypes.SettlementRequests.given
+import riichinexus.microservices.tournament.objects.apiTypes.StageRequests.given
+import riichinexus.microservices.tournament.objects.apiTypes.TableRequests.given
+import riichinexus.microservices.tournament.objects.apiTypes.*
 import upickle.default.*
 
 class ApiServerClubOperationsSuite extends FunSuite with ApiServerSuiteSupport:
@@ -40,10 +45,10 @@ class ApiServerClubOperationsSuite extends FunSuite with ApiServerSuiteSupport:
     val bravo = playerService(app).registerPlayer("page-bravo", "Bravo", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1500)
     val suspended = playerService(app).registerPlayer("page-suspended", "Suspended", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1400)
 
-    val club = clubService(app).createClub("Paged Club", owner.id, now, owner.asPrincipal)
-    clubService(app).addMember(club.id, alpha.id, principalFor(app, owner.id))
-    clubService(app).addMember(club.id, bravo.id, principalFor(app, owner.id))
-    clubService(app).addMember(club.id, suspended.id, principalFor(app, owner.id))
+    val club = clubApi(app).createClub("Paged Club", owner.id, now, owner.asPrincipal)
+    clubApi(app).addMember(club.id, alpha.id, principalFor(app, owner.id))
+    clubApi(app).addMember(club.id, bravo.id, principalFor(app, owner.id))
+    clubApi(app).addMember(club.id, suspended.id, principalFor(app, owner.id))
     val suspendedMember = playerRepository(app).findById(suspended.id).getOrElse(fail("suspended member missing"))
     playerRepository(app).save(suspendedMember.copy(status = PlayerStatus.Suspended))
 
@@ -61,11 +66,12 @@ class ApiServerClubOperationsSuite extends FunSuite with ApiServerSuiteSupport:
     )
 
     withServer(app) { baseUrl =>
-      val playersResponse = get(
-        s"$baseUrl/players?clubId=${club.id.value}&status=Active&limit=1&offset=1"
+      val playersResponse = postJson(
+        s"$baseUrl/api/listplayersapi",
+        write(ListPlayersAPIMessage(clubId = Some(club.id.value), status = Some("Active"), limit = Some(1), offset = Some(1)))
       )
       assertEquals(playersResponse.statusCode(), 200)
-      val playersPage = readPage[Player](playersResponse.body())
+      val playersPage = readPage[PlayerProfileView](playersResponse.body())
       assertEquals(playersPage.total, 3)
       assertEquals(playersPage.limit, 1)
       assertEquals(playersPage.offset, 1)
@@ -73,8 +79,9 @@ class ApiServerClubOperationsSuite extends FunSuite with ApiServerSuiteSupport:
       assertEquals(playersPage.appliedFilters("clubId"), club.id.value)
       assertEquals(playersPage.appliedFilters("status"), "Active")
 
-      val clubsResponse = get(
-        s"$baseUrl/clubs?memberId=${owner.id.value}&activeOnly=true&limit=10"
+      val clubsResponse = postJson(
+        s"$baseUrl/api/listclubsapi",
+        write(ListClubsAPIMessage(memberId = Some(owner.id.value), activeOnly = Some(true), limit = Some(10)))
       )
       assertEquals(clubsResponse.statusCode(), 200)
       val clubsPage = readPage[Club](clubsResponse.body())
@@ -94,15 +101,15 @@ class ApiServerClubOperationsSuite extends FunSuite with ApiServerSuiteSupport:
     val alphaSuspended = playerService(app).registerPlayer("alpha-suspended", "AlphaSuspended", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1580)
     val betaOwner = playerService(app).registerPlayer("beta-owner", "BetaOwner", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1800)
 
-    val alphaClub = clubService(app).createClub("Alpha Club", alphaOwner.id, now, alphaOwner.asPrincipal)
-    val betaClub = clubService(app).createClub("Beta Club", betaOwner.id, now.plusSeconds(60), betaOwner.asPrincipal)
+    val alphaClub = clubApi(app).createClub("Alpha Club", alphaOwner.id, now, alphaOwner.asPrincipal)
+    val betaClub = clubApi(app).createClub("Beta Club", betaOwner.id, now.plusSeconds(60), betaOwner.asPrincipal)
 
-    clubService(app).addMember(alphaClub.id, alphaActive.id, principalFor(app, alphaOwner.id))
-    clubService(app).addMember(alphaClub.id, alphaSuspended.id, principalFor(app, alphaOwner.id))
+    clubApi(app).addMember(alphaClub.id, alphaActive.id, principalFor(app, alphaOwner.id))
+    clubApi(app).addMember(alphaClub.id, alphaSuspended.id, principalFor(app, alphaOwner.id))
     val suspendedPlayer = playerRepository(app).findById(alphaSuspended.id).getOrElse(fail("suspended player missing"))
     playerRepository(app).save(suspendedPlayer.copy(status = PlayerStatus.Suspended))
 
-    clubService(app).updateRelation(
+    clubApi(app).updateRelation(
       alphaClub.id,
       ClubRelation(betaClub.id, ClubRelationKind.Rivalry, now.plusSeconds(120), Some("league rival")),
       principalFor(app, alphaOwner.id),
@@ -110,8 +117,9 @@ class ApiServerClubOperationsSuite extends FunSuite with ApiServerSuiteSupport:
     )
 
     withServer(app) { baseUrl =>
-      val response = get(
-        s"$baseUrl/public/clubs?relation=Rivalry&name=Alpha"
+      val response = postJson(
+        s"$baseUrl/api/listpublicclubsapi",
+        write(ListPublicClubsAPIMessage(relation = Some("Rivalry"), name = Some("Alpha")))
       )
       assertEquals(response.statusCode(), 200)
       val page = readPage[PublicClubDirectoryEntry](response.body())
@@ -134,23 +142,23 @@ class ApiServerClubOperationsSuite extends FunSuite with ApiServerSuiteSupport:
     val vice = playerService(app).registerPlayer("club-vice", "ClubVice", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
     val member = playerService(app).registerPlayer("club-member", "ClubMember", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1500)
 
-    val club = clubService(app).createClub("Managed Club", owner.id, now, owner.asPrincipal)
-    clubService(app).addMember(club.id, vice.id, principalFor(app, owner.id))
-    clubService(app).addMember(club.id, member.id, principalFor(app, owner.id))
-    clubService(app).assignAdmin(club.id, vice.id, principalFor(app, owner.id))
+    val club = clubApi(app).createClub("Managed Club", owner.id, now, owner.asPrincipal)
+    clubApi(app).addMember(club.id, vice.id, principalFor(app, owner.id))
+    clubApi(app).addMember(club.id, member.id, principalFor(app, owner.id))
+    clubApi(app).assignAdmin(club.id, vice.id, principalFor(app, owner.id))
 
     withServer(app) { baseUrl =>
       val revokeResponse = postJson(
-        s"$baseUrl/clubs/${club.id.value}/admins/${vice.id.value}/revoke",
-        write(OperatorRequest(Some(owner.id.value)))
+        s"$baseUrl/api/revokeclubadminapi",
+        write(RevokeClubAdminAPIMessage(club.id.value, vice.id.value, operatorId = Some(owner.id.value)))
       )
       assertEquals(revokeResponse.statusCode(), 200)
       val updatedClub = read[Club](revokeResponse.body())
       assertEquals(updatedClub.admins, Vector(owner.id))
 
       val removeResponse = postJson(
-        s"$baseUrl/clubs/${club.id.value}/members/${member.id.value}/remove",
-        write(OperatorRequest(Some(owner.id.value)))
+        s"$baseUrl/api/removeclubmemberapi",
+        write(RemoveClubMemberAPIMessage(club.id.value, member.id.value, operatorId = Some(owner.id.value)))
       )
       assertEquals(removeResponse.statusCode(), 200)
       val removedClub = read[Club](removeResponse.body())
@@ -164,27 +172,28 @@ class ApiServerClubOperationsSuite extends FunSuite with ApiServerSuiteSupport:
     val now = Instant.parse("2026-03-15T15:00:00Z")
 
     val owner = playerService(app).registerPlayer("club-fin-owner", "ClubFinOwner", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1800)
-    val club = clubService(app).createClub("Club Finance", owner.id, now, owner.asPrincipal)
+    val club = clubApi(app).createClub("Club Finance", owner.id, now, owner.asPrincipal)
 
     withServer(app) { baseUrl =>
       val treasuryResponse = postJson(
-        s"$baseUrl/clubs/${club.id.value}/treasury",
-        write(AdjustClubTreasuryRequest(owner.id.value, 2500L, Some("sponsor")))
+        s"$baseUrl/api/adjustclubtreasuryapi",
+        write(AdjustClubTreasuryAPIMessage(club.id.value, owner.id.value, 2500L, Some("sponsor")))
       )
       assertEquals(treasuryResponse.statusCode(), 200)
       assertEquals(read[Club](treasuryResponse.body()).treasuryBalance, 2500L)
 
       val pointPoolResponse = postJson(
-        s"$baseUrl/clubs/${club.id.value}/point-pool",
-        write(AdjustClubPointPoolRequest(owner.id.value, 180, Some("event reward")))
+        s"$baseUrl/api/adjustclubpointpoolapi",
+        write(AdjustClubPointPoolAPIMessage(club.id.value, owner.id.value, 180, Some("event reward")))
       )
       assertEquals(pointPoolResponse.statusCode(), 200)
       assertEquals(read[Club](pointPoolResponse.body()).pointPool, 180)
 
       val rankTreeResponse = postJson(
-        s"$baseUrl/clubs/${club.id.value}/rank-tree",
+        s"$baseUrl/api/updateclubranktreeapi",
         write(
-          UpdateClubRankTreeRequest(
+          UpdateClubRankTreeAPIMessage(
+            clubId = club.id.value,
             operatorId = owner.id.value,
             ranks = Vector(
               ClubRankNodeRequest("rookie", "Rookie", 0),
@@ -205,14 +214,15 @@ class ApiServerClubOperationsSuite extends FunSuite with ApiServerSuiteSupport:
 
     val owner = playerService(app).registerPlayer("club-priv-owner", "ClubPrivOwner", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1800)
     val delegate = playerService(app).registerPlayer("club-priv-delegate", "ClubPrivDelegate", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1700)
-    val club = clubService(app).createClub("Club Privileges", owner.id, now, owner.asPrincipal)
-    clubService(app).addMember(club.id, delegate.id, principalFor(app, owner.id))
+    val club = clubApi(app).createClub("Club Privileges", owner.id, now, owner.asPrincipal)
+    clubApi(app).addMember(club.id, delegate.id, principalFor(app, owner.id))
 
     withServer(app) { baseUrl =>
       val rankTreeResponse = postJson(
-        s"$baseUrl/clubs/${club.id.value}/rank-tree",
+        s"$baseUrl/api/updateclubranktreeapi",
         write(
-          UpdateClubRankTreeRequest(
+          UpdateClubRankTreeAPIMessage(
+            clubId = club.id.value,
             operatorId = owner.id.value,
             ranks = Vector(
               ClubRankNodeRequest("rookie", "Rookie", 0),
@@ -224,26 +234,32 @@ class ApiServerClubOperationsSuite extends FunSuite with ApiServerSuiteSupport:
       assertEquals(rankTreeResponse.statusCode(), 200)
 
       val contributionResponse = postJson(
-        s"$baseUrl/clubs/${club.id.value}/member-contributions",
-        write(AdjustClubMemberContributionRequest(owner.id.value, delegate.id.value, 120, Some("season contribution")))
+        s"$baseUrl/api/adjustclubmembercontributionapi",
+        write(AdjustClubMemberContributionAPIMessage(club.id.value, owner.id.value, delegate.id.value, 120, Some("season contribution")))
       )
       assertEquals(contributionResponse.statusCode(), 200)
 
-      val detailResponse = get(s"$baseUrl/clubs/${club.id.value}/member-privileges/${delegate.id.value}")
+      val detailResponse = postJson(
+        s"$baseUrl/api/getclubmemberprivilegeapi",
+        write(GetClubMemberPrivilegeAPIMessage(club.id.value, delegate.id.value))
+      )
       assertEquals(detailResponse.statusCode(), 200)
       val detail = read[ClubMemberPrivilegeSnapshot](detailResponse.body())
       assertEquals(detail.rankCode, "officer")
       assertEquals(detail.privileges, Vector("manage-bank", "priority-lineup"))
 
-      val listResponse = get(s"$baseUrl/clubs/${club.id.value}/member-privileges?privilege=manage-bank")
+      val listResponse = postJson(
+        s"$baseUrl/api/listclubmemberprivilegesapi",
+        write(ListClubMemberPrivilegesAPIMessage(club.id.value, privilege = Some("manage-bank")))
+      )
       assertEquals(listResponse.statusCode(), 200)
       val page = readPage[ClubMemberPrivilegeSnapshot](listResponse.body())
       assertEquals(page.total, 1)
       assertEquals(page.items.head.playerId, delegate.id)
 
       val delegatedTreasury = postJson(
-        s"$baseUrl/clubs/${club.id.value}/treasury",
-        write(AdjustClubTreasuryRequest(delegate.id.value, 900L, Some("delegated bank access")))
+        s"$baseUrl/api/adjustclubtreasuryapi",
+        write(AdjustClubTreasuryAPIMessage(club.id.value, delegate.id.value, 900L, Some("delegated bank access")))
       )
       assertEquals(delegatedTreasury.statusCode(), 200)
       assertEquals(read[Club](delegatedTreasury.body()).treasuryBalance, 900L)
@@ -256,20 +272,20 @@ class ApiServerClubOperationsSuite extends FunSuite with ApiServerSuiteSupport:
 
     val owner = playerService(app).registerPlayer("api-title-owner", "ApiTitleOwner", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1800)
     val member = playerService(app).registerPlayer("api-title-member", "ApiTitleMember", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1600)
-    val club = clubService(app).createClub("API Title Club", owner.id, now, owner.asPrincipal)
-    clubService(app).addMember(club.id, member.id, principalFor(app, owner.id))
+    val club = clubApi(app).createClub("API Title Club", owner.id, now, owner.asPrincipal)
+    clubApi(app).addMember(club.id, member.id, principalFor(app, owner.id))
 
     withServer(app) { baseUrl =>
       val assignResponse = postJson(
-        s"$baseUrl/clubs/${club.id.value}/titles",
-        write(AssignClubTitleRequest(member.id.value, owner.id.value, "Vice Captain", Some("promotion")))
+        s"$baseUrl/api/assignclubtitleapi",
+        write(AssignClubTitleAPIMessage(club.id.value, member.id.value, owner.id.value, "Vice Captain", Some("promotion")))
       )
       assertEquals(assignResponse.statusCode(), 200)
       assertEquals(read[Club](assignResponse.body()).titleAssignments.map(_.title), Vector("Vice Captain"))
 
       val clearResponse = postJson(
-        s"$baseUrl/clubs/${club.id.value}/titles/${member.id.value}/clear",
-        write(ClearClubTitleRequest(owner.id.value, Some("rotation")))
+        s"$baseUrl/api/clearclubtitleapi",
+        write(ClearClubTitleAPIMessage(club.id.value, member.id.value, owner.id.value, Some("rotation")))
       )
       assertEquals(clearResponse.statusCode(), 200)
       assertEquals(read[Club](clearResponse.body()).titleAssignments, Vector.empty)
@@ -282,13 +298,13 @@ class ApiServerClubOperationsSuite extends FunSuite with ApiServerSuiteSupport:
 
     val ownerA = playerService(app).registerPlayer("api-relation-a", "ApiRelationA", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1800)
     val ownerB = playerService(app).registerPlayer("api-relation-b", "ApiRelationB", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1780)
-    val clubA = clubService(app).createClub("API Alliance A", ownerA.id, now, ownerA.asPrincipal)
-    val clubB = clubService(app).createClub("API Alliance B", ownerB.id, now, ownerB.asPrincipal)
+    val clubA = clubApi(app).createClub("API Alliance A", ownerA.id, now, ownerA.asPrincipal)
+    val clubB = clubApi(app).createClub("API Alliance B", ownerB.id, now, ownerB.asPrincipal)
 
     withServer(app) { baseUrl =>
       val allianceResponse = postJson(
-        s"$baseUrl/clubs/${clubA.id.value}/relations",
-        write(UpdateClubRelationRequest(ownerA.id.value, clubB.id.value, "Alliance", Some("partner")))
+        s"$baseUrl/api/updateclubrelationapi",
+        write(UpdateClubRelationAPIMessage(clubA.id.value, ownerA.id.value, clubB.id.value, "Alliance", Some("partner")))
       )
       assertEquals(allianceResponse.statusCode(), 200)
       assertEquals(read[Club](allianceResponse.body()).relations.map(_.targetClubId), Vector(clubB.id))
@@ -298,8 +314,8 @@ class ApiServerClubOperationsSuite extends FunSuite with ApiServerSuiteSupport:
       )
 
       val neutralResponse = postJson(
-        s"$baseUrl/clubs/${clubA.id.value}/relations",
-        write(UpdateClubRelationRequest(ownerA.id.value, clubB.id.value, "Neutral", Some("reset")))
+        s"$baseUrl/api/updateclubrelationapi",
+        write(UpdateClubRelationAPIMessage(clubA.id.value, ownerA.id.value, clubB.id.value, "Neutral", Some("reset")))
       )
       assertEquals(neutralResponse.statusCode(), 200)
       assertEquals(read[Club](neutralResponse.body()).relations, Vector.empty)
@@ -312,19 +328,19 @@ class ApiServerClubOperationsSuite extends FunSuite with ApiServerSuiteSupport:
     val now = Instant.parse("2026-03-15T15:20:00Z")
 
     val owner = playerService(app).registerPlayer("api-honor-owner", "ApiHonorOwner", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1800)
-    val club = clubService(app).createClub("API Honor Club", owner.id, now, owner.asPrincipal)
+    val club = clubApi(app).createClub("API Honor Club", owner.id, now, owner.asPrincipal)
 
     withServer(app) { baseUrl =>
       val awardResponse = postJson(
-        s"$baseUrl/clubs/${club.id.value}/honors",
-        write(AwardClubHonorRequest(owner.id.value, "Golden Tile", Some("season MVP"), Some(now.plusSeconds(60))))
+        s"$baseUrl/api/awardclubhonorapi",
+        write(AwardClubHonorAPIMessage(club.id.value, owner.id.value, "Golden Tile", Some("season MVP"), Some(now.plusSeconds(60))))
       )
       assertEquals(awardResponse.statusCode(), 200)
       assertEquals(read[Club](awardResponse.body()).honors.map(_.title), Vector("Golden Tile"))
 
       val revokeResponse = postJson(
-        s"$baseUrl/clubs/${club.id.value}/honors/revoke",
-        write(RevokeClubHonorRequest(owner.id.value, "Golden Tile", Some("retired award")))
+        s"$baseUrl/api/revokeclubhonorapi",
+        write(RevokeClubHonorAPIMessage(club.id.value, owner.id.value, "Golden Tile", Some("retired award")))
       )
       assertEquals(revokeResponse.statusCode(), 200)
       assertEquals(read[Club](revokeResponse.body()).honors, Vector.empty)

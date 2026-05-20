@@ -11,16 +11,18 @@ import munit.FunSuite
 import riichinexus.bootstrap.ApplicationContext
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.auth.api.requests.CreateGuestSessionRequest
-import riichinexus.microservices.club.api.requests.*
-import riichinexus.microservices.club.api.responses.*
-import riichinexus.microservices.club.api.responses.ClubTournamentResponses.given
-import riichinexus.microservices.dictionary.api.requests.*
-import riichinexus.microservices.dictionary.api.responses.*
-import riichinexus.microservices.dictionary.api.responses.DictionaryResponses.given
-import riichinexus.microservices.opsanalytics.api.PerformanceDiagnosticsSnapshot
-import riichinexus.microservices.opsanalytics.api.requests.{ProcessAdvancedStatsTasksRequest, RecomputeAdvancedStatsRequest}
-import riichinexus.microservices.tournament.appeal.api.requests.*
+import riichinexus.microservices.auth.objects.apiTypes.CreateGuestSessionRequest
+import riichinexus.microservices.club.objects.apiTypes.*
+import riichinexus.microservices.club.objects.apiTypes.*
+import riichinexus.microservices.club.objects.apiTypes.ClubTournamentResponses.given
+import riichinexus.microservices.dictionary.objects.apiTypes.*
+import riichinexus.microservices.dictionary.objects.apiTypes.*
+import riichinexus.microservices.dictionary.objects.apiTypes.DictionaryResponses.given
+import riichinexus.microservices.opsanalytics.objects.apiTypes.PerformanceDiagnosticsSnapshot
+import riichinexus.microservices.tournament.api.*
+import riichinexus.microservices.tournament.objects.apiTypes.*
+import riichinexus.microservices.tournament.objects.apiTypes.TournamentOperationResponses.given
+import riichinexus.microservices.tournament.appeal.objects.apiTypes.*
 import upickle.default.*
 
 class ApiServerTournamentReadSuite extends FunSuite with ApiServerSuiteSupport:
@@ -37,9 +39,9 @@ class ApiServerTournamentReadSuite extends FunSuite with ApiServerSuiteSupport:
       playerService(app).registerPlayer("p4", "Delta", RankSnapshot(RankPlatform.Tenhou, "4-dan"), now, 1580)
     )
 
-    val club = clubService(app).createClub("Whitelist Club", admin.id, now, admin.asPrincipal)
+    val club = clubApi(app).createClub("Whitelist Club", admin.id, now, admin.asPrincipal)
     players.tail.foreach(player =>
-      clubService(app).addMember(club.id, player.id, principalFor(app, admin.id))
+      clubApi(app).addMember(club.id, player.id, principalFor(app, admin.id))
     )
 
     val stage = TournamentStage(IdGenerator.stageId(), "Swiss Stage", StageFormat.Swiss, 1, 1)
@@ -60,18 +62,24 @@ class ApiServerTournamentReadSuite extends FunSuite with ApiServerSuiteSupport:
     tournamentService(app).scheduleStageTables(tournament.id, stage.id, principalFor(app, admin.id))
 
     withServer(app) { baseUrl =>
-      val whitelistResponse = get(s"$baseUrl/tournaments/${tournament.id.value}/whitelist")
+      val whitelistResponse = postApi(
+        baseUrl,
+        TournamentWhitelistListAPIMessage(tournament.id.value)
+      )
       assertEquals(whitelistResponse.statusCode(), 200)
-      val whitelist = readPage[TournamentWhitelistEntry](whitelistResponse.body())
+      val whitelist = readPage[TournamentWhitelistEntryView](whitelistResponse.body())
       assert(whitelist.items.exists(_.clubId.contains(club.id)))
       assertEquals(
         whitelist.items.count(_.participantKind == TournamentParticipantKind.Player),
         players.size
       )
 
-      val tablesResponse = get(s"$baseUrl/tournaments/${tournament.id.value}/stages/${stage.id.value}/tables")
+      val tablesResponse = postApi(
+        baseUrl,
+        TournamentStageTablesAPIMessage(tournament.id.value, stage.id.value)
+      )
       assertEquals(tablesResponse.statusCode(), 200)
-      val tables = readPage[Table](tablesResponse.body())
+      val tables = readPage[TournamentTableView](tablesResponse.body())
       assertEquals(tables.total, 1)
       assertEquals(tables.items.head.seats.map(_.playerId).toSet, players.map(_.id).toSet)
     }

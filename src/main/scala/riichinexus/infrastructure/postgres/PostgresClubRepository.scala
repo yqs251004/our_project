@@ -127,9 +127,9 @@ final class PostgresClubRepository(
         statement.setBoolean(1, activeOnly)
         statement.setBoolean(2, joinableOnly)
         setNullableString(statement, 3, memberId.map(_.value))
-        setNullableString(statement, 4, memberId.map(id => s"""{"members":[{"value":"${id.value}"}]}"""))
+        // 兼容数据库里面的旧格式：早期 payload 里的 PlayerId �?{"value": "..."} 存储�?        setNullableString(statement, 4, memberId.map(id => s"""{"members":[{"value":"${id.value}"}]}"""))
         setNullableString(statement, 5, adminId.map(_.value))
-        setNullableString(statement, 6, adminId.map(id => s"""{"admins":[{"value":"${id.value}"}]}"""))
+        // 兼容数据库里面的旧格式：早期 payload 里的 PlayerId �?{"value": "..."} 存储�?        setNullableString(statement, 6, adminId.map(id => s"""{"admins":[{"value":"${id.value}"}]}"""))
         setNullableString(statement, 7, name)
         setNullableString(statement, 8, name.map(fragment => s"%${fragment.toLowerCase}%"))
       }
