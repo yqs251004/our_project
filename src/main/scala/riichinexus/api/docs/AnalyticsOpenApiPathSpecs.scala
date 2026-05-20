@@ -1,7 +1,7 @@
-package riichinexus.system.api.docs
+package riichinexus.api.docs
 
-import riichinexus.system.api.docs.{OperationSpec, ParameterSpec, PathSpec}
-import riichinexus.system.api.docs.OpenApiContractModel.*
+import riichinexus.api.docs.{OperationSpec, ParameterSpec, PathSpec}
+import riichinexus.api.docs.OpenApiContractModel.*
 
 object AnalyticsOpenApiPathSpecs:
   def paths: Vector[PathSpec] = Vector(

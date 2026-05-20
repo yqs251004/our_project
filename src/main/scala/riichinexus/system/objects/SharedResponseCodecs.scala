@@ -1,4 +1,4 @@
-package riichinexus.system.objects.apiTypes
+package riichinexus.system.objects
 
 import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.*

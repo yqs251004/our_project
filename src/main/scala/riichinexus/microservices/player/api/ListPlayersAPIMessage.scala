@@ -5,7 +5,7 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.microservices.player.objects.apiTypes.PlayerListQuery
 import riichinexus.microservices.player.objects.apiTypes.PlayerProfileView
-import riichinexus.system.objects.apiTypes.PagedResponse
+import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 
 final case class ListPlayersAPIMessage(

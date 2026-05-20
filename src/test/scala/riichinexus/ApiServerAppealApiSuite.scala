@@ -25,7 +25,7 @@ import riichinexus.microservices.tournament.appeal.objects.apiTypes.*
 import riichinexus.microservices.tournament.appeal.objects.apiTypes.TournamentAppealResponses.given
 import riichinexus.microservices.tournament.objects.apiTypes.*
 import riichinexus.microservices.tournament.objects.apiTypes.TournamentOperationResponses.given
-import riichinexus.system.objects.apiTypes.PagedResponse
+import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 
 class ApiServerAppealApiSuite extends FunSuite with ApiServerSuiteSupport:

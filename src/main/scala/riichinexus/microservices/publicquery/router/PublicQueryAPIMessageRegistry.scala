@@ -5,7 +5,7 @@ import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.publicquery.api.*
 import riichinexus.microservices.publicquery.objects.apiTypes.*
 import riichinexus.microservices.publicquery.objects.apiTypes.PublicQueryResponses.given
-import riichinexus.system.objects.apiTypes.PagedResponse
+import riichinexus.system.objects.PagedResponse
 
 object PublicQueryAPIMessageRegistry:
 

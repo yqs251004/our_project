@@ -29,9 +29,9 @@ import riichinexus.microservices.publicquery.objects.apiTypes.PublicQueryRespons
 import riichinexus.microservices.player.api.GetCurrentPlayerAPIMessage
 import riichinexus.microservices.player.objects.apiTypes.*
 import riichinexus.microservices.player.objects.apiTypes.PlayerResponses.given
-import riichinexus.system.objects.apiTypes.OperatorRequest
-import riichinexus.system.objects.apiTypes.OperatorRequest.given
-import riichinexus.system.objects.apiTypes.{ErrorResponse, PagedResponse}
+import riichinexus.microservices.tournament.objects.apiTypes.OperatorRequest
+import riichinexus.microservices.tournament.objects.apiTypes.OperatorRequest.given
+import riichinexus.system.objects.{ErrorResponse, PagedResponse}
 import riichinexus.microservices.tournament.api.*
 import riichinexus.microservices.tournament.objects.apiTypes.*
 import riichinexus.microservices.tournament.objects.apiTypes.TournamentOperationResponses.given

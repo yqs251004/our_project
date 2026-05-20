@@ -6,7 +6,7 @@ import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.player.objects.apiTypes.*
 import riichinexus.microservices.player.objects.apiTypes.PlayerResponses.given
-import riichinexus.system.objects.apiTypes.PagedResponse
+import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 
 final case class ListClubMembersAPIMessage(

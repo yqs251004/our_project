@@ -1,9 +1,9 @@
-package riichinexus.system.api.docs
+package riichinexus.api.docs
 
 import ujson.{Obj, Value}
 
-import riichinexus.system.api.docs.{OperationSpec, ParameterSpec, PathSpec}
-import riichinexus.system.api.docs.OpenApiContractModel.*
+import riichinexus.api.docs.{OperationSpec, ParameterSpec, PathSpec}
+import riichinexus.api.docs.OpenApiContractModel.*
 
 object ClubOpenApiSchemas:
   def schemas: Map[String, Value] = Map(

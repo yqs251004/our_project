@@ -1,4 +1,4 @@
-package riichinexus.system.objects.apiTypes
+package riichinexus.system.objects
 
 import java.time.Instant
 

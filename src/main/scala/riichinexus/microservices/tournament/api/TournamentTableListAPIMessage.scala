@@ -10,7 +10,7 @@ import riichinexus.microservices.tournament.objects.apiTypes.ManagementRequests.
 import riichinexus.microservices.tournament.objects.apiTypes.SettlementRequests.given
 import riichinexus.microservices.tournament.objects.apiTypes.StageRequests.given
 import riichinexus.microservices.tournament.objects.apiTypes.TableRequests.given
-import riichinexus.system.objects.apiTypes.PagedResponse
+import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 
 final case class TournamentTableListAPIMessage(

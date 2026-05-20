@@ -9,7 +9,7 @@ import riichinexus.application.ports.DomainEventSubscriber
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.opsanalytics.objects.apiTypes.DomainEventResponses.given
-import riichinexus.system.objects.apiTypes.PagedResponse
+import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 
 final case class OpsAnalyticsListDomainEventSubscriberPartitionsAPIMessage(

@@ -9,8 +9,8 @@ import org.http4s.*
 import org.typelevel.ci.CIString
 import riichinexus.application.ports.OptimisticConcurrencyException
 import riichinexus.domain.service.{AuthenticationFailure, AuthorizationFailure}
-import riichinexus.system.objects.apiTypes.{ErrorResponse, PagedResponse}
-import riichinexus.system.api.docs.OpenApiSupport
+import riichinexus.system.objects.{ErrorResponse, PagedResponse}
+import riichinexus.api.docs.OpenApiSupport
 import upickle.default.*
 
 trait HttpResponseSupport:

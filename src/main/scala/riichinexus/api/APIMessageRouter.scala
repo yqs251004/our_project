@@ -4,7 +4,7 @@ import cats.effect.IO
 import org.http4s.{HttpRoutes, Request, Response, Status}
 import org.http4s.dsl.io.*
 import riichinexus.api.http.RouteSupport
-import riichinexus.system.objects.apiTypes.ErrorResponse
+import riichinexus.system.objects.ErrorResponse
 
 object APIMessageRouter:
 

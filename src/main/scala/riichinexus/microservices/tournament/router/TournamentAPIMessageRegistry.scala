@@ -10,7 +10,7 @@ import riichinexus.microservices.tournament.objects.apiTypes.SettlementRequests.
 import riichinexus.microservices.tournament.objects.apiTypes.StageRequests.given
 import riichinexus.microservices.tournament.objects.apiTypes.TableRequests.given
 import riichinexus.microservices.tournament.objects.apiTypes.TournamentOperationResponses.given
-import riichinexus.system.objects.apiTypes.PagedResponse
+import riichinexus.system.objects.PagedResponse
 
 object TournamentAPIMessageRegistry:
 

@@ -5,7 +5,7 @@ import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.player.api.*
 import riichinexus.microservices.player.objects.apiTypes.*
 import riichinexus.microservices.player.objects.apiTypes.PlayerResponses.given
-import riichinexus.system.objects.apiTypes.PagedResponse
+import riichinexus.system.objects.PagedResponse
 
 object PlayerAPIMessageRegistry:
 

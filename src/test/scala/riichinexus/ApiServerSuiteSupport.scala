@@ -14,7 +14,7 @@ import riichinexus.domain.model.*
 import riichinexus.microservices.opsanalytics.objects.apiTypes.PerformanceDiagnosticsSnapshot
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.dictionary.objects.DictionaryTestClient
-import riichinexus.system.objects.apiTypes.PagedResponse
+import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 
 trait ApiServerSuiteSupport extends TestApplicationAccess:

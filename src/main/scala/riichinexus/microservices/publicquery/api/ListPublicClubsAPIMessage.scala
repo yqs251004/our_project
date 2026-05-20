@@ -4,7 +4,7 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.{AccessPrincipal, ClubRelationKind, Permission}
 import riichinexus.microservices.publicquery.objects.apiTypes.PublicClubDirectoryEntry
-import riichinexus.system.objects.apiTypes.PagedResponse
+import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 
 final case class ListPublicClubsAPIMessage(

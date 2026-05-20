@@ -7,7 +7,7 @@ import riichinexus.microservices.opsanalytics.api.*
 import riichinexus.microservices.opsanalytics.objects.apiTypes.PerformanceDiagnosticsSnapshot
 import riichinexus.microservices.opsanalytics.objects.apiTypes.*
 import riichinexus.microservices.opsanalytics.objects.apiTypes.DomainEventResponses.given
-import riichinexus.system.objects.apiTypes.PagedResponse
+import riichinexus.system.objects.PagedResponse
 
 object OpsAnalyticsAPIMessageRegistry:
 

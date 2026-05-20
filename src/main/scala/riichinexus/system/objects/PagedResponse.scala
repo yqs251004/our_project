@@ -1,4 +1,4 @@
-package riichinexus.system.objects.apiTypes
+package riichinexus.system.objects
 
 final case class PagedResponse[T](
     items: Vector[T],

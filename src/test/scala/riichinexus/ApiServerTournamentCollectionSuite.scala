@@ -18,9 +18,9 @@ import riichinexus.microservices.club.objects.apiTypes.ClubTournamentResponses.g
 import riichinexus.microservices.club.objects.apiTypes.*
 import riichinexus.microservices.dictionary.objects.apiTypes.UpsertDictionaryRequest
 import riichinexus.microservices.opsanalytics.objects.apiTypes.PerformanceDiagnosticsSnapshot
-import riichinexus.system.objects.apiTypes.OperatorRequest
-import riichinexus.system.objects.apiTypes.OperatorRequest.given
-import riichinexus.system.objects.apiTypes.PagedResponse
+import riichinexus.microservices.tournament.objects.apiTypes.OperatorRequest
+import riichinexus.microservices.tournament.objects.apiTypes.OperatorRequest.given
+import riichinexus.system.objects.PagedResponse
 import riichinexus.microservices.publicquery.objects.apiTypes.*
 import riichinexus.microservices.publicquery.objects.apiTypes.PublicQueryResponses.given
 import riichinexus.microservices.tournament.api.*

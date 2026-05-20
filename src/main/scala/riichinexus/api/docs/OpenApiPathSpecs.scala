@@ -1,4 +1,4 @@
-package riichinexus.system.api.docs
+package riichinexus.api.docs
 
 import OpenApiContractModel.*
 

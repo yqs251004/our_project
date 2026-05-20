@@ -13,7 +13,7 @@ import riichinexus.microservices.tournament.objects.apiTypes.ManagementRequests.
 import riichinexus.microservices.tournament.objects.apiTypes.SettlementRequests.given
 import riichinexus.microservices.tournament.objects.apiTypes.StageRequests.given
 import riichinexus.microservices.tournament.objects.apiTypes.TableRequests.given
-import riichinexus.system.objects.apiTypes.OperatorRequest
+import riichinexus.microservices.tournament.objects.apiTypes.OperatorRequest
 import upickle.default.*
 
 final case class TournamentRevokeAdminAPIMessage(tournamentId: String, playerId: String, operatorId: Option[String] = None) extends APIMessage[TournamentSummaryView] derives ReadWriter:

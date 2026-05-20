@@ -8,7 +8,7 @@ import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.tournament.domain.{TournamentOperationViewAssembler, TournamentStageTableScheduler}
 import riichinexus.microservices.tournament.objects.apiTypes.*
-import riichinexus.system.objects.apiTypes.OperatorRequest
+import riichinexus.microservices.tournament.objects.apiTypes.OperatorRequest
 import upickle.default.*
 
 final case class TournamentStageScheduleTablesAPIMessage(

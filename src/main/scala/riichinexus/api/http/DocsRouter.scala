@@ -4,8 +4,8 @@ import cats.effect.IO
 import org.http4s.HttpRoutes
 import org.http4s.Status
 import org.http4s.dsl.io.*
-import riichinexus.system.objects.apiTypes.HealthResponse
-import riichinexus.system.api.docs.OpenApiSupport
+import riichinexus.system.objects.HealthResponse
+import riichinexus.api.docs.OpenApiSupport
 
 object DocsRouter:
 

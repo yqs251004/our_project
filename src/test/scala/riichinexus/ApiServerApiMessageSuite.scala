@@ -30,7 +30,7 @@ import riichinexus.microservices.platformadmin.objects.apiTypes.*
 import riichinexus.microservices.platformadmin.objects.apiTypes.PlatformAdminResponses.given
 import riichinexus.microservices.publicquery.objects.apiTypes.*
 import riichinexus.microservices.publicquery.objects.apiTypes.PublicQueryResponses.given
-import riichinexus.system.objects.apiTypes.{ErrorResponse, PagedResponse}
+import riichinexus.system.objects.{ErrorResponse, PagedResponse}
 
 class ApiServerApiMessageSuite extends FunSuite with ApiServerSuiteSupport:
 

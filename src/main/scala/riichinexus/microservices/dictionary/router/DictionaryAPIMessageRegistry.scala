@@ -6,7 +6,7 @@ import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.dictionary.api.*
 import riichinexus.microservices.dictionary.objects.apiTypes.*
 import riichinexus.microservices.dictionary.objects.apiTypes.DictionaryResponses.given
-import riichinexus.system.objects.apiTypes.PagedResponse
+import riichinexus.system.objects.PagedResponse
 
 object DictionaryAPIMessageRegistry:
 
