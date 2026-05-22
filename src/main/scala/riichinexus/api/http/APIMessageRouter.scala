@@ -1,9 +1,9 @@
-package riichinexus.api
+package riichinexus.api.http
 
 import cats.effect.IO
 import org.http4s.{HttpRoutes, Request, Response, Status}
 import org.http4s.dsl.io.*
-import riichinexus.api.http.RouteSupport
+import riichinexus.api.{APIMessageRegistry, ApiPlanContext, ApiSuccessStatus, RegisteredAPIMessage}
 import riichinexus.system.objects.ErrorResponse
 
 object APIMessageRouter:
@@ -44,15 +44,21 @@ object APIMessageRouter:
     for
       body <- request.bodyText.compile.string
       context = ApiPlanContext(
-        support = support,
+        support = support.apiPlanSupport,
         bearerToken = support.bearerToken(request)
       )
       _ <-
         if apiMessage.requiresBearerToken then IO(context.requireBearerToken).void
         else IO.unit
       responseJson <- apiMessage.planJson(bodyForDecode(body), context)
-      response <- support.textResponse(apiMessage.successStatus, ujson.write(responseJson, indent = 2), "application/json; charset=utf-8")
+      response <- support.textResponse(httpStatus(apiMessage.successStatus), ujson.write(responseJson, indent = 2), "application/json; charset=utf-8")
     yield response
+
+  private def httpStatus(status: ApiSuccessStatus): Status =
+    status match
+      case ApiSuccessStatus.Ok => Status.Ok
+      case ApiSuccessStatus.Created => Status.Created
+      case ApiSuccessStatus.Accepted => Status.Accepted
 
   private def bodyForDecode(body: String): String =
     Option(body).map(_.trim).filter(_.nonEmpty).getOrElse("{}")

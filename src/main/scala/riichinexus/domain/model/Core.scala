@@ -777,8 +777,8 @@ final case class Club(
 object Club:
   val defaultRankTree: Vector[ClubRankNode] =
     Vector(
-      ClubRankNode("rookie", "Rookie", minimumContribution = 0),
-      ClubRankNode("member", "Member", minimumContribution = 500),
-      ClubRankNode("core", "Core", minimumContribution = 1500),
-      ClubRankNode("ace", "Ace", minimumContribution = 3000)
+      ClubRankNode("rookie", "萌新", minimumContribution = 0),
+      ClubRankNode("member", "同伴", minimumContribution = 500),
+      ClubRankNode("core", "主力", minimumContribution = 1500),
+      ClubRankNode("ace", "王牌", minimumContribution = 3000)
     )

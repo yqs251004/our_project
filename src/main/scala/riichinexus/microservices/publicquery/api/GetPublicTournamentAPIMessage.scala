@@ -51,11 +51,15 @@ final case class GetPublicTournamentAPIMessage(
             status = stage.status,
             currentRound = stage.currentRound,
             roundCount = stage.roundCount,
+            schedulingPoolSize = stage.schedulingPoolSize,
             tableCount = tables.size,
             archivedTableCount = tables.count(_.status == TableStatus.Archived),
             pendingTablePlanCount = stage.pendingTablePlans.size,
             standings = Some(module.stageQueries.stageStandings(tournament.id, stage.id)),
-            bracket = bracket
+            bracket = bracket,
+            advancementRule = stage.advancementRule,
+            swissRule = stage.swissRule,
+            knockoutRule = stage.knockoutRule
           )
         }
       )

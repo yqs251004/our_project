@@ -36,12 +36,16 @@ final case class TournamentStageConfigureRulesAPIMessage(tournamentId: String, s
           )
 
           val dictionarySnapshot = RuntimeDictionary.snapshot(module.globalDictionaryRepository)
+          val baseStage = currentStage.copy(
+            format = request.stageFormat.getOrElse(currentStage.format),
+            roundCount = math.max(request.roundCount.getOrElse(currentStage.roundCount), currentStage.currentRound)
+          )
           val configuredStage = normalizeStage(
-            currentStage.withRules(
+            baseStage.withRules(
               request.advancementRule,
               request.swissRule,
               request.knockoutRule,
-              request.schedulingPoolSize.getOrElse(currentStage.schedulingPoolSize)
+              request.schedulingPoolSize.getOrElse(baseStage.schedulingPoolSize)
             ),
             dictionarySnapshot
           )

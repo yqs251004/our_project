@@ -17,7 +17,7 @@ final case class ListPublicSchedulesAPIMessage(
   override def plan(context: ApiPlanContext): IO[PagedResponse[PublicScheduleView]] =
     IO {
       val module = context.support.publicQueryModule
-      context.support.routeContext.authorizationService
+      context.support.authorizationService
         .requirePermission(AccessPrincipal.guest(), Permission.ViewPublicSchedule)
 
       val parsedTournamentStatus = tournamentStatus.filter(_.nonEmpty).map(

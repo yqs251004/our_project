@@ -96,6 +96,8 @@ final case class CreateTournamentRequest(
 
 final case class ConfigureStageRulesRequest(
     operatorId: String,
+    format: Option[String] = None,
+    roundCount: Option[Int] = None,
     advancementRuleType: Option[String] = None,
     cutSize: Option[Int] = None,
     thresholdScore: Option[Int] = None,
@@ -118,6 +120,9 @@ final case class ConfigureStageRulesRequest(
 
   def operator: PlayerId =
     PlayerId(operatorId)
+
+  def stageFormat: Option[StageFormat] =
+    format.map(StageFormat.valueOf)
 
   def advancementRule: AdvancementRule =
     AdvancementRule(

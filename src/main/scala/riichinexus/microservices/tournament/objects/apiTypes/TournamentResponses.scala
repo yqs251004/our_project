@@ -60,6 +60,9 @@ final case class TournamentOperationsStageView(
     schedulingPoolSize: Int,
     pendingTablePlanCount: Int,
     scheduledTableCount: Int,
+    advancementRule: AdvancementRule = AdvancementRule(AdvancementRuleType.Custom, note = Some("unconfigured")),
+    swissRule: Option[SwissRuleConfig] = None,
+    knockoutRule: Option[KnockoutRuleConfig] = None,
     lineupSubmissions: Vector[TournamentLineupSubmissionView]
 ) derives CanEqual
 
@@ -86,7 +89,10 @@ final case class TournamentStageSummaryView(
     roundCount: Int,
     schedulingPoolSize: Int,
     pendingTablePlanCount: Int,
-    scheduledTableCount: Int
+    scheduledTableCount: Int,
+    advancementRule: AdvancementRule = AdvancementRule(AdvancementRuleType.Custom, note = Some("unconfigured")),
+    swissRule: Option[SwissRuleConfig] = None,
+    knockoutRule: Option[KnockoutRuleConfig] = None
 ) derives CanEqual
 
 object TournamentStageSummaryView:
@@ -101,7 +107,10 @@ object TournamentStageSummaryView:
       roundCount = stage.roundCount,
       schedulingPoolSize = stage.schedulingPoolSize,
       pendingTablePlanCount = stage.pendingTablePlans.size,
-      scheduledTableCount = stage.scheduledTableIds.size
+      scheduledTableCount = stage.scheduledTableIds.size,
+      advancementRule = stage.advancementRule,
+      swissRule = stage.swissRule,
+      knockoutRule = stage.knockoutRule
     )
 
 final case class TournamentSummaryView(

@@ -255,8 +255,13 @@ class FrontendContractSuite extends FunSuite with TestApplicationAccess:
       Vector(owner, applicant, reserve).foreach(player =>
         tournamentService(app).registerPlayer(tournament.id, player.id, principalFor(app, owner.id))
       )
-      tournamentService(app).whitelistClub(tournament.id, club.id, principalFor(app, owner.id))
+      tournamentService(app).registerClub(tournament.id, club.id, principalFor(app, owner.id))
       tournamentService(app).publishTournament(tournament.id, principalFor(app, owner.id))
+      val contractAcceptResponse = postJson(
+        s"$baseUrl/api/acceptclubtournamentapi",
+        write(AcceptClubTournamentAPIMessage(club.id.value, tournament.id.value, operatorId = Some(owner.id.value)))
+      )
+      assertEquals(contractAcceptResponse.statusCode(), 200)
       tournamentService(app).submitLineup(
         tournament.id,
         stage.id,
@@ -431,7 +436,13 @@ class FrontendContractSuite extends FunSuite with TestApplicationAccess:
       assertEquals(invitedResponse.statusCode(), 200)
       val invited = readPage[ClubTournamentParticipationView](invitedResponse.body())
       assertEquals(invited.items.head.clubParticipationStatus, ClubTournamentParticipationStatus.Invited)
-      assert(invited.items.head.canSubmitLineup)
+      assert(!invited.items.head.canSubmitLineup)
+
+      val acceptResponse = postJson(
+        s"$baseUrl/api/acceptclubtournamentapi",
+        write(AcceptClubTournamentAPIMessage(club.id.value, created.tournamentId.value, operatorId = Some(owner.id.value)))
+      )
+      assertEquals(acceptResponse.statusCode(), 200)
 
       val lineupResponse = postApi(
         baseUrl,
@@ -486,7 +497,8 @@ class FrontendContractSuite extends FunSuite with TestApplicationAccess:
       )
       assertEquals(registerClubResponse.statusCode(), 200)
       val clubRegistered = read[TournamentMutationView](registerClubResponse.body())
-      assertEquals(clubRegistered.tournament.participatingClubs.map(_.clubId), Vector(club.id))
+      assertEquals(clubRegistered.tournament.participatingClubs.map(_.clubId), Vector.empty)
+      assertEquals(clubRegistered.tournament.whitelistSummary.clubIds, Vector(club.id))
 
       val publishResponse = postApi(
         baseUrl,
@@ -494,6 +506,12 @@ class FrontendContractSuite extends FunSuite with TestApplicationAccess:
       )
       assertEquals(publishResponse.statusCode(), 200)
       assertEquals(read[TournamentMutationView](publishResponse.body()).tournament.status, TournamentStatus.RegistrationOpen)
+
+      val acceptResponse = postJson(
+        s"$baseUrl/api/acceptclubtournamentapi",
+        write(AcceptClubTournamentAPIMessage(club.id.value, tournament.id.value, operatorId = Some(admin.id.value)))
+      )
+      assertEquals(acceptResponse.statusCode(), 200)
 
       val lineupResponse = postApi(
         baseUrl,
@@ -552,7 +570,7 @@ class FrontendContractSuite extends FunSuite with TestApplicationAccess:
       val invited = readPage[ClubTournamentParticipationView](invitedResponse.body())
       assertEquals(invited.total, 1)
       assertEquals(invited.items.head.clubParticipationStatus, ClubTournamentParticipationStatus.Invited)
-      assert(invited.items.head.canSubmitLineup)
+      assert(!invited.items.head.canSubmitLineup)
 
       val acceptResponse = postJson(
         s"$baseUrl/api/acceptclubtournamentapi",
@@ -568,6 +586,7 @@ class FrontendContractSuite extends FunSuite with TestApplicationAccess:
       )
       val participating = readPage[ClubTournamentParticipationView](participatingResponse.body())
       assertEquals(participating.items.head.clubParticipationStatus, ClubTournamentParticipationStatus.Participating)
+      assert(participating.items.head.canSubmitLineup)
 
       val declineResponse = postJson(
         s"$baseUrl/api/declineclubtournamentapi",

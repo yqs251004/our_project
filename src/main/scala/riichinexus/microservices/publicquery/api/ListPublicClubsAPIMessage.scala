@@ -17,7 +17,7 @@ final case class ListPublicClubsAPIMessage(
   override def plan(context: ApiPlanContext): IO[PagedResponse[PublicClubDirectoryEntry]] =
     IO {
       val module = context.support.publicQueryModule
-      context.support.routeContext.authorizationService
+      context.support.authorizationService
         .requirePermission(AccessPrincipal.guest(), Permission.ViewClubDirectory)
 
       val parsedRelation = relation.filter(_.nonEmpty).map(

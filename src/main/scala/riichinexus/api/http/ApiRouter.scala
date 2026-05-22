@@ -3,7 +3,6 @@ package riichinexus.api.http
 import cats.effect.IO
 import cats.syntax.all.*
 import org.http4s.HttpApp
-import riichinexus.api.APIMessageRouter
 
 object ApiRouter:
 

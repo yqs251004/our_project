@@ -107,6 +107,9 @@ object TournamentOperationViewAssembler:
       schedulingPoolSize = stage.schedulingPoolSize,
       pendingTablePlanCount = stage.pendingTablePlans.size,
       scheduledTableCount = stage.scheduledTableIds.size,
+      advancementRule = stage.advancementRule,
+      swissRule = stage.swissRule,
+      knockoutRule = stage.knockoutRule,
       lineupSubmissions = stage.lineupSubmissions
         .sortBy(_.submittedAt)
         .map(submission => lineupSubmissionView(submission, clubsById, playersById))

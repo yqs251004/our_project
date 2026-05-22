@@ -109,7 +109,7 @@ final case class ListClubTournamentsAPIMessage(
               tournament.status != TournamentStatus.Draft &&
               tournament.status != TournamentStatus.Cancelled &&
               tournament.status != TournamentStatus.Archived &&
-              (isWhitelisted || isParticipating),
+              isParticipating,
           canDecline =
             clubVisibleToViewer &&
               tournament.status != TournamentStatus.Completed &&

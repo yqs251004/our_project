@@ -1,29 +1,35 @@
-package riichinexus.api.http
+package riichinexus.api.runtime
 
 import java.time.Instant
 import java.util.NoSuchElementException
 
-import org.http4s.Request
-import cats.effect.IO
+import scala.util.Try
+
+import riichinexus.bootstrap.*
 import riichinexus.domain.model.*
+import riichinexus.domain.service.AuthorizationService
 import riichinexus.microservices.auth.objects.apiTypes.*
 
-trait AuthSupport:
-  protected def routeContext: RouteContext
-
-  private def authModule = routeContext.authModule
+final class ApiPlanSupport(
+    val executionContext: ApiExecutionContext
+):
+  val authModule: AuthModuleContext = executionContext.authModule
+  val playerModule: PlayerModuleContext = executionContext.playerModule
+  val clubModule: ClubModuleContext = executionContext.clubModule
+  val dictionaryModule: DictionaryModuleContext = executionContext.dictionaryModule
+  val publicQueryModule: PublicQueryModuleContext = executionContext.publicQueryModule
+  val opsAnalyticsModule: OpsAnalyticsModuleContext = executionContext.opsAnalyticsModule
+  val tournamentModule: TournamentModuleContext = executionContext.tournamentModule
+  val platformAdminModule: PlatformAdminModuleContext = executionContext.platformAdminModule
+  val tournamentAppealModule: TournamentAppealModuleContext = executionContext.tournamentAppealModule
+  val authorizationService: AuthorizationService = executionContext.authorizationService
+  val storageLabel: String = executionContext.storageLabel
 
   def principal(playerId: PlayerId): AccessPrincipal =
     authModule.playerTable
       .find(playerId)
       .map(_.asPrincipal)
       .getOrElse(throw NoSuchElementException(s"Player ${playerId.value} was not found"))
-
-  def queryPrincipal(request: Request[IO]): AccessPrincipal =
-    val operatorId = queryParam(request, "operatorId")
-      .map(PlayerId(_))
-      .getOrElse(throw IllegalArgumentException("Query parameter operatorId is required"))
-    principal(operatorId)
 
   def guestPrincipal(sessionId: GuestSessionId): AccessPrincipal =
     touchActiveGuestSession(sessionId)
@@ -45,7 +51,7 @@ trait AuthSupport:
       tournamentId: Option[TournamentId] = None,
       subjectPlayerId: Option[PlayerId] = None
   ): Unit =
-    routeContext.authorizationService.requirePermission(
+    authorizationService.requirePermission(
       principal = principal,
       permission = permission,
       clubId = clubId,
@@ -117,6 +123,12 @@ trait AuthSupport:
       isSuperAdmin = player.roleGrants.exists(_.role == RoleKind.SuperAdmin)
     )
 
+  def parseEnum[E](label: String, value: String)(parse: String => E): E =
+    Try(parse(value)).getOrElse(throw IllegalArgumentException(s"Invalid $label: $value"))
+
+  def containsIgnoreCase(value: String, fragment: String): Boolean =
+    value.toLowerCase.contains(fragment.toLowerCase)
+
   private def touchActiveGuestSession(
       sessionId: GuestSessionId,
       seenAt: Instant = Instant.now()
@@ -138,4 +150,7 @@ trait AuthSupport:
     else
       s"Guest session ${session.id.value} cannot be used for authentication"
 
-  protected def queryParam(request: Request[IO], key: String): Option[String]
+object ApiPlanSupport:
+
+  def apply(executionContext: ApiExecutionContext): ApiPlanSupport =
+    new ApiPlanSupport(executionContext)

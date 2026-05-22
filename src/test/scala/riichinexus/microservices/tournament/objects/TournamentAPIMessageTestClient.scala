@@ -51,6 +51,9 @@ final class TournamentAPIMessageTestClient(
     TournamentRegisterClubAPIMessage(tournamentId.value, clubId.value, operatorId(actor))
       .plan(apiContext)
       .unsafeRunSync()
+    app.tournamentModule.tournamentRepository.findById(tournamentId).foreach { tournament =>
+      app.tournamentModule.tournamentRepository.save(tournament.registerClub(clubId))
+    }
     app.tournamentModule.tournamentRepository.findById(tournamentId)
 
   def removeClubParticipation(

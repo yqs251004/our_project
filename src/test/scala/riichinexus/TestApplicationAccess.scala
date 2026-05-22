@@ -5,7 +5,7 @@ import riichinexus.bootstrap.ApplicationContextTestAccess
 import riichinexus.bootstrap.ApplicationRepositoryContext
 import riichinexus.bootstrap.instrumentation.PerformanceDiagnosticsService
 import riichinexus.api.ApiPlanContext
-import riichinexus.api.http.{RouteContext, RouteSupport}
+import riichinexus.api.runtime.{ApiExecutionContext, ApiPlanSupport}
 import riichinexus.application.ports.*
 import riichinexus.domain.model.GuestAccessSession
 import riichinexus.microservices.auth.api.CreateGuestSessionAuthAPIMessage
@@ -61,8 +61,8 @@ trait TestApplicationAccess:
 
   protected def apiPlanContext(app: ApplicationContext): ApiPlanContext =
     ApiPlanContext(
-      RouteSupport(
-        RouteContext(
+      ApiPlanSupport(
+        ApiExecutionContext(
           authModule = app.authModule,
           playerModule = app.playerModule,
           clubModule = app.clubModule,
@@ -73,8 +73,7 @@ trait TestApplicationAccess:
           platformAdminModule = app.platformAdminModule,
           tournamentAppealModule = app.tournamentAppealModule,
           authorizationService = app.authorizationService,
-          storageLabel = "memory",
-          corsAllowOrigin = "*"
+          storageLabel = "memory"
         )
       ),
       bearerToken = None

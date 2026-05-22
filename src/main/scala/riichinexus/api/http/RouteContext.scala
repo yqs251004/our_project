@@ -1,19 +1,9 @@
 package riichinexus.api.http
 
-import riichinexus.bootstrap.*
-import riichinexus.domain.service.AuthorizationService
+import riichinexus.api.runtime.ApiExecutionContext
 
 final case class RouteContext(
-    authModule: AuthModuleContext,
-    playerModule: PlayerModuleContext,
-    clubModule: ClubModuleContext,
-    dictionaryModule: DictionaryModuleContext,
-    publicQueryModule: PublicQueryModuleContext,
-    opsAnalyticsModule: OpsAnalyticsModuleContext,
-    tournamentModule: TournamentModuleContext,
-    platformAdminModule: PlatformAdminModuleContext,
-    tournamentAppealModule: TournamentAppealModuleContext,
-    authorizationService: AuthorizationService,
-    storageLabel: String,
+    executionContext: ApiExecutionContext,
     corsAllowOrigin: String
-)
+):
+  def storageLabel: String = executionContext.storageLabel

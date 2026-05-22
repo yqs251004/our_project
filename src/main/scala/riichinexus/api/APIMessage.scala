@@ -1,8 +1,7 @@
 package riichinexus.api
 
 import cats.effect.IO
-import org.http4s.Status
-import riichinexus.api.http.RouteSupport
+import riichinexus.api.runtime.ApiPlanSupport
 import riichinexus.domain.service.AuthenticationFailure
 import upickle.default.*
 
@@ -16,7 +15,7 @@ trait APIWithTokenMessage[Response] extends APIMessage[Response]
 trait NoRequestAPIMessage[Response] extends APIMessage[Response]
 
 final case class ApiPlanContext(
-    support: RouteSupport,
+    support: ApiPlanSupport,
     bearerToken: Option[String]
 ):
   def requireBearerToken: String =
@@ -25,10 +24,13 @@ final case class ApiPlanContext(
       .filter(_.nonEmpty)
       .getOrElse(throw AuthenticationFailure("Bearer token is required", "missing_token"))
 
+enum ApiSuccessStatus:
+  case Ok, Created, Accepted
+
 final case class RegisteredAPIMessage(
     apiName: String,
     requiresBearerToken: Boolean,
-    successStatus: Status,
+    successStatus: ApiSuccessStatus,
     planJson: (String, ApiPlanContext) => IO[ujson.Value]
 )
 
@@ -46,28 +48,28 @@ object RegisteredAPIMessage:
       Writer[Response],
       ClassTag[Message]
   ): RegisteredAPIMessage =
-    build[Message, Response](requiresBearerToken = false, successStatus = Status.Ok)
+    build[Message, Response](requiresBearerToken = false, successStatus = ApiSuccessStatus.Ok)
 
   def created[Message <: APIMessage[Response], Response](using
       Reader[Message],
       Writer[Response],
       ClassTag[Message]
   ): RegisteredAPIMessage =
-    build[Message, Response](requiresBearerToken = false, successStatus = Status.Created)
+    build[Message, Response](requiresBearerToken = false, successStatus = ApiSuccessStatus.Created)
 
   def accepted[Message <: APIMessage[Response], Response](using
       Reader[Message],
       Writer[Response],
       ClassTag[Message]
   ): RegisteredAPIMessage =
-    build[Message, Response](requiresBearerToken = false, successStatus = Status.Accepted)
+    build[Message, Response](requiresBearerToken = false, successStatus = ApiSuccessStatus.Accepted)
 
   def apiWithToken[Message <: APIWithTokenMessage[Response], Response](using
       Reader[Message],
       Writer[Response],
       ClassTag[Message]
   ): RegisteredAPIMessage =
-    build[Message, Response](requiresBearerToken = true, successStatus = Status.Ok)
+    build[Message, Response](requiresBearerToken = true, successStatus = ApiSuccessStatus.Ok)
 
   def noRequest[Message <: NoRequestAPIMessage[Response], Response](message: => Message)(using
       Writer[Response],
@@ -76,13 +78,13 @@ object RegisteredAPIMessage:
     RegisteredAPIMessage(
       apiName = nameOf[Message],
       requiresBearerToken = false,
-      successStatus = Status.Ok,
+      successStatus = ApiSuccessStatus.Ok,
       planJson = (_, context) => message.plan(context).map(writeJs(_))
     )
 
   private def build[Message <: APIMessage[Response], Response](
       requiresBearerToken: Boolean,
-      successStatus: Status
+      successStatus: ApiSuccessStatus
   )(using
       reader: Reader[Message],
       writer: Writer[Response],

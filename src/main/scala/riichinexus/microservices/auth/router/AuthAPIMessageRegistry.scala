@@ -17,6 +17,7 @@ object AuthAPIMessageRegistry:
       RegisteredAPIMessage.apiWithToken[RestoreAuthSessionAPIMessage, AuthSessionResponse],
       RegisteredAPIMessage.apiWithToken[LogoutAuthAPIMessage, ApiMessage],
       RegisteredAPIMessage.api[CurrentSessionAuthAPIMessage, CurrentSessionResponse],
+      RegisteredAPIMessage.api[AuthCheckPermissionAPIMessage, Boolean],
       RegisteredAPIMessage.api[ListGuestSessionsAuthAPIMessage, PagedResponse[GuestAccessSession]],
       RegisteredAPIMessage.created[CreateGuestSessionAuthAPIMessage, GuestAccessSession],
       RegisteredAPIMessage.api[GetGuestSessionAuthAPIMessage, GuestAccessSession],

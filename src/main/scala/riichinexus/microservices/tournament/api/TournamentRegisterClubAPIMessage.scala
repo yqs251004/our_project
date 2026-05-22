@@ -39,7 +39,7 @@ final case class TournamentRegisterClubAPIMessage(tournamentId: String, clubId: 
         ensureClubActive(club)
 
         module.tournamentRepository.findById(tournamentIdValue).foreach { tournament =>
-          module.tournamentRepository.save(tournament.registerClub(clubIdValue))
+          module.tournamentRepository.save(tournament.whitelistClub(clubIdValue))
         }
       }
 

@@ -5,7 +5,7 @@ import cats.effect.IO
 import org.http4s.HttpApp
 import org.http4s.Request
 import org.http4s.server.middleware.Logger
-import riichinexus.api.http.ApiRouter
+import riichinexus.api.http.{ApiRouter, RouteContext}
 
 object ApiHttpApp:
 
@@ -74,7 +74,12 @@ object ApiHttpApp:
       logHeaders: Boolean = true,
       logBody: Boolean = false
   ): HttpApp[IO] =
-    val routed = ApiRouter.httpApp(runtime.routeContext)
+    val routed = ApiRouter.httpApp(
+      RouteContext(
+        executionContext = runtime.executionContext,
+        corsAllowOrigin = runtime.corsAllowOrigin
+      )
+    )
     Logger.httpApp(logHeaders = logHeaders, logBody = logBody)(
       instrumentRequests(runtime, routed)
     )

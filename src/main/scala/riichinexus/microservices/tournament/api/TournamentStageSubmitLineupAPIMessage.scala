@@ -58,12 +58,11 @@ final case class TournamentStageSubmitLineupAPIMessage(tournamentId: String, sta
             throw AuthorizationFailure("Lineup submitter must match the acting principal")
 
           val isClubRegistered =
-            tournament.participatingClubs.contains(submission.clubId) ||
-              tournament.whitelist.exists(_.clubId.contains(submission.clubId))
+            tournament.participatingClubs.contains(submission.clubId)
 
           if !isClubRegistered then
             throw IllegalArgumentException(
-              s"Club ${submission.clubId.value} is not whitelisted for tournament ${tournamentIdValue.value}"
+              s"Club ${submission.clubId.value} has not accepted tournament ${tournamentIdValue.value}"
             )
 
           submission.seats.foreach { seat =>

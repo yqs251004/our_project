@@ -2,10 +2,11 @@ package riichinexus.api
 
 import riichinexus.bootstrap.ApplicationContext
 import riichinexus.bootstrap.instrumentation.PerformanceDiagnosticsService
-import riichinexus.api.http.RouteContext
+import riichinexus.api.runtime.ApiExecutionContext
 
 final case class ApiRuntimeContext(
-    routeContext: RouteContext,
+    executionContext: ApiExecutionContext,
+    corsAllowOrigin: String,
     performanceDiagnosticsService: PerformanceDiagnosticsService
 )
 
@@ -26,7 +27,7 @@ object ApiRuntimeContext:
       corsAllowOrigin: String = "*"
   ): ApiRuntimeContext =
     ApiRuntimeContext(
-      routeContext = RouteContext(
+      executionContext = ApiExecutionContext(
         authModule = app.authModule,
         playerModule = app.playerModule,
         clubModule = app.clubModule,
@@ -37,8 +38,8 @@ object ApiRuntimeContext:
         platformAdminModule = app.platformAdminModule,
         tournamentAppealModule = app.tournamentAppealModule,
         authorizationService = app.authorizationService,
-        storageLabel = storageLabel,
-        corsAllowOrigin = corsAllowOrigin
+        storageLabel = storageLabel
       ),
+      corsAllowOrigin = corsAllowOrigin,
       performanceDiagnosticsService = app.opsAnalyticsModule.performanceDiagnosticsService
     )

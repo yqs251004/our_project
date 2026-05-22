@@ -16,7 +16,7 @@ final case class PublicClubLeaderboardAPIMessage(
   override def plan(context: ApiPlanContext): IO[PagedResponse[ClubLeaderboardEntry]] =
     IO {
       val module = context.support.publicQueryModule
-      context.support.routeContext.authorizationService
+      context.support.authorizationService
         .requirePermission(AccessPrincipal.guest(), Permission.ViewPublicLeaderboard)
 
       val leaderboard = module.tables.publicClubLeaderboard(Int.MaxValue)

@@ -142,11 +142,15 @@ final case class PublicTournamentStageView(
     status: StageStatus,
     currentRound: Int,
     roundCount: Int,
+    schedulingPoolSize: Int,
     tableCount: Int,
     archivedTableCount: Int,
     pendingTablePlanCount: Int,
     standings: Option[StageRankingSnapshot],
-    bracket: Option[KnockoutBracketSnapshot]
+    bracket: Option[KnockoutBracketSnapshot],
+    advancementRule: AdvancementRule = AdvancementRule(AdvancementRuleType.Custom, note = Some("unconfigured")),
+    swissRule: Option[SwissRuleConfig] = None,
+    knockoutRule: Option[KnockoutRuleConfig] = None
 ) derives CanEqual
 
 final case class PublicTournamentDetailView(
