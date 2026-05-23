@@ -49,7 +49,7 @@ private[service] object TournamentAdvancementProjector:
           val reserves = ranking.entries.filterNot(entry => qualified.exists(_.playerId == entry.playerId)).take(4).map(_.playerId)
           (qualified, reserves, summaryFor(stage, qualified.size, ranking))
         case AdvancementRuleType.KnockoutElimination =>
-          val qualifiedCount = stage.knockoutRule.flatMap(_.bracketSize)
+          val qualifiedCount = stage.knockoutRule.flatMap(_.bracketSize).filter(_ >= 4)
             .orElse(stage.advancementRule.targetTableCount.map(_ * 4))
             .getOrElse(math.min(4, ranking.entries.size))
           val qualified = ranking.entries.take(math.max(0, math.min(qualifiedCount, ranking.entries.size)))

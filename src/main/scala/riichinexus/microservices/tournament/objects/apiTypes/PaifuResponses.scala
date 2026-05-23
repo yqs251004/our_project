@@ -34,7 +34,9 @@ final case class TournamentPaifuSummaryView(
     matchRecordId: Option[MatchRecordId],
     totalHands: Int,
     playerIds: Vector[PlayerId],
-    finalStandings: Vector[TournamentPaifuFinalStandingView]
+    finalStandings: Vector[TournamentPaifuFinalStandingView],
+    metadata: PaifuMetadata,
+    rounds: Vector[KyokuRecord]
 ) derives CanEqual
 
 object TournamentPaifuSummaryView:
@@ -49,5 +51,7 @@ object TournamentPaifuSummaryView:
       matchRecordId = paifu.metadata.matchRecordId,
       totalHands = paifu.totalHands,
       playerIds = paifu.playerIds,
-      finalStandings = paifu.finalStandings.map(TournamentPaifuFinalStandingView.fromDomain)
+      finalStandings = paifu.finalStandings.map(TournamentPaifuFinalStandingView.fromDomain),
+      metadata = paifu.metadata,
+      rounds = paifu.rounds
     )

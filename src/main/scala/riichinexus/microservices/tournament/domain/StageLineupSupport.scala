@@ -4,6 +4,18 @@ import riichinexus.application.ports.PlayerRepository
 import riichinexus.domain.model.*
 
 object StageLineupSupport:
+  def directPlayerIds(tournament: Tournament): Vector[PlayerId] =
+    (tournament.participatingPlayers ++ tournament.whitelist.flatMap(_.playerId)).distinct
+
+  def resolveTargetPlayerIds(
+      tournament: Tournament,
+      stagePlayerIds: Vector[PlayerId],
+      fallbackPlayerIds: Vector[PlayerId]
+  ): Vector[PlayerId] =
+    if stagePlayerIds.nonEmpty then
+      (stagePlayerIds ++ directPlayerIds(tournament)).distinct
+    else fallbackPlayerIds
+
   def submittedPlayersWithClub(
       stage: TournamentStage
   ): Vector[(PlayerId, ClubId)] =

@@ -249,15 +249,6 @@ object MatchRecord:
       "Paifu final standings must match scheduled table players"
     )
 
-    val settlementNotes = paifu.rounds.zipWithIndex.flatMap { (round, index) =>
-      round.result.settlement.map { settlement =>
-        val noteSuffix =
-          if settlement.notes.isEmpty then ""
-          else s" notes=${settlement.notes.mkString("|")}"
-        s"round-${index + 1}:${round.descriptor.roundWind}-${round.descriptor.handNumber} settlement riichi=${settlement.riichiSticksDelta} honba=${settlement.honbaPayment}$noteSuffix"
-      }
-    }
-
     MatchRecord(
       id = IdGenerator.matchRecordId(),
       tableId = table.id,
@@ -280,5 +271,5 @@ object MatchRecord:
       },
       paifuId = Some(paifu.id),
       finalizedBy = finalizedBy,
-      notes = settlementNotes
+      notes = Vector.empty
     )

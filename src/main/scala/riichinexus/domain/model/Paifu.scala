@@ -36,13 +36,17 @@ final case class RoundSettlement(
 
 final case class AgariResult(
     outcome: HandOutcome,
-    winner: Option[PlayerId],
-    target: Option[PlayerId],
-    han: Option[Int],
-    fu: Option[Int],
+    winner: Option[PlayerId] = None,
+    target: Option[PlayerId] = None,
+    han: Option[Int] = None,
+    fu: Option[Int] = None,
     yaku: Vector[Yaku],
     points: Int,
     scoreChanges: Vector[ScoreChange],
+    doraIndicators: Option[Vector[String]] = None,
+    uraDoraIndicators: Option[Vector[String]] = None,
+    uraDoraVisible: Option[Boolean] = None,
+    tenpaiPlayerIds: Option[Vector[PlayerId]] = None,
     settlement: Option[RoundSettlement] = None
 ) derives CanEqual:
   require(points >= 0, "Result points must be non-negative")
@@ -51,7 +55,12 @@ final case class AgariResult(
     scoreChanges.map(_.playerId).distinct.size == scoreChanges.size,
     "Score changes cannot contain duplicate players"
   )
-  require(scoreChanges.map(_.delta).sum == 0, "Round score changes must net to zero")
+  doraIndicators.foreach { indicators =>
+    require(indicators.size == 5, "Dora indicators must contain exactly five tiles when provided")
+  }
+  uraDoraIndicators.foreach { indicators =>
+    require(indicators.size == 5, "Ura-dora indicators must contain exactly five tiles when provided")
+  }
   outcome match
     case HandOutcome.Ron =>
       require(winner.nonEmpty, "Ron result must include a winner")
@@ -85,7 +94,7 @@ enum PaifuActionType derives CanEqual:
 
 final case class PaifuAction(
     sequenceNo: Int,
-    actor: Option[PlayerId],
+    actor: Option[PlayerId] = None,
     actionType: PaifuActionType,
     tile: Option[String] = None,
     shantenAfterAction: Option[Int] = None,
@@ -143,6 +152,10 @@ final case class KyokuRecord(
     result.target.forall(initialHands.contains),
     "Round target must be seated in the initial hand map"
   )
+  require(
+    result.tenpaiPlayerIds.toVector.flatten.forall(initialHands.contains),
+    "Round tenpai player ids must reference seated players only"
+  )
 
 final case class FinalStanding(
     playerId: PlayerId,
@@ -153,7 +166,6 @@ final case class FinalStanding(
     oka: Double = 0.0
 ) derives CanEqual:
   require(placement >= 1 && placement <= 4, "Placement must be between 1 and 4")
-  require(finalPoints >= 0, "Final points must be non-negative")
 
 final case class PaifuMetadata(
     recordedAt: Instant,
@@ -206,3 +218,41 @@ final case class Paifu(
     metadata.seats.map { seat =>
       seat.playerId -> (seat.initialPoints + aggregatedScoreChanges.getOrElse(seat.playerId, 0))
     }.toMap
+
+  def expectedFinalPointsWithRiichiSticks: Map[PlayerId, Int] =
+    val totals = metadata.seats.map(seat => seat.playerId -> seat.initialPoints).toMap
+    rounds.foldLeft((totals, 0)) { case ((currentTotals, carriedRiichiSticks), round) =>
+      val acceptedRiichiByPlayer =
+        round.actions
+          .filter(action => action.actionType == PaifuActionType.Riichi && action.actor.nonEmpty)
+          .filterNot(action => isRiichiDeclarationRon(round, action))
+          .flatMap(_.actor)
+          .groupMapReduce(identity)(_ => 1)(_ + _)
+
+      val afterRiichiPayments = acceptedRiichiByPlayer.foldLeft(currentTotals) {
+        case (acc, (playerId, count)) =>
+          acc.updated(playerId, acc.getOrElse(playerId, 0) - count * 1000)
+      }
+
+      val afterScoreChanges = round.result.scoreChanges.foldLeft(afterRiichiPayments) {
+        case (acc, change) =>
+          acc.updated(change.playerId, acc.getOrElse(change.playerId, 0) + change.delta)
+      }
+
+      val nextRiichiSticks =
+        if round.result.outcome == HandOutcome.Ron || round.result.outcome == HandOutcome.Tsumo then 0
+        else carriedRiichiSticks + acceptedRiichiByPlayer.values.sum
+
+      (afterScoreChanges, nextRiichiSticks)
+    }._1
+
+  private def isRiichiDeclarationRon(round: KyokuRecord, action: PaifuAction): Boolean =
+    round.result.outcome == HandOutcome.Ron &&
+      action.actor.nonEmpty &&
+      action.tile.nonEmpty &&
+      round.result.target == action.actor &&
+      round.actions.exists(item =>
+        item.actionType == PaifuActionType.Win &&
+          item.sequenceNo > action.sequenceNo &&
+          item.tile == action.tile
+      )

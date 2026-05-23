@@ -151,12 +151,27 @@ final case class TournamentTableUploadPaifuAPIMessage(tableId: String, request: 
           s"Round ${index + 1} cannot carry honba payment when honba is zero"
         )
       }
+
+      round.result.doraIndicators.foreach { indicators =>
+        require(
+          indicators.forall(_.trim.nonEmpty),
+          s"Round ${index + 1} dora indicators cannot contain blank tiles"
+        )
+      }
+      round.result.uraDoraIndicators.foreach { indicators =>
+        require(
+          indicators.forall(_.trim.nonEmpty),
+          s"Round ${index + 1} ura-dora indicators cannot contain blank tiles"
+        )
+      }
     }
 
     val expectedFinalPoints = paifu.expectedFinalPoints
+    val expectedFinalPointsWithRiichiSticks = paifu.expectedFinalPointsWithRiichiSticks
     require(
       paifu.finalStandings.forall(standing =>
-        expectedFinalPoints.get(standing.playerId).contains(standing.finalPoints)
+        expectedFinalPoints.get(standing.playerId).contains(standing.finalPoints) ||
+          expectedFinalPointsWithRiichiSticks.get(standing.playerId).contains(standing.finalPoints)
       ),
       "Paifu final standings must match the cumulative round score changes"
     )

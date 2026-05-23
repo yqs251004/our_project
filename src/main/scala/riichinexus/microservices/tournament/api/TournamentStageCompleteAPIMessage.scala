@@ -112,7 +112,7 @@ final case class TournamentStageCompleteAPIMessage(tournamentId: String, stageId
     val stagePlayerIds = StageLineupSupport.resolveEligiblePlayers(stage, playersById.get)
 
     val targetPlayerIds =
-      if stagePlayerIds.nonEmpty then stagePlayerIds else fallbackPlayerIds
+      StageLineupSupport.resolveTargetPlayerIds(tournament, stagePlayerIds, fallbackPlayerIds)
 
     targetPlayerIds.flatMap { playerId =>
       playersById.get(playerId).filter(_.status == PlayerStatus.Active)

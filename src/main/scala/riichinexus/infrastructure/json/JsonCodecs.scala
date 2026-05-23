@@ -1,6 +1,7 @@
 package riichinexus.infrastructure.json
 
 import java.time.Instant
+import scala.annotation.targetName
 
 import riichinexus.domain.event.*
 import riichinexus.domain.model.*
@@ -21,6 +22,17 @@ object JsonCodecs:
         case arr: ujson.Arr if arr.value.isEmpty => None
         case arr: ujson.Arr if arr.value.size == 1 => Some(read[A](arr.value.head))
         case json => Some(read[A](json))
+      }
+    )
+
+  @targetName("givenReadWriterOptionVector")
+  given [A: ReadWriter]: ReadWriter[Option[Vector[A]]] =
+    readwriter[ujson.Value].bimap[Option[Vector[A]]](
+      _.map(writeJs(_)).getOrElse(ujson.Null),
+      {
+        case ujson.Null => None
+        case arr: ujson.Arr => Some(read[Vector[A]](arr))
+        case json => Some(Vector(read[A](json)))
       }
     )
 
@@ -146,7 +158,31 @@ object JsonCodecs:
   given ReadWriter[TournamentSettlementEntry] = macroRW
   given ReadWriter[TournamentSettlementSnapshot] = macroRW
   given ReadWriter[Tournament] = macroRW
-  given ReadWriter[TableSeat] = macroRW
+  given ReadWriter[TableSeat] =
+    readwriter[ujson.Value].bimap[TableSeat](
+      seat =>
+        ujson.Obj(
+          "seat" -> writeJs(seat.seat),
+          "playerId" -> writeJs(seat.playerId),
+          "initialPoints" -> seat.initialPoints,
+          "disconnected" -> seat.disconnected,
+          "ready" -> seat.ready,
+          "clubId" -> writeJs(seat.clubId)
+        ),
+      {
+        case obj: ujson.Obj =>
+          TableSeat(
+            seat = read[SeatWind](obj("seat")),
+            playerId = read[PlayerId](obj("playerId")),
+            initialPoints = obj.value.get("initialPoints").fold(25000)(read[Int](_)),
+            disconnected = obj.value.get("disconnected").fold(false)(read[Boolean](_)),
+            ready = obj.value.get("ready").fold(false)(read[Boolean](_)),
+            clubId = obj.value.get("clubId").fold(Option.empty[ClubId])(read[Option[ClubId]](_))
+          )
+        case json =>
+          throw upickle.core.Abort(s"Expected TableSeat object, got $json")
+      }
+    )
   given ReadWriter[TableStatus] =
     stringEnumReadWriter(TableStatus.valueOf, _.toString)
   given ReadWriter[AppealTableResolution] =
@@ -172,12 +208,93 @@ object JsonCodecs:
     stringEnumReadWriter(HandOutcome.valueOf, _.toString)
   given ReadWriter[Yaku] = macroRW
   given ReadWriter[ScoreChange] = macroRW
-  given ReadWriter[RoundSettlement] = macroRW
+  given ReadWriter[RoundSettlement] =
+    readwriter[ujson.Value].bimap[RoundSettlement](
+      settlement =>
+        ujson.Obj(
+          "riichiSticksDelta" -> settlement.riichiSticksDelta,
+          "honbaPayment" -> settlement.honbaPayment,
+          "notes" -> writeJs(settlement.notes)
+        ),
+      {
+        case obj: ujson.Obj =>
+          RoundSettlement(
+            riichiSticksDelta = obj.value.get("riichiSticksDelta").fold(0)(read[Int](_)),
+            honbaPayment = obj.value.get("honbaPayment").fold(0)(read[Int](_)),
+            notes = obj.value.get("notes").fold(Vector.empty[String])(read[Vector[String]](_))
+          )
+        case json =>
+          throw upickle.core.Abort(s"Expected RoundSettlement object, got $json")
+      }
+    )
   given ReadWriter[AgariResult] = macroRW
   given ReadWriter[PaifuActionType] =
     stringEnumReadWriter(PaifuActionType.valueOf, _.toString)
-  given ReadWriter[PaifuAction] = macroRW
-  given ReadWriter[KyokuDescriptor] = macroRW
+  given ReadWriter[PaifuAction] =
+    readwriter[ujson.Value].bimap[PaifuAction](
+      action =>
+        ujson.Obj(
+          "sequenceNo" -> action.sequenceNo,
+          "actor" -> writeJs(action.actor),
+          "actionType" -> writeJs(action.actionType),
+          "tile" -> writeJs(action.tile),
+          "shantenAfterAction" -> writeJs(action.shantenAfterAction),
+          "handTilesAfterAction" -> writeJs(action.handTilesAfterAction),
+          "revealedTiles" -> writeJs(action.revealedTiles),
+          "note" -> writeJs(action.note)
+        ),
+      {
+        case obj: ujson.Obj =>
+          PaifuAction(
+            sequenceNo = read[Int](obj("sequenceNo")),
+            actor = obj.value.get("actor").fold(Option.empty[PlayerId])(read[Option[PlayerId]](_)),
+            actionType = read[PaifuActionType](obj("actionType")),
+            tile = obj.value.get("tile").fold(Option.empty[String])(read[Option[String]](_)),
+            shantenAfterAction = obj.value.get("shantenAfterAction").fold(Option.empty[Int])(read[Option[Int]](_)),
+            handTilesAfterAction = obj.value.get("handTilesAfterAction").fold(Option.empty[Vector[String]])(read[Option[Vector[String]]](_)),
+            revealedTiles = obj.value.get("revealedTiles").fold(Vector.empty[String])(read[Vector[String]](_)),
+            note = obj.value.get("note").fold(Option.empty[String])(read[Option[String]](_))
+          )
+        case json =>
+          throw upickle.core.Abort(s"Expected PaifuAction object, got $json")
+      }
+    )
+  given ReadWriter[KyokuDescriptor] =
+    readwriter[ujson.Value].bimap[KyokuDescriptor](
+      descriptor =>
+        ujson.Obj(
+          "roundWind" -> writeJs(descriptor.roundWind),
+          "handNumber" -> descriptor.handNumber,
+          "honba" -> descriptor.honba
+        ),
+      {
+        case obj: ujson.Obj =>
+          KyokuDescriptor(
+            roundWind = read[SeatWind](obj("roundWind")),
+            handNumber = read[Int](obj("handNumber")),
+            honba = obj.value.get("honba").fold(0)(read[Int](_))
+          )
+        case json =>
+          throw upickle.core.Abort(s"Expected KyokuDescriptor object, got $json")
+      }
+    )
+  given ReadWriter[Map[PlayerId, Vector[String]]] =
+    readwriter[ujson.Value].bimap[Map[PlayerId, Vector[String]]](
+      hands =>
+        ujson.Obj.from(
+          hands.toSeq.map { case (playerId, tiles) =>
+            playerId.value -> writeJs(tiles)
+          }
+        ),
+      {
+        case obj: ujson.Obj =>
+          obj.value.map { case (playerId, tiles) =>
+            PlayerId(playerId) -> read[Vector[String]](tiles)
+          }.toMap
+        case json =>
+          read[Vector[(PlayerId, Vector[String])]](json).toMap
+      }
+    )
   given ReadWriter[KyokuRecord] = macroRW
   given ReadWriter[FinalStanding] = macroRW
   given ReadWriter[PaifuMetadata] = macroRW
