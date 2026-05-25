@@ -15,34 +15,50 @@ import upickle.default.*
 
 final case class TournamentSettlementListAPIMessage(
     tournamentId: String,
-    stageId: Option[String] = None,
-    status: Option[String] = None,
-    championId: Option[String] = None,
-    limit: Option[Int] = None,
-    offset: Option[Int] = None
+    query: TournamentSettlementQuery = TournamentSettlementQuery()
 ) extends APIMessage[PagedResponse[TournamentSettlementView]] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[TournamentSettlementView]] =
-    IO {
-      val query = TournamentSettlementQuery(
-        stageId = stageId.filter(_.nonEmpty).map(TournamentStageId(_)),
-        status = status.filter(_.nonEmpty).map(TournamentSettlementStatus.valueOf),
-        championId = championId.filter(_.nonEmpty).map(PlayerId(_))
-      )
-      val settlements = context.support.tournamentModule.tables
-        .listSettlements(TournamentId(tournamentId), query)
-        .map(TournamentSettlementView.fromDomain)
-      page(settlements, filters(stageId.filter(_.nonEmpty).map("stageId" -> _), status.filter(_.nonEmpty).map("status" -> _), championId.filter(_.nonEmpty).map("championId" -> _)))
-    }
+    for
+      resolved <- IO(resolveQuery)
+      settlements <- IO(listSettlements(context, resolved))
+    yield page(settlements.map(TournamentSettlementView.fromDomain), resolved)
 
-  private def page(items: Vector[TournamentSettlementView], appliedFilters: Map[String, String]): PagedResponse[TournamentSettlementView] =
-    val resolvedLimit = limit.getOrElse(20)
-    val resolvedOffset = offset.getOrElse(0)
+  private def resolveQuery: ResolvedSettlementListQuery =
+    ResolvedSettlementListQuery(
+      tournamentId = TournamentId(tournamentId),
+      query = query,
+      appliedFilters = filters(
+        query.stageId.map(value => "stageId" -> value.value),
+        query.status.map(value => "status" -> value.toString),
+        query.championId.map(value => "championId" -> value.value)
+      )
+    )
+
+  private def listSettlements(
+      context: ApiPlanContext,
+      resolved: ResolvedSettlementListQuery
+  ): Vector[TournamentSettlementSnapshot] =
+    context.support.tournamentModule.tables
+      .listSettlements(resolved.tournamentId, resolved.query)
+
+  private def page(
+      items: Vector[TournamentSettlementView],
+      resolved: ResolvedSettlementListQuery
+  ): PagedResponse[TournamentSettlementView] =
+    val resolvedLimit = resolved.query.limit.getOrElse(20)
+    val resolvedOffset = resolved.query.offset.getOrElse(0)
     require(resolvedLimit > 0, "Input field limit must be positive")
     require(resolvedOffset >= 0, "Input field offset must be non-negative")
     val boundedLimit = math.min(resolvedLimit, 100)
     val pageItems = items.slice(resolvedOffset, resolvedOffset + boundedLimit)
-    PagedResponse(pageItems, items.size, boundedLimit, resolvedOffset, resolvedOffset + pageItems.size < items.size, appliedFilters)
+    PagedResponse(pageItems, items.size, boundedLimit, resolvedOffset, resolvedOffset + pageItems.size < items.size, resolved.appliedFilters)
 
   private def filters(values: Option[(String, String)]*): Map[String, String] =
     values.flatten.toMap
+
+  private final case class ResolvedSettlementListQuery(
+      tournamentId: TournamentId,
+      query: TournamentSettlementQuery,
+      appliedFilters: Map[String, String]
+  )

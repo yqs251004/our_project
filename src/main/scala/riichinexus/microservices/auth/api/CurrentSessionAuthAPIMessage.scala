@@ -12,9 +12,23 @@ final case class CurrentSessionAuthAPIMessage(
 ) extends APIMessage[CurrentSessionResponse] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[CurrentSessionResponse] =
-    IO {
-      context.support.resolveCurrentSessionView(
-        operatorId = operatorId.filter(_.nonEmpty).map(PlayerId(_)),
-        guestSessionId = guestSessionId.filter(_.nonEmpty).map(GuestSessionId(_))
+    for
+      input <- IO(resolveInput)
+      session <- IO(
+        context.support.resolveCurrentSessionView(
+        operatorId = input.operatorId,
+        guestSessionId = input.guestSessionId
+        )
       )
-    }
+    yield session
+
+  private def resolveInput: CurrentSessionInput =
+    CurrentSessionInput(
+      operatorId = operatorId.filter(_.nonEmpty).map(PlayerId(_)),
+      guestSessionId = guestSessionId.filter(_.nonEmpty).map(GuestSessionId(_))
+    )
+
+  private final case class CurrentSessionInput(
+      operatorId: Option[PlayerId],
+      guestSessionId: Option[GuestSessionId]
+  )

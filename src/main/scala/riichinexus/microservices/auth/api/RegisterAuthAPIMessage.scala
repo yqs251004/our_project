@@ -4,6 +4,7 @@ import java.time.Instant
 
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
+import riichinexus.bootstrap.AuthModuleContext
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.objects.apiTypes.AuthSuccessResponse
 import riichinexus.microservices.auth.security.AuthPasswordHasher
@@ -19,62 +20,80 @@ final case class RegisterAuthAPIMessage(
   private val SessionTtl = java.time.Duration.ofDays(30)
 
   override def plan(context: ApiPlanContext): IO[AuthSuccessResponse] =
-    IO {
-      val module = context.support.authModule
-      module.transactionManager.inTransaction {
-        val registeredAt = Instant.now()
-        val normalizedUsername = AccountCredential.normalizeUsername(username)
-        val normalizedDisplayName = normalizeDisplayName(displayName)
-        validatePassword(password)
-
-        if module.accountCredentialRepository.findByUsername(normalizedUsername).nonEmpty then
-          throw IllegalArgumentException(s"Username $normalizedUsername is already registered")
-
-        val player = module.playerRepository.findAll().find(_.userId.equalsIgnoreCase(normalizedUsername)) match
-          case Some(existing) if existing.nickname == normalizedDisplayName =>
-            existing
-          case Some(existing) =>
-            module.playerRepository.save(existing.copy(nickname = normalizedDisplayName))
-          case None =>
-            module.playerRegistration.registerPlayer(
-              userId = normalizedUsername,
-              nickname = normalizedDisplayName,
-              rank = DefaultRank,
-              registeredAt = registeredAt
-            )
-        ensureActivePlayer(player)
-
-        val passwordDigest = AuthPasswordHasher.hash(password)
-        module.accountCredentialRepository.save(
-          AccountCredential(
-            username = normalizedUsername,
-            playerId = player.id,
-            passwordHash = passwordDigest.hash,
-            passwordSalt = passwordDigest.salt,
-            passwordIterations = passwordDigest.iterations,
-            createdAt = registeredAt,
-            updatedAt = registeredAt
-          )
-        )
-
-        val session = module.authenticatedSessionRepository.save(
-          AuthenticatedSession.create(
-            username = normalizedUsername,
-            playerId = player.id,
-            createdAt = registeredAt,
-            ttl = SessionTtl
-          )
-        )
-
-        riichinexus.microservices.auth.objects.apiTypes.AuthSuccessView(
-          userId = player.id.value,
-          username = normalizedUsername,
-          displayName = player.nickname,
-          token = session.token,
-          roles = context.support.registeredRoleFlags(player)
-        )
+    for
+      registeredAt <- IO.realTimeInstant
+      module = context.support.authModule
+      command = RegisterAuthCommand(
+        username = AccountCredential.normalizeUsername(username),
+        password = password,
+        displayName = normalizeDisplayName(displayName),
+        registeredAt = registeredAt
+      )
+      result <- IO {
+        module.transactionManager.inTransaction {
+          register(module, command)
+        }
       }
-    }
+    yield riichinexus.microservices.auth.objects.apiTypes.AuthSuccessView(
+      userId = result.player.id.value,
+      username = result.username,
+      displayName = result.player.nickname,
+      token = result.session.token,
+      roles = context.support.registeredRoleFlags(result.player)
+    )
+
+  private def register(module: AuthModuleContext, command: RegisterAuthCommand): RegisterAuthResult =
+    validatePassword(command.password)
+    if module.accountCredentialRepository.findByUsername(command.username).nonEmpty then
+      throw IllegalArgumentException(s"Username ${command.username} is already registered")
+
+    val player = resolveRegisteredPlayer(module, command)
+    ensureActivePlayer(player)
+    saveCredential(module, command, player)
+    val session = module.authenticatedSessionRepository.save(
+      AuthenticatedSession.create(
+        username = command.username,
+        playerId = player.id,
+        createdAt = command.registeredAt,
+        ttl = SessionTtl
+      )
+    )
+    RegisterAuthResult(command.username, player, session)
+
+  private def resolveRegisteredPlayer(
+      module: AuthModuleContext,
+      command: RegisterAuthCommand
+  ): Player =
+    module.playerRepository.findAll().find(_.userId.equalsIgnoreCase(command.username)) match
+      case Some(existing) if existing.nickname == command.displayName =>
+        existing
+      case Some(existing) =>
+        module.playerRepository.save(existing.copy(nickname = command.displayName))
+      case None =>
+        module.playerRegistration.registerPlayer(
+          userId = command.username,
+          nickname = command.displayName,
+          rank = DefaultRank,
+          registeredAt = command.registeredAt
+        )
+
+  private def saveCredential(
+      module: AuthModuleContext,
+      command: RegisterAuthCommand,
+      player: Player
+  ): AccountCredential =
+    val passwordDigest = AuthPasswordHasher.hash(command.password)
+    module.accountCredentialRepository.save(
+      AccountCredential(
+        username = command.username,
+        playerId = player.id,
+        passwordHash = passwordDigest.hash,
+        passwordSalt = passwordDigest.salt,
+        passwordIterations = passwordDigest.iterations,
+        createdAt = command.registeredAt,
+        updatedAt = command.registeredAt
+      )
+    )
 
   private def normalizeDisplayName(displayName: String): String =
     Option(displayName)
@@ -91,3 +110,16 @@ final case class RegisterAuthAPIMessage(
         s"Player ${player.id.value} is not active",
         "inactive_account"
       )
+
+  private final case class RegisterAuthCommand(
+      username: String,
+      password: String,
+      displayName: String,
+      registeredAt: Instant
+  )
+
+  private final case class RegisterAuthResult(
+      username: String,
+      player: Player,
+      session: AuthenticatedSession
+  )

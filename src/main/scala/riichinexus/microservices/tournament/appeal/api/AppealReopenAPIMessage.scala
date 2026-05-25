@@ -1,10 +1,12 @@
 package riichinexus.microservices.tournament.appeal.api
 
+import java.time.Instant
 import java.util.NoSuchElementException
 
 import cats.effect.IO
 
 import riichinexus.api.{APIMessage, ApiPlanContext}
+import riichinexus.bootstrap.TournamentAppealModuleContext
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.tournament.appeal.objects.apiTypes.*
@@ -18,13 +20,33 @@ final case class AppealReopenAPIMessage(
 ) extends APIMessage[AppealTicketView] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[AppealTicketView] =
-    IO {
-      val request = ReopenAppealRequest(operatorId, reason, note)
-      context.support.tournamentAppealModule.service.reopenAppeal(
-        ticketId = AppealTicketId(appealId),
-        reason = request.reason,
-        actor = context.support.principal(request.operator),
-        note = request.note
-      ).map(AppealTicketView.fromDomain)
-        .getOrElse(throw NoSuchElementException("Resource not found"))
-    }
+    for
+      resolved <- IO(resolveInput)
+      actor <- IO(context.support.principal(resolved.operator))
+      reopenedAt <- IO.realTimeInstant
+      module = context.support.tournamentAppealModule
+      command = ReopenAppealCommand(AppealTicketId(appealId), resolved, actor, reopenedAt)
+      ticket <- IO(reopenAppeal(module, command))
+    yield AppealTicketView.fromDomain(ticket)
+
+  private def resolveInput: ReopenAppealRequest =
+    ReopenAppealRequest(operatorId, reason, note)
+
+  private def reopenAppeal(
+      module: TournamentAppealModuleContext,
+      command: ReopenAppealCommand
+  ): AppealTicket =
+    module.service.reopenAppeal(
+      ticketId = command.ticketId,
+      reason = command.input.reason,
+      actor = command.actor,
+      reopenedAt = command.reopenedAt,
+      note = command.input.note
+    ).getOrElse(throw NoSuchElementException("Resource not found"))
+
+  private final case class ReopenAppealCommand(
+      ticketId: AppealTicketId,
+      input: ReopenAppealRequest,
+      actor: AccessPrincipal,
+      reopenedAt: Instant
+  )

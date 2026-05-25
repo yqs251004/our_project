@@ -21,24 +21,28 @@ final case class OpsAnalyticsProcessAdvancedStatsAPIMessage(
   require(limit > 0, "Advanced stats task processing limit must be positive")
 
   override def plan(context: ApiPlanContext): IO[Vector[AdvancedStatsRecomputeTaskResponse]] =
-    IO {
-      val operator = context.support.principal(operatorId)
-      context.support.requirePermission(operator, Permission.ManageGlobalDictionary)
-      processPending(context.support.opsAnalyticsModule, limit = limit, processedAt = Instant.now())
-        .map(AdvancedStatsRecomputeTaskResponse.fromDomain)
-    }
+    for
+      operator <- IO(context.support.principal(operatorId))
+      processedAt <- IO.realTimeInstant
+      module = context.support.opsAnalyticsModule
+      command = ProcessAdvancedStatsCommand(operator, limit, processedAt)
+      _ <- IO(requireOpsAdmin(context, command.operator))
+      tasks <- IO(processPending(module, command))
+    yield tasks.map(AdvancedStatsRecomputeTaskResponse.fromDomain)
+
+  private def requireOpsAdmin(context: ApiPlanContext, operator: AccessPrincipal): Unit =
+    context.support.requirePermission(operator, Permission.ManageGlobalDictionary)
 
   private val retryDelay = Duration.ofMinutes(5)
   private val maxAttempts = 3
 
   private def processPending(
       module: OpsAnalyticsModuleContext,
-      limit: Int,
-      processedAt: Instant
+      command: ProcessAdvancedStatsCommand
   ): Vector[AdvancedStatsRecomputeTask] =
-    module.advancedStatsRecomputeTaskRepository.findPending(limit, processedAt).flatMap { task =>
+    module.advancedStatsRecomputeTaskRepository.findPending(command.limit, command.processedAt).flatMap { task =>
       val maybeProcessing =
-        try Some(module.advancedStatsRecomputeTaskRepository.save(task.markProcessing(processedAt)))
+        try Some(module.advancedStatsRecomputeTaskRepository.save(task.markProcessing(command.processedAt)))
         catch
           case _: OptimisticConcurrencyException =>
             None
@@ -47,14 +51,14 @@ final case class OpsAnalyticsProcessAdvancedStatsAPIMessage(
         try
           processing.owner match
             case DashboardOwner.Player(playerId) =>
-              module.advancedStatsBoardRepository.save(rebuildPlayerBoard(module, playerId, processedAt))
+              module.advancedStatsBoardRepository.save(rebuildPlayerBoard(module, playerId, command.processedAt))
             case DashboardOwner.Club(clubId) =>
               val club = module.clubRepository.findById(clubId).getOrElse(
                 throw NoSuchElementException(s"Club ${clubId.value} was not found")
               )
-              module.advancedStatsBoardRepository.save(rebuildClubBoard(module, club, processedAt))
+              module.advancedStatsBoardRepository.save(rebuildClubBoard(module, club, command.processedAt))
 
-          try module.advancedStatsRecomputeTaskRepository.save(processing.markCompleted(processedAt))
+          try module.advancedStatsRecomputeTaskRepository.save(processing.markCompleted(command.processedAt))
           catch
             case _: OptimisticConcurrencyException =>
               module.advancedStatsRecomputeTaskRepository.findById(processing.id).getOrElse(processing)
@@ -64,11 +68,11 @@ final case class OpsAnalyticsProcessAdvancedStatsAPIMessage(
           case error: Throwable =>
             val errorMessage = Option(error.getMessage).getOrElse(error.getClass.getSimpleName)
             if processing.attempts >= maxAttempts then
-              module.advancedStatsRecomputeTaskRepository.save(processing.markDeadLetter(errorMessage, processedAt))
+              module.advancedStatsRecomputeTaskRepository.save(processing.markDeadLetter(errorMessage, command.processedAt))
             else
-              val retryAt = processedAt.plus(retryDelay)
+              val retryAt = command.processedAt.plus(retryDelay)
               module.advancedStatsRecomputeTaskRepository.save(
-                processing.markRetryScheduled(errorMessage, processedAt, retryAt)
+                processing.markRetryScheduled(errorMessage, command.processedAt, retryAt)
               )
       }
     }
@@ -97,3 +101,9 @@ final case class OpsAnalyticsProcessAdvancedStatsAPIMessage(
     val existingVersion =
       module.advancedStatsBoardRepository.findByOwner(DashboardOwner.Club(club.id)).map(_.version).getOrElse(0)
     buildClubBoard(club, memberBoards, at).copy(version = existingVersion)
+
+  private final case class ProcessAdvancedStatsCommand(
+      operator: AccessPrincipal,
+      limit: Int,
+      processedAt: Instant
+  )

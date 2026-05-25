@@ -14,26 +14,27 @@ final case class PublicClubLeaderboardAPIMessage(
 ) extends APIMessage[PagedResponse[ClubLeaderboardEntry]] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[ClubLeaderboardEntry]] =
-    IO {
-      val module = context.support.publicQueryModule
-      context.support.authorizationService
-        .requirePermission(AccessPrincipal.guest(), Permission.ViewPublicLeaderboard)
+    for
+      query <- IO(resolveQuery(context))
+      leaderboard <- IO(listLeaderboard(context, query))
+    yield PagedResponse.fromItems(leaderboard, limit, offset, query.appliedFilters)(identity)
 
-      val leaderboard = module.tables.publicClubLeaderboard(Int.MaxValue)
-        .filter(entry => name.filter(_.nonEmpty).forall(context.support.containsIgnoreCase(entry.name, _)))
-      val resolvedLimit = limit.getOrElse(20)
-      val resolvedOffset = offset.getOrElse(0)
-      require(resolvedLimit > 0, "Input field limit must be positive")
-      require(resolvedOffset >= 0, "Input field offset must be non-negative")
-      val boundedLimit = math.min(resolvedLimit, 100)
-      val page = leaderboard.slice(resolvedOffset, resolvedOffset + boundedLimit)
+  private def resolveQuery(context: ApiPlanContext): ResolvedClubLeaderboardQuery =
+    context.support.authorizationService
+      .requirePermission(AccessPrincipal.guest(), Permission.ViewPublicLeaderboard)
+    ResolvedClubLeaderboardQuery(
+      name = name.filter(_.nonEmpty),
+      appliedFilters = Vector(name.filter(_.nonEmpty).map("name" -> _)).flatten.toMap
+    )
 
-      PagedResponse(
-        items = page,
-        total = leaderboard.size,
-        limit = boundedLimit,
-        offset = resolvedOffset,
-        hasMore = resolvedOffset + page.size < leaderboard.size,
-        appliedFilters = Vector(name.filter(_.nonEmpty).map("name" -> _)).flatten.toMap
-      )
-    }
+  private def listLeaderboard(
+      context: ApiPlanContext,
+      query: ResolvedClubLeaderboardQuery
+  ): Vector[ClubLeaderboardEntry] =
+    context.support.publicQueryModule.tables.publicClubLeaderboard(Int.MaxValue)
+      .filter(entry => query.name.forall(context.support.containsIgnoreCase(entry.name, _)))
+
+  private final case class ResolvedClubLeaderboardQuery(
+      name: Option[String],
+      appliedFilters: Map[String, String]
+  )

@@ -15,10 +15,16 @@ final case class OpsAnalyticsPlayerDashboardAPIMessage(
 ) extends APIMessage[DashboardResponse] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[DashboardResponse] =
-    IO {
-      val operator = context.support.principal(operatorId)
-      context.support.requirePermission(operator, Permission.ViewOwnDashboard, subjectPlayerId = Some(playerId))
-      context.support.opsAnalyticsModule.tables.findDashboard(DashboardOwner.Player(playerId))
-        .map(DashboardResponse.fromDomain)
-        .getOrElse(throw NoSuchElementException(s"Dashboard for player ${playerId.value} was not found"))
-    }
+    for
+      operator <- IO(context.support.principal(operatorId))
+      _ <- IO(requireDashboardPermission(context, operator))
+      dashboard <- IO(findDashboard(context))
+    yield DashboardResponse.fromDomain(dashboard)
+
+  private def requireDashboardPermission(context: ApiPlanContext, operator: AccessPrincipal): Unit =
+    context.support.requirePermission(operator, Permission.ViewOwnDashboard, subjectPlayerId = Some(playerId))
+
+  private def findDashboard(context: ApiPlanContext): Dashboard =
+    context.support.opsAnalyticsModule.tables
+      .findDashboard(DashboardOwner.Player(playerId))
+      .getOrElse(throw NoSuchElementException(s"Dashboard for player ${playerId.value} was not found"))

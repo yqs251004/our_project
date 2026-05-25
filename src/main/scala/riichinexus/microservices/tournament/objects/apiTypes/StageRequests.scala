@@ -7,7 +7,7 @@ import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.*
 
 final case class CreateTournamentStageRequest(
-    id: Option[String],
+    id: Option[String] = None,
     name: String,
     format: String,
     order: Int,

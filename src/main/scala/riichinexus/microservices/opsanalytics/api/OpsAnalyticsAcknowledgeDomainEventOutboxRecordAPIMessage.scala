@@ -1,6 +1,8 @@
 package riichinexus.microservices.opsanalytics.api
 
-import java.util.NoSuchElementException
+import riichinexus.microservices.opsanalytics.tables.OpsAnalyticsDomainEventOutboxOperations
+
+import java.time.Instant
 
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
@@ -17,37 +19,28 @@ final case class OpsAnalyticsAcknowledgeDomainEventOutboxRecordAPIMessage(
 ) extends APIMessage[DomainEventOutboxRecordResponse] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[DomainEventOutboxRecordResponse] =
-    IO {
-      val module = context.support.opsAnalyticsModule
-      val actor = context.support.principal(operatorId)
-      val at = java.time.Instant.now()
-      module.transactionManager.inTransaction {
-        module.authorizationService.requirePermission(actor, Permission.ManageGlobalDictionary)
-        val record = module.domainEventOutboxRepository.findById(recordId)
-          .getOrElse(throw NoSuchElementException(s"Domain event outbox record ${recordId.value} was not found"))
-        require(
-          Set(DomainEventOutboxStatus.DeadLetter, DomainEventOutboxStatus.Quarantined).contains(record.status),
-          s"Only DeadLetter or Quarantined outbox records can be acknowledged, but ${recordId.value} is ${record.status}"
-        )
+    for
+      actor <- IO(context.support.principal(operatorId))
+      acknowledgedAt <- IO.realTimeInstant
+      command = AcknowledgeOutboxRecordCommand(recordId, actor, acknowledgedAt, note)
+      record <- IO(acknowledgeOutboxRecord(context, command))
+    yield DomainEventOutboxRecordResponse.fromDomain(record)
 
-        val acknowledged = module.domainEventOutboxRepository.save(record.markCompleted(at))
-        module.auditEventRepository.save(
-          AuditEventEntry(
-            id = IdGenerator.auditEventId(),
-            aggregateType = "domain-event-outbox-record",
-            aggregateId = recordId.value,
-            eventType = "DomainEventOutboxAcknowledged",
-            occurredAt = at,
-            actorId = actor.playerId,
-            details = Map(
-              "priorStatus" -> record.status.toString,
-              "eventType" -> record.eventType,
-              "aggregateType" -> record.aggregateType,
-              "aggregateId" -> record.aggregateId
-            ),
-            note = note
-          )
-        )
-        DomainEventOutboxRecordResponse.fromDomain(acknowledged)
-      }
-    }
+  private def acknowledgeOutboxRecord(
+      context: ApiPlanContext,
+      command: AcknowledgeOutboxRecordCommand
+  ): DomainEventOutboxRecord =
+    OpsAnalyticsDomainEventOutboxOperations.acknowledge(
+      context,
+      command.recordId,
+      command.actor,
+      command.acknowledgedAt,
+      command.note
+    )
+
+  private final case class AcknowledgeOutboxRecordCommand(
+      recordId: DomainEventOutboxRecordId,
+      actor: AccessPrincipal,
+      acknowledgedAt: Instant,
+      note: Option[String]
+  )

@@ -12,6 +12,7 @@ import riichinexus.domain.model.{
   EventCascadeRecord as DomainEventCascadeRecord,
   EventCascadeStatus
 }
+import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.*
 
 type DomainEventDeliveryStatus = String

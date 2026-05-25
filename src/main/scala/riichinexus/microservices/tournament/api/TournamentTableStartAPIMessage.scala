@@ -5,6 +5,7 @@ import java.time.Instant
 
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
+import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.tournament.objects.*
@@ -19,22 +20,35 @@ import upickle.default.*
 final case class TournamentTableStartAPIMessage(tableId: String, operatorId: Option[String] = None) extends APIMessage[TournamentTableView] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[TournamentTableView] =
-    IO {
-      val module = context.support.tournamentModule
-      val actor = OperatorRequest(operatorId.filter(_.nonEmpty)).operator
-        .map(context.support.principal)
-        .getOrElse(AccessPrincipal.system)
-      val id = TableId(tableId)
+    for
+      actor <- IO(resolveOperatorActor(context))
+      startedAt <- IO.realTimeInstant
+      module = context.support.tournamentModule
+      command = StartTableCommand(TableId(tableId), actor, startedAt)
+      table <- IO {
+        module.transactionManager.inTransaction {
+          startTable(module, command)
+        }.getOrElse(throw NoSuchElementException("Resource not found"))
+      }
+    yield TournamentTableView.fromDomain(table)
 
-      module.transactionManager.inTransaction {
-        module.tableRepository.findById(id).map { table =>
-          module.authorizationService.requirePermission(
-            actor,
-            Permission.ManageTournamentStages,
-            tournamentId = Some(table.tournamentId)
-          )
+  private def resolveOperatorActor(context: ApiPlanContext): AccessPrincipal =
+    OperatorRequest(operatorId.filter(_.nonEmpty)).operator
+      .map(context.support.principal)
+      .getOrElse(AccessPrincipal.system)
 
-          TournamentTableView.fromDomain(module.tableRepository.save(table.start(Instant.now())))
-        }
-      }.getOrElse(throw NoSuchElementException("Resource not found"))
+  private def startTable(module: TournamentModuleContext, command: StartTableCommand): Option[Table] =
+    module.tableRepository.findById(command.tableId).map { table =>
+      module.authorizationService.requirePermission(
+        command.actor,
+        Permission.ManageTournamentStages,
+        tournamentId = Some(table.tournamentId)
+      )
+      module.tableRepository.save(table.start(command.startedAt))
     }
+
+  private final case class StartTableCommand(
+      tableId: TableId,
+      actor: AccessPrincipal,
+      startedAt: Instant
+  )

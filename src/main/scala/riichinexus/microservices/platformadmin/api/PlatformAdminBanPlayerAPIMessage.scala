@@ -6,6 +6,8 @@ import java.time.Instant
 import java.util.NoSuchElementException
 
 import riichinexus.api.{APIMessage, ApiPlanContext}
+import riichinexus.application.changes.{DomainChange, DomainChangeInterpreter}
+import riichinexus.bootstrap.PlatformAdminModuleContext
 import riichinexus.domain.event.PlayerBanned
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
@@ -20,34 +22,61 @@ final case class PlatformAdminBanPlayerAPIMessage(
 ) extends APIMessage[PlatformAdminPlayerResponse] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[PlatformAdminPlayerResponse] =
-    IO {
-      val module = context.support.platformAdminModule
-      val request = BanPlayerRequest(operatorId = operatorId, reason = reason)
-      val actor = context.support.principal(request.operatorId)
-      val bannedAt = Instant.now()
-
-      module.transactionManager.inTransaction {
-        module.authorizationService.requirePermission(actor, Permission.BanRegisteredPlayer)
-        require(request.reason.trim.nonEmpty, "Ban reason cannot be empty")
-
-        module.tables.findPlayer(playerId).map { player =>
-          val banned = module.playerRepository.save(player.ban(request.reason))
-          module.auditEventRepository.save(
-            AuditEventEntry(
-              id = IdGenerator.auditEventId(),
-              aggregateType = "player",
-              aggregateId = playerId.value,
-              eventType = "PlayerBanned",
-              occurredAt = bannedAt,
-              actorId = actor.playerId,
-              details = Map("reason" -> request.reason),
-              note = Some(request.reason)
-            )
-          )
-          module.eventBus.publish(PlayerBanned(playerId, request.reason, bannedAt))
-          banned
-        }
+    for
+      actor <- IO(context.support.principal(operatorId))
+      module = context.support.platformAdminModule
+      request = BanPlayerRequest(operatorId = operatorId, reason = reason)
+      bannedAt <- IO.realTimeInstant
+      command = BanPlayerCommand(
+        playerId = playerId,
+        actor = actor,
+        reason = request.reason,
+        bannedAt = bannedAt
+      )
+      player <- IO {
+        module.transactionManager
+          .inTransaction {
+            banPlayer(module, command)
+          }
+          .getOrElse(throw NoSuchElementException(s"Player ${command.playerId.value} was not found"))
       }
-        .map(PlatformAdminPlayerView.fromDomain)
-        .getOrElse(throw NoSuchElementException(s"Player ${playerId.value} was not found"))
+    yield PlatformAdminPlayerView.fromDomain(player)
+
+  private def banPlayer(
+      module: PlatformAdminModuleContext,
+      command: BanPlayerCommand
+  ): Option[Player] =
+    module.authorizationService.requirePermission(command.actor, Permission.BanRegisteredPlayer)
+    require(command.reason.trim.nonEmpty, "Ban reason cannot be empty")
+
+    module.tables.findPlayer(command.playerId).map { player =>
+      DomainChangeInterpreter
+        .auditAndEvents(module.transactionManager, module.auditEventRepository, module.eventBus)
+        .commitWithinTransaction(
+          DomainChange(
+            aggregate = player.ban(command.reason),
+            persist = module.playerRepository.save,
+            auditEntries = _ =>
+              Vector(
+                AuditEventEntry(
+                  id = IdGenerator.auditEventId(),
+                  aggregateType = "player",
+                  aggregateId = command.playerId.value,
+                  eventType = "PlayerBanned",
+                  occurredAt = command.bannedAt,
+                  actorId = command.actor.playerId,
+                  details = Map("reason" -> command.reason),
+                  note = Some(command.reason)
+                )
+              ),
+            domainEvents = _ => Vector(PlayerBanned(command.playerId, command.reason, command.bannedAt))
+          )
+        )
     }
+
+  private final case class BanPlayerCommand(
+      playerId: PlayerId,
+      actor: AccessPrincipal,
+      reason: String,
+      bannedAt: Instant
+  )

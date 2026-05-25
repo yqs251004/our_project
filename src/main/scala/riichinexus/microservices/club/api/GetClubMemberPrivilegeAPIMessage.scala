@@ -15,8 +15,19 @@ final case class GetClubMemberPrivilegeAPIMessage(
 ) extends APIMessage[ClubMemberPrivilegeSnapshotResponse] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[ClubMemberPrivilegeSnapshotResponse] =
-    IO {
-      context.support.clubModule.tables.memberPrivilegeSnapshot(ClubId(clubId), PlayerId(playerId))
-        .map(ClubMemberPrivilegeSnapshotResponse.fromDomain)
-        .getOrElse(throw NoSuchElementException("Resource not found"))
-    }
+    for
+      input <- IO(GetClubMemberPrivilegeInput(ClubId(clubId), PlayerId(playerId)))
+      snapshot <- IO(resolveSnapshot(context, input))
+    yield ClubMemberPrivilegeSnapshotResponse.fromDomain(snapshot)
+
+  private def resolveSnapshot(
+      context: ApiPlanContext,
+      input: GetClubMemberPrivilegeInput
+  ): ClubMemberPrivilegeSnapshot =
+    context.support.clubModule.tables.memberPrivilegeSnapshot(input.clubId, input.playerId)
+      .getOrElse(throw NoSuchElementException("Resource not found"))
+
+  private final case class GetClubMemberPrivilegeInput(
+      clubId: ClubId,
+      playerId: PlayerId
+  )

@@ -20,71 +20,108 @@ import upickle.default.*
 final case class TournamentStageCompleteAPIMessage(tournamentId: String, stageId: String, request: CompleteStageRequest) extends APIMessage[riichinexus.microservices.tournament.objects.apiTypes.StageAdvancementSnapshot] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[riichinexus.microservices.tournament.objects.apiTypes.StageAdvancementSnapshot] =
-    IO {
-      val module = context.support.tournamentModule
-      val tournamentIdValue = TournamentId(tournamentId)
-      val stageIdValue = TournamentStageId(stageId)
-      val actor = request.operator.map(context.support.principal).getOrElse(AccessPrincipal.system)
-      val completedAt = Instant.now()
+    for
+      completedAt <- IO.realTimeInstant
+      module = context.support.tournamentModule
+      command = CompleteStageCommand(
+        tournamentId = TournamentId(tournamentId),
+        stageId = TournamentStageId(stageId),
+        actor = request.operator.map(context.support.principal).getOrElse(AccessPrincipal.system),
+        completedAt = completedAt
+      )
+      advancement <- IO {
+        module.transactionManager
+          .inTransaction {
+            completeStage(module, command)
+          }
+          .getOrElse(throw NoSuchElementException("Resource not found"))
+      }
+    yield riichinexus.microservices.tournament.objects.apiTypes.StageAdvancementSnapshot.fromDomain(advancement)
 
-      module.transactionManager.inTransaction {
-        module.tournamentRepository.findById(tournamentIdValue).map { tournament =>
-          module.authorizationService.requirePermission(
-            actor,
-            Permission.ManageTournamentStages,
-            tournamentId = Some(tournamentIdValue)
-          )
+  private def completeStage(
+      module: TournamentModuleContext,
+      command: CompleteStageCommand
+  ): Option[StageAdvancementSnapshot] =
+    module.tournamentRepository.findById(command.tournamentId).map { tournament =>
+      module.authorizationService.requirePermission(
+        command.actor,
+        Permission.ManageTournamentStages,
+        tournamentId = Some(command.tournamentId)
+      )
 
-          val stage = tournament.stages
-            .find(_.id == stageIdValue)
-            .getOrElse(throw NoSuchElementException(s"Stage ${stageIdValue.value} was not found"))
-          val stageTables = module.tableRepository.findByTournamentAndStage(tournamentIdValue, stageIdValue)
-          val isKnockoutStage =
-            stage.format == StageFormat.Knockout ||
-              stage.format == StageFormat.Finals ||
-              stage.advancementRule.ruleType == AdvancementRuleType.KnockoutElimination
+      val stage = requireStage(tournament, command.stageId)
+      val stageTables = module.tableRepository.findByTournamentAndStage(command.tournamentId, command.stageId)
+      ensureStageCanComplete(module, tournament, stage, stageTables, command.completedAt)
 
-          if stageTables.size != stage.scheduledTableIds.size then
-            throw IllegalArgumentException(
-              s"Stage ${stageIdValue.value} cannot complete before every scheduled table is materialized"
-            )
+      val advancement =
+        module.stageQueries.stageAdvancementPreview(command.tournamentId, command.stageId, command.completedAt)
 
-          if stageTables.exists(_.status != TableStatus.Archived) then
-            throw IllegalArgumentException(
-              s"Stage ${stageIdValue.value} cannot complete while tables are still active or under appeal"
-            )
-
-          if !isKnockoutStage then
-            val participants = resolveParticipants(module, tournament, stage)
-            val records = module.matchRecordRepository.findByTournamentAndStage(tournamentIdValue, stageIdValue)
-            val effectiveRoundLimit = StageLineupSupport.effectiveRoundLimit(stage)
-            val requiredTablesPerRound =
-              expectedTablesPerRound(
-                module = module,
-                tournament = tournament,
-                stage = stage,
-                participants = participants,
-                records = records,
-                at = completedAt
-              )
-            val roundCounts = stageTables.groupBy(_.stageRoundNumber).view.mapValues(_.size).toMap
-            val missingRounds = (1 to effectiveRoundLimit).filter(roundNumber =>
-              roundCounts.getOrElse(roundNumber, 0) != requiredTablesPerRound
-            )
-
-            if stage.pendingTablePlans.nonEmpty || stage.currentRound < effectiveRoundLimit || missingRounds.nonEmpty then
-              throw IllegalArgumentException(
-                s"Stage ${stageIdValue.value} cannot complete before all $effectiveRoundLimit rounds are fully scheduled and archived"
-              )
-
-          val advancement =
-            module.stageQueries.stageAdvancementPreview(tournamentIdValue, stageIdValue, completedAt)
-
-          module.tournamentRepository.save(tournament.updateStage(stageIdValue, _.complete))
-          riichinexus.microservices.tournament.objects.apiTypes.StageAdvancementSnapshot.fromDomain(advancement)
-        }
-      }.getOrElse(throw NoSuchElementException("Resource not found"))
+      module.tournamentRepository.save(tournament.updateStage(command.stageId, _.complete))
+      advancement
     }
+
+  private def requireStage(tournament: Tournament, stageId: TournamentStageId): TournamentStage =
+    tournament.stages
+      .find(_.id == stageId)
+      .getOrElse(throw NoSuchElementException(s"Stage ${stageId.value} was not found"))
+
+  private def ensureStageCanComplete(
+      module: TournamentModuleContext,
+      tournament: Tournament,
+      stage: TournamentStage,
+      stageTables: Vector[Table],
+      completedAt: Instant
+  ): Unit =
+    ensureAllTablesMaterialized(stage, stageTables)
+    ensureAllTablesArchived(stage, stageTables)
+    if !isKnockoutStage(stage) then
+      ensureNonKnockoutRoundsComplete(module, tournament, stage, stageTables, completedAt)
+
+  private def ensureAllTablesMaterialized(stage: TournamentStage, stageTables: Vector[Table]): Unit =
+    if stageTables.size != stage.scheduledTableIds.size then
+      throw IllegalArgumentException(
+        s"Stage ${stage.id.value} cannot complete before every scheduled table is materialized"
+      )
+
+  private def ensureAllTablesArchived(stage: TournamentStage, stageTables: Vector[Table]): Unit =
+    if stageTables.exists(_.status != TableStatus.Archived) then
+      throw IllegalArgumentException(
+        s"Stage ${stage.id.value} cannot complete while tables are still active or under appeal"
+      )
+
+  private def ensureNonKnockoutRoundsComplete(
+      module: TournamentModuleContext,
+      tournament: Tournament,
+      stage: TournamentStage,
+      stageTables: Vector[Table],
+      completedAt: Instant
+  ): Unit =
+    val participants = resolveParticipants(module, tournament, stage)
+    val records = module.matchRecordRepository.findByTournamentAndStage(tournament.id, stage.id)
+    val effectiveRoundLimit = StageLineupSupport.effectiveRoundLimit(stage)
+    val requiredTablesPerRound =
+      expectedTablesPerRound(
+        module = module,
+        tournament = tournament,
+        stage = stage,
+        participants = participants,
+        records = records,
+        at = completedAt
+      )
+    val roundCounts = stageTables.groupBy(_.stageRoundNumber).view.mapValues(_.size).toMap
+    val missingRounds = (1 to effectiveRoundLimit).filter(roundNumber =>
+      roundCounts.getOrElse(roundNumber, 0) != requiredTablesPerRound
+    )
+
+    if stage.pendingTablePlans.nonEmpty || stage.currentRound < effectiveRoundLimit || missingRounds.nonEmpty then
+      throw IllegalArgumentException(
+        s"Stage ${stage.id.value} cannot complete before all $effectiveRoundLimit rounds are fully scheduled and archived"
+      )
+
+  private def isKnockoutStage(stage: TournamentStage): Boolean =
+    stage.format == StageFormat.Knockout ||
+      stage.format == StageFormat.Finals ||
+      stage.advancementRule.ruleType == AdvancementRuleType.KnockoutElimination
 
   private def resolveParticipants(
       module: TournamentModuleContext,
@@ -194,3 +231,10 @@ final case class TournamentStageCompleteAPIMessage(tournamentId: String, stageId
     else
       val normalized = math.floorMod(shift, values.size)
       values.drop(normalized) ++ values.take(normalized)
+
+  private final case class CompleteStageCommand(
+      tournamentId: TournamentId,
+      stageId: TournamentStageId,
+      actor: AccessPrincipal,
+      completedAt: Instant
+  )

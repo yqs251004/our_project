@@ -1,7 +1,5 @@
 package riichinexus.infrastructure.memory
 
-import scala.collection.mutable
-
 import riichinexus.application.ports.*
 import riichinexus.domain.model.*
 
@@ -23,7 +21,7 @@ private object InMemoryAggregateRepositoryLockSupport:
         actual + 1
 
 final class InMemoryPlayerRepository extends PlayerRepository:
-  private val state = mutable.LinkedHashMap.empty[PlayerId, Player]
+  private val state = InMemoryKeyValueStore[PlayerId, Player]()
 
   override def save(player: Player): Player =
     val persisted = player.copy(
@@ -34,7 +32,7 @@ final class InMemoryPlayerRepository extends PlayerRepository:
         state.get(player.id).map(_.version)
       )
     )
-    state.update(persisted.id, persisted)
+    state.upsert(persisted.id, persisted)
     persisted
 
   override def findById(id: PlayerId): Option[Player] =
@@ -44,14 +42,14 @@ final class InMemoryPlayerRepository extends PlayerRepository:
     state.values.find(_.userId == userId)
 
   override def findAll(): Vector[Player] =
-    state.values.toVector
+    state.values
 
 object InMemoryPlayerRepository:
   def apply(): InMemoryPlayerRepository =
     new InMemoryPlayerRepository()
 
 final class InMemoryClubRepository extends ClubRepository:
-  private val state = mutable.LinkedHashMap.empty[ClubId, Club]
+  private val state = InMemoryKeyValueStore[ClubId, Club]()
 
   override def save(club: Club): Club =
     val persisted = club.copy(
@@ -62,7 +60,7 @@ final class InMemoryClubRepository extends ClubRepository:
         state.get(club.id).map(_.version)
       )
     )
-    state.update(persisted.id, persisted)
+    state.upsert(persisted.id, persisted)
     persisted
 
   override def findById(id: ClubId): Option[Club] =
@@ -72,14 +70,14 @@ final class InMemoryClubRepository extends ClubRepository:
     state.values.find(_.name == name)
 
   override def findAll(): Vector[Club] =
-    state.values.toVector
+    state.values
 
 object InMemoryClubRepository:
   def apply(): InMemoryClubRepository =
     new InMemoryClubRepository()
 
 final class InMemoryTournamentRepository extends TournamentRepository:
-  private val state = mutable.LinkedHashMap.empty[TournamentId, Tournament]
+  private val state = InMemoryKeyValueStore[TournamentId, Tournament]()
 
   override def save(tournament: Tournament): Tournament =
     val normalized = TournamentDefaults.ensureInitialStage(tournament)
@@ -91,7 +89,7 @@ final class InMemoryTournamentRepository extends TournamentRepository:
         state.get(normalized.id).map(_.version)
       )
     )
-    state.update(persisted.id, persisted)
+    state.upsert(persisted.id, persisted)
     persisted
 
   override def findById(id: TournamentId): Option[Tournament] =
@@ -103,7 +101,7 @@ final class InMemoryTournamentRepository extends TournamentRepository:
     ).map(normalizeOnRead)
 
   override def findAll(): Vector[Tournament] =
-    state.values.toVector.map(normalizeOnRead)
+    state.values.map(normalizeOnRead)
 
   private def normalizeOnRead(tournament: Tournament): Tournament =
     if tournament.stages.nonEmpty then tournament
@@ -114,7 +112,7 @@ object InMemoryTournamentRepository:
     new InMemoryTournamentRepository()
 
 final class InMemoryTableRepository extends TableRepository:
-  private val state = mutable.LinkedHashMap.empty[TableId, Table]
+  private val state = InMemoryKeyValueStore[TableId, Table]()
 
   override def save(table: Table): Table =
     val persisted = table.copy(
@@ -125,11 +123,11 @@ final class InMemoryTableRepository extends TableRepository:
         state.get(table.id).map(_.version)
       )
     )
-    state.update(persisted.id, persisted)
+    state.upsert(persisted.id, persisted)
     persisted
 
   override def delete(id: TableId): Unit =
-    state.remove(id)
+    state.delete(id)
 
   override def findById(id: TableId): Option[Table] =
     state.get(id)
@@ -140,17 +138,16 @@ final class InMemoryTableRepository extends TableRepository:
   ): Vector[Table] =
     state.values
       .filter(table => table.tournamentId == tournamentId && table.stageId == stageId)
-      .toVector
 
   override def findAll(): Vector[Table] =
-    state.values.toVector
+    state.values
 
 object InMemoryTableRepository:
   def apply(): InMemoryTableRepository =
     new InMemoryTableRepository()
 
 final class InMemoryAppealTicketRepository extends AppealTicketRepository:
-  private val state = mutable.LinkedHashMap.empty[AppealTicketId, AppealTicket]
+  private val state = InMemoryKeyValueStore[AppealTicketId, AppealTicket]()
 
   override def save(ticket: AppealTicket): AppealTicket =
     val persisted = ticket.copy(
@@ -161,21 +158,21 @@ final class InMemoryAppealTicketRepository extends AppealTicketRepository:
         state.get(ticket.id).map(_.version)
       )
     )
-    state.update(persisted.id, persisted)
+    state.upsert(persisted.id, persisted)
     persisted
 
   override def findById(id: AppealTicketId): Option[AppealTicket] =
     state.get(id)
 
   override def findAll(): Vector[AppealTicket] =
-    state.values.toVector
+    state.values
 
 object InMemoryAppealTicketRepository:
   def apply(): InMemoryAppealTicketRepository =
     new InMemoryAppealTicketRepository()
 
 final class InMemoryDashboardRepository extends DashboardRepository:
-  private val state = mutable.LinkedHashMap.empty[String, Dashboard]
+  private val state = InMemoryKeyValueStore[String, Dashboard]()
 
   override def save(dashboard: Dashboard): Dashboard =
     val key = ownerKey(dashboard.owner)
@@ -187,14 +184,14 @@ final class InMemoryDashboardRepository extends DashboardRepository:
         state.get(key).map(_.version)
       )
     )
-    state.update(key, persisted)
+    state.upsert(key, persisted)
     persisted
 
   override def findByOwner(owner: DashboardOwner): Option[Dashboard] =
     state.get(ownerKey(owner))
 
   override def findAll(): Vector[Dashboard] =
-    state.values.toVector
+    state.values
 
   private def ownerKey(owner: DashboardOwner): String =
     owner match
@@ -206,7 +203,7 @@ object InMemoryDashboardRepository:
     new InMemoryDashboardRepository()
 
 final class InMemoryAdvancedStatsBoardRepository extends AdvancedStatsBoardRepository:
-  private val state = mutable.LinkedHashMap.empty[String, AdvancedStatsBoard]
+  private val state = InMemoryKeyValueStore[String, AdvancedStatsBoard]()
 
   override def save(board: AdvancedStatsBoard): AdvancedStatsBoard =
     val key = ownerKey(board.owner)
@@ -218,14 +215,14 @@ final class InMemoryAdvancedStatsBoardRepository extends AdvancedStatsBoardRepos
         state.get(key).map(_.version)
       )
     )
-    state.update(key, persisted)
+    state.upsert(key, persisted)
     persisted
 
   override def findByOwner(owner: DashboardOwner): Option[AdvancedStatsBoard] =
     state.get(ownerKey(owner))
 
   override def findAll(): Vector[AdvancedStatsBoard] =
-    state.values.toVector
+    state.values
 
   private def ownerKey(owner: DashboardOwner): String =
     owner match
@@ -237,7 +234,7 @@ object InMemoryAdvancedStatsBoardRepository:
     new InMemoryAdvancedStatsBoardRepository()
 
 final class InMemoryAdvancedStatsRecomputeTaskRepository extends AdvancedStatsRecomputeTaskRepository:
-  private val state = mutable.LinkedHashMap.empty[AdvancedStatsRecomputeTaskId, AdvancedStatsRecomputeTask]
+  private val state = InMemoryKeyValueStore[AdvancedStatsRecomputeTaskId, AdvancedStatsRecomputeTask]()
 
   override def save(task: AdvancedStatsRecomputeTask): AdvancedStatsRecomputeTask =
     val persisted = task.copy(
@@ -248,19 +245,18 @@ final class InMemoryAdvancedStatsRecomputeTaskRepository extends AdvancedStatsRe
         state.get(task.id).map(_.version)
       )
     )
-    state.update(persisted.id, persisted)
+    state.upsert(persisted.id, persisted)
     persisted
 
   override def findById(id: AdvancedStatsRecomputeTaskId): Option[AdvancedStatsRecomputeTask] =
     state.get(id)
 
   override def findAll(): Vector[AdvancedStatsRecomputeTask] =
-    state.values.toVector.sortBy(_.requestedAt)
+    state.values.sortBy(_.requestedAt)
 
   override def findPending(limit: Int, asOf: java.time.Instant = java.time.Instant.now()): Vector[AdvancedStatsRecomputeTask] =
     state.values
       .filter(_.isRunnable(asOf))
-      .toVector
       .sortBy(_.requestedAt)
       .take(limit)
 
@@ -280,7 +276,7 @@ object InMemoryAdvancedStatsRecomputeTaskRepository:
     new InMemoryAdvancedStatsRecomputeTaskRepository()
 
 final class InMemoryGlobalDictionaryRepository extends GlobalDictionaryRepository:
-  private val state = mutable.LinkedHashMap.empty[String, GlobalDictionaryEntry]
+  private val state = InMemoryKeyValueStore[String, GlobalDictionaryEntry]()
 
   override def save(entry: GlobalDictionaryEntry): GlobalDictionaryEntry =
     val persisted = entry.copy(
@@ -291,21 +287,21 @@ final class InMemoryGlobalDictionaryRepository extends GlobalDictionaryRepositor
         state.get(entry.key).map(_.version)
       )
     )
-    state.update(persisted.key, persisted)
+    state.upsert(persisted.key, persisted)
     persisted
 
   override def findByKey(key: String): Option[GlobalDictionaryEntry] =
     state.get(key)
 
   override def findAll(): Vector[GlobalDictionaryEntry] =
-    state.values.toVector
+    state.values
 
 object InMemoryGlobalDictionaryRepository:
   def apply(): InMemoryGlobalDictionaryRepository =
     new InMemoryGlobalDictionaryRepository()
 
 final class InMemoryDictionaryNamespaceRepository extends DictionaryNamespaceRepository:
-  private val state = mutable.LinkedHashMap.empty[String, DictionaryNamespaceRegistration]
+  private val state = InMemoryKeyValueStore[String, DictionaryNamespaceRegistration]()
 
   override def save(registration: DictionaryNamespaceRegistration): DictionaryNamespaceRegistration =
     val persisted = registration.copy(
@@ -316,21 +312,21 @@ final class InMemoryDictionaryNamespaceRepository extends DictionaryNamespaceRep
         state.get(registration.namespacePrefix).map(_.version)
       )
     )
-    state.update(persisted.namespacePrefix, persisted)
+    state.upsert(persisted.namespacePrefix, persisted)
     persisted
 
   override def findByPrefix(prefix: String): Option[DictionaryNamespaceRegistration] =
     state.get(prefix)
 
   override def findAll(): Vector[DictionaryNamespaceRegistration] =
-    state.values.toVector.sortBy(_.namespacePrefix)
+    state.values.sortBy(_.namespacePrefix)
 
 object InMemoryDictionaryNamespaceRepository:
   def apply(): InMemoryDictionaryNamespaceRepository =
     new InMemoryDictionaryNamespaceRepository()
 
 final class InMemoryTournamentSettlementRepository extends TournamentSettlementRepository:
-  private val state = mutable.LinkedHashMap.empty[SettlementSnapshotId, TournamentSettlementSnapshot]
+  private val state = InMemoryKeyValueStore[SettlementSnapshotId, TournamentSettlementSnapshot]()
 
   override def save(snapshot: TournamentSettlementSnapshot): TournamentSettlementSnapshot =
     val persisted = snapshot.copy(
@@ -341,7 +337,7 @@ final class InMemoryTournamentSettlementRepository extends TournamentSettlementR
         state.get(snapshot.id).map(_.version)
       )
     )
-    state.update(persisted.id, persisted)
+    state.upsert(persisted.id, persisted)
     persisted
 
   override def findById(id: SettlementSnapshotId): Option[TournamentSettlementSnapshot] =
@@ -353,15 +349,14 @@ final class InMemoryTournamentSettlementRepository extends TournamentSettlementR
   ): Option[TournamentSettlementSnapshot] =
     state.values
       .filter(snapshot => snapshot.tournamentId == tournamentId && snapshot.stageId == stageId)
-      .toVector
       .sortBy(snapshot => (snapshot.revision, snapshot.generatedAt))
       .lastOption
 
   override def findByTournament(tournamentId: TournamentId): Vector[TournamentSettlementSnapshot] =
-    state.values.filter(_.tournamentId == tournamentId).toVector.sortBy(snapshot => (snapshot.generatedAt, snapshot.revision))
+    state.values.filter(_.tournamentId == tournamentId).sortBy(snapshot => (snapshot.generatedAt, snapshot.revision))
 
   override def findAll(): Vector[TournamentSettlementSnapshot] =
-    state.values.toVector.sortBy(snapshot => (snapshot.generatedAt, snapshot.revision))
+    state.values.sortBy(snapshot => (snapshot.generatedAt, snapshot.revision))
 
 object InMemoryTournamentSettlementRepository:
   def apply(): InMemoryTournamentSettlementRepository =

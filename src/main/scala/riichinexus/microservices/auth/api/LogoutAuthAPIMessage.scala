@@ -10,14 +10,20 @@ import upickle.default.*
 final case class LogoutAuthAPIMessage() extends APIWithTokenMessage[ApiMessage] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[ApiMessage] =
-    IO {
-      val module = context.support.authModule
-      module.transactionManager.inTransaction {
-        val loggedOutAt = Instant.now()
-        module.authenticatedSessionRepository.findByToken(context.requireBearerToken).foreach { session =>
-          if session.canAuthenticate(loggedOutAt) then
-            module.authenticatedSessionRepository.save(session.revoke(loggedOutAt))
+    for
+      token <- IO(context.requireBearerToken)
+      module = context.support.authModule
+      loggedOutAt <- IO.realTimeInstant
+      _ <- IO {
+        module.transactionManager.inTransaction {
+          logout(context, token, loggedOutAt)
         }
       }
-      ApiMessage("Logged out")
+    yield ApiMessage("Logged out")
+
+  private def logout(context: ApiPlanContext, token: String, loggedOutAt: Instant): Unit =
+    val module = context.support.authModule
+    module.authenticatedSessionRepository.findByToken(token).foreach { session =>
+      if session.canAuthenticate(loggedOutAt) then
+        module.authenticatedSessionRepository.save(session.revoke(loggedOutAt))
     }

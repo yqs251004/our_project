@@ -1,14 +1,12 @@
 package riichinexus.microservices.dictionary.api
 
-import cats.effect.IO
-
 import java.time.Instant
-import java.util.NoSuchElementException
 
+import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
-import riichinexus.domain.service.GlobalDictionaryRegistry
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.dictionary.domain.DictionaryNamespaceReviewOperations
 import riichinexus.microservices.dictionary.objects.apiTypes.{DictionaryNamespaceRegistration as DictionaryNamespaceRegistrationResponse, *}
 import upickle.default.*
 
@@ -19,37 +17,37 @@ final case class DictionaryRevokeNamespaceAPIMessage(
 ) extends APIMessage[DictionaryNamespaceRegistrationResponse] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[DictionaryNamespaceRegistrationResponse] =
-    IO {
-      val module = context.support.dictionaryModule
-      val request = RevokeDictionaryNamespaceRequest(operatorId, namespacePrefix, note)
-      val actor = context.support.principal(request.operator)
-      val revokedAt = Instant.now()
+    for
+      request <- IO(RevokeDictionaryNamespaceRequest(operatorId, namespacePrefix, note))
+      actor <- IO(context.support.principal(request.operator))
+      revokedAt <- IO.realTimeInstant
+      module = context.support.dictionaryModule
+      command = RevokeNamespaceCommand(
+        actor = actor,
+        namespacePrefix = request.namespacePrefix,
+        note = request.note,
+        revokedAt = revokedAt
+      )
+      registration <- IO(
+        revokeNamespace(module, command)
+      )
+    yield DictionaryNamespaceRegistrationResponse.fromDomain(registration)
 
-      module.transactionManager.inTransaction {
-        module.authorizationService.requirePermission(actor, Permission.ManageGlobalDictionary)
-        val reviewer = actor.playerId.getOrElse(PlayerId("system"))
-        val normalizedPrefix = GlobalDictionaryRegistry.normalizeNamespacePrefix(request.namespacePrefix)
-        module.tables.findNamespaceByPrefix(normalizedPrefix).map { existing =>
-          val revoked = existing.revoke(reviewer, revokedAt, request.note)
-          module.dictionaryNamespaceRepository.save(revoked)
-          module.auditEventRepository.save(
-            AuditEventEntry(
-              id = IdGenerator.auditEventId(),
-              aggregateType = "dictionary-namespace",
-              aggregateId = normalizedPrefix,
-              eventType = "DictionaryNamespaceRevoked",
-              occurredAt = revokedAt,
-              actorId = actor.playerId,
-              details = Map(
-                "contextClubId" -> existing.contextClubId.map(_.value).getOrElse(""),
-                "ownerPlayerId" -> existing.ownerPlayerId.value,
-                "coOwnerPlayerIds" -> existing.coOwnerPlayerIds.map(_.value).mkString(","),
-                "editorPlayerIds" -> existing.editorPlayerIds.map(_.value).mkString(",")
-              ),
-              note = request.note
-            )
-          )
-          DictionaryNamespaceRegistrationResponse.fromDomain(revoked)
-        }.getOrElse(throw NoSuchElementException("Resource not found"))
-      }
-    }
+  private def revokeNamespace(
+      module: riichinexus.bootstrap.DictionaryModuleContext,
+      command: RevokeNamespaceCommand
+  ): DictionaryNamespaceRegistration =
+    DictionaryNamespaceReviewOperations.revokeNamespace(
+      module = module,
+      actor = command.actor,
+      namespacePrefix = command.namespacePrefix,
+      note = command.note,
+      revokedAt = command.revokedAt
+    )
+
+  private final case class RevokeNamespaceCommand(
+      actor: AccessPrincipal,
+      namespacePrefix: String,
+      note: Option[String],
+      revokedAt: Instant
+  )

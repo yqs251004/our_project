@@ -1,10 +1,12 @@
 package riichinexus.microservices.tournament.appeal.api
 
+import java.time.Instant
 import java.util.NoSuchElementException
 
 import cats.effect.IO
 
 import riichinexus.api.{APIMessage, ApiPlanContext}
+import riichinexus.bootstrap.TournamentAppealModuleContext
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.tournament.appeal.objects.apiTypes.*
@@ -18,13 +20,33 @@ final case class AppealResolveAPIMessage(
 ) extends APIMessage[AppealTicketView] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[AppealTicketView] =
-    IO {
-      val request = ResolveAppealRequest(operatorId, verdict, note)
-      context.support.tournamentAppealModule.service.resolveAppeal(
-        ticketId = AppealTicketId(appealId),
-        verdict = request.verdict,
-        actor = context.support.principal(request.operator),
-        note = request.note
-      ).map(AppealTicketView.fromDomain)
-        .getOrElse(throw NoSuchElementException("Resource not found"))
-    }
+    for
+      resolved <- IO(resolveInput)
+      actor <- IO(context.support.principal(resolved.operator))
+      resolvedAt <- IO.realTimeInstant
+      module = context.support.tournamentAppealModule
+      command = ResolveAppealCommand(AppealTicketId(appealId), resolved, actor, resolvedAt)
+      ticket <- IO(resolveAppeal(module, command))
+    yield AppealTicketView.fromDomain(ticket)
+
+  private def resolveInput: ResolveAppealRequest =
+    ResolveAppealRequest(operatorId, verdict, note)
+
+  private def resolveAppeal(
+      module: TournamentAppealModuleContext,
+      command: ResolveAppealCommand
+  ): AppealTicket =
+    module.service.resolveAppeal(
+      ticketId = command.ticketId,
+      verdict = command.input.verdict,
+      actor = command.actor,
+      resolvedAt = command.resolvedAt,
+      note = command.input.note
+    ).getOrElse(throw NoSuchElementException("Resource not found"))
+
+  private final case class ResolveAppealCommand(
+      ticketId: AppealTicketId,
+      input: ResolveAppealRequest,
+      actor: AccessPrincipal,
+      resolvedAt: Instant
+  )

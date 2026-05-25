@@ -5,6 +5,7 @@ import java.util.NoSuchElementException
 
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
+import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
 import riichinexus.domain.service.*
 import riichinexus.infrastructure.json.JsonCodecs.given
@@ -20,53 +21,75 @@ final case class WithdrawClubApplicationAPIMessage(
 ) extends APIMessage[ClubMembershipApplicationResponse] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[ClubMembershipApplicationResponse] =
-    IO {
-      val module = context.support.clubModule
-      val parsedClubId = ClubId(clubId)
-      val parsedMembershipId = MembershipApplicationId(membershipId)
-      val actor = context.support.requestActor(
-        guestSessionId.filter(_.nonEmpty).map(GuestSessionId(_)),
-        operatorId.filter(_.nonEmpty).map(PlayerId(_))
+    for
+      actor <- IO(resolveActor(context))
+      withdrawnAt <- IO.realTimeInstant
+      module = context.support.clubModule
+      command = WithdrawClubApplicationCommand(
+        clubId = ClubId(clubId),
+        membershipId = MembershipApplicationId(membershipId),
+        actor = actor,
+        note = note,
+        withdrawnAt = withdrawnAt
       )
-      val withdrawnAt = Instant.now()
-
-      module.transactionManager.inTransaction {
-        module.authorizationService.requirePermission(actor, Permission.WithdrawClubApplication)
-
-        module.clubRepository.findById(parsedClubId).map { club =>
-          ensureClubActive(club)
-
-          val application = club
-            .findApplication(parsedMembershipId)
-            .getOrElse(
-              throw NoSuchElementException(
-                s"Membership application ${parsedMembershipId.value} was not found in club ${parsedClubId.value}"
-              )
-            )
-
-          if !application.isPending then
-            throw IllegalArgumentException(
-              s"Membership application ${parsedMembershipId.value} has already been reviewed"
-            )
-
-          requireApplicationOwnership(context, application, actor)
-          val updatedApplication = application.withdraw(actor.principalId, withdrawnAt, note)
-          module.clubRepository.save(club.reviewApplication(parsedMembershipId, _ => updatedApplication))
-          ClubMembershipApplicationResponse.fromDomain(updatedApplication)
+      application <- IO {
+        module.transactionManager.inTransaction {
+          withdrawApplication(module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
+    yield ClubMembershipApplicationResponse.fromDomain(application)
+
+  private def resolveActor(context: ApiPlanContext): AccessPrincipal =
+    context.support.requestActor(
+      guestSessionId.filter(_.nonEmpty).map(GuestSessionId(_)),
+      operatorId.filter(_.nonEmpty).map(PlayerId(_))
+    )
+
+  private def withdrawApplication(
+      module: ClubModuleContext,
+      command: WithdrawClubApplicationCommand
+  ): Option[ClubMembershipApplication] =
+    module.authorizationService.requirePermission(command.actor, Permission.WithdrawClubApplication)
+    module.clubRepository.findById(command.clubId).map { club =>
+      ensureClubActive(club)
+      val application = resolveApplication(club, command)
+      ensureApplicationPending(application, command.membershipId)
+      requireApplicationOwnership(module, application, command.actor)
+      val updatedApplication = application.withdraw(command.actor.principalId, command.withdrawnAt, command.note)
+      module.clubRepository.save(club.reviewApplication(command.membershipId, _ => updatedApplication))
+      updatedApplication
     }
+
+  private def resolveApplication(
+      club: Club,
+      command: WithdrawClubApplicationCommand
+  ): ClubMembershipApplication =
+    club
+      .findApplication(command.membershipId)
+      .getOrElse(
+        throw NoSuchElementException(
+          s"Membership application ${command.membershipId.value} was not found in club ${command.clubId.value}"
+        )
+      )
+
+  private def ensureApplicationPending(
+      application: ClubMembershipApplication,
+      membershipId: MembershipApplicationId
+  ): Unit =
+    if !application.isPending then
+      throw IllegalArgumentException(
+        s"Membership application ${membershipId.value} has already been reviewed"
+      )
 
   private def ensureClubActive(club: Club): Unit =
     if club.dissolvedAt.nonEmpty then
       throw IllegalArgumentException(s"Club ${club.id.value} has already been dissolved")
 
   private def requireApplicationOwnership(
-      context: ApiPlanContext,
+      module: ClubModuleContext,
       application: ClubMembershipApplication,
       actor: AccessPrincipal
   ): Unit =
-    val module = context.support.clubModule
     val ownedByGuest =
       actor.isGuest && application.applicantUserId.contains(s"guest:${actor.principalId}")
 
@@ -79,3 +102,11 @@ final case class WithdrawClubApplicationAPIMessage(
       throw AuthorizationFailure(
         s"${actor.displayName} cannot withdraw membership application ${application.id.value}"
       )
+
+  private final case class WithdrawClubApplicationCommand(
+      clubId: ClubId,
+      membershipId: MembershipApplicationId,
+      actor: AccessPrincipal,
+      note: Option[String],
+      withdrawnAt: Instant
+  )

@@ -14,36 +14,57 @@ import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 
 final case class TournamentRecordListAPIMessage(
-    playerId: Option[String] = None,
-    tournamentId: Option[String] = None,
-    stageId: Option[String] = None,
-    tableId: Option[String] = None,
-    limit: Option[Int] = None,
-    offset: Option[Int] = None
+    query: MatchRecordListQuery = MatchRecordListQuery()
 ) extends APIMessage[PagedResponse[TournamentMatchRecordView]] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[TournamentMatchRecordView]] =
-    IO {
-      val query = MatchRecordListQuery(playerId.filter(_.nonEmpty).map(PlayerId(_)), tournamentId.filter(_.nonEmpty).map(TournamentId(_)), stageId.filter(_.nonEmpty).map(TournamentStageId(_)), tableId.filter(_.nonEmpty).map(TableId(_)))
-      val records = context.support.tournamentModule.tables
-        .listMatchRecords()
-        .filter(record => query.playerId.forall(record.playerIds.contains))
-        .filter(record => query.tournamentId.forall(_ == record.tournamentId))
-        .filter(record => query.stageId.forall(_ == record.stageId))
-        .filter(record => query.tableId.forall(_ == record.tableId))
-        .sortBy(record => (record.generatedAt, record.id.value))
-        .map(TournamentMatchRecordView.fromDomain)
-      page(records, filters(playerId.filter(_.nonEmpty).map("playerId" -> _), tournamentId.filter(_.nonEmpty).map("tournamentId" -> _), stageId.filter(_.nonEmpty).map("stageId" -> _), tableId.filter(_.nonEmpty).map("tableId" -> _)))
-    }
+    for
+      resolved <- IO(resolveQuery)
+      records <- IO(listRecords(context, resolved))
+    yield pagedResponse(records, resolved)
 
-  private def page(items: Vector[TournamentMatchRecordView], appliedFilters: Map[String, String]): PagedResponse[TournamentMatchRecordView] =
-    val resolvedLimit = limit.getOrElse(20)
-    val resolvedOffset = offset.getOrElse(0)
-    require(resolvedLimit > 0, "Input field limit must be positive")
-    require(resolvedOffset >= 0, "Input field offset must be non-negative")
-    val boundedLimit = math.min(resolvedLimit, 100)
-    val pageItems = items.slice(resolvedOffset, resolvedOffset + boundedLimit)
-    PagedResponse(pageItems, items.size, boundedLimit, resolvedOffset, resolvedOffset + pageItems.size < items.size, appliedFilters)
+  private def resolveQuery: ResolvedMatchRecordListQuery =
+    ResolvedMatchRecordListQuery(
+      query = query,
+      limit = query.limit.getOrElse(20),
+      offset = query.offset.getOrElse(0),
+      appliedFilters = filters(
+        query.playerId.map(value => "playerId" -> value.value),
+        query.tournamentId.map(value => "tournamentId" -> value.value),
+        query.stageId.map(value => "stageId" -> value.value),
+        query.tableId.map(value => "tableId" -> value.value)
+      )
+    )
+
+  private def listRecords(
+      context: ApiPlanContext,
+      resolved: ResolvedMatchRecordListQuery
+  ): Vector[TournamentMatchRecordView] =
+    context.support.tournamentModule.tables
+      .listMatchRecords()
+      .filter(record => resolved.query.playerId.forall(record.playerIds.contains))
+      .filter(record => resolved.query.tournamentId.forall(_ == record.tournamentId))
+      .filter(record => resolved.query.stageId.forall(_ == record.stageId))
+      .filter(record => resolved.query.tableId.forall(_ == record.tableId))
+      .sortBy(record => (record.generatedAt, record.id.value))
+      .map(TournamentMatchRecordView.fromDomain)
+
+  private def pagedResponse(
+      items: Vector[TournamentMatchRecordView],
+      query: ResolvedMatchRecordListQuery
+  ): PagedResponse[TournamentMatchRecordView] =
+    require(query.limit > 0, "Input field limit must be positive")
+    require(query.offset >= 0, "Input field offset must be non-negative")
+    val boundedLimit = math.min(query.limit, 100)
+    val pageItems = items.slice(query.offset, query.offset + boundedLimit)
+    PagedResponse(pageItems, items.size, boundedLimit, query.offset, query.offset + pageItems.size < items.size, query.appliedFilters)
 
   private def filters(values: Option[(String, String)]*): Map[String, String] =
     values.flatten.toMap
+
+  private final case class ResolvedMatchRecordListQuery(
+      query: MatchRecordListQuery,
+      limit: Int,
+      offset: Int,
+      appliedFilters: Map[String, String]
+  )

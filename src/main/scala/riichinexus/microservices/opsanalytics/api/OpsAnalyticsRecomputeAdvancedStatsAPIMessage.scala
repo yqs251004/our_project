@@ -7,66 +7,71 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.OpsAnalyticsModuleContext
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.opsanalytics.objects.apiTypes.{AdvancedStatsRecomputeTask as AdvancedStatsRecomputeTaskResponse}
+import riichinexus.microservices.opsanalytics.objects.apiTypes.{AdvancedStatsRecomputeRequest, AdvancedStatsRecomputeTask as AdvancedStatsRecomputeTaskResponse}
 import upickle.default.*
 
 final case class OpsAnalyticsRecomputeAdvancedStatsAPIMessage(
-    operatorId: PlayerId,
-    mode: AdvancedStatsBackfillMode = AdvancedStatsBackfillMode.Full,
-    ownerType: Option[String] = None,
-    ownerId: Option[String] = None,
-    reason: Option[String] = None,
-    limit: Int = 500
+    request: AdvancedStatsRecomputeRequest
 ) extends APIMessage[Vector[AdvancedStatsRecomputeTaskResponse]] derives ReadWriter:
 
-  require(ownerType.nonEmpty == ownerId.nonEmpty, "ownerType and ownerId must be provided together")
-  require(limit > 0, "Advanced stats recompute limit must be positive")
-
   override def plan(context: ApiPlanContext): IO[Vector[AdvancedStatsRecomputeTaskResponse]] =
-    IO {
-      val operator = context.support.principal(operatorId)
-      context.support.requirePermission(operator, Permission.ManageGlobalDictionary)
-      val module = context.support.opsAnalyticsModule
-      val requestedAt = Instant.now()
-      val tasks = (ownerType, ownerId) match
-        case (Some("player"), Some(id)) =>
-          Vector(
-            enqueueOwnerRecompute(
-              module,
-              owner = DashboardOwner.Player(PlayerId(id)),
-              reason = reason.getOrElse("manual-targeted-recompute"),
-              requestedAt = requestedAt
-            )
+    for
+      operator <- IO(context.support.principal(request.operatorId))
+      requestedAt <- IO.realTimeInstant
+      module = context.support.opsAnalyticsModule
+      command <- IO(resolveCommand(operator, requestedAt))
+      _ <- IO(requireOpsAdmin(context, command.operator))
+      tasks <- IO(enqueueRecompute(module, command))
+    yield tasks.map(AdvancedStatsRecomputeTaskResponse.fromDomain)
+
+  private def resolveCommand(
+      operator: AccessPrincipal,
+      requestedAt: Instant
+  ): RecomputeAdvancedStatsCommand =
+    RecomputeAdvancedStatsCommand(
+      operator = operator,
+      targetOwner = request.targetOwner,
+      mode = request.mode,
+      targetedReason = request.targetedReason,
+      fullReason = request.fullReason,
+      backfillReason = request.backfillReason,
+      limit = request.limit,
+      requestedAt = requestedAt
+    )
+
+  private def requireOpsAdmin(context: ApiPlanContext, operator: AccessPrincipal): Unit =
+    context.support.requirePermission(operator, Permission.ManageGlobalDictionary)
+
+  private def enqueueRecompute(
+      module: OpsAnalyticsModuleContext,
+      command: RecomputeAdvancedStatsCommand
+  ): Vector[AdvancedStatsRecomputeTask] =
+    command.targetOwner match
+      case Some(owner) =>
+        Vector(
+          enqueueOwnerRecompute(
+            module,
+            owner = owner,
+            reason = command.targetedReason,
+            requestedAt = command.requestedAt
           )
-        case (Some("club"), Some(id)) =>
-          Vector(
-            enqueueOwnerRecompute(
+        )
+      case None =>
+        command.mode match
+          case AdvancedStatsBackfillMode.Full =>
+            enqueueFullRecompute(
               module,
-              owner = DashboardOwner.Club(ClubId(id)),
-              reason = reason.getOrElse("manual-targeted-recompute"),
-              requestedAt = requestedAt
+              requestedAt = command.requestedAt,
+              reason = command.fullReason
             )
-          )
-        case (Some(other), Some(_)) =>
-          throw IllegalArgumentException(s"Unsupported advanced stats ownerType: $other")
-        case _ =>
-          mode match
-            case AdvancedStatsBackfillMode.Full =>
-              enqueueFullRecompute(
-                module,
-                requestedAt = requestedAt,
-                reason = reason.getOrElse("manual-full-recompute")
-              )
-            case selectedMode =>
-              enqueueBackfill(
-                module,
-                mode = selectedMode,
-                requestedAt = requestedAt,
-                reason = reason.getOrElse(s"manual-${selectedMode.toString.toLowerCase}-backfill"),
-                limit = limit
-              )
-      tasks.map(AdvancedStatsRecomputeTaskResponse.fromDomain)
-    }
+          case selectedMode =>
+            enqueueBackfill(
+              module,
+              mode = selectedMode,
+              requestedAt = command.requestedAt,
+              reason = command.backfillReason,
+              limit = command.limit
+            )
 
   private def enqueueFullRecompute(
       module: OpsAnalyticsModuleContext,
@@ -129,3 +134,14 @@ final case class OpsAnalyticsRecomputeAdvancedStatsAPIMessage(
       case AdvancedStatsBackfillMode.Missing => board.isEmpty
       case AdvancedStatsBackfillMode.Stale =>
         board.exists(_.calculatorVersion < AdvancedStatsBoard.CurrentCalculatorVersion)
+
+  private final case class RecomputeAdvancedStatsCommand(
+      operator: AccessPrincipal,
+      targetOwner: Option[DashboardOwner],
+      mode: AdvancedStatsBackfillMode,
+      targetedReason: String,
+      fullReason: String,
+      backfillReason: String,
+      limit: Int,
+      requestedAt: Instant
+  )

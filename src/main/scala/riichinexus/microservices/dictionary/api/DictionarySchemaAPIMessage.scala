@@ -11,10 +11,10 @@ import upickle.default.*
 final case class DictionarySchemaAPIMessage() extends APIMessage[GlobalDictionarySchemaView] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[GlobalDictionarySchemaView] =
-    IO {
-      val schema = GlobalDictionaryRegistry.schemaView
+    for
+      schema <- IO(GlobalDictionaryRegistry.schemaView)
+    yield
       GlobalDictionarySchemaView(
         entries = schema.entries.map(GlobalDictionarySchemaEntry.fromDomain),
         unknownKeyPolicy = schema.unknownKeyPolicy
       )
-    }

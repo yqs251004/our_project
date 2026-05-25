@@ -5,6 +5,8 @@ import java.util.NoSuchElementException
 
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
+import riichinexus.application.changes.DomainChangeInterpreter
+import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
 import riichinexus.domain.service.*
 import riichinexus.infrastructure.json.JsonCodecs.given
@@ -19,54 +21,85 @@ final case class ClearClubTitleAPIMessage(
 ) extends APIMessage[ClubResponse] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[ClubResponse] =
-    IO {
-      val module = context.support.clubModule
-      val parsedClubId = ClubId(clubId)
-      val parsedPlayerId = PlayerId(playerId)
-      val actor = context.support.principal(PlayerId(operatorId))
-      val clearedAt = Instant.now()
-
-      module.transactionManager.inTransaction {
-        (for
-          club <- module.clubRepository.findById(parsedClubId)
-          player <- module.playerRepository.findById(parsedPlayerId)
-        yield
-          ensureClubActive(club)
-          requireActivePlayer(player, s"Player ${parsedPlayerId.value} cannot clear club title")
-          requireClubMember(club, parsedPlayerId, "clear internal title")
-          module.authorizationService.requirePermission(
-            actor,
-            Permission.SetClubTitle,
-            clubId = Some(parsedClubId)
-          )
-
-          val existingAssignment = club.titleAssignments.find(_.playerId == parsedPlayerId)
-            .getOrElse(
-              throw NoSuchElementException(
-                s"Player ${parsedPlayerId.value} does not hold a title in club ${parsedClubId.value}"
-              )
-            )
-
-          val updatedClub = module.clubRepository.save(club.clearInternalTitle(parsedPlayerId))
-          module.auditEventRepository.save(
-            AuditEventEntry(
-              id = IdGenerator.auditEventId(),
-              aggregateType = "club",
-              aggregateId = parsedClubId.value,
-              eventType = "ClubTitleCleared",
-              occurredAt = clearedAt,
-              actorId = actor.playerId,
-              details = Map(
-                "playerId" -> parsedPlayerId.value,
-                "title" -> existingAssignment.title
-              ),
-              note = note
-            )
-          )
-          ClubResponse.fromDomain(updatedClub)
-        ).getOrElse(throw NoSuchElementException("Resource not found"))
+    for
+      actor <- IO(context.support.principal(PlayerId(operatorId)))
+      clearedAt <- IO.realTimeInstant
+      module = context.support.clubModule
+      command = ClearClubTitleCommand(
+        clubId = ClubId(clubId),
+        playerId = PlayerId(playerId),
+        actor = actor,
+        note = note,
+        clearedAt = clearedAt
+      )
+      club <- IO {
+        module.transactionManager.inTransaction {
+          clearTitle(module, command)
+        }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
-    }
+    yield ClubResponse.fromDomain(club)
+
+  private def clearTitle(
+      module: ClubModuleContext,
+      command: ClearClubTitleCommand
+  ): Option[Club] =
+    for
+      club <- module.clubRepository.findById(command.clubId)
+      player <- module.playerRepository.findById(command.playerId)
+    yield
+      ensureTitleCanBeCleared(module, club, player, command)
+      val existingAssignment = resolveExistingAssignment(club, command)
+      commitTitleClear(module, club, command, existingAssignment)
+
+  private def ensureTitleCanBeCleared(
+      module: ClubModuleContext,
+      club: Club,
+      player: Player,
+      command: ClearClubTitleCommand
+  ): Unit =
+    ensureClubActive(club)
+    requireActivePlayer(player, s"Player ${command.playerId.value} cannot clear club title")
+    requireClubMember(club, command.playerId, "clear internal title")
+    module.authorizationService.requirePermission(
+      command.actor,
+      Permission.SetClubTitle,
+      clubId = Some(command.clubId)
+    )
+
+  private def resolveExistingAssignment(
+      club: Club,
+      command: ClearClubTitleCommand
+  ): ClubTitleAssignment =
+    club.titleAssignments.find(_.playerId == command.playerId)
+      .getOrElse(
+        throw NoSuchElementException(
+          s"Player ${command.playerId.value} does not hold a title in club ${command.clubId.value}"
+        )
+      )
+
+  private def commitTitleClear(
+      module: ClubModuleContext,
+      club: Club,
+      command: ClearClubTitleCommand,
+      existingAssignment: ClubTitleAssignment
+  ): Club =
+    DomainChangeInterpreter
+      .auditOnly(module.transactionManager, module.auditEventRepository)
+      .commitAudited(
+        aggregate = club.clearInternalTitle(command.playerId),
+        persist = module.clubRepository.save,
+        aggregateType = "club",
+        aggregateId = _.id.value,
+        eventType = "ClubTitleCleared",
+        occurredAt = command.clearedAt,
+        actorId = command.actor.playerId,
+        details = _ =>
+          Map(
+            "playerId" -> command.playerId.value,
+            "title" -> existingAssignment.title
+          ),
+        note = command.note
+      )
 
   private def ensureClubActive(club: Club): Unit =
     if club.dissolvedAt.nonEmpty then
@@ -81,3 +114,11 @@ final case class ClearClubTitleAPIMessage(
       throw IllegalArgumentException(
         s"Player ${playerId.value} must be a club member to $action in club ${club.id.value}"
       )
+
+  private final case class ClearClubTitleCommand(
+      clubId: ClubId,
+      playerId: PlayerId,
+      actor: AccessPrincipal,
+      note: Option[String],
+      clearedAt: Instant
+  )

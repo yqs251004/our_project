@@ -15,37 +15,38 @@ final case class ListPublicSchedulesAPIMessage(
 ) extends APIMessage[PagedResponse[PublicScheduleView]] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[PublicScheduleView]] =
-    IO {
-      val module = context.support.publicQueryModule
-      context.support.authorizationService
-        .requirePermission(AccessPrincipal.guest(), Permission.ViewPublicSchedule)
+    for
+      query <- IO(resolveQuery(context))
+      schedules <- IO(listSchedules(context, query))
+    yield PagedResponse.fromItems(schedules, limit, offset, query.appliedFilters)(identity)
 
-      val parsedTournamentStatus = tournamentStatus.filter(_.nonEmpty).map(
+  private def resolveQuery(context: ApiPlanContext): ResolvedScheduleQuery =
+    context.support.authorizationService
+      .requirePermission(AccessPrincipal.guest(), Permission.ViewPublicSchedule)
+    ResolvedScheduleQuery(
+      tournamentStatus = tournamentStatus.filter(_.nonEmpty).map(
         context.support.parseEnum("tournamentStatus", _)(TournamentStatus.valueOf)
-      )
-      val parsedStageStatus = stageStatus.filter(_.nonEmpty).map(
+      ),
+      stageStatus = stageStatus.filter(_.nonEmpty).map(
         context.support.parseEnum("stageStatus", _)(StageStatus.valueOf)
-      )
-      val schedules = module.tables.publicSchedules()
-        .filter(schedule => parsedTournamentStatus.forall(_.toString == schedule.tournamentStatus))
-        .filter(schedule => parsedStageStatus.forall(_.toString == schedule.stageStatus))
-        .sortBy(schedule => (schedule.startsAt, schedule.tournamentName, schedule.stageName))
-      val resolvedLimit = limit.getOrElse(20)
-      val resolvedOffset = offset.getOrElse(0)
-      require(resolvedLimit > 0, "Input field limit must be positive")
-      require(resolvedOffset >= 0, "Input field offset must be non-negative")
-      val boundedLimit = math.min(resolvedLimit, 100)
-      val page = schedules.slice(resolvedOffset, resolvedOffset + boundedLimit)
+      ),
+      appliedFilters = Vector(
+        tournamentStatus.filter(_.nonEmpty).map("tournamentStatus" -> _),
+        stageStatus.filter(_.nonEmpty).map("stageStatus" -> _)
+      ).flatten.toMap
+    )
 
-      PagedResponse(
-        items = page,
-        total = schedules.size,
-        limit = boundedLimit,
-        offset = resolvedOffset,
-        hasMore = resolvedOffset + page.size < schedules.size,
-        appliedFilters = Vector(
-          tournamentStatus.filter(_.nonEmpty).map("tournamentStatus" -> _),
-          stageStatus.filter(_.nonEmpty).map("stageStatus" -> _)
-        ).flatten.toMap
-      )
-    }
+  private def listSchedules(
+      context: ApiPlanContext,
+      query: ResolvedScheduleQuery
+  ): Vector[PublicScheduleView] =
+    context.support.publicQueryModule.tables.publicSchedules()
+      .filter(schedule => query.tournamentStatus.forall(_.toString == schedule.tournamentStatus))
+      .filter(schedule => query.stageStatus.forall(_.toString == schedule.stageStatus))
+      .sortBy(schedule => (schedule.startsAt, schedule.tournamentName, schedule.stageName))
+
+  private final case class ResolvedScheduleQuery(
+      tournamentStatus: Option[TournamentStatus],
+      stageStatus: Option[StageStatus],
+      appliedFilters: Map[String, String]
+  )

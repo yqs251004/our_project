@@ -7,6 +7,7 @@ import riichinexus.domain.model.{
   Dashboard as DomainDashboard,
   DashboardOwner as DomainDashboardOwner
 }
+import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.*
 
 type DashboardOwner = String

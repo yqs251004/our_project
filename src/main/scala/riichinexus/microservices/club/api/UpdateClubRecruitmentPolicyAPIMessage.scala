@@ -1,85 +1,94 @@
 package riichinexus.microservices.club.api
 
+import java.time.Instant
 import java.util.NoSuchElementException
 
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
+import riichinexus.application.changes.DomainChangeInterpreter
+import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
 import riichinexus.domain.service.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.objects.apiTypes.{Club as ClubResponse}
+import riichinexus.microservices.club.objects.apiTypes.{Club as ClubResponse, UpdateClubRecruitmentPolicyRequest}
 import upickle.default.*
 
 final case class UpdateClubRecruitmentPolicyAPIMessage(
     clubId: String,
-    operatorId: String,
-    applicationsOpen: Boolean,
-    requirementsText: Option[String] = None,
-    expectedReviewSlaHours: Option[Int] = None,
-    note: Option[String] = None
+    request: UpdateClubRecruitmentPolicyRequest
 ) extends APIMessage[ClubResponse] derives ReadWriter:
 
-  expectedReviewSlaHours.foreach(hours =>
-    require(hours > 0, "Recruitment policy expectedReviewSlaHours must be positive")
-  )
-
   override def plan(context: ApiPlanContext): IO[ClubResponse] =
-    IO {
-      val policy = ClubRecruitmentPolicy(
-        applicationsOpen = applicationsOpen,
-        requirementsText = requirementsText.map(_.trim).filter(_.nonEmpty),
-        expectedReviewSlaHours = expectedReviewSlaHours
+    for
+      actor <- IO(context.support.principal(request.operator))
+      occurredAt <- IO.realTimeInstant
+      module = context.support.clubModule
+      command = UpdateClubRecruitmentPolicyCommand(
+        clubId = ClubId(clubId),
+        actor = actor,
+        policy = request.policy,
+        note = request.note,
+        occurredAt = occurredAt
       )
-      val module = context.support.clubModule
-      val parsedClubId = ClubId(clubId)
-      val actor = context.support.principal(PlayerId(operatorId))
-      val occurredAt = java.time.Instant.now()
-
-      module.transactionManager.inTransaction {
-        module.clubRepository.findById(parsedClubId).map { club =>
-          ensureClubActive(club)
-          requireClubCapability(
-            context = context,
-            actor = actor,
-            club = club,
-            permission = Permission.ManageClubMembership,
-            delegatedPrivileges = Set(ClubPrivilege.ApproveRoster)
-          )
-
-          val updatedClub = module.clubRepository.save(club.updateRecruitmentPolicy(policy))
-          module.auditEventRepository.save(
-            AuditEventEntry(
-              id = IdGenerator.auditEventId(),
-              aggregateType = "club",
-              aggregateId = parsedClubId.value,
-              eventType = "ClubRecruitmentPolicyUpdated",
-              occurredAt = occurredAt,
-              actorId = actor.playerId,
-              details = Map(
-                "applicationsOpen" -> policy.applicationsOpen.toString,
-                "requirementsText" -> policy.requirementsText.getOrElse("none"),
-                "expectedReviewSlaHours" -> policy.expectedReviewSlaHours.map(_.toString).getOrElse("none")
-              ),
-              note = note
-            )
-          )
-          ClubResponse.fromDomain(updatedClub)
+      club <- IO {
+        module.transactionManager.inTransaction {
+          updateRecruitmentPolicy(module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
+    yield ClubResponse.fromDomain(club)
+
+  private def updateRecruitmentPolicy(
+      module: ClubModuleContext,
+      command: UpdateClubRecruitmentPolicyCommand
+  ): Option[Club] =
+    module.clubRepository.findById(command.clubId).map { club =>
+      ensureClubActive(club)
+      requireClubCapability(
+        module = module,
+        actor = command.actor,
+        club = club,
+        permission = Permission.ManageClubMembership,
+        delegatedPrivileges = Set(ClubPrivilege.ApproveRoster)
+      )
+      commitRecruitmentPolicyUpdate(module, club, command)
     }
+
+  private def commitRecruitmentPolicyUpdate(
+      module: ClubModuleContext,
+      club: Club,
+      command: UpdateClubRecruitmentPolicyCommand
+  ): Club =
+    DomainChangeInterpreter
+      .auditOnly(module.transactionManager, module.auditEventRepository)
+      .commitAudited(
+        aggregate = club.updateRecruitmentPolicy(command.policy),
+        persist = module.clubRepository.save,
+        aggregateType = "club",
+        aggregateId = _.id.value,
+        eventType = "ClubRecruitmentPolicyUpdated",
+        occurredAt = command.occurredAt,
+        actorId = command.actor.playerId,
+        details = _ =>
+          Map(
+            "applicationsOpen" -> command.policy.applicationsOpen.toString,
+            "requirementsText" -> command.policy.requirementsText.getOrElse("none"),
+            "expectedReviewSlaHours" -> command.policy.expectedReviewSlaHours.map(_.toString).getOrElse("none")
+          ),
+        note = command.note
+      )
 
   private def ensureClubActive(club: Club): Unit =
     if club.dissolvedAt.nonEmpty then
       throw IllegalArgumentException(s"Club ${club.id.value} has already been dissolved")
 
   private def requireClubCapability(
-      context: ApiPlanContext,
+      module: ClubModuleContext,
       actor: AccessPrincipal,
       club: Club,
       permission: Permission,
       delegatedPrivileges: Set[String]
   ): Unit =
-    val authorizationService = context.support.clubModule.authorizationService
+    val authorizationService = module.authorizationService
     val hasBasePermission = authorizationService.can(actor, permission, clubId = Some(club.id))
     val hasDelegatedPrivilege = actor.playerId.exists { playerId =>
       club.members.contains(playerId) &&
@@ -90,3 +99,11 @@ final case class UpdateClubRecruitmentPolicyAPIMessage(
       throw AuthorizationFailure(
         s"${actor.displayName} is not allowed to perform $permission in club ${club.id.value}"
       )
+
+  private final case class UpdateClubRecruitmentPolicyCommand(
+      clubId: ClubId,
+      actor: AccessPrincipal,
+      policy: ClubRecruitmentPolicy,
+      note: Option[String],
+      occurredAt: Instant
+  )

@@ -5,6 +5,7 @@ import java.util.NoSuchElementException
 
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
+import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
 import riichinexus.domain.service.*
 import riichinexus.infrastructure.json.JsonCodecs.given
@@ -18,34 +19,51 @@ final case class AssignClubAdminAPIMessage(
 ) extends APIMessage[ClubResponse] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[ClubResponse] =
-    IO {
-      val module = context.support.clubModule
-      val parsedClubId = ClubId(clubId)
-      val parsedPlayerId = PlayerId(playerId)
-      val actor = context.support.principal(PlayerId(operatorId))
-      val grantedAt = Instant.now()
-
-      module.transactionManager.inTransaction {
-        (for
-          club <- module.clubRepository.findById(parsedClubId)
-          player <- module.playerRepository.findById(parsedPlayerId)
-        yield
-          ensureClubActive(club)
-          requireActivePlayer(player, s"Player ${parsedPlayerId.value} cannot be granted club admin")
-          requireClubMember(club, parsedPlayerId, "assign club admin")
-          module.authorizationService.requirePermission(
-            actor,
-            Permission.AssignClubAdmin,
-            clubId = Some(parsedClubId)
-          )
-
-          module.playerRepository.save(
-            player.grantRole(RoleGrant.clubAdmin(parsedClubId, grantedAt, actor.playerId))
-          )
-          ClubResponse.fromDomain(module.clubRepository.save(club.grantAdmin(parsedPlayerId)))
-        ).getOrElse(throw NoSuchElementException("Resource not found"))
+    for
+      actor <- IO(context.support.principal(PlayerId(operatorId)))
+      grantedAt <- IO.realTimeInstant
+      module = context.support.clubModule
+      command = AssignClubAdminCommand(
+        clubId = ClubId(clubId),
+        playerId = PlayerId(playerId),
+        actor = actor,
+        grantedAt = grantedAt
+      )
+      club <- IO {
+        module.transactionManager.inTransaction {
+          assignAdmin(module, command)
+        }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
-    }
+    yield ClubResponse.fromDomain(club)
+
+  private def assignAdmin(
+      module: ClubModuleContext,
+      command: AssignClubAdminCommand
+  ): Option[Club] =
+    for
+      club <- module.clubRepository.findById(command.clubId)
+      player <- module.playerRepository.findById(command.playerId)
+    yield
+      ensureAdminCanBeAssigned(module, club, player, command)
+      module.playerRepository.save(
+        player.grantRole(RoleGrant.clubAdmin(command.clubId, command.grantedAt, command.actor.playerId))
+      )
+      module.clubRepository.save(club.grantAdmin(command.playerId))
+
+  private def ensureAdminCanBeAssigned(
+      module: ClubModuleContext,
+      club: Club,
+      player: Player,
+      command: AssignClubAdminCommand
+  ): Unit =
+    ensureClubActive(club)
+    requireActivePlayer(player, s"Player ${command.playerId.value} cannot be granted club admin")
+    requireClubMember(club, command.playerId, "assign club admin")
+    module.authorizationService.requirePermission(
+      command.actor,
+      Permission.AssignClubAdmin,
+      clubId = Some(command.clubId)
+    )
 
   private def ensureClubActive(club: Club): Unit =
     if club.dissolvedAt.nonEmpty then
@@ -60,3 +78,10 @@ final case class AssignClubAdminAPIMessage(
       throw IllegalArgumentException(
         s"Player ${playerId.value} must be a club member to $action in club ${club.id.value}"
       )
+
+  private final case class AssignClubAdminCommand(
+      clubId: ClubId,
+      playerId: PlayerId,
+      actor: AccessPrincipal,
+      grantedAt: Instant
+  )

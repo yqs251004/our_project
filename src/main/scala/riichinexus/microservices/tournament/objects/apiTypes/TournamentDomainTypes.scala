@@ -16,6 +16,7 @@ import riichinexus.domain.model.{
   Table as DomainTable,
   TableSeat as DomainTableSeat
 }
+import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.*
 
 type SeatWind = String

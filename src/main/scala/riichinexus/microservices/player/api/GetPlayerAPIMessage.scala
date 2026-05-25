@@ -13,8 +13,12 @@ final case class GetPlayerAPIMessage(
 ) extends APIMessage[PlayerResponse] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[PlayerResponse] =
-    IO {
-      context.support.playerModule.tables.findPlayer(PlayerId(playerId))
-        .map(PlayerProfileView.fromDomain)
-        .getOrElse(throw NoSuchElementException("Resource not found"))
-    }
+    for
+      id <- IO(PlayerId(playerId))
+      player <- IO(findPlayer(context, id))
+    yield PlayerProfileView.fromDomain(player)
+
+  private def findPlayer(context: ApiPlanContext, playerId: PlayerId) =
+    context.support.playerModule.tables
+      .findPlayer(playerId)
+      .getOrElse(throw NoSuchElementException("Resource not found"))

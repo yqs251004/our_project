@@ -4,6 +4,7 @@ import java.util.NoSuchElementException
 
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
+import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.tournament.domain.{TournamentOperationViewAssembler, TournamentStageTableScheduler}
@@ -18,29 +19,48 @@ final case class TournamentStageScheduleTablesAPIMessage(
 ) extends APIMessage[TournamentMutationView] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[TournamentMutationView] =
-    IO {
-      val module = context.support.tournamentModule
-      val tournamentIdValue = TournamentId(tournamentId)
-      val stageIdValue = TournamentStageId(stageId)
-      val actor = OperatorRequest(operatorId.filter(_.nonEmpty)).operator
-        .map(context.support.principal)
-        .getOrElse(AccessPrincipal.system)
-
-      val scheduledTables = module.transactionManager.inTransaction {
-        module.authorizationService.requirePermission(
-          actor,
-          Permission.ManageTournamentStages,
-          tournamentId = Some(tournamentIdValue)
-        )
-
-        TournamentStageTableScheduler.schedule(
-          module = module,
-          tournamentId = tournamentIdValue,
-          stageId = stageIdValue
-        )
+    for
+      actor <- IO(resolveOperatorActor(context))
+      module = context.support.tournamentModule
+      command = ScheduleStageTablesCommand(
+        tournamentId = TournamentId(tournamentId),
+        stageId = TournamentStageId(stageId),
+        actor = actor
+      )
+      scheduledTables <- IO {
+        module.transactionManager.inTransaction {
+          scheduleTables(module, command)
+        }
       }
-
-      TournamentOperationViewAssembler
-        .mutationView(module, tournamentIdValue, scheduledTables)
+      view <- IO {
+        TournamentOperationViewAssembler
+        .mutationView(module, command.tournamentId, scheduledTables)
         .getOrElse(throw NoSuchElementException("Resource not found"))
-    }
+      }
+    yield view
+
+  private def resolveOperatorActor(context: ApiPlanContext): AccessPrincipal =
+    OperatorRequest(operatorId.filter(_.nonEmpty)).operator
+      .map(context.support.principal)
+      .getOrElse(AccessPrincipal.system)
+
+  private def scheduleTables(
+      module: TournamentModuleContext,
+      command: ScheduleStageTablesCommand
+  ): Vector[Table] =
+    module.authorizationService.requirePermission(
+      command.actor,
+      Permission.ManageTournamentStages,
+      tournamentId = Some(command.tournamentId)
+    )
+    TournamentStageTableScheduler.schedule(
+      module = module,
+      tournamentId = command.tournamentId,
+      stageId = command.stageId
+    )
+
+  private final case class ScheduleStageTablesCommand(
+      tournamentId: TournamentId,
+      stageId: TournamentStageId,
+      actor: AccessPrincipal
+  )

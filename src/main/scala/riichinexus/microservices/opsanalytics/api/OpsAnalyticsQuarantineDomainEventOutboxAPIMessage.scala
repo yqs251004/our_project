@@ -1,5 +1,8 @@
 package riichinexus.microservices.opsanalytics.api
 
+import riichinexus.microservices.opsanalytics.tables.OpsAnalyticsDomainEventOutboxOperations
+
+import java.time.Instant
 import java.util.NoSuchElementException
 
 import cats.effect.IO
@@ -19,75 +22,66 @@ final case class OpsAnalyticsQuarantineDomainEventOutboxAPIMessage(
   require(recordIds.nonEmpty, "Batch quarantine requires at least one recordId")
 
   override def plan(context: ApiPlanContext): IO[DomainEventOutboxBatchOperationResultResponse] =
-    IO {
-      val actor = context.support.principal(operatorId)
-      val at = java.time.Instant.now()
-      val normalizedReason = reason.trim
-      require(normalizedReason.nonEmpty, "Quarantine reason cannot be empty")
-      val normalizedIds = recordIds.distinct
-      val failures = Vector.newBuilder[DomainEventOutboxOperationFailure]
-      val succeededIds = Vector.newBuilder[DomainEventOutboxRecordId]
+    for
+      actor <- IO(context.support.principal(operatorId))
+      quarantinedAt <- IO.realTimeInstant
+      command <- IO(resolveCommand(actor, quarantinedAt))
+      result <- IO(quarantineOutboxBatch(context, command))
+    yield DomainEventOutboxBatchOperationResultResponse.fromDomain(result)
 
-      normalizedIds.foreach { currentRecordId =>
-        try
-          quarantineOutboxRecord(context, currentRecordId, actor, normalizedReason, at)
-          succeededIds += currentRecordId
-        catch
-          case error: IllegalArgumentException =>
-            failures += DomainEventOutboxOperationFailure(currentRecordId, error.getMessage)
-          case error: NoSuchElementException =>
-            failures += DomainEventOutboxOperationFailure(currentRecordId, error.getMessage)
-          case error: IllegalStateException =>
-            failures += DomainEventOutboxOperationFailure(currentRecordId, error.getMessage)
-      }
+  private def resolveCommand(actor: AccessPrincipal, quarantinedAt: Instant): QuarantineOutboxBatchCommand =
+    val normalizedReason = reason.trim
+    require(normalizedReason.nonEmpty, "Quarantine reason cannot be empty")
+    QuarantineOutboxBatchCommand(actor, recordIds.distinct, normalizedReason, quarantinedAt)
 
-      DomainEventOutboxBatchOperationResultResponse.fromDomain(DomainEventOutboxBatchOperationResult(
-        action = "quarantine",
-        processedAt = at,
-        requestedCount = normalizedIds.size,
-        succeededRecordIds = succeededIds.result(),
-        failures = failures.result()
-      ))
+  private def quarantineOutboxBatch(
+      context: ApiPlanContext,
+      command: QuarantineOutboxBatchCommand
+  ): DomainEventOutboxBatchOperationResult =
+    val (succeededIds, failures) = command.recordIds.foldLeft(
+      Vector.empty[DomainEventOutboxRecordId] -> Vector.empty[DomainEventOutboxOperationFailure]
+    ) { case ((succeeded, failed), currentRecordId) =>
+      quarantineOutboxRecordResult(context, currentRecordId, command.actor, command.reason, command.quarantinedAt) match
+        case Right(_)    => (succeeded :+ currentRecordId) -> failed
+        case Left(error) => succeeded -> (failed :+ error)
     }
+
+    DomainEventOutboxBatchOperationResult(
+      action = "quarantine",
+      processedAt = command.quarantinedAt,
+      requestedCount = command.recordIds.size,
+      succeededRecordIds = succeededIds,
+      failures = failures
+    )
+
+  private def quarantineOutboxRecordResult(
+      context: ApiPlanContext,
+      currentRecordId: DomainEventOutboxRecordId,
+      actor: AccessPrincipal,
+      normalizedReason: String,
+      at: Instant
+  ): Either[DomainEventOutboxOperationFailure, DomainEventOutboxRecord] =
+    try Right(quarantineOutboxRecord(context, currentRecordId, actor, normalizedReason, at))
+    catch
+      case error: IllegalArgumentException =>
+        Left(DomainEventOutboxOperationFailure(currentRecordId, error.getMessage))
+      case error: NoSuchElementException =>
+        Left(DomainEventOutboxOperationFailure(currentRecordId, error.getMessage))
+      case error: IllegalStateException =>
+        Left(DomainEventOutboxOperationFailure(currentRecordId, error.getMessage))
 
   private def quarantineOutboxRecord(
       context: ApiPlanContext,
       currentRecordId: DomainEventOutboxRecordId,
       actor: AccessPrincipal,
       normalizedReason: String,
-      at: java.time.Instant
+      at: Instant
   ): DomainEventOutboxRecord =
-    val module = context.support.opsAnalyticsModule
-    module.transactionManager.inTransaction {
-      module.authorizationService.requirePermission(actor, Permission.ManageGlobalDictionary)
-      val record = module.domainEventOutboxRepository.findById(currentRecordId)
-        .getOrElse(throw NoSuchElementException(s"Domain event outbox record ${currentRecordId.value} was not found"))
-      require(
-        record.status != DomainEventOutboxStatus.Completed,
-        s"Completed outbox record ${currentRecordId.value} cannot be quarantined"
-      )
-      require(
-        record.status != DomainEventOutboxStatus.Quarantined,
-        s"Outbox record ${currentRecordId.value} is already quarantined"
-      )
+    OpsAnalyticsDomainEventOutboxOperations.quarantine(context, currentRecordId, actor, normalizedReason, at)
 
-      val quarantined = module.domainEventOutboxRepository.save(record.markQuarantined(normalizedReason, at))
-      module.auditEventRepository.save(
-        AuditEventEntry(
-          id = IdGenerator.auditEventId(),
-          aggregateType = "domain-event-outbox-record",
-          aggregateId = currentRecordId.value,
-          eventType = "DomainEventOutboxQuarantined",
-          occurredAt = at,
-          actorId = actor.playerId,
-          details = Map(
-            "priorStatus" -> record.status.toString,
-            "eventType" -> record.eventType,
-            "aggregateType" -> record.aggregateType,
-            "aggregateId" -> record.aggregateId
-          ),
-          note = Some(normalizedReason)
-        )
-      )
-      quarantined
-    }
+  private final case class QuarantineOutboxBatchCommand(
+      actor: AccessPrincipal,
+      recordIds: Vector[DomainEventOutboxRecordId],
+      reason: String,
+      quarantinedAt: Instant
+  )

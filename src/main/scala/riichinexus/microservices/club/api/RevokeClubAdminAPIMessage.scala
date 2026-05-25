@@ -4,6 +4,7 @@ import java.util.NoSuchElementException
 
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
+import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
 import riichinexus.domain.service.*
 import riichinexus.infrastructure.json.JsonCodecs.given
@@ -17,40 +18,64 @@ final case class RevokeClubAdminAPIMessage(
 ) extends APIMessage[ClubResponse] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[ClubResponse] =
-    IO {
-      val module = context.support.clubModule
-      val parsedClubId = ClubId(clubId)
-      val parsedPlayerId = PlayerId(playerId)
-      val actor = operatorId.filter(_.nonEmpty).map(id => context.support.principal(PlayerId(id))).getOrElse(AccessPrincipal.system)
-
-      module.transactionManager.inTransaction {
-        (for
-          club <- module.clubRepository.findById(parsedClubId)
-          player <- module.playerRepository.findById(parsedPlayerId)
-        yield
-          ensureClubActive(club)
-          requireClubMember(club, parsedPlayerId, "revoke club admin")
-          module.authorizationService.requirePermission(
-            actor,
-            Permission.AssignClubAdmin,
-            clubId = Some(parsedClubId)
-          )
-
-          if !club.admins.contains(parsedPlayerId) then
-            throw IllegalArgumentException(
-              s"Player ${parsedPlayerId.value} is not a club admin of club ${parsedClubId.value}"
-            )
-
-          if club.admins.size <= 1 then
-            throw IllegalArgumentException(
-              s"Club ${parsedClubId.value} must retain at least one club admin"
-            )
-
-          module.playerRepository.save(player.revokeClubAdmin(parsedClubId))
-          ClubResponse.fromDomain(module.clubRepository.save(club.revokeAdmin(parsedPlayerId)))
-        ).getOrElse(throw NoSuchElementException("Resource not found"))
+    for
+      actor <- IO(resolveOperatorActor(context))
+      module = context.support.clubModule
+      command = RevokeClubAdminCommand(
+        clubId = ClubId(clubId),
+        playerId = PlayerId(playerId),
+        actor = actor
+      )
+      club <- IO {
+        module.transactionManager.inTransaction {
+          revokeAdmin(module, command)
+        }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
-    }
+    yield ClubResponse.fromDomain(club)
+
+  private def resolveOperatorActor(context: ApiPlanContext): AccessPrincipal =
+    operatorId.filter(_.nonEmpty)
+      .map(id => context.support.principal(PlayerId(id)))
+      .getOrElse(AccessPrincipal.system)
+
+  private def revokeAdmin(
+      module: ClubModuleContext,
+      command: RevokeClubAdminCommand
+  ): Option[Club] =
+    for
+      club <- module.clubRepository.findById(command.clubId)
+      player <- module.playerRepository.findById(command.playerId)
+    yield
+      ensureAdminCanBeRevoked(module, club, command)
+      module.playerRepository.save(player.revokeClubAdmin(command.clubId))
+      module.clubRepository.save(club.revokeAdmin(command.playerId))
+
+  private def ensureAdminCanBeRevoked(
+      module: ClubModuleContext,
+      club: Club,
+      command: RevokeClubAdminCommand
+  ): Unit =
+    ensureClubActive(club)
+    requireClubMember(club, command.playerId, "revoke club admin")
+    module.authorizationService.requirePermission(
+      command.actor,
+      Permission.AssignClubAdmin,
+      clubId = Some(command.clubId)
+    )
+    ensureTargetIsAdmin(club, command)
+    ensureAnotherAdminRemains(club, command)
+
+  private def ensureTargetIsAdmin(club: Club, command: RevokeClubAdminCommand): Unit =
+    if !club.admins.contains(command.playerId) then
+      throw IllegalArgumentException(
+        s"Player ${command.playerId.value} is not a club admin of club ${command.clubId.value}"
+      )
+
+  private def ensureAnotherAdminRemains(club: Club, command: RevokeClubAdminCommand): Unit =
+    if club.admins.size <= 1 then
+      throw IllegalArgumentException(
+        s"Club ${command.clubId.value} must retain at least one club admin"
+      )
 
   private def ensureClubActive(club: Club): Unit =
     if club.dissolvedAt.nonEmpty then
@@ -61,3 +86,9 @@ final case class RevokeClubAdminAPIMessage(
       throw IllegalArgumentException(
         s"Player ${playerId.value} must be a club member to $action in club ${club.id.value}"
       )
+
+  private final case class RevokeClubAdminCommand(
+      clubId: ClubId,
+      playerId: PlayerId,
+      actor: AccessPrincipal
+  )

@@ -12,8 +12,11 @@ import upickle.default.*
 final case class GetClubAPIMessage(clubId: String) extends APIMessage[ClubResponse] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[ClubResponse] =
-    IO {
-      context.support.clubModule.tables.findClub(ClubId(clubId))
-        .map(ClubResponse.fromDomain)
-        .getOrElse(throw NoSuchElementException("Resource not found"))
-    }
+    for
+      id <- IO(ClubId(clubId))
+      club <- IO(resolveClub(context, id))
+    yield ClubResponse.fromDomain(club)
+
+  private def resolveClub(context: ApiPlanContext, clubId: ClubId): Club =
+    context.support.clubModule.tables.findClub(clubId)
+      .getOrElse(throw NoSuchElementException("Resource not found"))

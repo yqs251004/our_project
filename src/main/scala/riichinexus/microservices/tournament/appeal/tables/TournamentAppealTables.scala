@@ -8,6 +8,7 @@ final class TournamentAppealTables(
     appealTicketRepository: AppealTicketRepository
 ):
   def listAppeals(query: AppealListQuery): Vector[AppealTicket] =
+    val asOf = query.asOf.getOrElse(java.time.Instant.now())
     appealTicketRepository.findAll()
       .filter(ticket => query.status.forall(_ == ticket.status))
       .filter(ticket => query.priority.forall(_ == ticket.priority))
@@ -16,7 +17,7 @@ final class TournamentAppealTables(
       .filter(ticket => query.tableId.forall(_ == ticket.tableId))
       .filter(ticket => query.openedBy.forall(_ == ticket.openedBy))
       .filter(ticket => query.assigneeId.forall(ticket.assigneeId.contains))
-      .filter(ticket => !query.overdueOnly || ticket.dueAt.exists(_.isBefore(query.asOf)))
+      .filter(ticket => !query.overdueOnly || ticket.dueAt.exists(_.isBefore(asOf)))
       .filter(ticket => query.dueBefore.forall(limit => ticket.dueAt.exists(dueAt => !dueAt.isAfter(limit))))
       .filter(ticket => query.dueAfter.forall(limit => ticket.dueAt.exists(dueAt => !dueAt.isBefore(limit))))
       .sortBy(ticket => (ticket.updatedAt, ticket.id.value))

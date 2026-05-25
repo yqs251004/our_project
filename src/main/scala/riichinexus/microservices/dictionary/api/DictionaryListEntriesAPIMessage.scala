@@ -1,7 +1,6 @@
 package riichinexus.microservices.dictionary.api
 
 import cats.effect.IO
-
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
@@ -17,24 +16,35 @@ final case class DictionaryListEntriesAPIMessage(
 ) extends APIMessage[PagedResponse[GlobalDictionaryEntryResponse]] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[GlobalDictionaryEntryResponse]] =
-    IO {
-      val parsedPrefix = prefix.filter(_.nonEmpty)
-      val parsedUpdatedBy = updatedBy.filter(_.nonEmpty).map(PlayerId(_))
-      val entries = context.support.dictionaryModule.tables.listEntries()
-        .filter(entry => parsedPrefix.forall(prefix => entry.key.startsWith(prefix)))
-        .filter(entry => parsedUpdatedBy.forall(_ == entry.updatedBy))
-        .sortBy(_.key)
-      page(entries, filters(prefix.filter(_.nonEmpty).map("prefix" -> _), updatedBy.filter(_.nonEmpty).map("updatedBy" -> _)))
-    }
+    for
+      query <- IO(resolveQuery)
+      entries <- IO(listEntries(context, query))
+    yield
+      PagedResponse.fromItems(entries, limit, offset, query.appliedFilters)(
+        GlobalDictionaryEntryResponse.fromDomain
+      )
 
-  private def page(items: Vector[GlobalDictionaryEntry], appliedFilters: Map[String, String]): PagedResponse[GlobalDictionaryEntryResponse] =
-    val resolvedLimit = limit.getOrElse(20)
-    val resolvedOffset = offset.getOrElse(0)
-    require(resolvedLimit > 0, "Input field limit must be positive")
-    require(resolvedOffset >= 0, "Input field offset must be non-negative")
-    val boundedLimit = math.min(resolvedLimit, 100)
-    val pageItems = items.slice(resolvedOffset, resolvedOffset + boundedLimit)
-    PagedResponse(pageItems.map(GlobalDictionaryEntryResponse.fromDomain), items.size, boundedLimit, resolvedOffset, resolvedOffset + pageItems.size < items.size, appliedFilters)
+  private def resolveQuery: ResolvedEntriesQuery =
+    ResolvedEntriesQuery(
+      prefix = prefix.filter(_.nonEmpty),
+      updatedBy = updatedBy.filter(_.nonEmpty).map(PlayerId(_)),
+      appliedFilters = Vector(
+        prefix.filter(_.nonEmpty).map("prefix" -> _),
+        updatedBy.filter(_.nonEmpty).map("updatedBy" -> _)
+      ).flatten.toMap
+    )
 
-  private def filters(values: Option[(String, String)]*): Map[String, String] =
-    values.flatten.toMap
+  private def listEntries(
+      context: ApiPlanContext,
+      query: ResolvedEntriesQuery
+  ): Vector[GlobalDictionaryEntry] =
+    context.support.dictionaryModule.tables.listEntries()
+      .filter(entry => query.prefix.forall(prefix => entry.key.startsWith(prefix)))
+      .filter(entry => query.updatedBy.forall(_ == entry.updatedBy))
+      .sortBy(_.key)
+
+  private final case class ResolvedEntriesQuery(
+      prefix: Option[String],
+      updatedBy: Option[PlayerId],
+      appliedFilters: Map[String, String]
+  )

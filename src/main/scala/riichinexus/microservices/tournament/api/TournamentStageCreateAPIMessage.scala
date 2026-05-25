@@ -4,6 +4,7 @@ import java.util.NoSuchElementException
 
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
+import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.dictionary.domain.RuntimeDictionary
@@ -18,31 +19,45 @@ import upickle.default.*
 final case class TournamentStageCreateAPIMessage(tournamentId: String, request: CreateTournamentStageRequest) extends APIMessage[TournamentSummaryView] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[TournamentSummaryView] =
-    IO {
-      val module = context.support.tournamentModule
-      val tournamentIdValue = TournamentId(tournamentId)
-      val actor = request.operator.map(context.support.principal).getOrElse(AccessPrincipal.system)
+    for
+      actor <- IO(request.operator.map(context.support.principal).getOrElse(AccessPrincipal.system))
+      module = context.support.tournamentModule
+      command = CreateStageCommand(
+        tournamentId = TournamentId(tournamentId),
+        actor = actor,
+        stage = request.toStage
+      )
+      tournament <- IO {
+        module.transactionManager.inTransaction {
+          createStage(module, command)
+        }.getOrElse(throw NoSuchElementException("Resource not found"))
+      }
+    yield TournamentSummaryView.fromDomain(tournament)
 
-      module.transactionManager.inTransaction {
-        module.tournamentRepository.findById(tournamentIdValue).map { tournament =>
-          if tournament.status == TournamentStatus.Completed || tournament.status == TournamentStatus.Archived then
-            throw IllegalArgumentException(
-              s"Cannot add stages to tournament ${tournamentIdValue.value} in status ${tournament.status}"
-            )
-
-          module.authorizationService.requirePermission(
-            actor,
-            Permission.ManageTournamentStages,
-            tournamentId = Some(tournamentIdValue)
-          )
-
-          val dictionarySnapshot = RuntimeDictionary.snapshot(module.globalDictionaryRepository)
-          TournamentSummaryView.fromDomain(
-            module.tournamentRepository.save(tournament.addStage(normalizeStage(request.toStage, dictionarySnapshot)))
-          )
-        }
-      }.getOrElse(throw NoSuchElementException("Resource not found"))
+  private def createStage(
+      module: TournamentModuleContext,
+      command: CreateStageCommand
+  ): Option[Tournament] =
+    module.tournamentRepository.findById(command.tournamentId).map { tournament =>
+      ensureStageCanBeAdded(module, tournament, command)
+      val dictionarySnapshot = RuntimeDictionary.snapshot(module.globalDictionaryRepository)
+      module.tournamentRepository.save(tournament.addStage(normalizeStage(command.stage, dictionarySnapshot)))
     }
+
+  private def ensureStageCanBeAdded(
+      module: TournamentModuleContext,
+      tournament: Tournament,
+      command: CreateStageCommand
+  ): Unit =
+    if tournament.status == TournamentStatus.Completed || tournament.status == TournamentStatus.Archived then
+      throw IllegalArgumentException(
+        s"Cannot add stages to tournament ${command.tournamentId.value} in status ${tournament.status}"
+      )
+    module.authorizationService.requirePermission(
+      command.actor,
+      Permission.ManageTournamentStages,
+      tournamentId = Some(command.tournamentId)
+    )
 
   private def normalizeStage(
       stage: TournamentStage,
@@ -56,3 +71,9 @@ final case class TournamentStageCreateAPIMessage(tournamentId: String, request: 
         templatedStage.advancementRule.templateKey.isEmpty
     then templatedStage.copy(advancementRule = AdvancementRule.defaultFor(templatedStage.format))
     else templatedStage
+
+  private final case class CreateStageCommand(
+      tournamentId: TournamentId,
+      actor: AccessPrincipal,
+      stage: TournamentStage
+  )

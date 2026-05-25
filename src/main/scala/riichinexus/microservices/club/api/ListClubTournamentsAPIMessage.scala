@@ -5,6 +5,7 @@ import java.util.NoSuchElementException
 
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
+import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.objects.apiTypes.{Club as _, ClubRelation as _, ClubMembershipApplication as _, ClubPrivilegeDefinition as _, ClubMemberPrivilegeSnapshot as _, *}
@@ -22,65 +23,85 @@ final case class ListClubTournamentsAPIMessage(
   private val recentTournamentWindow = Duration.ofDays(90)
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[ClubTournamentParticipationView]] =
-    IO {
-      val parsedScope = scope.filter(_.nonEmpty).getOrElse("recent")
-      val parsedViewer = viewer.filter(_.nonEmpty).map(PlayerId(_))
-      val parsedClubId = ClubId(clubId)
-      context.support.clubModule.tables
-        .findClub(parsedClubId)
-        .getOrElse(throw NoSuchElementException(s"Club ${parsedClubId.value} was not found"))
-      val viewerPrincipal = parsedViewer.map(context.support.principal).getOrElse(AccessPrincipal.guest())
-      val allItems = context.support.clubModule.tables
-        .listTournamentsByClub(parsedClubId)
-        .flatMap(tournament => buildClubTournamentParticipationView(context, parsedClubId, tournament, viewerPrincipal))
-      val recentThreshold = Instant.now().minus(recentTournamentWindow)
-      val activeStatuses = Set(
-        TournamentStatus.RegistrationOpen.toString,
-        TournamentStatus.Scheduled.toString,
-        TournamentStatus.InProgress.toString
-      )
-      val items = parsedScope.trim.toLowerCase match
-        case "recent" =>
-          allItems.filter(item =>
-            activeStatuses.contains(item.status) ||
-              Instant.parse(item.endsAt).isAfter(recentThreshold)
-          )
-        case "active" =>
-          allItems.filter(item => activeStatuses.contains(item.status))
-        case "all" => allItems
-        case other =>
-          throw IllegalArgumentException(
-            s"Unsupported scope '$other'. Supported values: recent, active, all"
-          )
-      val sortedItems = items.sortBy(item => (item.startsAt, item.tournamentId)).reverse
-      val resolvedLimit = limit.getOrElse(20)
-      val resolvedOffset = offset.getOrElse(0)
-      require(resolvedLimit > 0, "Input field limit must be positive")
-      require(resolvedOffset >= 0, "Input field offset must be non-negative")
-      val boundedLimit = math.min(resolvedLimit, 100)
-      val page = sortedItems.slice(resolvedOffset, resolvedOffset + boundedLimit)
-      PagedResponse(
-        items = page,
-        total = sortedItems.size,
-        limit = boundedLimit,
-        offset = resolvedOffset,
-        hasMore = resolvedOffset + page.size < sortedItems.size,
-        appliedFilters = Vector(
-          scope.filter(_.nonEmpty).map("scope" -> _),
-          viewer.filter(_.nonEmpty).map("viewer" -> _)
-        ).flatten.toMap
-      )
-    }
+    for
+      now <- IO.realTimeInstant
+      module = context.support.clubModule
+      query <- IO(resolveQuery(context, now))
+      items <- IO(listTournaments(module, query))
+    yield pagedResponse(items, query)
+
+  private def resolveQuery(context: ApiPlanContext, now: Instant): ClubTournamentQuery =
+    val parsedViewer = viewer.filter(_.nonEmpty).map(PlayerId(_))
+    ClubTournamentQuery(
+      clubId = ClubId(clubId),
+      scope = scope.filter(_.nonEmpty).getOrElse("recent"),
+      viewerPrincipal = parsedViewer.map(context.support.principal).getOrElse(AccessPrincipal.guest()),
+      limit = limit.getOrElse(20),
+      offset = offset.getOrElse(0),
+      recentThreshold = now.minus(recentTournamentWindow),
+      appliedFilters = Vector(
+        scope.filter(_.nonEmpty).map("scope" -> _),
+        viewer.filter(_.nonEmpty).map("viewer" -> _)
+      ).flatten.toMap
+    )
+
+  private def listTournaments(
+      module: ClubModuleContext,
+      query: ClubTournamentQuery
+  ): Vector[ClubTournamentParticipationView] =
+    module.tables
+      .findClub(query.clubId)
+      .getOrElse(throw NoSuchElementException(s"Club ${query.clubId.value} was not found"))
+    val allItems = module.tables
+      .listTournamentsByClub(query.clubId)
+      .flatMap(tournament => buildClubTournamentParticipationView(module, query.clubId, tournament, query.viewerPrincipal))
+    filterByScope(allItems, query)
+
+  private def filterByScope(
+      items: Vector[ClubTournamentParticipationView],
+      query: ClubTournamentQuery
+  ): Vector[ClubTournamentParticipationView] =
+    query.scope.trim.toLowerCase match
+      case "recent" =>
+        items.filter(item =>
+          activeStatuses.contains(item.status) ||
+            Instant.parse(item.endsAt).isAfter(query.recentThreshold)
+        )
+      case "active" =>
+        items.filter(item => activeStatuses.contains(item.status))
+      case "all" => items
+      case other =>
+        throw IllegalArgumentException(
+          s"Unsupported scope '$other'. Supported values: recent, active, all"
+        )
+
+  private def pagedResponse(
+      items: Vector[ClubTournamentParticipationView],
+      query: ClubTournamentQuery
+  ): PagedResponse[ClubTournamentParticipationView] =
+    val sortedItems = items.sortBy(item => (item.startsAt, item.tournamentId)).reverse
+    require(query.limit > 0, "Input field limit must be positive")
+    require(query.offset >= 0, "Input field offset must be non-negative")
+    val boundedLimit = math.min(query.limit, 100)
+    val page = sortedItems.slice(query.offset, query.offset + boundedLimit)
+    PagedResponse(
+      items = page,
+      total = sortedItems.size,
+      limit = boundedLimit,
+      offset = query.offset,
+      hasMore = query.offset + page.size < sortedItems.size,
+      appliedFilters = query.appliedFilters
+    )
 
   private def buildClubTournamentParticipationView(
-      context: ApiPlanContext,
+      module: ClubModuleContext,
       clubId: ClubId,
       tournament: Tournament,
       viewer: AccessPrincipal
   ): Option[ClubTournamentParticipationView] =
-    val club = context.support.clubModule.tables.findClub(clubId)
+    val club = module.tables.findClub(clubId)
     val clubVisibleToViewer =
-      club.exists(currentClub => canManageClubTournamentParticipation(context, viewer, currentClub))
+      club.exists(currentClub => canManageClubTournamentParticipation(module, viewer, currentClub))
     val isWhitelisted = tournament.whitelist.exists(_.clubId.contains(clubId))
     val isParticipating = tournament.participatingClubs.contains(clubId)
     if !isWhitelisted && !isParticipating then None
@@ -118,12 +139,28 @@ final case class ListClubTournamentsAPIMessage(
       )
 
   private def canManageClubTournamentParticipation(
-      context: ApiPlanContext,
+      module: ClubModuleContext,
       actor: AccessPrincipal,
-      club: riichinexus.domain.model.Club
+      club: Club
   ): Boolean =
     actor.isSuperAdmin ||
-      context.support.clubModule.authorizationService.can(actor, Permission.SubmitTournamentLineup, clubId = Some(club.id)) ||
+      module.authorizationService.can(actor, Permission.SubmitTournamentLineup, clubId = Some(club.id)) ||
       actor.playerId.exists(playerId =>
         club.members.contains(playerId) && club.hasPrivilege(playerId, ClubPrivilege.PriorityLineup)
       )
+
+  private val activeStatuses = Set(
+    TournamentStatus.RegistrationOpen.toString,
+    TournamentStatus.Scheduled.toString,
+    TournamentStatus.InProgress.toString
+  )
+
+  private final case class ClubTournamentQuery(
+      clubId: ClubId,
+      scope: String,
+      viewerPrincipal: AccessPrincipal,
+      limit: Int,
+      offset: Int,
+      recentThreshold: Instant,
+      appliedFilters: Map[String, String]
+  )

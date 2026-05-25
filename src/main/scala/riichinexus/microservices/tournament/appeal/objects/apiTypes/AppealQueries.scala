@@ -3,6 +3,8 @@ package riichinexus.microservices.tournament.appeal.objects.apiTypes
 import java.time.Instant
 
 import riichinexus.domain.model.*
+import riichinexus.infrastructure.json.JsonCodecs.given
+import upickle.default.*
 
 final case class AppealListQuery(
     status: Option[AppealStatus] = None,
@@ -15,7 +17,7 @@ final case class AppealListQuery(
     overdueOnly: Boolean = false,
     dueBefore: Option[Instant] = None,
     dueAfter: Option[Instant] = None,
-    asOf: Instant = Instant.now(),
+    asOf: Option[Instant] = None,
     limit: Option[Int] = None,
     offset: Option[Int] = None
-)
+) derives ReadWriter

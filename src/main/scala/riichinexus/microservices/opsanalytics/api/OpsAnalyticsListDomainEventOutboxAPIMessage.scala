@@ -1,176 +1,109 @@
 package riichinexus.microservices.opsanalytics.api
 
 import java.time.Instant
-import java.util.NoSuchElementException
 
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
-import riichinexus.application.ports.DomainEventSubscriber
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.opsanalytics.objects.apiTypes.{DomainEventOutboxRecord as DomainEventOutboxRecordResponse}
+import riichinexus.microservices.opsanalytics.objects.apiTypes.DomainEventOutboxQuery
 import riichinexus.microservices.opsanalytics.objects.apiTypes.DomainEventResponses.given
+import riichinexus.microservices.opsanalytics.tables.OpsAnalyticsDomainEventSubscriberQueries
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 
 final case class OpsAnalyticsListDomainEventOutboxAPIMessage(
-    operatorId: PlayerId,
-    asOf: Option[Instant] = None,
-    status: Option[DomainEventOutboxStatus] = None,
-    eventType: Option[String] = None,
-    aggregateType: Option[String] = None,
-    aggregateId: Option[String] = None,
-    subscriberId: Option[String] = None,
-    partitionKey: Option[String] = None,
-    delivered: Option[Boolean] = None,
-    blockedOnly: Option[Boolean] = None,
-    limit: Option[Int] = None,
-    offset: Option[Int] = None
+    query: DomainEventOutboxQuery
 ) extends APIMessage[PagedResponse[DomainEventOutboxRecordResponse]] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[DomainEventOutboxRecordResponse]] =
-    IO {
-      requireOpsAdmin(context)
-      val parsedAsOf = asOf.getOrElse(Instant.now())
-      val parsedEventType = eventType.filter(_.nonEmpty)
-      val parsedAggregateType = aggregateType.filter(_.nonEmpty)
-      val parsedAggregateId = aggregateId.filter(_.nonEmpty)
-      val parsedSubscriberId = subscriberId.filter(_.nonEmpty)
-      val parsedPartitionKey = partitionKey.filter(_.nonEmpty)
-      val parsedBlockedOnly = blockedOnly.getOrElse(false)
-      require(parsedSubscriberId.nonEmpty || delivered.isEmpty, "Input field delivered requires subscriberId")
-      require(parsedSubscriberId.nonEmpty || parsedPartitionKey.isEmpty, "Input field partitionKey requires subscriberId")
-      require(parsedSubscriberId.nonEmpty || !parsedBlockedOnly, "Input field blockedOnly requires subscriberId")
-      val subscriber = parsedSubscriberId.map(resolveSubscriber(context, _))
-      val receiptsByOutboxAndSubscriber = context.support.opsAnalyticsModule.domainEventDeliveryReceiptRepository.findAll()
-        .groupBy(receipt => receipt.outboxRecordId -> receipt.subscriberId)
-      paged(
-        context.support.opsAnalyticsModule.domainEventOutboxRepository.findAll()
-          .filter(record => status.forall(_ == record.status))
-          .filter(record => parsedEventType.forall(_ == record.eventType))
-          .filter(record => parsedAggregateType.forall(_ == record.aggregateType))
-          .filter(record => parsedAggregateId.forall(_ == record.aggregateId))
-          .filter(record =>
-            subscriber.forall(sub =>
-              parsedPartitionKey.forall(_ == sub.partitionStrategy.partitionKey(record))
-            )
-          )
-          .filter(record =>
-            subscriber match
-              case Some(sub) =>
-                val hasReceipt = receiptsByOutboxAndSubscriber.contains(record.id -> sub.subscriberId)
-                delivered.forall(_ == hasReceipt)
-              case None =>
-                delivered.isEmpty
-          )
-          .filter(record =>
-            !parsedBlockedOnly || subscriber.isEmpty || isBlockedForSubscriber(context, record, subscriber.get, parsedAsOf)
-          )
-          .sortBy(_.sequenceNo),
-        Vector(
-          asOf.map(value => "asOf" -> value.toString),
-          status.map(value => "status" -> value.toString),
-          eventType.filter(_.nonEmpty).map("eventType" -> _),
-          aggregateType.filter(_.nonEmpty).map("aggregateType" -> _),
-          aggregateId.filter(_.nonEmpty).map("aggregateId" -> _),
-          subscriberId.filter(_.nonEmpty).map("subscriberId" -> _),
-          partitionKey.filter(_.nonEmpty).map("partitionKey" -> _),
-          delivered.map(value => "delivered" -> value.toString),
-          blockedOnly.map(value => "blockedOnly" -> value.toString)
-        ).flatten.toMap
+    for
+      _ <- IO(requireOpsAdmin(context))
+      asOf <- IO.realTimeInstant
+      parsed <- IO(resolveQuery(asOf))
+      records <- IO(listOutboxRecords(context, parsed))
+    yield PagedResponse.fromItems(records, query.limit, query.offset, parsed.appliedFilters)(
+      DomainEventOutboxRecordResponse.fromDomain
+    )
+
+  private def listOutboxRecords(
+      context: ApiPlanContext,
+      parsed: ResolvedOutboxQuery
+  ): Vector[DomainEventOutboxRecord] =
+    val module = context.support.opsAnalyticsModule
+    val subscriber =
+      parsed.subscriberId.map(OpsAnalyticsDomainEventSubscriberQueries.resolveSubscriber(module, _))
+    val receiptsByOutboxAndSubscriber = module.domainEventDeliveryReceiptRepository.findAll()
+      .groupBy(receipt => receipt.outboxRecordId -> receipt.subscriberId)
+
+    module.domainEventOutboxRepository.findAll()
+      .filter(record => query.status.forall(_ == record.status))
+      .filter(record => parsed.eventType.forall(_ == record.eventType))
+      .filter(record => parsed.aggregateType.forall(_ == record.aggregateType))
+      .filter(record => parsed.aggregateId.forall(_ == record.aggregateId))
+      .filter(record =>
+        subscriber.forall(sub =>
+          parsed.partitionKey.forall(_ == sub.partitionStrategy.partitionKey(record))
+        )
       )
-    }
+      .filter(record =>
+        subscriber match
+          case Some(sub) =>
+            val hasReceipt = receiptsByOutboxAndSubscriber.contains(record.id -> sub.subscriberId)
+            query.delivered.forall(_ == hasReceipt)
+          case None =>
+            query.delivered.isEmpty
+      )
+      .filter(record =>
+        !parsed.blockedOnly ||
+          subscriber.isEmpty ||
+          OpsAnalyticsDomainEventSubscriberQueries.isBlockedForSubscriber(module, record, subscriber.get, parsed.asOf)
+      )
+      .sortBy(_.sequenceNo)
+
+  private def resolveQuery(defaultAsOf: Instant): ResolvedOutboxQuery =
+    val parsedSubscriberId = query.subscriberId.filter(_.nonEmpty)
+    val parsedPartitionKey = query.partitionKey.filter(_.nonEmpty)
+    val parsedBlockedOnly = query.blockedOnly.getOrElse(false)
+
+    require(parsedSubscriberId.nonEmpty || query.delivered.isEmpty, "Input field delivered requires subscriberId")
+    require(parsedSubscriberId.nonEmpty || parsedPartitionKey.isEmpty, "Input field partitionKey requires subscriberId")
+    require(parsedSubscriberId.nonEmpty || !parsedBlockedOnly, "Input field blockedOnly requires subscriberId")
+
+    ResolvedOutboxQuery(
+      asOf = query.asOf.getOrElse(defaultAsOf),
+      eventType = query.eventType.filter(_.nonEmpty),
+      aggregateType = query.aggregateType.filter(_.nonEmpty),
+      aggregateId = query.aggregateId.filter(_.nonEmpty),
+      subscriberId = parsedSubscriberId,
+      partitionKey = parsedPartitionKey,
+      blockedOnly = parsedBlockedOnly,
+      appliedFilters = Vector(
+        query.asOf.map(value => "asOf" -> value.toString),
+        query.status.map(value => "status" -> value.toString),
+        query.eventType.filter(_.nonEmpty).map("eventType" -> _),
+        query.aggregateType.filter(_.nonEmpty).map("aggregateType" -> _),
+        query.aggregateId.filter(_.nonEmpty).map("aggregateId" -> _),
+        query.subscriberId.filter(_.nonEmpty).map("subscriberId" -> _),
+        query.partitionKey.filter(_.nonEmpty).map("partitionKey" -> _),
+        query.delivered.map(value => "delivered" -> value.toString),
+        query.blockedOnly.map(value => "blockedOnly" -> value.toString)
+      ).flatten.toMap
+    )
 
   private def requireOpsAdmin(context: ApiPlanContext): AccessPrincipal =
-    val operator = context.support.principal(operatorId)
+    val operator = context.support.principal(query.operatorId)
     context.support.requirePermission(operator, Permission.ManageGlobalDictionary)
     operator
 
-  private def paged(items: Vector[DomainEventOutboxRecord], appliedFilters: Map[String, String]): PagedResponse[DomainEventOutboxRecordResponse] =
-    val resolvedLimit = limit.getOrElse(20)
-    val resolvedOffset = offset.getOrElse(0)
-    require(resolvedLimit > 0, "Input field limit must be positive")
-    require(resolvedOffset >= 0, "Input field offset must be non-negative")
-    val boundedLimit = math.min(resolvedLimit, 100)
-    val page = items.slice(resolvedOffset, resolvedOffset + boundedLimit)
-    PagedResponse(page.map(DomainEventOutboxRecordResponse.fromDomain), items.size, boundedLimit, resolvedOffset, resolvedOffset + page.size < items.size, appliedFilters)
-
-  private def resolveSubscriber(context: ApiPlanContext, subscriberId: String): DomainEventSubscriber =
-    context.support.opsAnalyticsModule.domainEventSubscribers
-      .find(_.subscriberId == subscriberId)
-      .getOrElse(throw NoSuchElementException(s"Domain event subscriber $subscriberId was not registered"))
-
-  private def isBlockedForSubscriber(
-      context: ApiPlanContext,
-      record: DomainEventOutboxRecord,
-      subscriber: DomainEventSubscriber,
-      asOf: Instant
-  ): Boolean =
-    buildPartitionStatuses(context, subscriber, asOf)
-      .find(_.partitionKey == subscriber.partitionStrategy.partitionKey(record))
-      .exists(status =>
-        status.nextUndeliveredRecordId.contains(record.id) &&
-          (status.blockedByDeadLetter || status.blockedByQuarantine || status.blockedByRetryDelay ||
-            status.blockedByInFlightProcessing || status.blockedBySequenceGap)
-      )
-
-  private def buildPartitionStatuses(
-      context: ApiPlanContext,
-      subscriber: DomainEventSubscriber,
-      asOf: Instant
-  ): Vector[DomainEventSubscriberPartitionStatus] =
-    val module = context.support.opsAnalyticsModule
-    val records = module.domainEventOutboxRepository.findAll().sortBy(_.sequenceNo)
-    val recordsById = records.map(record => record.id -> record).toMap
-    val receipts = module.domainEventDeliveryReceiptRepository.findAll()
-      .filter(_.subscriberId == subscriber.subscriberId)
-    val receiptByRecordId = receipts.map(receipt => receipt.outboxRecordId -> receipt).toMap
-    val cursors = module.domainEventSubscriberCursorRepository.findAll()
-      .filter(_.subscriberId == subscriber.subscriberId)
-    val cursorByPartition = cursors.map(cursor => cursor.partitionKey -> cursor).toMap
-    val relevantPartitionsFromRecords = records.map(subscriber.partitionStrategy.partitionKey).distinct
-    val relevantPartitions = (relevantPartitionsFromRecords ++ cursorByPartition.keys).distinct
-
-    relevantPartitions.map { currentPartitionKey =>
-      val partitionRecords = records.filter(record =>
-        subscriber.partitionStrategy.partitionKey(record) == currentPartitionKey
-      )
-      val undeliveredRecords = partitionRecords.filterNot(record => receiptByRecordId.contains(record.id))
-      val nextUndelivered = undeliveredRecords.headOption
-      val lastDeliveredReceipt = partitionRecords.reverseIterator
-        .map(record => receiptByRecordId.get(record.id))
-        .collectFirst { case Some(receipt) => receipt }
-      val cursor = cursorByPartition.get(currentPartitionKey)
-
-      DomainEventSubscriberPartitionStatus(
-        subscriberId = subscriber.subscriberId,
-        partitionStrategy = subscriber.partitionStrategy.toString,
-        partitionKey = currentPartitionKey,
-        cursor = cursor,
-        lastDeliveredAt = lastDeliveredReceipt.map(_.deliveredAt).orElse(cursor.map(_.advancedAt)),
-        lastDeliveredSequenceNo =
-          cursor.map(_.lastDeliveredSequenceNo)
-            .orElse(lastDeliveredReceipt.flatMap(receipt => recordsById.get(receipt.outboxRecordId).map(_.sequenceNo))),
-        undeliveredCount = undeliveredRecords.size,
-        deadLetterUndeliveredCount = undeliveredRecords.count(_.status == DomainEventOutboxStatus.DeadLetter),
-        quarantinedUndeliveredCount = undeliveredRecords.count(_.status == DomainEventOutboxStatus.Quarantined),
-        readyUndeliveredCount = undeliveredRecords.count(record =>
-          record.status == DomainEventOutboxStatus.Pending && !record.availableAt.isAfter(asOf)
-        ),
-        nextUndeliveredRecordId = nextUndelivered.map(_.id),
-        nextUndeliveredSequenceNo = nextUndelivered.map(_.sequenceNo),
-        nextUndeliveredEventType = nextUndelivered.map(_.eventType),
-        nextUndeliveredStatus = nextUndelivered.map(_.status),
-        nextUndeliveredOccurredAt = nextUndelivered.map(_.occurredAt),
-        nextUndeliveredAvailableAt = nextUndelivered.map(_.availableAt),
-        blockedByDeadLetter = nextUndelivered.exists(_.status == DomainEventOutboxStatus.DeadLetter),
-        blockedByQuarantine = nextUndelivered.exists(_.status == DomainEventOutboxStatus.Quarantined),
-        blockedByRetryDelay = nextUndelivered.exists(record =>
-          record.status == DomainEventOutboxStatus.Pending && record.availableAt.isAfter(asOf)
-        ),
-        blockedByInFlightProcessing = nextUndelivered.exists(_.status == DomainEventOutboxStatus.Processing),
-        blockedBySequenceGap = nextUndelivered.exists(record =>
-          undeliveredRecords.exists(_.sequenceNo > record.sequenceNo)
-        )
-      )
-    }
+  private final case class ResolvedOutboxQuery(
+      asOf: Instant,
+      eventType: Option[String],
+      aggregateType: Option[String],
+      aggregateId: Option[String],
+      subscriberId: Option[String],
+      partitionKey: Option[String],
+      blockedOnly: Boolean,
+      appliedFilters: Map[String, String]
+  )

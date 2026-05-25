@@ -17,32 +17,36 @@ final case class ListPlayersAPIMessage(
 ) extends APIMessage[PagedResponse[PlayerProfileView]] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[PlayerProfileView]] =
-    IO {
-      val query = PlayerListQuery(
-        clubId = clubId.filter(_.nonEmpty).map(ClubId(_)),
-        status = status.filter(_.nonEmpty).map(context.support.parseEnum("status", _)(PlayerStatus.valueOf)),
-        nickname = nickname.filter(_.nonEmpty)
-      )
-      val players = context.support.playerModule.tables.listPlayers(query)
-        .filter(player => query.nickname.forall(context.support.containsIgnoreCase(player.nickname, _)))
-        .map(PlayerProfileView.fromDomain)
-      val resolvedLimit = limit.getOrElse(20)
-      val resolvedOffset = offset.getOrElse(0)
-      require(resolvedLimit > 0, "Input field limit must be positive")
-      require(resolvedOffset >= 0, "Input field offset must be non-negative")
-      val boundedLimit = math.min(resolvedLimit, 100)
-      val page = players.slice(resolvedOffset, resolvedOffset + boundedLimit)
+    for
+      query <- IO(resolveQuery(context))
+      players <- IO(listPlayers(context, query))
+    yield PagedResponse.fromItems(players, limit, offset, query.appliedFilters)(
+      PlayerProfileView.fromDomain
+    )
 
-      PagedResponse(
-        items = page,
-        total = players.size,
-        limit = boundedLimit,
-        offset = resolvedOffset,
-        hasMore = resolvedOffset + page.size < players.size,
-        appliedFilters = Vector(
-          clubId.filter(_.nonEmpty).map("clubId" -> _),
-          status.filter(_.nonEmpty).map("status" -> _),
-          nickname.filter(_.nonEmpty).map("nickname" -> _)
-        ).flatten.toMap
-      )
-    }
+  private def resolveQuery(context: ApiPlanContext): ResolvedPlayersQuery =
+    val playerQuery = PlayerListQuery(
+      clubId = clubId.filter(_.nonEmpty).map(ClubId(_)),
+      status = status.filter(_.nonEmpty).map(context.support.parseEnum("status", _)(PlayerStatus.valueOf)),
+      nickname = nickname.filter(_.nonEmpty)
+    )
+    ResolvedPlayersQuery(
+      query = playerQuery,
+      appliedFilters = Vector(
+        clubId.filter(_.nonEmpty).map("clubId" -> _),
+        status.filter(_.nonEmpty).map("status" -> _),
+        nickname.filter(_.nonEmpty).map("nickname" -> _)
+      ).flatten.toMap
+    )
+
+  private def listPlayers(
+      context: ApiPlanContext,
+      resolved: ResolvedPlayersQuery
+  ): Vector[Player] =
+    context.support.playerModule.tables.listPlayers(resolved.query)
+      .filter(player => resolved.query.nickname.forall(context.support.containsIgnoreCase(player.nickname, _)))
+
+  private final case class ResolvedPlayersQuery(
+      query: PlayerListQuery,
+      appliedFilters: Map[String, String]
+  )

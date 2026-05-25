@@ -1,10 +1,12 @@
 package riichinexus.microservices.tournament.appeal.api
 
+import java.time.Instant
 import java.util.NoSuchElementException
 
 import cats.effect.IO
 
 import riichinexus.api.{APIMessage, ApiPlanContext}
+import riichinexus.bootstrap.TournamentAppealModuleContext
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.tournament.appeal.objects.apiTypes.*
@@ -12,23 +14,49 @@ import upickle.default.*
 
 final case class AppealAdjudicateAPIMessage(
     appealId: String,
-    operatorId: String,
-    decision: String,
-    verdict: String,
-    tableResolution: Option[String] = None,
-    note: Option[String] = None
+    request: AdjudicateAppealRequest
 ) extends APIMessage[AppealTicketView] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[AppealTicketView] =
-    IO {
-      val request = AdjudicateAppealRequest(operatorId, decision, verdict, tableResolution, note)
-      context.support.tournamentAppealModule.service.adjudicateAppeal(
-        ticketId = AppealTicketId(appealId),
-        decision = request.decisionType,
-        verdict = request.verdict,
-        actor = context.support.principal(request.operator),
-        tableResolution = request.resolution,
-        note = request.note
-      ).map(AppealTicketView.fromDomain)
-        .getOrElse(throw NoSuchElementException("Resource not found"))
-    }
+    for
+      actor <- IO(context.support.principal(request.operator))
+      adjudicatedAt <- IO.realTimeInstant
+      module = context.support.tournamentAppealModule
+      command <- IO(resolveCommand(actor, adjudicatedAt))
+      ticket <- IO(adjudicateAppeal(module, command))
+    yield AppealTicketView.fromDomain(ticket)
+
+  private def resolveCommand(actor: AccessPrincipal, adjudicatedAt: Instant): AdjudicateAppealCommand =
+    AdjudicateAppealCommand(
+      ticketId = AppealTicketId(appealId),
+      decision = request.decisionType,
+      verdict = request.verdict,
+      actor = actor,
+      tableResolution = request.resolution,
+      note = request.note,
+      adjudicatedAt = adjudicatedAt
+    )
+
+  private def adjudicateAppeal(
+      module: TournamentAppealModuleContext,
+      command: AdjudicateAppealCommand
+  ): AppealTicket =
+    module.service.adjudicateAppeal(
+      ticketId = command.ticketId,
+      decision = command.decision,
+      verdict = command.verdict,
+      actor = command.actor,
+      adjudicatedAt = command.adjudicatedAt,
+      tableResolution = command.tableResolution,
+      note = command.note
+    ).getOrElse(throw NoSuchElementException("Resource not found"))
+
+  private final case class AdjudicateAppealCommand(
+      ticketId: AppealTicketId,
+      decision: AppealDecisionType,
+      verdict: String,
+      actor: AccessPrincipal,
+      tableResolution: Option[AppealTableResolution],
+      note: Option[String],
+      adjudicatedAt: Instant
+  )

@@ -1,12 +1,13 @@
 package riichinexus.domain.service
 
-import scala.collection.mutable
-
 import riichinexus.domain.model.*
 
 private[service] object AdvancedStatsExactAnalyzer:
   private val TerminalAndHonorIndices =
     Set(0, 8, 9, 17, 18, 26, 27, 28, 29, 30, 31, 32, 33)
+
+  private val EmptyCounts: Vector[Int] =
+    Vector.fill(34)(0)
 
   final case class ExactRoundStats(
       strictTileTrackable: Boolean,
@@ -29,109 +30,152 @@ private[service] object AdvancedStatsExactAnalyzer:
     )
 
   private def analyzeExactUkeire(round: KyokuRecord, playerId: PlayerId): Vector[Int] =
+    final case class UkeireState(
+        hand: Vector[Int],
+        visibleKnown: Vector[Int],
+        samples: Vector[Int],
+        trackable: Boolean
+    )
+
     round.initialHands.get(playerId).flatMap(parseHandCounts) match
       case None => Vector.empty
       case Some(initialCounts) if initialCounts.sum != 13 =>
         Vector.empty
       case Some(initialCounts) =>
-        val visibleKnown = initialCounts.clone()
-        var hand = initialCounts.clone()
-        val samples = Vector.newBuilder[Int]
-        var trackable = true
+        val initialState = UkeireState(
+          hand = initialCounts,
+          visibleKnown = initialCounts,
+          samples = Vector.empty,
+          trackable = true
+        )
 
-        round.actions.foreach { action =>
-          if trackable then
+        val finalState = round.actions.foldLeft(initialState) { (state, action) =>
+          if !state.trackable then state
+          else
             action.actor match
               case Some(actor) if actor == playerId =>
                 val snapshotCounts = action.handTilesAfterAction.flatMap(parseHandCounts)
                 snapshotCounts match
                   case Some(snapshot) =>
-                    hand = snapshot
-                    updateVisibleKnown(visibleKnown, publiclyRevealedTiles(action))
-                    if hand.sum == 13 then
-                      samples += calculateExactUkeire(hand.clone(), visibleKnown.clone())
+                    val nextVisible = updateVisibleKnown(state.visibleKnown, publiclyRevealedTiles(action))
+                    val nextSamples =
+                      if snapshot.sum == 13 then state.samples :+ calculateExactUkeire(snapshot, nextVisible)
+                      else state.samples
+                    state.copy(hand = snapshot, visibleKnown = nextVisible, samples = nextSamples)
                   case None =>
                     action.actionType match
                       case PaifuActionType.Draw =>
                         action.tile.flatMap(parseTile) match
                           case Some(tileIndex) =>
-                            hand(tileIndex) += 1
-                            visibleKnown(tileIndex) += 1
+                            state.copy(
+                              hand = incrementCount(state.hand, tileIndex),
+                              visibleKnown = incrementCount(state.visibleKnown, tileIndex)
+                            )
                           case None =>
-                            trackable = false
+                            state.copy(trackable = false)
                       case PaifuActionType.Discard | PaifuActionType.Riichi =>
                         action.tile.flatMap(parseTile) match
-                          case Some(tileIndex) if hand(tileIndex) > 0 =>
-                            hand(tileIndex) -= 1
-                            updateVisibleKnown(visibleKnown, publiclyRevealedTiles(action))
-                            if hand.sum == 13 then
-                              samples += calculateExactUkeire(hand.clone(), visibleKnown.clone())
+                          case Some(tileIndex) if state.hand(tileIndex) > 0 =>
+                            val nextHand = decrementCount(state.hand, tileIndex)
+                            val nextVisible = updateVisibleKnown(state.visibleKnown, publiclyRevealedTiles(action))
+                            val nextSamples =
+                              if nextHand.sum == 13 then state.samples :+ calculateExactUkeire(nextHand, nextVisible)
+                              else state.samples
+                            state.copy(hand = nextHand, visibleKnown = nextVisible, samples = nextSamples)
                           case None if action.actionType == PaifuActionType.Riichi =>
-                            updateVisibleKnown(visibleKnown, publiclyRevealedTiles(action))
+                            state.copy(visibleKnown = updateVisibleKnown(state.visibleKnown, publiclyRevealedTiles(action)))
                           case _ =>
-                            trackable = false
+                            state.copy(trackable = false)
                       case callType if isMeldAction(callType) =>
-                        trackable = false
+                        state.copy(trackable = false)
                       case _ =>
-                        updateVisibleKnown(visibleKnown, publiclyRevealedTiles(action))
+                        state.copy(visibleKnown = updateVisibleKnown(state.visibleKnown, publiclyRevealedTiles(action)))
               case _ =>
-                updateVisibleKnown(visibleKnown, publiclyRevealedTiles(action))
+                state.copy(visibleKnown = updateVisibleKnown(state.visibleKnown, publiclyRevealedTiles(action)))
         }
 
-        if trackable then samples.result() else Vector.empty
+        if finalState.trackable then finalState.samples else Vector.empty
 
   private def analyzeExactDefense(round: KyokuRecord, playerId: PlayerId): AdvancedStatsExactAnalyzer.ExactRoundStats =
-    val riichiDiscards = mutable.Map.empty[PlayerId, mutable.Set[Int]]
-    var playerDeclaredRiichi = false
-    var postRiichiDiscardCount = 0
-    var safePostRiichiDiscardCount = 0
-    var foldDiscardCount = 0
-    val publicVisible = Array.fill(34)(0)
+    final case class DefenseState(
+        riichiDiscards: Map[PlayerId, Set[Int]],
+        playerDeclaredRiichi: Boolean,
+        postRiichiDiscardCount: Int,
+        safePostRiichiDiscardCount: Int,
+        foldDiscardCount: Int,
+        publicVisible: Vector[Int]
+    )
 
-    round.actions.foreach { action =>
+    val initialState = DefenseState(
+      riichiDiscards = Map.empty,
+      playerDeclaredRiichi = false,
+      postRiichiDiscardCount = 0,
+      safePostRiichiDiscardCount = 0,
+      foldDiscardCount = 0,
+      publicVisible = EmptyCounts
+    )
+
+    val finalState = round.actions.foldLeft(initialState) { (state, action) =>
       action.actor match
         case Some(actor) if action.actionType == PaifuActionType.Riichi && actor != playerId =>
-          val discards = riichiDiscards.getOrElseUpdate(actor, mutable.Set.empty)
-          publiclyRevealedTiles(action).foreach { tileIndex =>
-            discards += tileIndex
-          }
-          updateVisibleKnown(publicVisible, publiclyRevealedTiles(action))
+          val revealedTiles = publiclyRevealedTiles(action)
+          state.copy(
+            riichiDiscards = state.riichiDiscards.updated(
+              actor,
+              state.riichiDiscards.getOrElse(actor, Set.empty) ++ revealedTiles
+            ),
+            publicVisible = updateVisibleKnown(state.publicVisible, revealedTiles)
+          )
         case Some(actor) if action.actionType == PaifuActionType.Discard && actor != playerId =>
-          publiclyRevealedTiles(action).foreach { tileIndex =>
-            riichiDiscards.get(actor).foreach(_ += tileIndex)
-          }
-          updateVisibleKnown(publicVisible, publiclyRevealedTiles(action))
+          val revealedTiles = publiclyRevealedTiles(action)
+          state.copy(
+            riichiDiscards = state.riichiDiscards.get(actor)
+              .fold(state.riichiDiscards)(discards => state.riichiDiscards.updated(actor, discards ++ revealedTiles)),
+            publicVisible = updateVisibleKnown(state.publicVisible, revealedTiles)
+          )
         case Some(actor) if actor == playerId && action.actionType == PaifuActionType.Riichi =>
-          playerDeclaredRiichi = true
-          updateVisibleKnown(publicVisible, publiclyRevealedTiles(action))
-        case Some(actor) if actor == playerId && isPlayerExposureAction(action.actionType) && riichiDiscards.nonEmpty =>
+          state.copy(
+            playerDeclaredRiichi = true,
+            publicVisible = updateVisibleKnown(state.publicVisible, publiclyRevealedTiles(action))
+          )
+        case Some(actor) if actor == playerId && isPlayerExposureAction(action.actionType) && state.riichiDiscards.nonEmpty =>
           val discardedTiles = publiclyRevealedTiles(action)
-          discardedTiles.foreach { tileIndex =>
-            postRiichiDiscardCount += 1
-            val genbutsuSafe = riichiDiscards.values.forall(_.contains(tileIndex))
-            val deadSafe = publicVisible(tileIndex) + 1 >= 4
-            if genbutsuSafe || deadSafe then
-              safePostRiichiDiscardCount += 1
-              if !playerDeclaredRiichi then foldDiscardCount += 1
+          val exposureStats = discardedTiles.foldLeft((0, 0, 0)) {
+            case ((postCount, safeCount, foldCount), tileIndex) =>
+              val genbutsuSafe = state.riichiDiscards.values.forall(_.contains(tileIndex))
+              val deadSafe = state.publicVisible(tileIndex) + 1 >= 4
+              val safe = genbutsuSafe || deadSafe
+              (
+                postCount + 1,
+                safeCount + Option.when(safe)(1).getOrElse(0),
+                foldCount + Option.when(safe && !state.playerDeclaredRiichi)(1).getOrElse(0)
+              )
           }
-          updateVisibleKnown(publicVisible, discardedTiles)
-          if isMeldAction(action.actionType) then
-            updateVisibleKnown(publicVisible, meldExposureOnly(action))
+          val visibleAfterDiscard = updateVisibleKnown(state.publicVisible, discardedTiles)
+          val visibleAfterMeld =
+            if isMeldAction(action.actionType) then updateVisibleKnown(visibleAfterDiscard, meldExposureOnly(action))
+            else visibleAfterDiscard
+          state.copy(
+            postRiichiDiscardCount = state.postRiichiDiscardCount + exposureStats._1,
+            safePostRiichiDiscardCount = state.safePostRiichiDiscardCount + exposureStats._2,
+            foldDiscardCount = state.foldDiscardCount + exposureStats._3,
+            publicVisible = visibleAfterMeld
+          )
         case _ =>
-          updateVisibleKnown(publicVisible, publiclyRevealedTiles(action))
+          state.copy(publicVisible = updateVisibleKnown(state.publicVisible, publiclyRevealedTiles(action)))
     }
 
     AdvancedStatsExactAnalyzer.ExactRoundStats(
-      strictTileTrackable = postRiichiDiscardCount > 0,
+      strictTileTrackable = finalState.postRiichiDiscardCount > 0,
       ukeireSamples = Vector.empty,
-      postRiichiDiscardCount = postRiichiDiscardCount,
-      safePostRiichiDiscardCount = safePostRiichiDiscardCount,
-      foldDiscardCount = foldDiscardCount
+      postRiichiDiscardCount = finalState.postRiichiDiscardCount,
+      safePostRiichiDiscardCount = finalState.safePostRiichiDiscardCount,
+      foldDiscardCount = finalState.foldDiscardCount
     )
 
   private def calculateExactUkeire(
-      handCounts: Array[Int],
-      visibleKnown: Array[Int]
+      handCounts: Vector[Int],
+      visibleKnown: Vector[Int]
   ): Int =
     val currentShanten = calculateShanten(handCounts)
 
@@ -139,111 +183,86 @@ private[service] object AdvancedStatsExactAnalyzer:
       val remainingCopies = 4 - visibleKnown(tileIndex)
       if remainingCopies <= 0 then total
       else
-        handCounts(tileIndex) += 1
-        val improved = bestShantenAfterDiscard(handCounts) < currentShanten
-        handCounts(tileIndex) -= 1
+        val improved = bestShantenAfterDiscard(incrementCount(handCounts, tileIndex)) < currentShanten
         if improved then total + remainingCopies else total
     }
 
-  private def bestShantenAfterDiscard(counts: Array[Int]): Int =
+  private def bestShantenAfterDiscard(counts: Vector[Int]): Int =
     (0 until 34)
       .filter(counts(_) > 0)
       .map { tileIndex =>
-        counts(tileIndex) -= 1
-        val shanten = calculateShanten(counts)
-        counts(tileIndex) += 1
-        shanten
+        calculateShanten(decrementCount(counts, tileIndex))
       }
       .foldLeft(8)(math.min)
 
-  private def calculateShanten(counts: Array[Int]): Int =
+  private def calculateShanten(counts: Vector[Int]): Int =
     Vector(
-      calculateRegularShanten(counts.clone()),
+      calculateRegularShanten(counts),
       calculateChiitoiShanten(counts),
       calculateKokushiShanten(counts)
     ).min
 
-  private def calculateRegularShanten(counts: Array[Int]): Int =
-    var best = 8
-
-    def dfs(index: Int, melds: Int, pairs: Int, taatsu: Int): Unit =
-      var nextIndex = index
-      while nextIndex < 34 && counts(nextIndex) == 0 do nextIndex += 1
-
+  private def calculateRegularShanten(counts: Vector[Int]): Int =
+    def dfs(currentCounts: Vector[Int], index: Int, melds: Int, pairs: Int, taatsu: Int): Int =
+      val nextIndex = (index until 34).find(currentCounts(_) > 0).getOrElse(34)
       val boundedTaatsu = math.min(taatsu, 4 - melds)
-      best = math.min(best, 8 - melds * 2 - boundedTaatsu - pairs)
+      val currentBest = 8 - melds * 2 - boundedTaatsu - pairs
 
-      if nextIndex >= 34 then ()
+      if nextIndex >= 34 then currentBest
       else
-        if counts(nextIndex) >= 3 then
-          counts(nextIndex) -= 3
-          dfs(nextIndex, melds + 1, pairs, taatsu)
-          counts(nextIndex) += 3
+        Vector(
+          Some(currentBest),
+          Option.when(currentCounts(nextIndex) >= 3)(
+            dfs(adjustCounts(currentCounts, nextIndex -> -3), nextIndex, melds + 1, pairs, taatsu)
+          ),
+          Option.when(
+            isSuitTile(nextIndex) && tileNumber(nextIndex) <= 7 &&
+              currentCounts(nextIndex + 1) > 0 && currentCounts(nextIndex + 2) > 0
+          )(
+            dfs(
+              adjustCounts(currentCounts, nextIndex -> -1, (nextIndex + 1) -> -1, (nextIndex + 2) -> -1),
+              nextIndex,
+              melds + 1,
+              pairs,
+              taatsu
+            )
+          ),
+          Option.when(currentCounts(nextIndex) >= 2 && pairs == 0)(
+            dfs(adjustCounts(currentCounts, nextIndex -> -2), nextIndex, melds, pairs + 1, taatsu)
+          ),
+          Option.when(currentCounts(nextIndex) >= 2)(
+            dfs(adjustCounts(currentCounts, nextIndex -> -2), nextIndex, melds, pairs, taatsu + 1)
+          ),
+          Option.when(isSuitTile(nextIndex) && tileNumber(nextIndex) <= 8 && currentCounts(nextIndex + 1) > 0)(
+            dfs(adjustCounts(currentCounts, nextIndex -> -1, (nextIndex + 1) -> -1), nextIndex, melds, pairs, taatsu + 1)
+          ),
+          Option.when(isSuitTile(nextIndex) && tileNumber(nextIndex) <= 7 && currentCounts(nextIndex + 2) > 0)(
+            dfs(adjustCounts(currentCounts, nextIndex -> -1, (nextIndex + 2) -> -1), nextIndex, melds, pairs, taatsu + 1)
+          ),
+          Some(dfs(currentCounts, nextIndex + 1, melds, pairs, taatsu))
+        ).flatten.min
 
-        if isSuitTile(nextIndex) && tileNumber(nextIndex) <= 7 &&
-            counts(nextIndex + 1) > 0 && counts(nextIndex + 2) > 0 then
-          counts(nextIndex) -= 1
-          counts(nextIndex + 1) -= 1
-          counts(nextIndex + 2) -= 1
-          dfs(nextIndex, melds + 1, pairs, taatsu)
-          counts(nextIndex) += 1
-          counts(nextIndex + 1) += 1
-          counts(nextIndex + 2) += 1
+    dfs(counts, 0, 0, 0, 0)
 
-        if counts(nextIndex) >= 2 then
-          if pairs == 0 then
-            counts(nextIndex) -= 2
-            dfs(nextIndex, melds, pairs + 1, taatsu)
-            counts(nextIndex) += 2
-
-          counts(nextIndex) -= 2
-          dfs(nextIndex, melds, pairs, taatsu + 1)
-          counts(nextIndex) += 2
-
-        if isSuitTile(nextIndex) && tileNumber(nextIndex) <= 8 && counts(nextIndex + 1) > 0 then
-          counts(nextIndex) -= 1
-          counts(nextIndex + 1) -= 1
-          dfs(nextIndex, melds, pairs, taatsu + 1)
-          counts(nextIndex) += 1
-          counts(nextIndex + 1) += 1
-
-        if isSuitTile(nextIndex) && tileNumber(nextIndex) <= 7 && counts(nextIndex + 2) > 0 then
-          counts(nextIndex) -= 1
-          counts(nextIndex + 2) -= 1
-          dfs(nextIndex, melds, pairs, taatsu + 1)
-          counts(nextIndex) += 1
-          counts(nextIndex + 2) += 1
-
-        dfs(nextIndex + 1, melds, pairs, taatsu)
-
-    dfs(0, 0, 0, 0)
-    best
-
-  private def calculateChiitoiShanten(counts: Array[Int]): Int =
+  private def calculateChiitoiShanten(counts: Vector[Int]): Int =
     val pairCount = counts.count(_ >= 2)
     val uniqueCount = counts.count(_ > 0)
     6 - pairCount + math.max(0, 7 - uniqueCount)
 
-  private def calculateKokushiShanten(counts: Array[Int]): Int =
+  private def calculateKokushiShanten(counts: Vector[Int]): Int =
     val uniqueCount = TerminalAndHonorIndices.count(index => counts(index) > 0)
     val pairExists = TerminalAndHonorIndices.exists(index => counts(index) >= 2)
     13 - uniqueCount - (if pairExists then 1 else 0)
 
-  private def parseHandCounts(tiles: Vector[String]): Option[Array[Int]] =
-    val counts = Array.fill(34)(0)
+  private def parseHandCounts(tiles: Vector[String]): Option[Vector[Int]] =
     val parsed = tiles.map(parseTile)
     if parsed.exists(_.isEmpty) then None
-    else
-      parsed.flatten.foreach { tileIndex =>
-        counts(tileIndex) += 1
-      }
-      Some(counts)
+    else Some(parsed.flatten.foldLeft(EmptyCounts)(incrementCount))
 
   private def parseTile(tile: String): Option[Int] =
-    if tile == null || tile.length != 2 then None
-    else
-      val numberChar = tile.charAt(0)
-      val suitChar = tile.charAt(1)
+    Option(tile).filter(_.length == 2).flatMap { value =>
+      val numberChar = value.charAt(0)
+      val suitChar = value.charAt(1)
       val normalizedNumber =
         if numberChar == '0' then 5
         else if numberChar.isDigit then numberChar.asDigit
@@ -260,6 +279,7 @@ private[service] object AdvancedStatsExactAnalyzer:
           Some(27 + normalizedNumber - 1)
         case _ =>
           None
+    }
 
   private def isSuitTile(index: Int): Boolean =
     index < 27
@@ -313,7 +333,18 @@ private[service] object AdvancedStatsExactAnalyzer:
     if action.revealedTiles.nonEmpty then action.revealedTiles.flatMap(parseTile)
     else Vector.empty
 
-  private def updateVisibleKnown(visibleKnown: Array[Int], tileIndices: Vector[Int]): Unit =
-    tileIndices.foreach { tileIndex =>
-      visibleKnown(tileIndex) = math.min(4, visibleKnown(tileIndex) + 1)
+  private def updateVisibleKnown(visibleKnown: Vector[Int], tileIndices: Vector[Int]): Vector[Int] =
+    tileIndices.foldLeft(visibleKnown) { (counts, tileIndex) =>
+      counts.updated(tileIndex, math.min(4, counts(tileIndex) + 1))
+    }
+
+  private def incrementCount(counts: Vector[Int], tileIndex: Int): Vector[Int] =
+    counts.updated(tileIndex, counts(tileIndex) + 1)
+
+  private def decrementCount(counts: Vector[Int], tileIndex: Int): Vector[Int] =
+    counts.updated(tileIndex, counts(tileIndex) - 1)
+
+  private def adjustCounts(counts: Vector[Int], changes: (Int, Int)*): Vector[Int] =
+    changes.foldLeft(counts) { case (updatedCounts, (tileIndex, delta)) =>
+      updatedCounts.updated(tileIndex, updatedCounts(tileIndex) + delta)
     }

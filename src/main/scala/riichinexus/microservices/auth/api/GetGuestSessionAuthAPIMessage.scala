@@ -14,9 +14,12 @@ final case class GetGuestSessionAuthAPIMessage(
 ) extends APIMessage[GuestSessionResponse] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[GuestSessionResponse] =
-    IO {
-      context.support.authModule.guestSessionTable
-        .find(GuestSessionId(sessionId))
-        .map(GuestSessionResponse.fromDomain)
-        .getOrElse(throw NoSuchElementException(s"Guest session $sessionId was not found"))
-    }
+    for
+      id <- IO(GuestSessionId(sessionId))
+      session <- IO(findGuestSession(context, id))
+    yield GuestSessionResponse.fromDomain(session)
+
+  private def findGuestSession(context: ApiPlanContext, sessionId: GuestSessionId) =
+    context.support.authModule.guestSessionTable
+      .find(sessionId)
+      .getOrElse(throw NoSuchElementException(s"Guest session ${sessionId.value} was not found"))

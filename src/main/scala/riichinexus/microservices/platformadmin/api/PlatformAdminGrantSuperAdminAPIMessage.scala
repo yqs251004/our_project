@@ -6,6 +6,8 @@ import java.time.Instant
 import java.util.NoSuchElementException
 
 import riichinexus.api.{APIMessage, ApiPlanContext}
+import riichinexus.application.changes.{DomainChange, DomainChangeInterpreter}
+import riichinexus.bootstrap.PlatformAdminModuleContext
 import riichinexus.domain.model.*
 import riichinexus.domain.service.AuthorizationFailure
 import riichinexus.infrastructure.json.JsonCodecs.given
@@ -19,34 +21,60 @@ final case class PlatformAdminGrantSuperAdminAPIMessage(
 ) extends APIMessage[PlatformAdminPlayerResponse] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[PlatformAdminPlayerResponse] =
-    IO {
-      val module = context.support.platformAdminModule
-      val request = GrantSuperAdminRequest(operatorId = operatorId)
-      val actor = context.support.principal(request.operatorId)
-      val grantedAt = Instant.now()
-
-      module.transactionManager.inTransaction {
-        if !actor.isSuperAdmin then
-          throw AuthorizationFailure("Only an existing super admin can grant super admin access")
-
-        module.tables.findPlayer(playerId).map { player =>
-          val updatedPlayer =
-            module.playerRepository.save(player.grantRole(RoleGrant.superAdmin(grantedAt, actor.playerId)))
-          module.auditEventRepository.save(
-            AuditEventEntry(
-              id = IdGenerator.auditEventId(),
-              aggregateType = "player",
-              aggregateId = playerId.value,
-              eventType = "SuperAdminGranted",
-              occurredAt = grantedAt,
-              actorId = actor.playerId,
-              details = Map("playerId" -> playerId.value),
-              note = Some(s"Granted super admin access to ${playerId.value}")
-            )
-          )
-          updatedPlayer
-        }
+    for
+      actor <- IO(context.support.principal(operatorId))
+      module = context.support.platformAdminModule
+      request = GrantSuperAdminRequest(operatorId = operatorId)
+      grantedAt <- IO.realTimeInstant
+      command = GrantSuperAdminCommand(
+        playerId = playerId,
+        actor = actor,
+        grantedAt = grantedAt
+      )
+      player <- IO {
+        module.transactionManager
+          .inTransaction {
+            grantSuperAdmin(module, command)
+          }
+          .getOrElse(throw NoSuchElementException(s"Player ${command.playerId.value} was not found"))
       }
-        .map(PlatformAdminPlayerView.fromDomain)
-        .getOrElse(throw NoSuchElementException(s"Player ${playerId.value} was not found"))
+    yield PlatformAdminPlayerView.fromDomain(player)
+
+  private def grantSuperAdmin(
+      module: PlatformAdminModuleContext,
+    command: GrantSuperAdminCommand
+  ): Option[Player] =
+    ensureSuperAdmin(command.actor)
+    module.tables.findPlayer(command.playerId).map { player =>
+      DomainChangeInterpreter
+        .auditOnly(module.transactionManager, module.auditEventRepository)
+        .commitWithinTransaction(
+          DomainChange(
+            aggregate = player.grantRole(RoleGrant.superAdmin(command.grantedAt, command.actor.playerId)),
+            persist = module.playerRepository.save,
+            auditEntries = _ =>
+              Vector(
+                AuditEventEntry(
+                  id = IdGenerator.auditEventId(),
+                  aggregateType = "player",
+                  aggregateId = command.playerId.value,
+                  eventType = "SuperAdminGranted",
+                  occurredAt = command.grantedAt,
+                  actorId = command.actor.playerId,
+                  details = Map("playerId" -> command.playerId.value),
+                  note = Some(s"Granted super admin access to ${command.playerId.value}")
+                )
+              )
+          )
+        )
     }
+
+  private def ensureSuperAdmin(actor: AccessPrincipal): Unit =
+    if !actor.isSuperAdmin then
+      throw AuthorizationFailure("Only an existing super admin can grant super admin access")
+
+  private final case class GrantSuperAdminCommand(
+      playerId: PlayerId,
+      actor: AccessPrincipal,
+      grantedAt: Instant
+  )

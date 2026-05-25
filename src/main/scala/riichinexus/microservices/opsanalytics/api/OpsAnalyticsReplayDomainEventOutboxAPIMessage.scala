@@ -1,5 +1,7 @@
 package riichinexus.microservices.opsanalytics.api
 
+import riichinexus.microservices.opsanalytics.tables.OpsAnalyticsDomainEventOutboxOperations
+
 import java.time.Instant
 import java.util.NoSuchElementException
 
@@ -21,35 +23,54 @@ final case class OpsAnalyticsReplayDomainEventOutboxAPIMessage(
   require(recordIds.nonEmpty, "Batch replay requires at least one recordId")
 
   override def plan(context: ApiPlanContext): IO[DomainEventOutboxBatchOperationResultResponse] =
-    IO {
-      val actor = context.support.principal(operatorId)
-      val replayAtInstant = replayAt.getOrElse(Instant.now())
-      val at = Instant.now()
-      val normalizedIds = recordIds.distinct
-      val failures = Vector.newBuilder[DomainEventOutboxOperationFailure]
-      val succeededIds = Vector.newBuilder[DomainEventOutboxRecordId]
+    for
+      actor <- IO(context.support.principal(operatorId))
+      replayAtInstant <- resolveReplayAt
+      replayedAt <- IO.realTimeInstant
+      command = ReplayOutboxBatchCommand(actor, recordIds.distinct, replayAtInstant, replayedAt, note)
+      result <- IO(replayOutboxBatch(context, command))
+    yield DomainEventOutboxBatchOperationResultResponse.fromDomain(result)
 
-      normalizedIds.foreach { currentRecordId =>
-        try
-          replayOutboxRecord(context, currentRecordId, actor, replayAtInstant, at)
-          succeededIds += currentRecordId
-        catch
-          case error: IllegalArgumentException =>
-            failures += DomainEventOutboxOperationFailure(currentRecordId, error.getMessage)
-          case error: NoSuchElementException =>
-            failures += DomainEventOutboxOperationFailure(currentRecordId, error.getMessage)
-          case error: IllegalStateException =>
-            failures += DomainEventOutboxOperationFailure(currentRecordId, error.getMessage)
-      }
+  private def resolveReplayAt: IO[Instant] =
+    replayAt match
+      case Some(value) => IO(value)
+      case None        => IO.realTimeInstant
 
-      DomainEventOutboxBatchOperationResultResponse.fromDomain(DomainEventOutboxBatchOperationResult(
-        action = "replay",
-        processedAt = at,
-        requestedCount = normalizedIds.size,
-        succeededRecordIds = succeededIds.result(),
-        failures = failures.result()
-      ))
+  private def replayOutboxBatch(
+      context: ApiPlanContext,
+      command: ReplayOutboxBatchCommand
+  ): DomainEventOutboxBatchOperationResult =
+    val (succeededIds, failures) = command.recordIds.foldLeft(
+      Vector.empty[DomainEventOutboxRecordId] -> Vector.empty[DomainEventOutboxOperationFailure]
+    ) { case ((succeeded, failed), currentRecordId) =>
+      replayOutboxRecordResult(context, currentRecordId, command.actor, command.replayAt, command.replayedAt) match
+        case Right(_)    => (succeeded :+ currentRecordId) -> failed
+        case Left(error) => succeeded -> (failed :+ error)
     }
+
+    DomainEventOutboxBatchOperationResult(
+      action = "replay",
+      processedAt = command.replayedAt,
+      requestedCount = command.recordIds.size,
+      succeededRecordIds = succeededIds,
+      failures = failures
+    )
+
+  private def replayOutboxRecordResult(
+      context: ApiPlanContext,
+      currentRecordId: DomainEventOutboxRecordId,
+      actor: AccessPrincipal,
+      replayAtInstant: Instant,
+      at: Instant
+  ): Either[DomainEventOutboxOperationFailure, DomainEventOutboxRecord] =
+    try Right(replayOutboxRecord(context, currentRecordId, actor, replayAtInstant, at))
+    catch
+      case error: IllegalArgumentException =>
+        Left(DomainEventOutboxOperationFailure(currentRecordId, error.getMessage))
+      case error: NoSuchElementException =>
+        Left(DomainEventOutboxOperationFailure(currentRecordId, error.getMessage))
+      case error: IllegalStateException =>
+        Left(DomainEventOutboxOperationFailure(currentRecordId, error.getMessage))
 
   private def replayOutboxRecord(
       context: ApiPlanContext,
@@ -58,34 +79,12 @@ final case class OpsAnalyticsReplayDomainEventOutboxAPIMessage(
       replayAtInstant: Instant,
       at: Instant
   ): DomainEventOutboxRecord =
-    val module = context.support.opsAnalyticsModule
-    module.transactionManager.inTransaction {
-      module.authorizationService.requirePermission(actor, Permission.ManageGlobalDictionary)
-      val record = module.domainEventOutboxRepository.findById(currentRecordId)
-        .getOrElse(throw NoSuchElementException(s"Domain event outbox record ${currentRecordId.value} was not found"))
-      require(
-        Set(DomainEventOutboxStatus.DeadLetter, DomainEventOutboxStatus.Quarantined).contains(record.status),
-        s"Only DeadLetter or Quarantined outbox records can be replayed, but ${currentRecordId.value} is ${record.status}"
-      )
+    OpsAnalyticsDomainEventOutboxOperations.replay(context, currentRecordId, actor, replayAtInstant, at, note)
 
-      val replayed = module.domainEventOutboxRepository.save(record.markReplayed(replayAtInstant))
-      module.auditEventRepository.save(
-        AuditEventEntry(
-          id = IdGenerator.auditEventId(),
-          aggregateType = "domain-event-outbox-record",
-          aggregateId = currentRecordId.value,
-          eventType = "DomainEventOutboxReplayed",
-          occurredAt = at,
-          actorId = actor.playerId,
-          details = Map(
-            "priorStatus" -> record.status.toString,
-            "replayAt" -> replayAtInstant.toString,
-            "eventType" -> record.eventType,
-            "aggregateType" -> record.aggregateType,
-            "aggregateId" -> record.aggregateId
-          ),
-          note = note
-        )
-      )
-      replayed
-    }
+  private final case class ReplayOutboxBatchCommand(
+      actor: AccessPrincipal,
+      recordIds: Vector[DomainEventOutboxRecordId],
+      replayAt: Instant,
+      replayedAt: Instant,
+      note: Option[String]
+  )

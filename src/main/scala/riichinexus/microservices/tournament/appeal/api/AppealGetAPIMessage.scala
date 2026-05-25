@@ -13,8 +13,12 @@ import upickle.default.*
 final case class AppealGetAPIMessage(appealId: String) extends APIMessage[AppealTicketView] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[AppealTicketView] =
-    IO {
-      context.support.tournamentAppealModule.tables.findAppeal(AppealTicketId(appealId))
-        .map(AppealTicketView.fromDomain)
-        .getOrElse(throw NoSuchElementException("Resource not found"))
-    }
+    for
+      ticketId <- IO(AppealTicketId(appealId))
+      ticket <- IO(findAppeal(context, ticketId))
+    yield AppealTicketView.fromDomain(ticket)
+
+  private def findAppeal(context: ApiPlanContext, ticketId: AppealTicketId): AppealTicket =
+    context.support.tournamentAppealModule.tables
+      .findAppeal(ticketId)
+      .getOrElse(throw NoSuchElementException("Resource not found"))

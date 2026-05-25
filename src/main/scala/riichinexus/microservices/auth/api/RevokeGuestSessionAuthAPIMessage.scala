@@ -5,7 +5,9 @@ import java.util.NoSuchElementException
 
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
-import riichinexus.domain.model.{AuditEventEntry, GuestSessionId, IdGenerator}
+import riichinexus.application.changes.{DomainChange, DomainChangeInterpreter}
+import riichinexus.bootstrap.AuthModuleContext
+import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.auth.objects.apiTypes.GuestSessionResponse
 import upickle.default.*
@@ -16,29 +18,61 @@ final case class RevokeGuestSessionAuthAPIMessage(
 ) extends APIMessage[GuestSessionResponse] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[GuestSessionResponse] =
-    IO {
-      val module = context.support.authModule
-      val revokedAt = Instant.now()
-      val guestSessionId = GuestSessionId(sessionId)
-      val revokeReason = reason.filter(_.trim.nonEmpty).getOrElse("revoked-by-operator")
-      module.transactionManager.inTransaction {
-        module.guestSessionRepository.findById(guestSessionId).map { session =>
-          val updated = module.guestSessionRepository.save(
-            session.revoke(revokeReason, revokedAt)
-          )
-          module.auditEventRepository.save(
-            AuditEventEntry(
-              id = IdGenerator.auditEventId(),
-              aggregateType = "guest-session",
-              aggregateId = guestSessionId.value,
-              eventType = "GuestSessionRevoked",
-              occurredAt = revokedAt,
-              details = Map("reason" -> updated.revokedReason.getOrElse(revokeReason))
-            )
-          )
-          GuestSessionResponse.fromDomain(updated)
-        }.getOrElse(
-          throw NoSuchElementException(s"Guest session $sessionId was not found")
-        )
+    for
+      revokedAt <- IO.realTimeInstant
+      module = context.support.authModule
+      input = resolveInput
+      command = RevokeGuestSessionCommand(
+        input = input,
+        revokedAt = revokedAt
+      )
+      session <- IO {
+        module.transactionManager.inTransaction {
+          revokeGuestSession(module, command)
+        }
       }
-    }
+    yield GuestSessionResponse.fromDomain(session)
+
+  private def revokeGuestSession(
+      module: AuthModuleContext,
+      command: RevokeGuestSessionCommand
+  ): GuestAccessSession =
+    val session = module.guestSessionRepository.findById(command.input.sessionId)
+      .getOrElse(throw NoSuchElementException(s"Guest session ${command.input.sessionId.value} was not found"))
+    DomainChangeInterpreter
+      .auditOnly(module.transactionManager, module.auditEventRepository)
+      .commitWithinTransaction(
+        DomainChange(
+          aggregate = session.revoke(command.input.reason, command.revokedAt),
+          persist = module.guestSessionRepository.save,
+          auditEntries = updated =>
+            Vector(
+              AuditEventEntry(
+                id = IdGenerator.auditEventId(),
+                aggregateType = "guest-session",
+                aggregateId = updated.id.value,
+                eventType = "GuestSessionRevoked",
+                occurredAt = command.revokedAt,
+                actorId = None,
+                details = Map("reason" -> updated.revokedReason.getOrElse(command.input.reason)),
+                note = None
+              )
+            )
+        )
+      )
+
+  private def resolveInput: ResolvedRevokeGuestSessionInput =
+    ResolvedRevokeGuestSessionInput(
+      sessionId = GuestSessionId(sessionId),
+      reason = reason.filter(_.trim.nonEmpty).getOrElse("revoked-by-operator")
+    )
+
+  private final case class RevokeGuestSessionCommand(
+      input: ResolvedRevokeGuestSessionInput,
+      revokedAt: Instant
+  )
+
+  private final case class ResolvedRevokeGuestSessionInput(
+      sessionId: GuestSessionId,
+      reason: String
+  )

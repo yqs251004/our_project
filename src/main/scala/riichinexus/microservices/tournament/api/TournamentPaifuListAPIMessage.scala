@@ -14,36 +14,57 @@ import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 
 final case class TournamentPaifuListAPIMessage(
-    playerId: Option[String] = None,
-    tournamentId: Option[String] = None,
-    stageId: Option[String] = None,
-    tableId: Option[String] = None,
-    limit: Option[Int] = None,
-    offset: Option[Int] = None
+    query: PaifuListQuery = PaifuListQuery()
 ) extends APIMessage[PagedResponse[TournamentPaifuSummaryView]] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[TournamentPaifuSummaryView]] =
-    IO {
-      val query = PaifuListQuery(playerId.filter(_.nonEmpty).map(PlayerId(_)), tournamentId.filter(_.nonEmpty).map(TournamentId(_)), stageId.filter(_.nonEmpty).map(TournamentStageId(_)), tableId.filter(_.nonEmpty).map(TableId(_)))
-      val paifus = context.support.tournamentModule.tables
-        .listPaifus()
-        .filter(paifu => query.playerId.forall(paifu.playerIds.contains))
-        .filter(paifu => query.tournamentId.forall(_ == paifu.metadata.tournamentId))
-        .filter(paifu => query.stageId.forall(_ == paifu.metadata.stageId))
-        .filter(paifu => query.tableId.forall(_ == paifu.metadata.tableId))
-        .sortBy(paifu => (paifu.metadata.recordedAt, paifu.id.value))
-        .map(TournamentPaifuSummaryView.fromDomain)
-      page(paifus, filters(playerId.filter(_.nonEmpty).map("playerId" -> _), tournamentId.filter(_.nonEmpty).map("tournamentId" -> _), stageId.filter(_.nonEmpty).map("stageId" -> _), tableId.filter(_.nonEmpty).map("tableId" -> _)))
-    }
+    for
+      resolved <- IO(resolveQuery)
+      paifus <- IO(listPaifus(context, resolved))
+    yield pagedResponse(paifus, resolved)
 
-  private def page(items: Vector[TournamentPaifuSummaryView], appliedFilters: Map[String, String]): PagedResponse[TournamentPaifuSummaryView] =
-    val resolvedLimit = limit.getOrElse(20)
-    val resolvedOffset = offset.getOrElse(0)
-    require(resolvedLimit > 0, "Input field limit must be positive")
-    require(resolvedOffset >= 0, "Input field offset must be non-negative")
-    val boundedLimit = math.min(resolvedLimit, 100)
-    val pageItems = items.slice(resolvedOffset, resolvedOffset + boundedLimit)
-    PagedResponse(pageItems, items.size, boundedLimit, resolvedOffset, resolvedOffset + pageItems.size < items.size, appliedFilters)
+  private def resolveQuery: ResolvedPaifuListQuery =
+    ResolvedPaifuListQuery(
+      query = query,
+      limit = query.limit.getOrElse(20),
+      offset = query.offset.getOrElse(0),
+      appliedFilters = filters(
+        query.playerId.map(value => "playerId" -> value.value),
+        query.tournamentId.map(value => "tournamentId" -> value.value),
+        query.stageId.map(value => "stageId" -> value.value),
+        query.tableId.map(value => "tableId" -> value.value)
+      )
+    )
+
+  private def listPaifus(
+      context: ApiPlanContext,
+      resolved: ResolvedPaifuListQuery
+  ): Vector[TournamentPaifuSummaryView] =
+    context.support.tournamentModule.tables
+      .listPaifus()
+      .filter(paifu => resolved.query.playerId.forall(paifu.playerIds.contains))
+      .filter(paifu => resolved.query.tournamentId.forall(_ == paifu.metadata.tournamentId))
+      .filter(paifu => resolved.query.stageId.forall(_ == paifu.metadata.stageId))
+      .filter(paifu => resolved.query.tableId.forall(_ == paifu.metadata.tableId))
+      .sortBy(paifu => (paifu.metadata.recordedAt, paifu.id.value))
+      .map(TournamentPaifuSummaryView.fromDomain)
+
+  private def pagedResponse(
+      items: Vector[TournamentPaifuSummaryView],
+      query: ResolvedPaifuListQuery
+  ): PagedResponse[TournamentPaifuSummaryView] =
+    require(query.limit > 0, "Input field limit must be positive")
+    require(query.offset >= 0, "Input field offset must be non-negative")
+    val boundedLimit = math.min(query.limit, 100)
+    val pageItems = items.slice(query.offset, query.offset + boundedLimit)
+    PagedResponse(pageItems, items.size, boundedLimit, query.offset, query.offset + pageItems.size < items.size, query.appliedFilters)
 
   private def filters(values: Option[(String, String)]*): Map[String, String] =
     values.flatten.toMap
+
+  private final case class ResolvedPaifuListQuery(
+      query: PaifuListQuery,
+      limit: Int,
+      offset: Int,
+      appliedFilters: Map[String, String]
+  )

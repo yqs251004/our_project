@@ -16,34 +16,37 @@ import upickle.default.*
 final case class TournamentStageTablesAPIMessage(
     tournamentId: String,
     stageId: String,
-    status: Option[String] = None,
-    roundNumber: Option[Int] = None,
-    playerId: Option[String] = None,
-    limit: Option[Int] = None,
-    offset: Option[Int] = None
+    query: StageTableQuery = StageTableQuery()
 ) extends APIMessage[PagedResponse[TournamentTableView]] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[TournamentTableView]] =
-    IO {
-      val query = StageTableQuery(
-        status = status.filter(_.nonEmpty).map(TableStatus.valueOf),
-        roundNumber = roundNumber,
-        playerId = playerId.filter(_.nonEmpty).map(PlayerId(_))
-      )
-      val tables = context.support.tournamentModule.tables
-        .listStageTables(TournamentId(tournamentId), TournamentStageId(stageId), query)
-        .map(TournamentTableView.fromDomain)
-      page(tables, filters(status.filter(_.nonEmpty).map("status" -> _), roundNumber.map(value => "roundNumber" -> value.toString), playerId.filter(_.nonEmpty).map("playerId" -> _)))
-    }
+    for
+      resolved <- IO(resolveQuery)
+      tables <- IO(listStageTables(context, resolved))
+    yield PagedResponse.fromItems(tables, resolved.query.limit, resolved.query.offset, resolved.appliedFilters)(TournamentTableView.fromDomain)
 
-  private def page(items: Vector[TournamentTableView], appliedFilters: Map[String, String]): PagedResponse[TournamentTableView] =
-    val resolvedLimit = limit.getOrElse(20)
-    val resolvedOffset = offset.getOrElse(0)
-    require(resolvedLimit > 0, "Input field limit must be positive")
-    require(resolvedOffset >= 0, "Input field offset must be non-negative")
-    val boundedLimit = math.min(resolvedLimit, 100)
-    val pageItems = items.slice(resolvedOffset, resolvedOffset + boundedLimit)
-    PagedResponse(pageItems, items.size, boundedLimit, resolvedOffset, resolvedOffset + pageItems.size < items.size, appliedFilters)
+  private def resolveQuery: ResolvedStageTablesQuery =
+    ResolvedStageTablesQuery(
+      tournamentId = TournamentId(tournamentId),
+      stageId = TournamentStageId(stageId),
+      query = query,
+      appliedFilters = Vector(
+        query.status.map(value => "status" -> value.toString),
+        query.roundNumber.map(value => "roundNumber" -> value.toString),
+        query.playerId.map(value => "playerId" -> value.value)
+      ).flatten.toMap
+    )
 
-  private def filters(values: Option[(String, String)]*): Map[String, String] =
-    values.flatten.toMap
+  private def listStageTables(
+      context: ApiPlanContext,
+      resolved: ResolvedStageTablesQuery
+  ): Vector[Table] =
+    context.support.tournamentModule.tables
+      .listStageTables(resolved.tournamentId, resolved.stageId, resolved.query)
+
+  private final case class ResolvedStageTablesQuery(
+      tournamentId: TournamentId,
+      stageId: TournamentStageId,
+      query: StageTableQuery,
+      appliedFilters: Map[String, String]
+  )

@@ -1,10 +1,11 @@
 package riichinexus.microservices.club.objects.apiTypes
 
 import riichinexus.domain.model.{GuestSessionId, PlayerId}
+import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.*
 
 final case class ClubMembershipApplicationRequest(
-    applicantUserId: Option[String],
+    applicantUserId: Option[String] = None,
     displayName: String,
     message: Option[String] = None,
     guestSessionId: Option[String] = None,
@@ -74,7 +75,6 @@ object WithdrawClubApplicationRequest:
 
 final case class ClubApplicationListQuery(
     operatorId: String,
-    guestSessionId: Option[String] = None,
     status: Option[String] = None,
     applicantUserId: Option[String] = None,
     displayName: Option[String] = None,

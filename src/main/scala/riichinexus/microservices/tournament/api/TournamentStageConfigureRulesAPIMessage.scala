@@ -4,6 +4,7 @@ import java.util.NoSuchElementException
 
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
+import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.dictionary.domain.RuntimeDictionary
@@ -18,46 +19,63 @@ import upickle.default.*
 final case class TournamentStageConfigureRulesAPIMessage(tournamentId: String, stageId: String, request: ConfigureStageRulesRequest) extends APIMessage[TournamentSummaryView] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[TournamentSummaryView] =
-    IO {
-      val module = context.support.tournamentModule
-      val tournamentIdValue = TournamentId(tournamentId)
-      val stageIdValue = TournamentStageId(stageId)
-      val actor = context.support.principal(request.operator)
+    for
+      actor <- IO(context.support.principal(request.operator))
+      module = context.support.tournamentModule
+      command = ConfigureStageRulesCommand(
+        tournamentId = TournamentId(tournamentId),
+        stageId = TournamentStageId(stageId),
+        actor = actor,
+        request = request
+      )
+      tournament <- IO {
+        module.transactionManager.inTransaction {
+          configureStageRules(module, command)
+        }.getOrElse(throw NoSuchElementException("Resource not found"))
+      }
+    yield TournamentSummaryView.fromDomain(tournament)
 
-      module.transactionManager.inTransaction {
-        module.tournamentRepository.findById(tournamentIdValue).map { tournament =>
-          val currentStage = tournament.stages
-            .find(_.id == stageIdValue)
-            .getOrElse(throw NoSuchElementException(s"Stage ${stageIdValue.value} was not found"))
-          module.authorizationService.requirePermission(
-            actor,
-            Permission.ConfigureTournamentRules,
-            tournamentId = Some(tournamentIdValue)
-          )
-
-          val dictionarySnapshot = RuntimeDictionary.snapshot(module.globalDictionaryRepository)
-          val baseStage = currentStage.copy(
-            format = request.stageFormat.getOrElse(currentStage.format),
-            roundCount = math.max(request.roundCount.getOrElse(currentStage.roundCount), currentStage.currentRound)
-          )
-          val configuredStage = normalizeStage(
-            baseStage.withRules(
-              request.advancementRule,
-              request.swissRule,
-              request.knockoutRule,
-              request.schedulingPoolSize.getOrElse(baseStage.schedulingPoolSize)
-            ),
-            dictionarySnapshot
-          )
-
-          TournamentSummaryView.fromDomain(
-            module.tournamentRepository.save(
-              tournament.updateStage(stageIdValue, _ => configuredStage)
-            )
-          )
-        }
-      }.getOrElse(throw NoSuchElementException("Resource not found"))
+  private def configureStageRules(
+      module: TournamentModuleContext,
+      command: ConfigureStageRulesCommand
+  ): Option[Tournament] =
+    module.tournamentRepository.findById(command.tournamentId).map { tournament =>
+      val currentStage = requireStage(tournament, command.stageId)
+      module.authorizationService.requirePermission(
+        command.actor,
+        Permission.ConfigureTournamentRules,
+        tournamentId = Some(command.tournamentId)
+      )
+      val configuredStage = buildConfiguredStage(module, currentStage, command.request)
+      module.tournamentRepository.save(
+        tournament.updateStage(command.stageId, _ => configuredStage)
+      )
     }
+
+  private def requireStage(tournament: Tournament, stageId: TournamentStageId): TournamentStage =
+    tournament.stages
+      .find(_.id == stageId)
+      .getOrElse(throw NoSuchElementException(s"Stage ${stageId.value} was not found"))
+
+  private def buildConfiguredStage(
+      module: TournamentModuleContext,
+      currentStage: TournamentStage,
+      request: ConfigureStageRulesRequest
+  ): TournamentStage =
+    val dictionarySnapshot = RuntimeDictionary.snapshot(module.globalDictionaryRepository)
+    val baseStage = currentStage.copy(
+      format = request.stageFormat.getOrElse(currentStage.format),
+      roundCount = math.max(request.roundCount.getOrElse(currentStage.roundCount), currentStage.currentRound)
+    )
+    normalizeStage(
+      baseStage.withRules(
+        request.advancementRule,
+        request.swissRule,
+        request.knockoutRule,
+        request.schedulingPoolSize.getOrElse(baseStage.schedulingPoolSize)
+      ),
+      dictionarySnapshot
+    )
 
   private def normalizeStage(
       stage: TournamentStage,
@@ -71,3 +89,10 @@ final case class TournamentStageConfigureRulesAPIMessage(tournamentId: String, s
         templatedStage.advancementRule.templateKey.isEmpty
     then templatedStage.copy(advancementRule = AdvancementRule.defaultFor(templatedStage.format))
     else templatedStage
+
+  private final case class ConfigureStageRulesCommand(
+      tournamentId: TournamentId,
+      stageId: TournamentStageId,
+      actor: AccessPrincipal,
+      request: ConfigureStageRulesRequest
+  )

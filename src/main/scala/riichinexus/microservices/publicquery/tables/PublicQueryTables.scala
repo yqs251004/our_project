@@ -4,6 +4,7 @@ import riichinexus.application.ports.*
 import riichinexus.domain.model.*
 import riichinexus.domain.service.GlobalDictionaryRegistry
 import riichinexus.microservices.publicquery.objects.apiTypes.*
+import riichinexus.microservices.tournament.objects.apiTypes.RankSnapshotView
 import riichinexus.microservices.tournament.domain.StageLineupSupport
 
 final class PublicQueryTables(

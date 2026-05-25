@@ -17,16 +17,17 @@ final case class AuthCheckPermissionAPIMessage(
 ) extends APIMessage[Boolean] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[Boolean] =
-    IO {
-      Try {
-        val operator = context.support.principal(PlayerId(operatorId))
-        context.support.requirePermission(
-          principal = operator,
-          permission = permission,
-          clubId = clubId.filter(_.nonEmpty).map(ClubId(_)),
-          tournamentId = tournamentId.filter(_.nonEmpty).map(TournamentId(_)),
-          subjectPlayerId = subjectPlayerId.filter(_.nonEmpty).map(PlayerId(_))
-        )
-        true
-      }.getOrElse(false)
-    }
+    IO(checkPermission(context))
+
+  private def checkPermission(context: ApiPlanContext): Boolean =
+    Try {
+      val operator = context.support.principal(PlayerId(operatorId))
+      context.support.requirePermission(
+        principal = operator,
+        permission = permission,
+        clubId = clubId.filter(_.nonEmpty).map(ClubId(_)),
+        tournamentId = tournamentId.filter(_.nonEmpty).map(TournamentId(_)),
+        subjectPlayerId = subjectPlayerId.filter(_.nonEmpty).map(PlayerId(_))
+      )
+      true
+    }.getOrElse(false)

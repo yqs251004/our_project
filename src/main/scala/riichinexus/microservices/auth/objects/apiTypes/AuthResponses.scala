@@ -1,6 +1,7 @@
 package riichinexus.microservices.auth.objects.apiTypes
 
 import riichinexus.domain.model.{GuestAccessSession, Player}
+import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.*
 
 enum SessionPrincipalKind derives CanEqual:

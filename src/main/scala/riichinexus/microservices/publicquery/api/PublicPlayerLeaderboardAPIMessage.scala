@@ -15,34 +15,35 @@ final case class PublicPlayerLeaderboardAPIMessage(
 ) extends APIMessage[PagedResponse[PlayerLeaderboardEntry]] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[PlayerLeaderboardEntry]] =
-    IO {
-      val module = context.support.publicQueryModule
-      context.support.authorizationService
-        .requirePermission(AccessPrincipal.guest(), Permission.ViewPublicLeaderboard)
+    for
+      query <- IO(resolveQuery(context))
+      leaderboard <- IO(listLeaderboard(context, query))
+    yield PagedResponse.fromItems(leaderboard, limit, offset, query.appliedFilters)(identity)
 
-      val parsedClubId = clubId.filter(_.nonEmpty).map(ClubId(_).value)
-      val parsedStatus = status.filter(_.nonEmpty).map(
+  private def resolveQuery(context: ApiPlanContext): ResolvedPlayerLeaderboardQuery =
+    context.support.authorizationService
+      .requirePermission(AccessPrincipal.guest(), Permission.ViewPublicLeaderboard)
+    ResolvedPlayerLeaderboardQuery(
+      clubId = clubId.filter(_.nonEmpty).map(ClubId(_).value),
+      status = status.filter(_.nonEmpty).map(
         context.support.parseEnum("status", _)(PlayerStatus.valueOf)
-      )
-      val leaderboard = module.tables.publicPlayerLeaderboard(Int.MaxValue)
-        .filter(entry => parsedClubId.forall(entry.clubIds.contains))
-        .filter(entry => parsedStatus.forall(_.toString == entry.status))
-      val resolvedLimit = limit.getOrElse(20)
-      val resolvedOffset = offset.getOrElse(0)
-      require(resolvedLimit > 0, "Input field limit must be positive")
-      require(resolvedOffset >= 0, "Input field offset must be non-negative")
-      val boundedLimit = math.min(resolvedLimit, 100)
-      val page = leaderboard.slice(resolvedOffset, resolvedOffset + boundedLimit)
+      ),
+      appliedFilters = Vector(
+        clubId.filter(_.nonEmpty).map("clubId" -> _),
+        status.filter(_.nonEmpty).map("status" -> _)
+      ).flatten.toMap
+    )
 
-      PagedResponse(
-        items = page,
-        total = leaderboard.size,
-        limit = boundedLimit,
-        offset = resolvedOffset,
-        hasMore = resolvedOffset + page.size < leaderboard.size,
-        appliedFilters = Vector(
-          clubId.filter(_.nonEmpty).map("clubId" -> _),
-          status.filter(_.nonEmpty).map("status" -> _)
-        ).flatten.toMap
-      )
-    }
+  private def listLeaderboard(
+      context: ApiPlanContext,
+      query: ResolvedPlayerLeaderboardQuery
+  ): Vector[PlayerLeaderboardEntry] =
+    context.support.publicQueryModule.tables.publicPlayerLeaderboard(Int.MaxValue)
+      .filter(entry => query.clubId.forall(entry.clubIds.contains))
+      .filter(entry => query.status.forall(_.toString == entry.status))
+
+  private final case class ResolvedPlayerLeaderboardQuery(
+      clubId: Option[String],
+      status: Option[PlayerStatus],
+      appliedFilters: Map[String, String]
+  )

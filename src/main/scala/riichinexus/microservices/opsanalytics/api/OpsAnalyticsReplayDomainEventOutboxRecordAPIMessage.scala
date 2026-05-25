@@ -1,7 +1,8 @@
 package riichinexus.microservices.opsanalytics.api
 
+import riichinexus.microservices.opsanalytics.tables.OpsAnalyticsDomainEventOutboxOperations
+
 import java.time.Instant
-import java.util.NoSuchElementException
 
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
@@ -19,39 +20,36 @@ final case class OpsAnalyticsReplayDomainEventOutboxRecordAPIMessage(
 ) extends APIMessage[DomainEventOutboxRecordResponse] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[DomainEventOutboxRecordResponse] =
-    IO {
-      val module = context.support.opsAnalyticsModule
-      val actor = context.support.principal(operatorId)
-      val replayAtInstant = replayAt.getOrElse(Instant.now())
-      val at = Instant.now()
-      module.transactionManager.inTransaction {
-        module.authorizationService.requirePermission(actor, Permission.ManageGlobalDictionary)
-        val record = module.domainEventOutboxRepository.findById(recordId)
-          .getOrElse(throw NoSuchElementException(s"Domain event outbox record ${recordId.value} was not found"))
-        require(
-          Set(DomainEventOutboxStatus.DeadLetter, DomainEventOutboxStatus.Quarantined).contains(record.status),
-          s"Only DeadLetter or Quarantined outbox records can be replayed, but ${recordId.value} is ${record.status}"
-        )
+    for
+      actor <- IO(context.support.principal(operatorId))
+      replayAtInstant <- resolveReplayAt
+      replayedAt <- IO.realTimeInstant
+      command = ReplayOutboxRecordCommand(recordId, actor, replayAtInstant, replayedAt, note)
+      record <- IO(replayOutboxRecord(context, command))
+    yield DomainEventOutboxRecordResponse.fromDomain(record)
 
-        val replayed = module.domainEventOutboxRepository.save(record.markReplayed(replayAtInstant))
-        module.auditEventRepository.save(
-          AuditEventEntry(
-            id = IdGenerator.auditEventId(),
-            aggregateType = "domain-event-outbox-record",
-            aggregateId = recordId.value,
-            eventType = "DomainEventOutboxReplayed",
-            occurredAt = at,
-            actorId = actor.playerId,
-            details = Map(
-              "priorStatus" -> record.status.toString,
-              "replayAt" -> replayAtInstant.toString,
-              "eventType" -> record.eventType,
-              "aggregateType" -> record.aggregateType,
-              "aggregateId" -> record.aggregateId
-            ),
-            note = note
-          )
-        )
-        DomainEventOutboxRecordResponse.fromDomain(replayed)
-      }
-    }
+  private def resolveReplayAt: IO[Instant] =
+    replayAt match
+      case Some(value) => IO(value)
+      case None        => IO.realTimeInstant
+
+  private def replayOutboxRecord(
+      context: ApiPlanContext,
+      command: ReplayOutboxRecordCommand
+  ): DomainEventOutboxRecord =
+    OpsAnalyticsDomainEventOutboxOperations.replay(
+      context,
+      command.recordId,
+      command.actor,
+      command.replayAt,
+      command.replayedAt,
+      command.note
+    )
+
+  private final case class ReplayOutboxRecordCommand(
+      recordId: DomainEventOutboxRecordId,
+      actor: AccessPrincipal,
+      replayAt: Instant,
+      replayedAt: Instant,
+      note: Option[String]
+  )

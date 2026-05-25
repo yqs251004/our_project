@@ -22,31 +22,56 @@ final case class TournamentListAPIMessage(
 ) extends APIMessage[PagedResponse[TournamentSummaryView]] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[TournamentSummaryView]] =
-    IO {
-      val query = TournamentListQuery(
+    for
+      query <- IO(resolveQuery)
+      tournaments <- IO(listTournaments(context, query))
+    yield pagedResponse(tournaments, query)
+
+  private def resolveQuery: ResolvedTournamentListQuery =
+    ResolvedTournamentListQuery(
+      query = TournamentListQuery(
         status = status.filter(_.nonEmpty).map(TournamentStatus.valueOf),
         adminId = adminId.filter(_.nonEmpty).map(PlayerId(_)),
         organizer = organizer.filter(_.nonEmpty)
+      ),
+      limit = limit.getOrElse(20),
+      offset = offset.getOrElse(0),
+      appliedFilters = filters(
+        status.filter(_.nonEmpty).map("status" -> _),
+        adminId.filter(_.nonEmpty).map("adminId" -> _),
+        organizer.filter(_.nonEmpty).map("organizer" -> _)
       )
-      val tournaments = context.support.tournamentModule.tables
-        .listTournaments(
-          status = query.status,
-          adminId = query.adminId,
-          organizer = query.organizer
-        )
-        .sortBy(tournament => (tournament.startsAt, tournament.name, tournament.id.value))
-        .map(TournamentSummaryView.fromDomain)
-      page(tournaments, filters(status.filter(_.nonEmpty).map("status" -> _), adminId.filter(_.nonEmpty).map("adminId" -> _), organizer.filter(_.nonEmpty).map("organizer" -> _)))
-    }
+    )
 
-  private def page(items: Vector[TournamentSummaryView], appliedFilters: Map[String, String]): PagedResponse[TournamentSummaryView] =
-    val resolvedLimit = limit.getOrElse(20)
-    val resolvedOffset = offset.getOrElse(0)
-    require(resolvedLimit > 0, "Input field limit must be positive")
-    require(resolvedOffset >= 0, "Input field offset must be non-negative")
-    val boundedLimit = math.min(resolvedLimit, 100)
-    val pageItems = items.slice(resolvedOffset, resolvedOffset + boundedLimit)
-    PagedResponse(pageItems, items.size, boundedLimit, resolvedOffset, resolvedOffset + pageItems.size < items.size, appliedFilters)
+  private def listTournaments(
+      context: ApiPlanContext,
+      resolved: ResolvedTournamentListQuery
+  ): Vector[TournamentSummaryView] =
+    context.support.tournamentModule.tables
+      .listTournaments(
+        status = resolved.query.status,
+        adminId = resolved.query.adminId,
+        organizer = resolved.query.organizer
+      )
+      .sortBy(tournament => (tournament.startsAt, tournament.name, tournament.id.value))
+      .map(TournamentSummaryView.fromDomain)
+
+  private def pagedResponse(
+      items: Vector[TournamentSummaryView],
+      query: ResolvedTournamentListQuery
+  ): PagedResponse[TournamentSummaryView] =
+    require(query.limit > 0, "Input field limit must be positive")
+    require(query.offset >= 0, "Input field offset must be non-negative")
+    val boundedLimit = math.min(query.limit, 100)
+    val pageItems = items.slice(query.offset, query.offset + boundedLimit)
+    PagedResponse(pageItems, items.size, boundedLimit, query.offset, query.offset + pageItems.size < items.size, query.appliedFilters)
 
   private def filters(values: Option[(String, String)]*): Map[String, String] =
     values.flatten.toMap
+
+  private final case class ResolvedTournamentListQuery(
+      query: TournamentListQuery,
+      limit: Int,
+      offset: Int,
+      appliedFilters: Map[String, String]
+  )

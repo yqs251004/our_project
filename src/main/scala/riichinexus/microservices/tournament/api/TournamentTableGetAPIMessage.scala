@@ -17,8 +17,11 @@ import upickle.default.*
 final case class TournamentTableGetAPIMessage(tableId: String) extends APIMessage[TournamentTableView] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[TournamentTableView] =
-    IO {
-      context.support.tournamentModule.tables.findTable(TableId(tableId))
-        .map(TournamentTableView.fromDomain)
-        .getOrElse(throw NoSuchElementException("Resource not found"))
-    }
+    for
+      id <- IO(TableId(tableId))
+      table <- IO(resolveTable(context, id))
+    yield TournamentTableView.fromDomain(table)
+
+  private def resolveTable(context: ApiPlanContext, tableId: TableId): Table =
+    context.support.tournamentModule.tables.findTable(tableId)
+      .getOrElse(throw NoSuchElementException("Resource not found"))

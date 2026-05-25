@@ -17,8 +17,23 @@ import upickle.default.*
 final case class TournamentSettlementGetAPIMessage(tournamentId: String, stageId: String) extends APIMessage[TournamentSettlementView] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[TournamentSettlementView] =
-    IO {
-      context.support.tournamentModule.tables.findSettlement(TournamentId(tournamentId), TournamentStageId(stageId))
-        .map(TournamentSettlementView.fromDomain)
-        .getOrElse(throw NoSuchElementException("Resource not found"))
-    }
+    for
+      resolved <- IO(resolveQuery)
+      settlement <- IO(findSettlement(context, resolved))
+    yield TournamentSettlementView.fromDomain(settlement)
+
+  private def resolveQuery: SettlementGetQuery =
+    SettlementGetQuery(
+      tournamentId = TournamentId(tournamentId),
+      stageId = TournamentStageId(stageId)
+    )
+
+  private def findSettlement(context: ApiPlanContext, query: SettlementGetQuery): TournamentSettlementSnapshot =
+    context.support.tournamentModule.tables
+      .findSettlement(query.tournamentId, query.stageId)
+      .getOrElse(throw NoSuchElementException("Resource not found"))
+
+  private final case class SettlementGetQuery(
+      tournamentId: TournamentId,
+      stageId: TournamentStageId
+  )

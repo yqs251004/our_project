@@ -4,54 +4,76 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.objects.apiTypes.{Club as ClubResponse}
+import riichinexus.microservices.club.objects.apiTypes.{Club as ClubResponse, ClubListQuery}
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 
 final case class ListClubsAPIMessage(
-    activeOnly: Option[Boolean] = None,
-    joinableOnly: Option[Boolean] = None,
-    memberId: Option[String] = None,
-    adminId: Option[String] = None,
-    name: Option[String] = None,
-    limit: Option[Int] = None,
-    offset: Option[Int] = None
+    query: ClubListQuery = ClubListQuery()
 ) extends APIMessage[PagedResponse[ClubResponse]] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[ClubResponse]] =
-    IO {
-      val parsedActiveOnly = activeOnly.contains(true)
-      val parsedJoinableOnly = joinableOnly.contains(true)
-      val parsedMemberId = memberId.filter(_.nonEmpty).map(PlayerId(_))
-      val parsedAdminId = adminId.filter(_.nonEmpty).map(PlayerId(_))
-      val parsedName = name.filter(_.nonEmpty)
-      val clubs = context.support.clubModule.tables
-        .listClubs(
-          activeOnly = parsedActiveOnly,
-          joinableOnly = parsedJoinableOnly,
-          memberId = parsedMemberId,
-          adminId = parsedAdminId,
-          name = parsedName
-        )
-        .sortBy(club => (club.dissolvedAt.nonEmpty, club.name, club.id.value))
-      val resolvedLimit = limit.getOrElse(20)
-      val resolvedOffset = offset.getOrElse(0)
-      require(resolvedLimit > 0, "Input field limit must be positive")
-      require(resolvedOffset >= 0, "Input field offset must be non-negative")
-      val boundedLimit = math.min(resolvedLimit, 100)
-      val page = clubs.slice(resolvedOffset, resolvedOffset + boundedLimit).map(ClubResponse.fromDomain)
-      PagedResponse(
-        items = page,
-        total = clubs.size,
-        limit = boundedLimit,
-        offset = resolvedOffset,
-        hasMore = resolvedOffset + page.size < clubs.size,
-        appliedFilters = Vector(
-          activeOnly.map(value => "activeOnly" -> value.toString),
-          joinableOnly.map(value => "joinableOnly" -> value.toString),
-          memberId.filter(_.nonEmpty).map("memberId" -> _),
-          adminId.filter(_.nonEmpty).map("adminId" -> _),
-          name.filter(_.nonEmpty).map("name" -> _)
-        ).flatten.toMap
+    for
+      resolved <- IO(resolveQuery)
+      clubs <- IO(listClubs(context, resolved))
+    yield pagedResponse(clubs, resolved)
+
+  private def resolveQuery: ResolvedClubListQuery =
+    ResolvedClubListQuery(
+      activeOnly = query.activeOnly.contains(true),
+      joinableOnly = query.joinableOnly.contains(true),
+      memberId = query.memberId.filter(_.nonEmpty).map(PlayerId(_)),
+      adminId = query.adminId.filter(_.nonEmpty).map(PlayerId(_)),
+      name = query.name.filter(_.nonEmpty),
+      limit = query.limit.getOrElse(20),
+      offset = query.offset.getOrElse(0),
+      appliedFilters = Vector(
+        query.activeOnly.map(value => "activeOnly" -> value.toString),
+        query.joinableOnly.map(value => "joinableOnly" -> value.toString),
+        query.memberId.filter(_.nonEmpty).map("memberId" -> _),
+        query.adminId.filter(_.nonEmpty).map("adminId" -> _),
+        query.name.filter(_.nonEmpty).map("name" -> _)
+      ).flatten.toMap
+    )
+
+  private def listClubs(
+      context: ApiPlanContext,
+      query: ResolvedClubListQuery
+  ): Vector[Club] =
+    context.support.clubModule.tables
+      .listClubs(
+        activeOnly = query.activeOnly,
+        joinableOnly = query.joinableOnly,
+        memberId = query.memberId,
+        adminId = query.adminId,
+        name = query.name
       )
-    }
+      .sortBy(club => (club.dissolvedAt.nonEmpty, club.name, club.id.value))
+
+  private def pagedResponse(
+      clubs: Vector[Club],
+      query: ResolvedClubListQuery
+  ): PagedResponse[ClubResponse] =
+    require(query.limit > 0, "Input field limit must be positive")
+    require(query.offset >= 0, "Input field offset must be non-negative")
+    val boundedLimit = math.min(query.limit, 100)
+    val page = clubs.slice(query.offset, query.offset + boundedLimit).map(ClubResponse.fromDomain)
+    PagedResponse(
+      items = page,
+      total = clubs.size,
+      limit = boundedLimit,
+      offset = query.offset,
+      hasMore = query.offset + page.size < clubs.size,
+      appliedFilters = query.appliedFilters
+    )
+
+  private final case class ResolvedClubListQuery(
+      activeOnly: Boolean,
+      joinableOnly: Boolean,
+      memberId: Option[PlayerId],
+      adminId: Option[PlayerId],
+      name: Option[String],
+      limit: Int,
+      offset: Int,
+      appliedFilters: Map[String, String]
+  )

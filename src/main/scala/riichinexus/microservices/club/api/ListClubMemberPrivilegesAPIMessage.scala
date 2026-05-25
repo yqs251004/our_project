@@ -4,45 +4,69 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.objects.apiTypes.{ClubMemberPrivilegeSnapshot as ClubMemberPrivilegeSnapshotResponse}
+import riichinexus.microservices.club.objects.apiTypes.{ClubMemberPrivilegeListQuery, ClubMemberPrivilegeSnapshot as ClubMemberPrivilegeSnapshotResponse}
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 
 final case class ListClubMemberPrivilegesAPIMessage(
     clubId: String,
-    playerId: Option[String] = None,
-    privilege: Option[String] = None,
-    rankCode: Option[String] = None,
-    limit: Option[Int] = None,
-    offset: Option[Int] = None
+    query: ClubMemberPrivilegeListQuery = ClubMemberPrivilegeListQuery()
 ) extends APIMessage[PagedResponse[ClubMemberPrivilegeSnapshotResponse]] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[ClubMemberPrivilegeSnapshotResponse]] =
-    IO {
-      val parsedPlayerId = playerId.filter(_.nonEmpty).map(PlayerId(_))
-      val parsedPrivilege = privilege.filter(_.nonEmpty).map(ClubPrivilegeRegistry.requireSupported)
-      val parsedRankCode = rankCode.filter(_.nonEmpty).map(_.trim.toLowerCase)
-      val snapshots = context.support.clubModule.tables
-        .listMemberPrivilegeSnapshots(ClubId(clubId))
-        .filter(snapshot => parsedPlayerId.forall(_ == snapshot.playerId))
-        .filter(snapshot => parsedPrivilege.forall(snapshot.privileges.contains))
-        .filter(snapshot => parsedRankCode.forall(_ == snapshot.rankCode.trim.toLowerCase))
-      val resolvedLimit = limit.getOrElse(20)
-      val resolvedOffset = offset.getOrElse(0)
-      require(resolvedLimit > 0, "Input field limit must be positive")
-      require(resolvedOffset >= 0, "Input field offset must be non-negative")
-      val boundedLimit = math.min(resolvedLimit, 100)
-      val page = snapshots.slice(resolvedOffset, resolvedOffset + boundedLimit).map(ClubMemberPrivilegeSnapshotResponse.fromDomain)
-      PagedResponse(
-        items = page,
-        total = snapshots.size,
-        limit = boundedLimit,
-        offset = resolvedOffset,
-        hasMore = resolvedOffset + page.size < snapshots.size,
-        appliedFilters = Vector(
-          playerId.filter(_.nonEmpty).map("playerId" -> _),
-          privilege.filter(_.nonEmpty).map("privilege" -> _),
-          rankCode.filter(_.nonEmpty).map("rankCode" -> _)
-        ).flatten.toMap
-      )
-    }
+    for
+      resolved <- IO(resolveQuery)
+      snapshots <- IO(listSnapshots(context, resolved))
+    yield pagedResponse(snapshots, resolved)
+
+  private def resolveQuery: ResolvedClubMemberPrivilegeQuery =
+    ResolvedClubMemberPrivilegeQuery(
+      clubId = ClubId(clubId),
+      playerId = query.playerId.filter(_.nonEmpty).map(PlayerId(_)),
+      privilege = query.privilege.filter(_.nonEmpty).map(ClubPrivilegeRegistry.requireSupported),
+      rankCode = query.rankCode.filter(_.nonEmpty).map(_.trim.toLowerCase),
+      limit = query.limit.getOrElse(20),
+      offset = query.offset.getOrElse(0),
+      appliedFilters = Vector(
+        query.playerId.filter(_.nonEmpty).map("playerId" -> _),
+        query.privilege.filter(_.nonEmpty).map("privilege" -> _),
+        query.rankCode.filter(_.nonEmpty).map("rankCode" -> _)
+      ).flatten.toMap
+    )
+
+  private def listSnapshots(
+      context: ApiPlanContext,
+      query: ResolvedClubMemberPrivilegeQuery
+  ): Vector[ClubMemberPrivilegeSnapshot] =
+    context.support.clubModule.tables
+      .listMemberPrivilegeSnapshots(query.clubId)
+      .filter(snapshot => query.playerId.forall(_ == snapshot.playerId))
+      .filter(snapshot => query.privilege.forall(snapshot.privileges.contains))
+      .filter(snapshot => query.rankCode.forall(_ == snapshot.rankCode.trim.toLowerCase))
+
+  private def pagedResponse(
+      snapshots: Vector[ClubMemberPrivilegeSnapshot],
+      query: ResolvedClubMemberPrivilegeQuery
+  ): PagedResponse[ClubMemberPrivilegeSnapshotResponse] =
+    require(query.limit > 0, "Input field limit must be positive")
+    require(query.offset >= 0, "Input field offset must be non-negative")
+    val boundedLimit = math.min(query.limit, 100)
+    val page = snapshots.slice(query.offset, query.offset + boundedLimit).map(ClubMemberPrivilegeSnapshotResponse.fromDomain)
+    PagedResponse(
+      items = page,
+      total = snapshots.size,
+      limit = boundedLimit,
+      offset = query.offset,
+      hasMore = query.offset + page.size < snapshots.size,
+      appliedFilters = query.appliedFilters
+    )
+
+  private final case class ResolvedClubMemberPrivilegeQuery(
+      clubId: ClubId,
+      playerId: Option[PlayerId],
+      privilege: Option[String],
+      rankCode: Option[String],
+      limit: Int,
+      offset: Int,
+      appliedFilters: Map[String, String]
+  )

@@ -1,14 +1,12 @@
 package riichinexus.microservices.dictionary.api
 
-import cats.effect.IO
-
 import java.time.Instant
-import java.util.NoSuchElementException
 
+import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
-import riichinexus.domain.service.GlobalDictionaryRegistry
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.dictionary.domain.DictionaryNamespaceReviewOperations
 import riichinexus.microservices.dictionary.objects.apiTypes.{DictionaryNamespaceRegistration as DictionaryNamespaceRegistrationResponse, *}
 import upickle.default.*
 
@@ -20,40 +18,40 @@ final case class DictionaryReviewNamespaceAPIMessage(
 ) extends APIMessage[DictionaryNamespaceRegistrationResponse] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[DictionaryNamespaceRegistrationResponse] =
-    IO {
-      val module = context.support.dictionaryModule
-      val request = ReviewDictionaryNamespaceRequest(operatorId, namespacePrefix, approve, note)
-      val actor = context.support.principal(request.operator)
-      val reviewedAt = Instant.now()
+    for
+      request <- IO(ReviewDictionaryNamespaceRequest(operatorId, namespacePrefix, approve, note))
+      actor <- IO(context.support.principal(request.operator))
+      reviewedAt <- IO.realTimeInstant
+      module = context.support.dictionaryModule
+      command = ReviewNamespaceCommand(
+        actor = actor,
+        namespacePrefix = request.namespacePrefix,
+        approve = request.approve,
+        note = request.note,
+        reviewedAt = reviewedAt
+      )
+      registration <- IO(
+        reviewNamespace(module, command)
+      )
+    yield DictionaryNamespaceRegistrationResponse.fromDomain(registration)
 
-      module.transactionManager.inTransaction {
-        module.authorizationService.requirePermission(actor, Permission.ManageGlobalDictionary)
-        val reviewer = actor.playerId.getOrElse(PlayerId("system"))
-        val normalizedPrefix = GlobalDictionaryRegistry.normalizeNamespacePrefix(request.namespacePrefix)
-        module.tables.findNamespaceByPrefix(normalizedPrefix).map { existing =>
-          val reviewed =
-            if request.approve then existing.approve(reviewer, reviewedAt, request.note)
-            else existing.reject(reviewer, reviewedAt, request.note)
+  private def reviewNamespace(
+      module: riichinexus.bootstrap.DictionaryModuleContext,
+      command: ReviewNamespaceCommand
+  ): DictionaryNamespaceRegistration =
+    DictionaryNamespaceReviewOperations.reviewNamespace(
+      module = module,
+      actor = command.actor,
+      namespacePrefix = command.namespacePrefix,
+      approve = command.approve,
+      note = command.note,
+      reviewedAt = command.reviewedAt
+    )
 
-          module.dictionaryNamespaceRepository.save(reviewed)
-          module.auditEventRepository.save(
-            AuditEventEntry(
-              id = IdGenerator.auditEventId(),
-              aggregateType = "dictionary-namespace",
-              aggregateId = normalizedPrefix,
-              eventType = if request.approve then "DictionaryNamespaceApproved" else "DictionaryNamespaceRejected",
-              occurredAt = reviewedAt,
-              actorId = actor.playerId,
-              details = Map(
-                "contextClubId" -> existing.contextClubId.map(_.value).getOrElse(""),
-                "ownerPlayerId" -> existing.ownerPlayerId.value,
-                "coOwnerPlayerIds" -> existing.coOwnerPlayerIds.map(_.value).mkString(","),
-                "editorPlayerIds" -> existing.editorPlayerIds.map(_.value).mkString(",")
-              ),
-              note = request.note
-            )
-          )
-          DictionaryNamespaceRegistrationResponse.fromDomain(reviewed)
-        }.getOrElse(throw NoSuchElementException("Resource not found"))
-      }
-    }
+  private final case class ReviewNamespaceCommand(
+      actor: AccessPrincipal,
+      namespacePrefix: String,
+      approve: Boolean,
+      note: Option[String],
+      reviewedAt: Instant
+  )

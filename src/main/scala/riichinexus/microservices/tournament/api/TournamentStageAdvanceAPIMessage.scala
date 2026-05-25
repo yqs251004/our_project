@@ -5,6 +5,7 @@ import java.time.Instant
 
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
+import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.tournament.objects.*
@@ -18,38 +19,54 @@ import upickle.default.*
 final case class TournamentStageAdvanceAPIMessage(tournamentId: String, stageId: String, request: AdvanceKnockoutStageRequest) extends APIMessage[Vector[riichinexus.microservices.tournament.objects.apiTypes.Table]] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[Vector[riichinexus.microservices.tournament.objects.apiTypes.Table]] =
-    IO {
-      val module = context.support.tournamentModule
-      val tournamentIdValue = TournamentId(tournamentId)
-      val stageIdValue = TournamentStageId(stageId)
-      val actor = request.operator.map(context.support.principal).getOrElse(AccessPrincipal.system)
-      val at = Instant.now()
-
-      module.transactionManager.inTransaction {
-        val tournament = module.tournamentRepository
-          .findById(tournamentIdValue)
-          .getOrElse(throw NoSuchElementException(s"Tournament ${tournamentIdValue.value} was not found"))
-        val stage = tournament.stages
-          .find(_.id == stageIdValue)
-          .getOrElse(throw NoSuchElementException(s"Stage ${stageIdValue.value} was not found"))
-
-        module.authorizationService.requirePermission(
-          actor,
-          Permission.ManageTournamentStages,
-          tournamentId = Some(tournamentIdValue)
-        )
-
-        val isKnockoutStage =
-          stage.format == StageFormat.Knockout ||
-            stage.format == StageFormat.Finals ||
-            stage.advancementRule.ruleType == AdvancementRuleType.KnockoutElimination
-
-        if !isKnockoutStage then
-          throw IllegalArgumentException(
-            s"Stage ${stageIdValue.value} is not configured as a knockout stage"
-          )
-
-        module.knockoutStageCoordinator.materializeUnlockedTables(tournamentIdValue, stageIdValue, at)
-          .map(riichinexus.microservices.tournament.objects.apiTypes.Table.fromDomain)
+    for
+      actor <- IO(request.operator.map(context.support.principal).getOrElse(AccessPrincipal.system))
+      at <- IO.realTimeInstant
+      module = context.support.tournamentModule
+      command = AdvanceKnockoutStageCommand(
+        tournamentId = TournamentId(tournamentId),
+        stageId = TournamentStageId(stageId),
+        actor = actor,
+        at = at
+      )
+      tables <- IO {
+        module.transactionManager.inTransaction {
+          advanceStage(module, command)
+        }
       }
-    }
+    yield tables.map(riichinexus.microservices.tournament.objects.apiTypes.Table.fromDomain)
+
+  private def advanceStage(
+      module: TournamentModuleContext,
+      command: AdvanceKnockoutStageCommand
+  ): Vector[Table] =
+    val tournament = module.tournamentRepository
+      .findById(command.tournamentId)
+      .getOrElse(throw NoSuchElementException(s"Tournament ${command.tournamentId.value} was not found"))
+    val stage = tournament.stages
+      .find(_.id == command.stageId)
+      .getOrElse(throw NoSuchElementException(s"Stage ${command.stageId.value} was not found"))
+    module.authorizationService.requirePermission(
+      command.actor,
+      Permission.ManageTournamentStages,
+      tournamentId = Some(command.tournamentId)
+    )
+    ensureKnockoutStage(stage, command.stageId)
+    module.knockoutStageCoordinator.materializeUnlockedTables(command.tournamentId, command.stageId, command.at)
+
+  private def ensureKnockoutStage(stage: TournamentStage, stageId: TournamentStageId): Unit =
+    val isKnockoutStage =
+      stage.format == StageFormat.Knockout ||
+        stage.format == StageFormat.Finals ||
+        stage.advancementRule.ruleType == AdvancementRuleType.KnockoutElimination
+    if !isKnockoutStage then
+      throw IllegalArgumentException(
+        s"Stage ${stageId.value} is not configured as a knockout stage"
+      )
+
+  private final case class AdvanceKnockoutStageCommand(
+      tournamentId: TournamentId,
+      stageId: TournamentStageId,
+      actor: AccessPrincipal,
+      at: Instant
+  )

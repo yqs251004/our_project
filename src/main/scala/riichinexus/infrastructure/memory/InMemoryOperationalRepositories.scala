@@ -1,7 +1,5 @@
 package riichinexus.infrastructure.memory
 
-import scala.collection.mutable
-
 import riichinexus.application.ports.*
 import riichinexus.domain.model.*
 
@@ -23,7 +21,7 @@ private object InMemoryRepositoryLockSupport:
         actual + 1
 
 final class InMemoryGuestSessionRepository extends GuestSessionRepository:
-  private val state = mutable.LinkedHashMap.empty[GuestSessionId, GuestAccessSession]
+  private val state = InMemoryKeyValueStore[GuestSessionId, GuestAccessSession]()
 
   override def save(session: GuestAccessSession): GuestAccessSession =
     val persisted = session.copy(
@@ -34,21 +32,21 @@ final class InMemoryGuestSessionRepository extends GuestSessionRepository:
         state.get(session.id).map(_.version)
       )
     )
-    state.update(persisted.id, persisted)
+    state.upsert(persisted.id, persisted)
     persisted
 
   override def findById(id: GuestSessionId): Option[GuestAccessSession] =
     state.get(id)
 
   override def findAll(): Vector[GuestAccessSession] =
-    state.values.toVector
+    state.values
 
 object InMemoryGuestSessionRepository:
   def apply(): InMemoryGuestSessionRepository =
     new InMemoryGuestSessionRepository()
 
 final class InMemoryAccountCredentialRepository extends AccountCredentialRepository:
-  private val state = mutable.LinkedHashMap.empty[String, AccountCredential]
+  private val state = InMemoryKeyValueStore[String, AccountCredential]()
 
   override def save(credential: AccountCredential): AccountCredential =
     val persisted = credential.copy(
@@ -59,7 +57,7 @@ final class InMemoryAccountCredentialRepository extends AccountCredentialReposit
         state.get(credential.username).map(_.version)
       )
     )
-    state.update(persisted.username, persisted)
+    state.upsert(persisted.username, persisted)
     persisted
 
   override def findByUsername(username: String): Option[AccountCredential] =
@@ -69,14 +67,14 @@ final class InMemoryAccountCredentialRepository extends AccountCredentialReposit
     state.values.find(_.playerId == playerId)
 
   override def findAll(): Vector[AccountCredential] =
-    state.values.toVector
+    state.values
 
 object InMemoryAccountCredentialRepository:
   def apply(): InMemoryAccountCredentialRepository =
     new InMemoryAccountCredentialRepository()
 
 final class InMemoryAuthenticatedSessionRepository extends AuthenticatedSessionRepository:
-  private val state = mutable.LinkedHashMap.empty[String, AuthenticatedSession]
+  private val state = InMemoryKeyValueStore[String, AuthenticatedSession]()
 
   override def save(session: AuthenticatedSession): AuthenticatedSession =
     val persisted = session.copy(
@@ -87,25 +85,24 @@ final class InMemoryAuthenticatedSessionRepository extends AuthenticatedSessionR
         state.get(session.token).map(_.version)
       )
     )
-    state.update(persisted.token, persisted)
+    state.upsert(persisted.token, persisted)
     persisted
 
   override def findByToken(token: String): Option[AuthenticatedSession] =
     state.get(token)
 
   override def findAll(): Vector[AuthenticatedSession] =
-    state.values.toVector
+    state.values
 
 object InMemoryAuthenticatedSessionRepository:
   def apply(): InMemoryAuthenticatedSessionRepository =
     new InMemoryAuthenticatedSessionRepository()
 
 final class InMemoryMatchRecordRepository extends MatchRecordRepository:
-  private val state = mutable.LinkedHashMap.empty[MatchRecordId, MatchRecord]
+  private val state = InMemoryKeyValueStore[MatchRecordId, MatchRecord]()
 
   override def save(record: MatchRecord): MatchRecord =
-    state.update(record.id, record)
-    record
+    state.upsert(record.id, record)
 
   override def findById(id: MatchRecordId): Option[MatchRecord] =
     state.get(id)
@@ -114,31 +111,30 @@ final class InMemoryMatchRecordRepository extends MatchRecordRepository:
     state.values.find(_.tableId == tableId)
 
   override def findAll(): Vector[MatchRecord] =
-    state.values.toVector
+    state.values
 
 object InMemoryMatchRecordRepository:
   def apply(): InMemoryMatchRecordRepository =
     new InMemoryMatchRecordRepository()
 
 final class InMemoryPaifuRepository extends PaifuRepository:
-  private val state = mutable.LinkedHashMap.empty[PaifuId, Paifu]
+  private val state = InMemoryKeyValueStore[PaifuId, Paifu]()
 
   override def save(paifu: Paifu): Paifu =
-    state.update(paifu.id, paifu)
-    paifu
+    state.upsert(paifu.id, paifu)
 
   override def findById(id: PaifuId): Option[Paifu] =
     state.get(id)
 
   override def findAll(): Vector[Paifu] =
-    state.values.toVector
+    state.values
 
 object InMemoryPaifuRepository:
   def apply(): InMemoryPaifuRepository =
     new InMemoryPaifuRepository()
 
 final class InMemoryEventCascadeRecordRepository extends EventCascadeRecordRepository:
-  private val state = mutable.LinkedHashMap.empty[EventCascadeRecordId, EventCascadeRecord]
+  private val state = InMemoryKeyValueStore[EventCascadeRecordId, EventCascadeRecord]()
 
   override def save(record: EventCascadeRecord): EventCascadeRecord =
     val persisted = record.copy(
@@ -149,14 +145,14 @@ final class InMemoryEventCascadeRecordRepository extends EventCascadeRecordRepos
         state.get(record.id).map(_.version)
       )
     )
-    state.update(persisted.id, persisted)
+    state.upsert(persisted.id, persisted)
     persisted
 
   override def findById(id: EventCascadeRecordId): Option[EventCascadeRecord] =
     state.get(id)
 
   override def findAll(): Vector[EventCascadeRecord] =
-    state.values.toVector.sortBy(record => (record.occurredAt, record.id.value))
+    state.values.sortBy(record => (record.occurredAt, record.id.value))
 
 object InMemoryEventCascadeRecordRepository:
   def apply(): InMemoryEventCascadeRecordRepository =

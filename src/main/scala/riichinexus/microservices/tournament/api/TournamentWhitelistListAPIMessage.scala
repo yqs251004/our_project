@@ -17,41 +17,70 @@ import upickle.default.*
 
 final case class TournamentWhitelistListAPIMessage(
     tournamentId: String,
-    participantKind: Option[String] = None,
-    playerId: Option[String] = None,
-    clubId: Option[String] = None,
-    limit: Option[Int] = None,
-    offset: Option[Int] = None
+    query: TournamentWhitelistQuery = TournamentWhitelistQuery()
 ) extends APIMessage[PagedResponse[TournamentWhitelistEntryView]] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[TournamentWhitelistEntryView]] =
-    IO {
-      val query = TournamentWhitelistQuery(
-        participantKind = participantKind.filter(_.nonEmpty).map(TournamentParticipantKind.valueOf),
-        playerId = playerId.filter(_.nonEmpty).map(PlayerId(_)),
-        clubId = clubId.filter(_.nonEmpty).map(ClubId(_))
-      )
-      val tournamentIdValue = TournamentId(tournamentId)
-      val whitelist = context.support.tournamentModule.tables
-        .findTournament(tournamentIdValue)
-        .map(_.whitelist
-          .filter(entry => query.participantKind.forall(_ == entry.participantKind))
-          .filter(entry => query.playerId.forall(id => entry.playerId.contains(id)))
-          .filter(entry => query.clubId.forall(id => entry.clubId.contains(id)))
-        )
-        .getOrElse(throw NoSuchElementException(s"Tournament ${tournamentIdValue.value} was not found"))
-        .map(TournamentWhitelistEntryView.fromDomain)
-      page(whitelist, filters(participantKind.filter(_.nonEmpty).map("participantKind" -> _), playerId.filter(_.nonEmpty).map("playerId" -> _), clubId.filter(_.nonEmpty).map("clubId" -> _)))
-    }
+    for
+      resolved <- IO(resolveQuery)
+      whitelist <- IO(listWhitelist(context, resolved))
+    yield pagedResponse(whitelist, resolved)
 
-  private def page(items: Vector[TournamentWhitelistEntryView], appliedFilters: Map[String, String]): PagedResponse[TournamentWhitelistEntryView] =
-    val resolvedLimit = limit.getOrElse(20)
-    val resolvedOffset = offset.getOrElse(0)
-    require(resolvedLimit > 0, "Input field limit must be positive")
-    require(resolvedOffset >= 0, "Input field offset must be non-negative")
-    val boundedLimit = math.min(resolvedLimit, 100)
-    val pageItems = items.slice(resolvedOffset, resolvedOffset + boundedLimit)
-    PagedResponse(pageItems, items.size, boundedLimit, resolvedOffset, resolvedOffset + pageItems.size < items.size, appliedFilters)
+  private def resolveQuery: ResolvedWhitelistQuery =
+    ResolvedWhitelistQuery(
+      tournamentId = TournamentId(tournamentId),
+      participantKind = query.participantKind,
+      playerId = query.playerId,
+      clubId = query.clubId,
+      limit = query.limit.getOrElse(20),
+      offset = query.offset.getOrElse(0),
+      appliedFilters = filters(
+        query.participantKind.map(value => "participantKind" -> value.toString),
+        query.playerId.map(value => "playerId" -> value.value),
+        query.clubId.map(value => "clubId" -> value.value)
+      )
+    )
+
+  private def listWhitelist(
+      context: ApiPlanContext,
+      query: ResolvedWhitelistQuery
+  ): Vector[TournamentWhitelistEntryView] =
+    context.support.tournamentModule.tables
+      .findTournament(query.tournamentId)
+      .map(_.whitelist
+        .filter(entry => query.participantKind.forall(_ == entry.participantKind))
+        .filter(entry => query.playerId.forall(id => entry.playerId.contains(id)))
+        .filter(entry => query.clubId.forall(id => entry.clubId.contains(id)))
+      )
+      .getOrElse(throw NoSuchElementException(s"Tournament ${query.tournamentId.value} was not found"))
+      .map(TournamentWhitelistEntryView.fromDomain)
+
+  private def pagedResponse(
+      items: Vector[TournamentWhitelistEntryView],
+      query: ResolvedWhitelistQuery
+  ): PagedResponse[TournamentWhitelistEntryView] =
+    require(query.limit > 0, "Input field limit must be positive")
+    require(query.offset >= 0, "Input field offset must be non-negative")
+    val boundedLimit = math.min(query.limit, 100)
+    val pageItems = items.slice(query.offset, query.offset + boundedLimit)
+    PagedResponse(
+      pageItems,
+      items.size,
+      boundedLimit,
+      query.offset,
+      query.offset + pageItems.size < items.size,
+      query.appliedFilters
+    )
 
   private def filters(values: Option[(String, String)]*): Map[String, String] =
     values.flatten.toMap
+
+  private final case class ResolvedWhitelistQuery(
+      tournamentId: TournamentId,
+      participantKind: Option[TournamentParticipantKind],
+      playerId: Option[PlayerId],
+      clubId: Option[ClubId],
+      limit: Int,
+      offset: Int,
+      appliedFilters: Map[String, String]
+  )

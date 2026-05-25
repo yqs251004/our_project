@@ -8,6 +8,7 @@ import riichinexus.microservices.tournament.objects.apiTypes.{
   AdvancementRuleView,
   KnockoutBracketSnapshot,
   KnockoutRuleConfigView,
+  RankSnapshotView,
   StageRankingSnapshot,
   SwissRuleConfigView
 }
@@ -28,20 +29,6 @@ final case class PublicClubHonorView(
 object PublicClubHonorView:
   def fromDomain(honor: ClubHonor): PublicClubHonorView =
     PublicClubHonorView(title = honor.title)
-
-final case class RankSnapshotView(
-    platform: String,
-    tier: String,
-    stars: Option[Int]
-) derives CanEqual
-
-object RankSnapshotView:
-  def fromDomain(rank: RankSnapshot): RankSnapshotView =
-    RankSnapshotView(
-      platform = rank.platform.toString,
-      tier = rank.tier,
-      stars = rank.stars
-    )
 
 final case class PublicScheduleView(
     tournamentId: String,
@@ -504,7 +491,6 @@ object PublicQueryResponses:
   given ReadWriter[PublicScheduleView] = macroRW
   given ReadWriter[PublicClubRelationView] = macroRW
   given ReadWriter[PublicClubHonorView] = macroRW
-  given ReadWriter[RankSnapshotView] = macroRW
   given ReadWriter[PublicClubDirectoryEntry] = macroRW
   given ReadWriter[PlayerLeaderboardEntry] = macroRW
   given ReadWriter[ClubLeaderboardEntry] = macroRW

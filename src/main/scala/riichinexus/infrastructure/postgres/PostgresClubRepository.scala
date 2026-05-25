@@ -94,10 +94,7 @@ final class PostgresClubRepository(
             connection.createArrayOf("text", ids.map(_.value).distinct.toArray)
           )
           Using.resource(statement.executeQuery()) { resultSet =>
-            val buffer = Vector.newBuilder[Club]
-            while resultSet.next() do
-              buffer += read[Club](resultSet.getString("payload"))
-            buffer.result()
+            readPayloads(resultSet)(payload => read[Club](payload))
           }
         }
       }

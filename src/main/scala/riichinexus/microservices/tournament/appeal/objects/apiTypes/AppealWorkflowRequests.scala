@@ -93,6 +93,15 @@ final case class UpdateAppealWorkflowRequest(
     clearDueAt: Boolean = false,
     note: Option[String] = None
 ):
+  require(
+    !(clearAssignee && assigneeId.exists(_.trim.nonEmpty)),
+    "Appeal workflow cannot clear and assign assignee in the same request"
+  )
+  require(
+    !(clearDueAt && dueAt.exists(_.trim.nonEmpty)),
+    "Appeal workflow cannot clear and set dueAt in the same request"
+  )
+
   def operator: PlayerId =
     PlayerId(operatorId)
 

@@ -11,8 +11,15 @@ import upickle.default.*
 final case class TournamentStageStandingsAPIMessage(tournamentId: String, stageId: String) extends APIMessage[StageRankingSnapshotResponse] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[StageRankingSnapshotResponse] =
-    IO {
-      StageRankingSnapshotResponse.fromDomain(
-        context.support.tournamentModule.stageQueries.stageStandings(TournamentId(tournamentId), TournamentStageId(stageId))
-      )
-    }
+    for
+      input <- IO(resolveInput)
+      snapshot <- IO(context.support.tournamentModule.stageQueries.stageStandings(input.tournamentId, input.stageId))
+    yield StageRankingSnapshotResponse.fromDomain(snapshot)
+
+  private def resolveInput: StageQueryInput =
+    StageQueryInput(TournamentId(tournamentId), TournamentStageId(stageId))
+
+  private final case class StageQueryInput(
+      tournamentId: TournamentId,
+      stageId: TournamentStageId
+  )

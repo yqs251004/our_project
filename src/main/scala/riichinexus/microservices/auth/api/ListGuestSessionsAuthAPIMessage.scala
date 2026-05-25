@@ -16,23 +16,28 @@ final case class ListGuestSessionsAuthAPIMessage(
 ) extends APIMessage[PagedResponse[GuestSessionResponse]] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[GuestSessionResponse]] =
-    IO {
-      val boundedLimit = math.min(limit.getOrElse(20), 100)
-      val pageOffset = offset.getOrElse(0)
-      require(boundedLimit > 0, "Input field limit must be positive")
-      require(pageOffset >= 0, "Input field offset must be non-negative")
+    for
+      asOf <- IO.realTimeInstant
+      query = resolveQuery(asOf)
+      sessions <- IO {
+        context.support.authModule.guestSessionTable.list(
+          activeOnly = query.activeOnly,
+          asOf = query.asOf
+        )
+      }
+    yield PagedResponse.fromItems(sessions, limit, offset, query.appliedFilters)(
+      GuestSessionResponse.fromDomain
+    )
 
-      val sessions = context.support.authModule.guestSessionTable.list(
-        activeOnly = activeOnly,
-        asOf = Instant.now()
-      )
-      val page = sessions.slice(pageOffset, pageOffset + boundedLimit).map(GuestSessionResponse.fromDomain)
-      PagedResponse(
-        items = page,
-        total = sessions.size,
-        limit = boundedLimit,
-        offset = pageOffset,
-        hasMore = pageOffset + page.size < sessions.size,
-        appliedFilters = activeOnly.map(value => Map("activeOnly" -> value.toString)).getOrElse(Map.empty)
-      )
-    }
+  private def resolveQuery(asOf: Instant): ResolvedGuestSessionsQuery =
+    ResolvedGuestSessionsQuery(
+      activeOnly = activeOnly,
+      asOf = asOf,
+      appliedFilters = activeOnly.map(value => Map("activeOnly" -> value.toString)).getOrElse(Map.empty)
+    )
+
+  private final case class ResolvedGuestSessionsQuery(
+      activeOnly: Option[Boolean],
+      asOf: Instant,
+      appliedFilters: Map[String, String]
+  )

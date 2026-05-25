@@ -6,6 +6,8 @@ import com.comcast.ip4s.{Host, Port, host, port}
 import org.http4s.ember.server.EmberServerBuilder
 import org.http4s.server.Server
 
+import java.util.concurrent.atomic.AtomicReference
+import scala.annotation.tailrec
 import scala.concurrent.duration.*
 
 final case class ApiServerConfig(
@@ -69,22 +71,32 @@ final class ApiServer(
     runtime: ApiRuntimeContext,
     config: ApiServerConfig
 ):
-  private var primaryServer: Option[Server] = None
-  private var primaryRelease: Option[IO[Unit]] = None
+  private final case class ServerHandle(
+      server: Server,
+      release: IO[Unit]
+  )
+
+  private val primary = AtomicReference(Option.empty[ServerHandle])
 
   def start(): Unit =
-    if primaryServer.isEmpty then
+    val current = primary.get()
+    if current.isEmpty then
       val (server, release) = ApiServer.resource(runtime, config).allocated.unsafeRunSync()
-      primaryServer = Some(server)
-      primaryRelease = Some(release)
+      val handle = ServerHandle(server, release)
+      if !primary.compareAndSet(current, Some(handle)) then
+        release.unsafeRunSync()
 
   def stop(delaySeconds: Int = 0): Unit =
-    primaryRelease.foreach(_.unsafeRunSync())
-    primaryRelease = None
-    primaryServer = None
+    clearPrimary().foreach(_.release.unsafeRunSync())
 
   def port: Int =
-    primaryServer.map(_.address.getPort).getOrElse(config.port)
+    primary.get().map(_.server.address.getPort).getOrElse(config.port)
+
+  @tailrec
+  private def clearPrimary(): Option[ServerHandle] =
+    val current = primary.get()
+    if current.isEmpty || primary.compareAndSet(current, None) then current
+    else clearPrimary()
 
 final class RiichiNexusApiServer(
     runtime: ApiRuntimeContext,

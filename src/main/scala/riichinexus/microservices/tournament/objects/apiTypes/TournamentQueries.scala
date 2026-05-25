@@ -1,6 +1,8 @@
 package riichinexus.microservices.tournament.objects.apiTypes
 
 import riichinexus.domain.model.*
+import riichinexus.infrastructure.json.JsonCodecs.given
+import upickle.default.*
 
 final case class TournamentListQuery(
     status: Option[TournamentStatus] = None,
@@ -8,7 +10,7 @@ final case class TournamentListQuery(
     organizer: Option[String] = None,
     limit: Option[Int] = None,
     offset: Option[Int] = None
-)
+) derives ReadWriter
 
 final case class TournamentWhitelistQuery(
     participantKind: Option[TournamentParticipantKind] = None,
@@ -16,7 +18,7 @@ final case class TournamentWhitelistQuery(
     clubId: Option[ClubId] = None,
     limit: Option[Int] = None,
     offset: Option[Int] = None
-)
+) derives ReadWriter
 
 final case class TournamentSettlementQuery(
     stageId: Option[TournamentStageId] = None,
@@ -24,7 +26,7 @@ final case class TournamentSettlementQuery(
     championId: Option[PlayerId] = None,
     limit: Option[Int] = None,
     offset: Option[Int] = None
-)
+) derives ReadWriter
 
 final case class StageTableQuery(
     status: Option[TableStatus] = None,
@@ -32,7 +34,7 @@ final case class StageTableQuery(
     playerId: Option[PlayerId] = None,
     limit: Option[Int] = None,
     offset: Option[Int] = None
-)
+) derives ReadWriter
 
 final case class TableListQuery(
     status: Option[TableStatus] = None,
@@ -42,7 +44,7 @@ final case class TableListQuery(
     playerId: Option[PlayerId] = None,
     limit: Option[Int] = None,
     offset: Option[Int] = None
-)
+) derives ReadWriter
 
 final case class MatchRecordListQuery(
     playerId: Option[PlayerId] = None,
@@ -51,7 +53,7 @@ final case class MatchRecordListQuery(
     tableId: Option[TableId] = None,
     limit: Option[Int] = None,
     offset: Option[Int] = None
-)
+) derives ReadWriter
 
 final case class PaifuListQuery(
     playerId: Option[PlayerId] = None,
@@ -60,4 +62,4 @@ final case class PaifuListQuery(
     tableId: Option[TableId] = None,
     limit: Option[Int] = None,
     offset: Option[Int] = None
-)
+) derives ReadWriter

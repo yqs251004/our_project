@@ -13,12 +13,15 @@ final case class GetCurrentPlayerAPIMessage(
 ) extends APIMessage[PlayerResponse] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[PlayerResponse] =
-    IO {
-      val playerId = Option(operatorId).map(_.trim).filter(_.nonEmpty)
-        .map(PlayerId(_))
-        .getOrElse(throw IllegalArgumentException("Input field operatorId is required"))
+    for
+      playerId <- IO(resolvePlayerId)
+      player <- IO(
+        context.support.playerModule.tables.findPlayer(playerId)
+          .getOrElse(throw NoSuchElementException("Resource not found"))
+      )
+    yield PlayerProfileView.fromDomain(player)
 
-      context.support.playerModule.tables.findPlayer(playerId)
-        .map(PlayerProfileView.fromDomain)
-        .getOrElse(throw NoSuchElementException("Resource not found"))
-    }
+  private def resolvePlayerId: PlayerId =
+    Option(operatorId).map(_.trim).filter(_.nonEmpty)
+      .map(PlayerId(_))
+      .getOrElse(throw IllegalArgumentException("Input field operatorId is required"))

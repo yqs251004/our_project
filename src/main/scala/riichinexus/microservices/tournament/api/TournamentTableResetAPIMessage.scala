@@ -5,6 +5,7 @@ import java.time.Instant
 
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
+import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.tournament.objects.*
@@ -18,20 +19,31 @@ import upickle.default.*
 final case class TournamentTableResetAPIMessage(tableId: String, request: ForceResetTableRequest) extends APIMessage[TournamentTableView] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[TournamentTableView] =
-    IO {
-      val module = context.support.tournamentModule
-      val id = TableId(tableId)
-      val actor = context.support.principal(request.operator)
+    for
+      actor <- IO(context.support.principal(request.operator))
+      resetAt <- IO.realTimeInstant
+      module = context.support.tournamentModule
+      command = ResetTableCommand(TableId(tableId), actor, request.note, resetAt)
+      table <- IO {
+        module.transactionManager.inTransaction {
+          resetTable(module, command)
+        }.getOrElse(throw NoSuchElementException("Resource not found"))
+      }
+    yield TournamentTableView.fromDomain(table)
 
-      module.transactionManager.inTransaction {
-        module.tableRepository.findById(id).map { table =>
-          module.authorizationService.requirePermission(
-            actor,
-            Permission.ResetTableState,
-            tournamentId = Some(table.tournamentId)
-          )
-
-          TournamentTableView.fromDomain(module.tableRepository.save(table.forceReset(request.note, Instant.now())))
-        }
-      }.getOrElse(throw NoSuchElementException("Resource not found"))
+  private def resetTable(module: TournamentModuleContext, command: ResetTableCommand): Option[Table] =
+    module.tableRepository.findById(command.tableId).map { table =>
+      module.authorizationService.requirePermission(
+        command.actor,
+        Permission.ResetTableState,
+        tournamentId = Some(table.tournamentId)
+      )
+      module.tableRepository.save(table.forceReset(command.note, command.resetAt))
     }
+
+  private final case class ResetTableCommand(
+      tableId: TableId,
+      actor: AccessPrincipal,
+      note: String,
+      resetAt: Instant
+  )

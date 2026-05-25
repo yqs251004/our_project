@@ -15,34 +15,36 @@ final case class ListPublicClubsAPIMessage(
 ) extends APIMessage[PagedResponse[PublicClubDirectoryEntry]] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[PublicClubDirectoryEntry]] =
-    IO {
-      val module = context.support.publicQueryModule
-      context.support.authorizationService
-        .requirePermission(AccessPrincipal.guest(), Permission.ViewClubDirectory)
+    for
+      query <- IO(resolveQuery(context))
+      clubs <- IO(listClubs(context, query))
+    yield PagedResponse.fromItems(clubs, limit, offset, query.appliedFilters)(identity)
 
-      val parsedRelation = relation.filter(_.nonEmpty).map(
+  private def resolveQuery(context: ApiPlanContext): ResolvedClubDirectoryQuery =
+    context.support.authorizationService
+      .requirePermission(AccessPrincipal.guest(), Permission.ViewClubDirectory)
+    ResolvedClubDirectoryQuery(
+      name = name.filter(_.nonEmpty),
+      relation = relation.filter(_.nonEmpty).map(
         context.support.parseEnum("relation", _)(ClubRelationKind.valueOf)
-      )
-      val clubs = module.tables.publicClubDirectory()
-        .filter(club => name.filter(_.nonEmpty).forall(context.support.containsIgnoreCase(club.name, _)))
-        .filter(club => parsedRelation.forall(relationKind => club.relations.exists(_.relation == relationKind.toString)))
-        .sortBy(_.name)
-      val resolvedLimit = limit.getOrElse(20)
-      val resolvedOffset = offset.getOrElse(0)
-      require(resolvedLimit > 0, "Input field limit must be positive")
-      require(resolvedOffset >= 0, "Input field offset must be non-negative")
-      val boundedLimit = math.min(resolvedLimit, 100)
-      val page = clubs.slice(resolvedOffset, resolvedOffset + boundedLimit)
+      ),
+      appliedFilters = Vector(
+        name.filter(_.nonEmpty).map("name" -> _),
+        relation.filter(_.nonEmpty).map("relation" -> _)
+      ).flatten.toMap
+    )
 
-      PagedResponse(
-        items = page,
-        total = clubs.size,
-        limit = boundedLimit,
-        offset = resolvedOffset,
-        hasMore = resolvedOffset + page.size < clubs.size,
-        appliedFilters = Vector(
-          name.filter(_.nonEmpty).map("name" -> _),
-          relation.filter(_.nonEmpty).map("relation" -> _)
-        ).flatten.toMap
-      )
-    }
+  private def listClubs(
+      context: ApiPlanContext,
+      query: ResolvedClubDirectoryQuery
+  ): Vector[PublicClubDirectoryEntry] =
+    context.support.publicQueryModule.tables.publicClubDirectory()
+      .filter(club => query.name.forall(context.support.containsIgnoreCase(club.name, _)))
+      .filter(club => query.relation.forall(relationKind => club.relations.exists(_.relation == relationKind.toString)))
+      .sortBy(_.name)
+
+  private final case class ResolvedClubDirectoryQuery(
+      name: Option[String],
+      relation: Option[ClubRelationKind],
+      appliedFilters: Map[String, String]
+  )

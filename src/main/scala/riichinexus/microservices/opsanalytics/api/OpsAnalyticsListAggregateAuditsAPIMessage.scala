@@ -5,46 +5,57 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.opsanalytics.objects.apiTypes.{AuditEventEntry as AuditEventEntryResponse}
+import riichinexus.microservices.opsanalytics.objects.apiTypes.{AggregateAuditEventQuery, AuditEventQuery}
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 
 final case class OpsAnalyticsListAggregateAuditsAPIMessage(
-    operatorId: PlayerId,
-    aggregateType: String,
-    aggregateId: String,
-    actorId: Option[PlayerId] = None,
-    eventType: Option[String] = None,
-    limit: Option[Int] = None,
-    offset: Option[Int] = None
+    query: AggregateAuditEventQuery
 ) extends APIMessage[PagedResponse[AuditEventEntryResponse]] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[AuditEventEntryResponse]] =
-    IO {
-      val operator = context.support.principal(operatorId)
-      context.support.requirePermission(operator, Permission.ViewAuditTrail)
-      val audits = context.support.opsAnalyticsModule.tables.listAuditEventsByAggregate(
-        aggregateType = aggregateType,
-        aggregateId = aggregateId,
-        actorId = actorId,
-        eventType = eventType.filter(_.nonEmpty)
-      )
-      paged(
-        audits,
-        Vector(
-          Some("aggregateType" -> aggregateType),
-          Some("aggregateId" -> aggregateId),
-          actorId.map(value => "actorId" -> value.value),
-          eventType.filter(_.nonEmpty).map("eventType" -> _),
-          Some("operatorId" -> operatorId.value)
-        ).flatten.toMap
-      )
-    }
+    for
+      operator <- IO(context.support.principal(query.operatorId))
+      _ <- IO(requireAuditPermission(context, operator))
+      resolved <- IO(resolveQuery(query.toAuditEventQuery))
+      audits <- IO(listAudits(context, resolved))
+    yield PagedResponse.fromItems(
+      audits,
+      query.limit,
+      query.offset,
+      resolved.appliedFilters
+    )(AuditEventEntryResponse.fromDomain)
 
-  private def paged(items: Vector[AuditEventEntry], appliedFilters: Map[String, String]): PagedResponse[AuditEventEntryResponse] =
-    val resolvedLimit = limit.getOrElse(20)
-    val resolvedOffset = offset.getOrElse(0)
-    require(resolvedLimit > 0, "Input field limit must be positive")
-    require(resolvedOffset >= 0, "Input field offset must be non-negative")
-    val boundedLimit = math.min(resolvedLimit, 100)
-    val page = items.slice(resolvedOffset, resolvedOffset + boundedLimit)
-    PagedResponse(page.map(AuditEventEntryResponse.fromDomain), items.size, boundedLimit, resolvedOffset, resolvedOffset + page.size < items.size, appliedFilters)
+  private def requireAuditPermission(context: ApiPlanContext, operator: AccessPrincipal): Unit =
+    context.support.requirePermission(operator, Permission.ViewAuditTrail)
+
+  private def resolveQuery(query: AuditEventQuery): ResolvedAuditQuery =
+    ResolvedAuditQuery(
+      aggregateType = query.aggregateType.filter(_.nonEmpty),
+      aggregateId = query.aggregateId.filter(_.nonEmpty),
+      actorId = query.actorId,
+      eventType = query.eventType.filter(_.nonEmpty),
+      appliedFilters = Vector(
+        query.aggregateType.filter(_.nonEmpty).map("aggregateType" -> _),
+        query.aggregateId.filter(_.nonEmpty).map("aggregateId" -> _),
+        query.actorId.map(value => "actorId" -> value.value),
+        query.eventType.filter(_.nonEmpty).map("eventType" -> _),
+        Some("operatorId" -> query.operatorId.value)
+      ).flatten.toMap
+    )
+
+  private def listAudits(context: ApiPlanContext, query: ResolvedAuditQuery): Vector[AuditEventEntry] =
+    context.support.opsAnalyticsModule.tables.listAuditEvents(
+      aggregateType = query.aggregateType,
+      aggregateId = query.aggregateId,
+      actorId = query.actorId,
+      eventType = query.eventType
+    )
+
+  private final case class ResolvedAuditQuery(
+      aggregateType: Option[String],
+      aggregateId: Option[String],
+      actorId: Option[PlayerId],
+      eventType: Option[String],
+      appliedFilters: Map[String, String]
+  )

@@ -66,19 +66,21 @@ final class BalancedEloSeatingPolicy extends SeatingPolicy:
 
   private def buildSnakeGroups(players: Vector[Player]): Vector[Vector[Player]] =
     val tableCount = players.size / 4
-    val grouped = Array.fill(tableCount)(Vector.empty[Player])
+    players.grouped(tableCount).zipWithIndex
+      .flatMap { case (row, rowIndex) =>
+        val tableIndices =
+          if rowIndex % 2 == 0 then row.indices
+          else row.indices.reverse
 
-    players.grouped(tableCount).zipWithIndex.foreach { case (row, rowIndex) =>
-      val tableIndices =
-        if rowIndex % 2 == 0 then row.indices
-        else row.indices.reverse
-
-      tableIndices.zip(row).foreach { case (tableIndex, player) =>
-        grouped(tableIndex) = grouped(tableIndex) :+ player
+        tableIndices.zip(row).map { case (tableIndex, player) =>
+          tableIndex -> player
+        }
       }
-    }
-
-    grouped.toVector
+      .toVector
+      .groupBy(_._1)
+      .toVector
+      .sortBy(_._1)
+      .map { case (_, entries) => entries.map(_._2) }
 
   private def buildOptimalGroups(
       players: Vector[Player],
@@ -86,23 +88,21 @@ final class BalancedEloSeatingPolicy extends SeatingPolicy:
       representedClubByPlayer: Map[PlayerId, ClubId],
       clubRelations: Map[(ClubId, ClubId), ClubRelationKind]
   ): Vector[Vector[Player]] =
+    final case class SearchResult(score: Double, grouping: Vector[Vector[Player]])
+
     val branchLimit =
       if players.size <= 8 then 12
       else if players.size <= 16 then 10
       else 8
 
-    var bestScore = Double.MaxValue
-    var bestGrouping = Vector.empty[Vector[Player]]
-
     def search(
         remaining: Vector[Player],
         current: Vector[Vector[Player]],
-        currentScore: Double
-    ): Unit =
+        currentScore: Double,
+        best: SearchResult
+    ): SearchResult =
       if remaining.isEmpty then
-        if currentScore < bestScore then
-          bestScore = currentScore
-          bestGrouping = current
+        if currentScore < best.score then SearchResult(currentScore, current) else best
       else
         val anchor = selectAnchor(remaining, opponentCounts, representedClubByPlayer, clubRelations)
         val rest = remaining.filterNot(_.id == anchor.id)
@@ -110,18 +110,24 @@ final class BalancedEloSeatingPolicy extends SeatingPolicy:
           .sortBy(groupScore(_, opponentCounts, representedClubByPlayer, clubRelations))
           .take(branchLimit)
 
-        candidates.foreach { group =>
+        candidates.foldLeft(best) { (currentBest, group) =>
           val penalty = groupScore(group, opponentCounts, representedClubByPlayer, clubRelations)
           val nextScore = currentScore + penalty
-          if nextScore < bestScore then
+          if nextScore < currentBest.score then
             val groupedIds = group.map(_.id).toSet
             val nextRemaining = remaining.filterNot(player => groupedIds.contains(player.id))
-            search(nextRemaining, current :+ group, nextScore)
+            search(nextRemaining, current :+ group, nextScore, currentBest)
+          else currentBest
         }
 
-    search(players, Vector.empty, 0.0)
+    val best = search(
+      remaining = players,
+      current = Vector.empty,
+      currentScore = 0.0,
+      best = SearchResult(Double.MaxValue, Vector.empty)
+    )
 
-    if bestGrouping.nonEmpty then bestGrouping
+    if best.grouping.nonEmpty then best.grouping
     else players.grouped(4).map(_.toVector).toVector
 
   private def selectAnchor(

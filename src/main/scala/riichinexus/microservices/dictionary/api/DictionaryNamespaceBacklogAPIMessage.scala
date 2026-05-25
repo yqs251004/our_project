@@ -1,13 +1,15 @@
 package riichinexus.microservices.dictionary.api
 
-import cats.effect.IO
-
 import java.time.{Duration, Instant}
 
+import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
-import riichinexus.domain.model.*
+import riichinexus.domain.model.{DictionaryNamespaceRegistration as DomainDictionaryNamespaceRegistration, *}
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.dictionary.objects.apiTypes.*
+import riichinexus.microservices.dictionary.objects.apiTypes.{
+  DictionaryNamespaceBacklogView,
+  DictionaryNamespaceOwnerBacklog
+}
 import riichinexus.microservices.dictionary.objects.apiTypes.DictionaryResponses.given
 import upickle.default.*
 
@@ -18,38 +20,56 @@ final case class DictionaryNamespaceBacklogAPIMessage(
 ) extends APIMessage[DictionaryNamespaceBacklogView] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[DictionaryNamespaceBacklogView] =
-    IO {
-      val module = context.support.dictionaryModule
-      val actor = context.support.principal(PlayerId(operatorId))
-      val resolvedAsOf = asOf.filter(_.nonEmpty).map(Instant.parse).getOrElse(Instant.now())
-      val dueSoonWindow = Duration.ofHours(dueSoonHours.getOrElse(24L))
+    for
+      now <- IO.realTimeInstant
+      command <- IO(resolveCommand(context, now))
+      pending <- IO(listPendingNamespaces(context, command))
+    yield buildBacklogView(pending, command)
 
-      module.transactionManager.inTransaction {
-        module.authorizationService.requirePermission(actor, Permission.ManageGlobalDictionary)
-        val pending = module.tables.listNamespaces()
-          .filter(_.status == DictionaryNamespaceReviewStatus.Pending)
+  private def resolveCommand(context: ApiPlanContext, now: Instant): BacklogCommand =
+    val module = context.support.dictionaryModule
+    val actor = context.support.principal(PlayerId(operatorId))
+    module.authorizationService.requirePermission(actor, Permission.ManageGlobalDictionary)
+    BacklogCommand(
+      asOf = asOf.filter(_.nonEmpty).map(Instant.parse).getOrElse(now),
+      dueSoonWindow = Duration.ofHours(dueSoonHours.getOrElse(24L))
+    )
 
-        val ownerBacklog = pending
-          .groupBy(_.ownerPlayerId)
-          .toVector
-          .map { case (ownerId, registrations) =>
-            DictionaryNamespaceOwnerBacklog(
-              ownerPlayerId = ownerId.value,
-              pendingCount = registrations.size,
-              overdueCount = registrations.count(_.isPendingOverdue(resolvedAsOf)),
-              dueSoonCount = registrations.count(_.isPendingDueSoon(resolvedAsOf, dueSoonWindow))
-            )
-          }
-          .sortBy(bucket => (-bucket.overdueCount, -bucket.pendingCount, bucket.ownerPlayerId))
+  private def listPendingNamespaces(
+      context: ApiPlanContext,
+      command: BacklogCommand
+  ): Vector[DomainDictionaryNamespaceRegistration] =
+    context.support.dictionaryModule.tables.listNamespaces()
+      .filter(_.status == DictionaryNamespaceReviewStatus.Pending)
 
-        DictionaryNamespaceBacklogView(
-          asOf = resolvedAsOf.toString,
-          pendingCount = pending.size,
-          overdueCount = pending.count(_.isPendingOverdue(resolvedAsOf)),
-          dueSoonCount = pending.count(_.isPendingDueSoon(resolvedAsOf, dueSoonWindow)),
-          oldestPendingRequestedAt = pending.map(_.requestedAt).sorted.headOption.map(_.toString),
-          nextDueAt = pending.flatMap(_.reviewDueAt).sorted.headOption.map(_.toString),
-          ownerBacklog = ownerBacklog
+  private def buildBacklogView(
+      pending: Vector[DomainDictionaryNamespaceRegistration],
+      command: BacklogCommand
+  ): DictionaryNamespaceBacklogView =
+    val ownerBacklog = pending
+      .groupBy(_.ownerPlayerId)
+      .toVector
+      .map { case (ownerId, registrations) =>
+        DictionaryNamespaceOwnerBacklog(
+          ownerPlayerId = ownerId.value,
+          pendingCount = registrations.size,
+          overdueCount = registrations.count(_.isPendingOverdue(command.asOf)),
+          dueSoonCount = registrations.count(_.isPendingDueSoon(command.asOf, command.dueSoonWindow))
         )
       }
-    }
+      .sortBy(bucket => (-bucket.overdueCount, -bucket.pendingCount, bucket.ownerPlayerId))
+
+    DictionaryNamespaceBacklogView(
+      asOf = command.asOf.toString,
+      pendingCount = pending.size,
+      overdueCount = pending.count(_.isPendingOverdue(command.asOf)),
+      dueSoonCount = pending.count(_.isPendingDueSoon(command.asOf, command.dueSoonWindow)),
+      oldestPendingRequestedAt = pending.map(_.requestedAt).sorted.headOption.map(_.toString),
+      nextDueAt = pending.flatMap(_.reviewDueAt).sorted.headOption.map(_.toString),
+      ownerBacklog = ownerBacklog
+    )
+
+  private final case class BacklogCommand(
+      asOf: Instant,
+      dueSoonWindow: Duration
+  )

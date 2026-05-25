@@ -1,7 +1,5 @@
 package riichinexus.infrastructure.memory
 
-import scala.collection.mutable
-
 import riichinexus.application.ports.*
 import riichinexus.domain.model.*
 
@@ -23,61 +21,60 @@ private object InMemoryEventStoreLockSupport:
         actual + 1
 
 final class InMemoryDomainEventOutboxRepository extends DomainEventOutboxRepository:
-  private val state = mutable.LinkedHashMap.empty[DomainEventOutboxRecordId, DomainEventOutboxRecord]
-  private var nextSequenceNo: Long = 1L
+  private val state = InMemoryKeyValueStore[DomainEventOutboxRecordId, DomainEventOutboxRecord]()
 
   override def save(record: DomainEventOutboxRecord): DomainEventOutboxRecord =
-    val persisted = record.copy(
-      sequenceNo =
-        if record.sequenceNo > 0L then record.sequenceNo
-        else
-          val allocated = nextSequenceNo
-          nextSequenceNo += 1L
-          allocated,
-      version = InMemoryEventStoreLockSupport.nextVersion(
-        "domain-event-outbox-record",
-        record.id.value,
-        record.version,
-        state.get(record.id).map(_.version)
+    state.modify { currentState =>
+      val (stateWithSequence, sequenceNo) =
+        if record.sequenceNo > 0L then currentState -> record.sequenceNo
+        else currentState.allocateSequenceNo
+      val persisted = record.copy(
+        sequenceNo = sequenceNo,
+        version = InMemoryEventStoreLockSupport.nextVersion(
+          "domain-event-outbox-record",
+          record.id.value,
+          record.version,
+          currentState.get(record.id).map(_.version)
+        )
       )
-    )
-    state.update(persisted.id, persisted)
-    persisted
+      stateWithSequence.upsert(persisted.id, persisted) -> persisted
+    }
 
   override def findById(id: DomainEventOutboxRecordId): Option[DomainEventOutboxRecord] =
     state.get(id)
 
   override def findAll(): Vector[DomainEventOutboxRecord] =
-    state.values.toVector.sortBy(_.sequenceNo)
+    state.values.sortBy(_.sequenceNo)
 
 object InMemoryDomainEventOutboxRepository:
   def apply(): InMemoryDomainEventOutboxRepository =
     new InMemoryDomainEventOutboxRepository()
 
 final class InMemoryDomainEventDeliveryReceiptRepository extends DomainEventDeliveryReceiptRepository:
-  private val state = mutable.LinkedHashMap.empty[String, DomainEventDeliveryReceipt]
+  private val state = InMemoryKeyValueStore[String, DomainEventDeliveryReceipt]()
 
   override def save(receipt: DomainEventDeliveryReceipt): DomainEventDeliveryReceipt =
     val key = compositeKey(receipt.outboxRecordId, receipt.subscriberId)
-    state.get(key) match
-      case Some(existing) => existing
-      case None =>
-        val persisted = receipt.copy(
-          version = InMemoryEventStoreLockSupport.nextVersion(
-            "domain-event-delivery-receipt",
-            receipt.id.value,
-            receipt.version,
-            None
+    state.modify { currentState =>
+      currentState.get(key) match
+        case Some(existing) => currentState -> existing
+        case None =>
+          val persisted = receipt.copy(
+            version = InMemoryEventStoreLockSupport.nextVersion(
+              "domain-event-delivery-receipt",
+              receipt.id.value,
+              receipt.version,
+              None
+            )
           )
-        )
-        state.update(key, persisted)
-        persisted
+          currentState.upsert(key, persisted) -> persisted
+    }
 
   override def findById(id: DomainEventDeliveryReceiptId): Option[DomainEventDeliveryReceipt] =
     state.values.find(_.id == id)
 
   override def findAll(): Vector[DomainEventDeliveryReceipt] =
-    state.values.toVector.sortBy(receipt => (receipt.deliveredAt, receipt.subscriberId, receipt.id.value))
+    state.values.sortBy(receipt => (receipt.deliveredAt, receipt.subscriberId, receipt.id.value))
 
   override def findByOutboxRecordAndSubscriber(
       outboxRecordId: DomainEventOutboxRecordId,
@@ -96,26 +93,27 @@ object InMemoryDomainEventDeliveryReceiptRepository:
     new InMemoryDomainEventDeliveryReceiptRepository()
 
 final class InMemoryDomainEventSubscriberCursorRepository extends DomainEventSubscriberCursorRepository:
-  private val state = mutable.LinkedHashMap.empty[String, DomainEventSubscriberCursor]
+  private val state = InMemoryKeyValueStore[String, DomainEventSubscriberCursor]()
 
   override def save(cursor: DomainEventSubscriberCursor): DomainEventSubscriberCursor =
     val key = compositeKey(cursor.subscriberId, cursor.partitionKey)
-    val persisted = cursor.copy(
-      version = InMemoryEventStoreLockSupport.nextVersion(
-        "domain-event-subscriber-cursor",
-        cursor.id.value,
-        cursor.version,
-        state.get(key).map(_.version)
+    state.modify { currentState =>
+      val persisted = cursor.copy(
+        version = InMemoryEventStoreLockSupport.nextVersion(
+          "domain-event-subscriber-cursor",
+          cursor.id.value,
+          cursor.version,
+          currentState.get(key).map(_.version)
+        )
       )
-    )
-    state.update(key, persisted)
-    persisted
+      currentState.upsert(key, persisted) -> persisted
+    }
 
   override def findById(id: DomainEventSubscriberCursorId): Option[DomainEventSubscriberCursor] =
     state.values.find(_.id == id)
 
   override def findAll(): Vector[DomainEventSubscriberCursor] =
-    state.values.toVector.sortBy(cursor => (cursor.subscriberId, cursor.partitionKey))
+    state.values.sortBy(cursor => (cursor.subscriberId, cursor.partitionKey))
 
   override def findBySubscriberAndPartition(
       subscriberId: String,
@@ -131,17 +129,16 @@ object InMemoryDomainEventSubscriberCursorRepository:
     new InMemoryDomainEventSubscriberCursorRepository()
 
 final class InMemoryAuditEventRepository extends AuditEventRepository:
-  private val state = mutable.ArrayBuffer.empty[AuditEventEntry]
+  private val state = InMemoryAppendOnlyStore[AuditEventEntry]()
 
   override def save(entry: AuditEventEntry): AuditEventEntry =
-    state += entry
-    entry
+    state.append(entry)
 
   override def findByAggregate(aggregateType: String, aggregateId: String): Vector[AuditEventEntry] =
-    state.filter(entry => entry.aggregateType == aggregateType && entry.aggregateId == aggregateId).toVector
+    state.values.filter(entry => entry.aggregateType == aggregateType && entry.aggregateId == aggregateId)
 
   override def findAll(): Vector[AuditEventEntry] =
-    state.toVector
+    state.values
 
 object InMemoryAuditEventRepository:
   def apply(): InMemoryAuditEventRepository =

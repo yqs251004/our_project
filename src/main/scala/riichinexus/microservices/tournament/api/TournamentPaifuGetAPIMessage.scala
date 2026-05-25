@@ -17,8 +17,11 @@ import upickle.default.*
 final case class TournamentPaifuGetAPIMessage(paifuId: String) extends APIMessage[TournamentPaifuSummaryView] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[TournamentPaifuSummaryView] =
-    IO {
-      context.support.tournamentModule.tables.findPaifu(PaifuId(paifuId))
-        .map(TournamentPaifuSummaryView.fromDomain)
-        .getOrElse(throw NoSuchElementException("Resource not found"))
-    }
+    for
+      id <- IO(PaifuId(paifuId))
+      paifu <- IO(resolvePaifu(context, id))
+    yield TournamentPaifuSummaryView.fromDomain(paifu)
+
+  private def resolvePaifu(context: ApiPlanContext, paifuId: PaifuId): Paifu =
+    context.support.tournamentModule.tables.findPaifu(paifuId)
+      .getOrElse(throw NoSuchElementException("Resource not found"))

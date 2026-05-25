@@ -2,8 +2,10 @@ package riichinexus.infrastructure.postgres
 
 import java.sql.Connection
 import java.sql.PreparedStatement
+import java.sql.ResultSet
 import java.sql.Types
 
+import scala.annotation.tailrec
 import scala.util.Using
 
 import riichinexus.application.ports.OptimisticConcurrencyException
@@ -46,13 +48,20 @@ trait JdbcRepositorySupport:
       Using.resource(connection.prepareStatement(sql)) { statement =>
         bind(statement)
         Using.resource(statement.executeQuery()) { resultSet =>
-          val buffer = Vector.newBuilder[T]
-          while resultSet.next() do
-            buffer += read[T](resultSet.getString("payload"))
-          buffer.result()
+          readPayloads(resultSet)(payload => read[T](payload))
         }
       }
     }
+
+  protected def readPayloads[T](
+      resultSet: ResultSet
+  )(decode: String => T): Vector[T] =
+    @tailrec
+    def loop(acc: Vector[T]): Vector[T] =
+      if resultSet.next() then loop(decode(resultSet.getString("payload")) +: acc)
+      else acc.reverse
+
+    loop(Vector.empty)
 
   protected def writeJson[T: Writer](value: T): String =
     write(value)

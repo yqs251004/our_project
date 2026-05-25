@@ -5,6 +5,8 @@ import java.util.NoSuchElementException
 
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
+import riichinexus.application.changes.DomainChangeInterpreter
+import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
 import riichinexus.domain.service.*
 import riichinexus.infrastructure.json.JsonCodecs.given
@@ -20,58 +22,82 @@ final case class AssignClubTitleAPIMessage(
 ) extends APIMessage[ClubResponse] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[ClubResponse] =
-    IO {
-      val module = context.support.clubModule
-      val parsedClubId = ClubId(clubId)
-      val parsedPlayerId = PlayerId(playerId)
-      val actor = context.support.principal(PlayerId(operatorId))
-      val assignedAt = Instant.now()
-
-      module.transactionManager.inTransaction {
-        (for
-          club <- module.clubRepository.findById(parsedClubId)
-          player <- module.playerRepository.findById(parsedPlayerId)
-        yield
-          ensureClubActive(club)
-          requireActivePlayer(player, s"Player ${parsedPlayerId.value} cannot receive club title")
-          requireClubMember(club, parsedPlayerId, "set internal title")
-          module.authorizationService.requirePermission(
-            actor,
-            Permission.SetClubTitle,
-            clubId = Some(parsedClubId)
-          )
-
-          val assignedBy = actor.playerId.getOrElse(club.creator)
-          val updatedClub = module.clubRepository.save(
-            club.setInternalTitle(
-              ClubTitleAssignment(
-                playerId = parsedPlayerId,
-                title = title,
-                assignedBy = assignedBy,
-                assignedAt = assignedAt,
-                note = note
-              )
-            )
-          )
-          module.auditEventRepository.save(
-            AuditEventEntry(
-              id = IdGenerator.auditEventId(),
-              aggregateType = "club",
-              aggregateId = parsedClubId.value,
-              eventType = "ClubTitleAssigned",
-              occurredAt = assignedAt,
-              actorId = actor.playerId,
-              details = Map(
-                "playerId" -> parsedPlayerId.value,
-                "title" -> title
-              ),
-              note = note
-            )
-          )
-          ClubResponse.fromDomain(updatedClub)
-        ).getOrElse(throw NoSuchElementException("Resource not found"))
+    for
+      actor <- IO(context.support.principal(PlayerId(operatorId)))
+      assignedAt <- IO.realTimeInstant
+      module = context.support.clubModule
+      command = AssignClubTitleCommand(
+        clubId = ClubId(clubId),
+        playerId = PlayerId(playerId),
+        actor = actor,
+        title = title,
+        note = note,
+        assignedAt = assignedAt
+      )
+      club <- IO {
+        module.transactionManager.inTransaction {
+          assignTitle(module, command)
+        }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
-    }
+    yield ClubResponse.fromDomain(club)
+
+  private def assignTitle(
+      module: ClubModuleContext,
+      command: AssignClubTitleCommand
+  ): Option[Club] =
+    for
+      club <- module.clubRepository.findById(command.clubId)
+      player <- module.playerRepository.findById(command.playerId)
+    yield
+      ensureTitleCanBeAssigned(module, club, player, command)
+      commitTitleAssignment(module, club, command, assignedBy = command.actor.playerId.getOrElse(club.creator))
+
+  private def ensureTitleCanBeAssigned(
+      module: ClubModuleContext,
+      club: Club,
+      player: Player,
+      command: AssignClubTitleCommand
+  ): Unit =
+    ensureClubActive(club)
+    requireActivePlayer(player, s"Player ${command.playerId.value} cannot receive club title")
+    requireClubMember(club, command.playerId, "set internal title")
+    module.authorizationService.requirePermission(
+      command.actor,
+      Permission.SetClubTitle,
+      clubId = Some(command.clubId)
+    )
+
+  private def commitTitleAssignment(
+      module: ClubModuleContext,
+      club: Club,
+      command: AssignClubTitleCommand,
+      assignedBy: PlayerId
+  ): Club =
+    DomainChangeInterpreter
+      .auditOnly(module.transactionManager, module.auditEventRepository)
+      .commitAudited(
+        aggregate = club.setInternalTitle(
+          ClubTitleAssignment(
+            playerId = command.playerId,
+            title = command.title,
+            assignedBy = assignedBy,
+            assignedAt = command.assignedAt,
+            note = command.note
+          )
+        ),
+        persist = module.clubRepository.save,
+        aggregateType = "club",
+        aggregateId = _.id.value,
+        eventType = "ClubTitleAssigned",
+        occurredAt = command.assignedAt,
+        actorId = command.actor.playerId,
+        details = _ =>
+          Map(
+            "playerId" -> command.playerId.value,
+            "title" -> command.title
+          ),
+        note = command.note
+      )
 
   private def ensureClubActive(club: Club): Unit =
     if club.dissolvedAt.nonEmpty then
@@ -86,3 +112,12 @@ final case class AssignClubTitleAPIMessage(
       throw IllegalArgumentException(
         s"Player ${playerId.value} must be a club member to $action in club ${club.id.value}"
       )
+
+  private final case class AssignClubTitleCommand(
+      clubId: ClubId,
+      playerId: PlayerId,
+      actor: AccessPrincipal,
+      title: String,
+      note: Option[String],
+      assignedAt: Instant
+  )

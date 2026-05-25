@@ -1,6 +1,8 @@
 package riichinexus.microservices.opsanalytics.api
 
-import java.util.NoSuchElementException
+import riichinexus.microservices.opsanalytics.tables.OpsAnalyticsDomainEventOutboxOperations
+
+import java.time.Instant
 
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
@@ -17,43 +19,33 @@ final case class OpsAnalyticsQuarantineDomainEventOutboxRecordAPIMessage(
 ) extends APIMessage[DomainEventOutboxRecordResponse] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[DomainEventOutboxRecordResponse] =
-    IO {
-      val module = context.support.opsAnalyticsModule
-      val actor = context.support.principal(operatorId)
-      val at = java.time.Instant.now()
-      val normalizedReason = reason.trim
-      require(normalizedReason.nonEmpty, "Quarantine reason cannot be empty")
-      module.transactionManager.inTransaction {
-        module.authorizationService.requirePermission(actor, Permission.ManageGlobalDictionary)
-        val record = module.domainEventOutboxRepository.findById(recordId)
-          .getOrElse(throw NoSuchElementException(s"Domain event outbox record ${recordId.value} was not found"))
-        require(
-          record.status != DomainEventOutboxStatus.Completed,
-          s"Completed outbox record ${recordId.value} cannot be quarantined"
-        )
-        require(
-          record.status != DomainEventOutboxStatus.Quarantined,
-          s"Outbox record ${recordId.value} is already quarantined"
-        )
+    for
+      actor <- IO(context.support.principal(operatorId))
+      quarantinedAt <- IO.realTimeInstant
+      command <- IO(resolveCommand(actor, quarantinedAt))
+      record <- IO(quarantineOutboxRecord(context, command))
+    yield DomainEventOutboxRecordResponse.fromDomain(record)
 
-        val quarantined = module.domainEventOutboxRepository.save(record.markQuarantined(normalizedReason, at))
-        module.auditEventRepository.save(
-          AuditEventEntry(
-            id = IdGenerator.auditEventId(),
-            aggregateType = "domain-event-outbox-record",
-            aggregateId = recordId.value,
-            eventType = "DomainEventOutboxQuarantined",
-            occurredAt = at,
-            actorId = actor.playerId,
-            details = Map(
-              "priorStatus" -> record.status.toString,
-              "eventType" -> record.eventType,
-              "aggregateType" -> record.aggregateType,
-              "aggregateId" -> record.aggregateId
-            ),
-            note = Some(normalizedReason)
-          )
-        )
-        DomainEventOutboxRecordResponse.fromDomain(quarantined)
-      }
-    }
+  private def resolveCommand(actor: AccessPrincipal, quarantinedAt: Instant): QuarantineOutboxRecordCommand =
+    val normalizedReason = reason.trim
+    require(normalizedReason.nonEmpty, "Quarantine reason cannot be empty")
+    QuarantineOutboxRecordCommand(recordId, actor, normalizedReason, quarantinedAt)
+
+  private def quarantineOutboxRecord(
+      context: ApiPlanContext,
+      command: QuarantineOutboxRecordCommand
+  ): DomainEventOutboxRecord =
+    OpsAnalyticsDomainEventOutboxOperations.quarantine(
+      context,
+      command.recordId,
+      command.actor,
+      command.reason,
+      command.quarantinedAt
+    )
+
+  private final case class QuarantineOutboxRecordCommand(
+      recordId: DomainEventOutboxRecordId,
+      actor: AccessPrincipal,
+      reason: String,
+      quarantinedAt: Instant
+  )

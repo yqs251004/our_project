@@ -1,5 +1,8 @@
 package riichinexus.microservices.opsanalytics.api
 
+import riichinexus.microservices.opsanalytics.tables.OpsAnalyticsDomainEventOutboxOperations
+
+import java.time.Instant
 import java.util.NoSuchElementException
 
 import cats.effect.IO
@@ -19,68 +22,59 @@ final case class OpsAnalyticsAcknowledgeDomainEventOutboxAPIMessage(
   require(recordIds.nonEmpty, "Batch acknowledge requires at least one recordId")
 
   override def plan(context: ApiPlanContext): IO[DomainEventOutboxBatchOperationResultResponse] =
-    IO {
-      val actor = context.support.principal(operatorId)
-      val at = java.time.Instant.now()
-      val normalizedIds = recordIds.distinct
-      val failures = Vector.newBuilder[DomainEventOutboxOperationFailure]
-      val succeededIds = Vector.newBuilder[DomainEventOutboxRecordId]
+    for
+      actor <- IO(context.support.principal(operatorId))
+      acknowledgedAt <- IO.realTimeInstant
+      command = AcknowledgeOutboxBatchCommand(actor, recordIds.distinct, acknowledgedAt, note)
+      result <- IO(acknowledgeOutboxBatch(context, command))
+    yield DomainEventOutboxBatchOperationResultResponse.fromDomain(result)
 
-      normalizedIds.foreach { currentRecordId =>
-        try
-          acknowledgeOutboxRecord(context, currentRecordId, actor, at)
-          succeededIds += currentRecordId
-        catch
-          case error: IllegalArgumentException =>
-            failures += DomainEventOutboxOperationFailure(currentRecordId, error.getMessage)
-          case error: NoSuchElementException =>
-            failures += DomainEventOutboxOperationFailure(currentRecordId, error.getMessage)
-          case error: IllegalStateException =>
-            failures += DomainEventOutboxOperationFailure(currentRecordId, error.getMessage)
-      }
-
-      DomainEventOutboxBatchOperationResultResponse.fromDomain(DomainEventOutboxBatchOperationResult(
-        action = "ack",
-        processedAt = at,
-        requestedCount = normalizedIds.size,
-        succeededRecordIds = succeededIds.result(),
-        failures = failures.result()
-      ))
+  private def acknowledgeOutboxBatch(
+      context: ApiPlanContext,
+      command: AcknowledgeOutboxBatchCommand
+  ): DomainEventOutboxBatchOperationResult =
+    val (succeededIds, failures) = command.recordIds.foldLeft(
+      Vector.empty[DomainEventOutboxRecordId] -> Vector.empty[DomainEventOutboxOperationFailure]
+    ) { case ((succeeded, failed), currentRecordId) =>
+      acknowledgeOutboxRecordResult(context, currentRecordId, command.actor, command.acknowledgedAt) match
+        case Right(_)    => (succeeded :+ currentRecordId) -> failed
+        case Left(error) => succeeded -> (failed :+ error)
     }
+
+    DomainEventOutboxBatchOperationResult(
+      action = "ack",
+      processedAt = command.acknowledgedAt,
+      requestedCount = command.recordIds.size,
+      succeededRecordIds = succeededIds,
+      failures = failures
+    )
+
+  private def acknowledgeOutboxRecordResult(
+      context: ApiPlanContext,
+      currentRecordId: DomainEventOutboxRecordId,
+      actor: AccessPrincipal,
+      at: Instant
+  ): Either[DomainEventOutboxOperationFailure, DomainEventOutboxRecord] =
+    try Right(acknowledgeOutboxRecord(context, currentRecordId, actor, at))
+    catch
+      case error: IllegalArgumentException =>
+        Left(DomainEventOutboxOperationFailure(currentRecordId, error.getMessage))
+      case error: NoSuchElementException =>
+        Left(DomainEventOutboxOperationFailure(currentRecordId, error.getMessage))
+      case error: IllegalStateException =>
+        Left(DomainEventOutboxOperationFailure(currentRecordId, error.getMessage))
 
   private def acknowledgeOutboxRecord(
       context: ApiPlanContext,
       currentRecordId: DomainEventOutboxRecordId,
       actor: AccessPrincipal,
-      at: java.time.Instant
+      at: Instant
   ): DomainEventOutboxRecord =
-    val module = context.support.opsAnalyticsModule
-    module.transactionManager.inTransaction {
-      module.authorizationService.requirePermission(actor, Permission.ManageGlobalDictionary)
-      val record = module.domainEventOutboxRepository.findById(currentRecordId)
-        .getOrElse(throw NoSuchElementException(s"Domain event outbox record ${currentRecordId.value} was not found"))
-      require(
-        Set(DomainEventOutboxStatus.DeadLetter, DomainEventOutboxStatus.Quarantined).contains(record.status),
-        s"Only DeadLetter or Quarantined outbox records can be acknowledged, but ${currentRecordId.value} is ${record.status}"
-      )
+    OpsAnalyticsDomainEventOutboxOperations.acknowledge(context, currentRecordId, actor, at, note)
 
-      val acknowledged = module.domainEventOutboxRepository.save(record.markCompleted(at))
-      module.auditEventRepository.save(
-        AuditEventEntry(
-          id = IdGenerator.auditEventId(),
-          aggregateType = "domain-event-outbox-record",
-          aggregateId = currentRecordId.value,
-          eventType = "DomainEventOutboxAcknowledged",
-          occurredAt = at,
-          actorId = actor.playerId,
-          details = Map(
-            "priorStatus" -> record.status.toString,
-            "eventType" -> record.eventType,
-            "aggregateType" -> record.aggregateType,
-            "aggregateId" -> record.aggregateId
-          ),
-          note = note
-        )
-      )
-      acknowledged
-    }
+  private final case class AcknowledgeOutboxBatchCommand(
+      actor: AccessPrincipal,
+      recordIds: Vector[DomainEventOutboxRecordId],
+      acknowledgedAt: Instant,
+      note: Option[String]
+  )

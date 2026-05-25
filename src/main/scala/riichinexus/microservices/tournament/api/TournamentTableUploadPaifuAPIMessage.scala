@@ -4,6 +4,8 @@ import java.util.NoSuchElementException
 
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
+import riichinexus.application.changes.{DomainChange, DomainChangeInterpreter}
+import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.event.*
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
@@ -18,61 +20,104 @@ import upickle.default.*
 final case class TournamentTableUploadPaifuAPIMessage(tableId: String, request: UploadPaifuRequest) extends APIMessage[TournamentTableView] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[TournamentTableView] =
-    IO {
-      val module = context.support.tournamentModule
-      val id = TableId(tableId)
-      val actor = request.operator.map(context.support.principal).getOrElse(AccessPrincipal.system)
-      val paifu = request.paifu
+    for
+      actor <- IO(resolveActor(context))
+      module = context.support.tournamentModule
+      command = UploadPaifuCommand(
+        tableId = TableId(tableId),
+        actor = actor,
+        paifu = request.paifu
+      )
+      archivedTable <- IO {
+        module.transactionManager.inTransaction {
+          archivePaifu(module, command)
+        }.getOrElse(throw NoSuchElementException("Resource not found"))
+      }
+    yield TournamentTableView.fromDomain(archivedTable)
 
-      module.transactionManager.inTransaction {
-        module.tableRepository.findById(id).map { table =>
-          module.authorizationService.requirePermission(
-            actor,
-            Permission.ManageTournamentStages,
-            tournamentId = Some(table.tournamentId)
-          )
-          validatePaifu(table, paifu)
+  private def resolveActor(context: ApiPlanContext): AccessPrincipal =
+    request.operator.map(context.support.principal).getOrElse(AccessPrincipal.system)
 
-          if module.matchRecordRepository.findByTable(id).nonEmpty then
-            throw IllegalArgumentException(s"Table ${id.value} has already been archived")
+  private def archivePaifu(
+      module: TournamentModuleContext,
+      command: UploadPaifuCommand
+  ): Option[Table] =
+    module.tableRepository.findById(command.tableId).map { table =>
+      module.authorizationService.requirePermission(
+        command.actor,
+        Permission.ManageTournamentStages,
+        tournamentId = Some(table.tournamentId)
+      )
+      validatePaifu(table, command.paifu)
+      ensureNotArchived(module, command.tableId)
 
-          val provisionalRecord =
-            MatchRecord.fromTableAndPaifu(table, paifu, paifu.metadata.recordedAt, actor.playerId)
-          val linkedPaifu = paifu.copy(
-            metadata = paifu.metadata.copy(matchRecordId = Some(provisionalRecord.id))
-          )
-          val storedPaifu = module.paifuRepository.save(linkedPaifu)
-          val storedRecord =
-            module.matchRecordRepository.save(provisionalRecord.copy(paifuId = Some(storedPaifu.id)))
-
-          val archivedTable = module.tableRepository.save(
-            table
-              .enterScoring(paifu.metadata.recordedAt)
-              .archive(storedRecord.id, storedPaifu.id, paifu.metadata.recordedAt)
-          )
-
-          module.eventBus.publish(
-            MatchRecordArchived(
-              tableId = table.id,
-              tournamentId = table.tournamentId,
-              stageId = table.stageId,
-              matchRecord = storedRecord,
-              paifu = Some(storedPaifu),
-              occurredAt = paifu.metadata.recordedAt
-            )
-          )
-
-          if table.bracketMatchId.nonEmpty then
-            module.knockoutStageCoordinator.materializeUnlockedTables(
-              table.tournamentId,
-              table.stageId,
-              paifu.metadata.recordedAt
-            )
-
-          TournamentTableView.fromDomain(archivedTable)
-        }
-      }.getOrElse(throw NoSuchElementException("Resource not found"))
+      val archived = commitArchivedPaifu(module, table, command.paifu, command.actor)
+      materializeUnlockedTables(module, table, command.paifu)
+      archived.table
     }
+
+  private def ensureNotArchived(module: TournamentModuleContext, id: TableId): Unit =
+    if module.matchRecordRepository.findByTable(id).nonEmpty then
+      throw IllegalArgumentException(s"Table ${id.value} has already been archived")
+
+  private def commitArchivedPaifu(
+      module: TournamentModuleContext,
+      table: Table,
+      paifu: Paifu,
+      actor: AccessPrincipal
+  ): ArchivedPaifuChange =
+    val provisionalRecord =
+      MatchRecord.fromTableAndPaifu(table, paifu, paifu.metadata.recordedAt, actor.playerId)
+    val linkedPaifu = paifu.copy(
+      metadata = paifu.metadata.copy(matchRecordId = Some(provisionalRecord.id))
+    )
+
+    DomainChangeInterpreter
+      .auditAndEvents(module.transactionManager, module.auditEventRepository, module.eventBus)
+      .commitWithinTransaction(
+        DomainChange(
+          aggregate = ArchivedPaifuChange(
+            table = table
+              .enterScoring(paifu.metadata.recordedAt)
+              .archive(provisionalRecord.id, linkedPaifu.id, paifu.metadata.recordedAt),
+            matchRecord = provisionalRecord.copy(paifuId = Some(linkedPaifu.id)),
+            paifu = linkedPaifu
+          ),
+          persist = change =>
+            val storedPaifu = module.paifuRepository.save(change.paifu)
+            val storedRecord =
+              module.matchRecordRepository.save(change.matchRecord.copy(paifuId = Some(storedPaifu.id)))
+            val archivedTable = module.tableRepository.save(
+              table
+                .enterScoring(paifu.metadata.recordedAt)
+                .archive(storedRecord.id, storedPaifu.id, paifu.metadata.recordedAt)
+            )
+            change.copy(table = archivedTable, matchRecord = storedRecord, paifu = storedPaifu),
+          domainEvents = change =>
+            Vector(
+              MatchRecordArchived(
+                tableId = table.id,
+                tournamentId = table.tournamentId,
+                stageId = table.stageId,
+                matchRecord = change.matchRecord,
+                paifu = Some(change.paifu),
+                occurredAt = paifu.metadata.recordedAt
+              )
+            )
+        )
+      )
+
+  private def materializeUnlockedTables(
+      module: TournamentModuleContext,
+      table: Table,
+      paifu: Paifu
+  ): Unit =
+    if table.bracketMatchId.nonEmpty then
+      module.knockoutStageCoordinator.materializeUnlockedTables(
+        table.tournamentId,
+        table.stageId,
+        paifu.metadata.recordedAt
+      )
 
   private def validatePaifu(table: Table, paifu: Paifu): Unit =
     val scheduledSeatsByPlayer = table.seats.map(seat => seat.playerId -> seat).toMap
@@ -175,3 +220,15 @@ final case class TournamentTableUploadPaifuAPIMessage(tableId: String, request: 
       ),
       "Paifu final standings must match the cumulative round score changes"
     )
+
+  private final case class ArchivedPaifuChange(
+      table: Table,
+      matchRecord: MatchRecord,
+      paifu: Paifu
+  )
+
+  private final case class UploadPaifuCommand(
+      tableId: TableId,
+      actor: AccessPrincipal,
+      paifu: Paifu
+  )

@@ -95,10 +95,7 @@ final class PostgresPlayerRepository(
             connection.createArrayOf("text", ids.map(_.value).distinct.toArray)
           )
           Using.resource(statement.executeQuery()) { resultSet =>
-            val buffer = Vector.newBuilder[Player]
-            while resultSet.next() do
-              buffer += read[Player](resultSet.getString("payload"))
-            buffer.result()
+            readPayloads(resultSet)(payload => read[Player](payload))
           }
         }
       }

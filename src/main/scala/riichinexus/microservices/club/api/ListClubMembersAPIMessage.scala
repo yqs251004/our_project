@@ -18,30 +18,57 @@ final case class ListClubMembersAPIMessage(
 ) extends APIMessage[PagedResponse[PlayerProfileView]] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[PlayerProfileView]] =
-    IO {
-      val parsedStatus = status.filter(_.nonEmpty).map(context.support.parseEnum("status", _)(PlayerStatus.valueOf))
-      val parsedNickname = nickname.filter(_.nonEmpty)
-      val members = context.support.clubModule.tables
-        .listPlayersByClub(ClubId(clubId))
-        .filter(player => parsedStatus.forall(_ == player.status))
-        .filter(player => parsedNickname.forall(context.support.containsIgnoreCase(player.nickname, _)))
-        .sortBy(player => (player.nickname, player.id.value))
-        .map(PlayerProfileView.fromDomain)
-      val resolvedLimit = limit.getOrElse(20)
-      val resolvedOffset = offset.getOrElse(0)
-      require(resolvedLimit > 0, "Input field limit must be positive")
-      require(resolvedOffset >= 0, "Input field offset must be non-negative")
-      val boundedLimit = math.min(resolvedLimit, 100)
-      val page = members.slice(resolvedOffset, resolvedOffset + boundedLimit)
-      PagedResponse(
-        items = page,
-        total = members.size,
-        limit = boundedLimit,
-        offset = resolvedOffset,
-        hasMore = resolvedOffset + page.size < members.size,
-        appliedFilters = Vector(
-          status.filter(_.nonEmpty).map("status" -> _),
-          nickname.filter(_.nonEmpty).map("nickname" -> _)
-        ).flatten.toMap
-      )
-    }
+    for
+      query <- IO(resolveQuery(context))
+      members <- IO(listMembers(context, query))
+    yield pagedResponse(members, query)
+
+  private def resolveQuery(context: ApiPlanContext): ResolvedClubMembersQuery =
+    ResolvedClubMembersQuery(
+      clubId = ClubId(clubId),
+      status = status.filter(_.nonEmpty).map(context.support.parseEnum("status", _)(PlayerStatus.valueOf)),
+      nickname = nickname.filter(_.nonEmpty),
+      limit = limit.getOrElse(20),
+      offset = offset.getOrElse(0),
+      appliedFilters = Vector(
+        status.filter(_.nonEmpty).map("status" -> _),
+        nickname.filter(_.nonEmpty).map("nickname" -> _)
+      ).flatten.toMap
+    )
+
+  private def listMembers(
+      context: ApiPlanContext,
+      query: ResolvedClubMembersQuery
+  ): Vector[PlayerProfileView] =
+    context.support.clubModule.tables
+      .listPlayersByClub(query.clubId)
+      .filter(player => query.status.forall(_ == player.status))
+      .filter(player => query.nickname.forall(context.support.containsIgnoreCase(player.nickname, _)))
+      .sortBy(player => (player.nickname, player.id.value))
+      .map(PlayerProfileView.fromDomain)
+
+  private def pagedResponse(
+      members: Vector[PlayerProfileView],
+      query: ResolvedClubMembersQuery
+  ): PagedResponse[PlayerProfileView] =
+    require(query.limit > 0, "Input field limit must be positive")
+    require(query.offset >= 0, "Input field offset must be non-negative")
+    val boundedLimit = math.min(query.limit, 100)
+    val page = members.slice(query.offset, query.offset + boundedLimit)
+    PagedResponse(
+      items = page,
+      total = members.size,
+      limit = boundedLimit,
+      offset = query.offset,
+      hasMore = query.offset + page.size < members.size,
+      appliedFilters = query.appliedFilters
+    )
+
+  private final case class ResolvedClubMembersQuery(
+      clubId: ClubId,
+      status: Option[PlayerStatus],
+      nickname: Option[String],
+      limit: Int,
+      offset: Int,
+      appliedFilters: Map[String, String]
+  )

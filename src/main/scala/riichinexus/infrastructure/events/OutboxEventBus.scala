@@ -3,12 +3,10 @@ package riichinexus.infrastructure.events
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.Executors
-import java.util.concurrent.ThreadFactory
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
-import scala.collection.mutable
-
+import scala.annotation.tailrec
 import riichinexus.application.ports.*
 import riichinexus.domain.event.*
 import riichinexus.domain.model.*
@@ -68,8 +66,7 @@ final class OutboxBackedDomainEventBus(
     maxAttempts: Int = 5,
     pollInterval: Duration = Duration.ofSeconds(2)
 ) extends DomainEventBus:
-  private val subscribers = mutable.ArrayBuffer.empty[DomainEventSubscriber]
-  initialSubscribers.foreach(register)
+  private val subscribers = AtomicReference(validateSubscribers(initialSubscribers))
 
   private val drainInFlight = AtomicBoolean(false)
   private val executor =
@@ -104,11 +101,17 @@ final class OutboxBackedDomainEventBus(
     else scheduleDrain()
 
   override def register(subscriber: DomainEventSubscriber): Unit =
+    appendSubscriber(subscriber)
+
+  @tailrec
+  private def appendSubscriber(subscriber: DomainEventSubscriber): Unit =
+    val current = subscribers.get()
     require(
-      !subscribers.exists(_.subscriberId == subscriber.subscriberId),
+      !current.exists(_.subscriberId == subscriber.subscriberId),
       s"Duplicate domain event subscriberId registered: ${subscriber.subscriberId}"
     )
-    subscribers += subscriber
+    if !subscribers.compareAndSet(current, current :+ subscriber) then
+      appendSubscriber(subscriber)
 
   override def drainPendingNow(limit: Int = 100, processedAt: Instant = Instant.now()): Int =
     processPending(limit, processedAt)
@@ -170,14 +173,13 @@ final class OutboxBackedDomainEventBus(
       record: DomainEventOutboxRecord,
       deliveredAt: Instant
   ): DeliveryAttemptSummary =
-    val deferredSubscribers = Vector.newBuilder[String]
-
-    subscribers.foreach { subscriber =>
+    val deferredSubscribers = subscribers.get().foldLeft(Vector.empty[String]) { (deferred, subscriber) =>
       val alreadyDelivered = transactionManager.inTransaction {
         deliveryReceiptRepository.findByOutboxRecordAndSubscriber(record.id, subscriber.subscriberId).nonEmpty
       }
 
-      if !alreadyDelivered then
+      if alreadyDelivered then deferred
+      else
         val partitionKey = subscriber.partitionStrategy.partitionKey(record)
         val ready = transactionManager.inTransaction {
           isReadyForSubscriber(subscriber, record, partitionKey)
@@ -197,14 +199,25 @@ final class OutboxBackedDomainEventBus(
             )
             advanceCursor(subscriber, partitionKey, record, deliveredAt)
           }
-        else deferredSubscribers += subscriber.subscriberId
+          deferred
+        else deferred :+ subscriber.subscriberId
     }
 
-    val deferred = deferredSubscribers.result()
     DeliveryAttemptSummary(
-      allSubscribersDelivered = deferred.isEmpty,
-      deferredSubscribers = deferred
+      allSubscribersDelivered = deferredSubscribers.isEmpty,
+      deferredSubscribers = deferredSubscribers
     )
+
+  private def validateSubscribers(
+      candidateSubscribers: Vector[DomainEventSubscriber]
+  ): Vector[DomainEventSubscriber] =
+    candidateSubscribers.foldLeft(Vector.empty[DomainEventSubscriber]) { (validated, subscriber) =>
+      require(
+        !validated.exists(_.subscriberId == subscriber.subscriberId),
+        s"Duplicate domain event subscriberId registered: ${subscriber.subscriberId}"
+      )
+      validated :+ subscriber
+    }
 
   private def isReadyForSubscriber(
       subscriber: DomainEventSubscriber,

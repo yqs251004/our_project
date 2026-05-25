@@ -4,10 +4,11 @@ import java.util.NoSuchElementException
 
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
+import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.club.domain.ClubApplicationViewAssembler
 import riichinexus.microservices.club.objects.apiTypes.{Club as _, ClubRelation as _, ClubMembershipApplication as _, ClubPrivilegeDefinition as _, ClubMemberPrivilegeSnapshot as _, *}
-import riichinexus.microservices.tournament.objects.apiTypes.RankSnapshotView
 import upickle.default.*
 
 final case class GetCurrentClubApplicationAPIMessage(
@@ -17,76 +18,45 @@ final case class GetCurrentClubApplicationAPIMessage(
 ) extends APIMessage[ClubMembershipApplicationView] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[ClubMembershipApplicationView] =
-    IO {
-      val parsedClubId = ClubId(clubId)
-      val parsedGuestSessionId = guestSessionId.filter(_.nonEmpty).map(GuestSessionId(_))
-      val parsedOperatorId = operatorId.filter(_.nonEmpty).map(PlayerId(_))
-      val club = context.support.clubModule.tables
-        .findClub(parsedClubId)
-        .getOrElse(throw NoSuchElementException(s"Club ${parsedClubId.value} was not found"))
-      if parsedGuestSessionId.isEmpty && parsedOperatorId.isEmpty then
-        throw IllegalArgumentException("operatorId or guestSessionId is required")
-      val actor = context.support.requestActor(parsedGuestSessionId, parsedOperatorId)
-      club.membershipApplications
-        .filter(application => application.isPending && ownsClubApplication(context, actor, application))
-        .maxByOption(_.submittedAt)
-        .map(application => buildClubMembershipApplicationView(context, club, application, actor))
-        .getOrElse(throw NoSuchElementException("Resource not found"))
-    }
+    for
+      input <- IO(resolveInput)
+      actor <- IO(resolveActor(context, input))
+      view <- IO(getCurrentApplicationView(context.support.clubModule, input, actor))
+    yield view
 
-  private def canManageClubApplications(actor: AccessPrincipal, club: Club): Boolean =
-    actor.isSuperAdmin || actor.playerId.exists(playerId =>
-      club.admins.contains(playerId) || club.hasPrivilege(playerId, ClubPrivilege.ApproveRoster)
+  private def resolveInput: CurrentClubApplicationInput =
+    val parsedGuestSessionId = guestSessionId.filter(_.nonEmpty).map(GuestSessionId(_))
+    val parsedOperatorId = operatorId.filter(_.nonEmpty).map(PlayerId(_))
+    if parsedGuestSessionId.isEmpty && parsedOperatorId.isEmpty then
+      throw IllegalArgumentException("operatorId or guestSessionId is required")
+    CurrentClubApplicationInput(
+      clubId = ClubId(clubId),
+      operatorId = parsedOperatorId,
+      guestSessionId = parsedGuestSessionId
     )
 
-  private def ownsClubApplication(
+  private def resolveActor(
       context: ApiPlanContext,
-      actor: AccessPrincipal,
-      application: ClubMembershipApplication
-  ): Boolean =
-    val ownedByGuest = actor.isGuest && application.applicantUserId.contains(s"guest:${actor.principalId}")
-    val ownedByRegisteredPlayer =
-      actor.playerId.flatMap(context.support.clubModule.tables.findPlayer).exists(player =>
-        application.applicantUserId.contains(player.userId)
-      )
-    ownedByGuest || ownedByRegisteredPlayer
+      input: CurrentClubApplicationInput
+  ): AccessPrincipal =
+    context.support.requestActor(input.guestSessionId, input.operatorId)
 
-  private def canWithdrawClubApplication(
-      context: ApiPlanContext,
-      actor: AccessPrincipal,
-      application: ClubMembershipApplication
-  ): Boolean =
-    actor.isSuperAdmin || ownsClubApplication(context, actor, application)
-
-  private def buildClubMembershipApplicationView(
-      context: ApiPlanContext,
-      club: Club,
-      application: ClubMembershipApplication,
+  private def getCurrentApplicationView(
+      module: ClubModuleContext,
+      input: CurrentClubApplicationInput,
       actor: AccessPrincipal
   ): ClubMembershipApplicationView =
-    val tables = context.support.clubModule.tables
-    val applicantPlayer = application.applicantUserId.flatMap(tables.findPlayerByUserId)
-    ClubMembershipApplicationView(
-      applicationId = application.id.value,
-      clubId = club.id.value,
-      clubName = club.name,
-      applicant = ClubMembershipApplicantView(
-        playerId = applicantPlayer.map(_.id.value),
-        applicantUserId = application.applicantUserId,
-        displayName = application.displayName,
-        playerStatus = applicantPlayer.map(_.status.toString),
-        currentRank = applicantPlayer.map(player => RankSnapshotView.fromDomain(player.currentRank)),
-        elo = applicantPlayer.map(_.elo),
-        clubIds = applicantPlayer.map(_.boundClubIds.map(_.value)).getOrElse(Vector.empty)
-      ),
-      submittedAt = application.submittedAt.toString,
-      message = application.message,
-      status = application.status.toString,
-      reviewedBy = application.reviewedBy.map(_.value),
-      reviewedByDisplayName = application.reviewedBy.flatMap(playerId => tables.findPlayer(playerId).map(_.nickname)),
-      reviewedAt = application.reviewedAt.map(_.toString),
-      reviewNote = application.reviewNote,
-      withdrawnByPrincipalId = application.withdrawnByPrincipalId,
-      canReview = application.isPending && canManageClubApplications(actor, club),
-      canWithdraw = application.isPending && canWithdrawClubApplication(context, actor, application)
-    )
+    val club = module.tables
+      .findClub(input.clubId)
+      .getOrElse(throw NoSuchElementException(s"Club ${input.clubId.value} was not found"))
+    val application = club.membershipApplications
+      .filter(application => application.isPending && ClubApplicationViewAssembler.ownsClubApplication(module, actor, application))
+      .maxByOption(_.submittedAt)
+      .getOrElse(throw NoSuchElementException("Resource not found"))
+    ClubApplicationViewAssembler.applicationView(module, club, application, actor)
+
+  private final case class CurrentClubApplicationInput(
+      clubId: ClubId,
+      operatorId: Option[PlayerId],
+      guestSessionId: Option[GuestSessionId]
+  )

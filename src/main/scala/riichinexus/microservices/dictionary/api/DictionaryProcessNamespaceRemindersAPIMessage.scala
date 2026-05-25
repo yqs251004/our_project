@@ -1,12 +1,12 @@
 package riichinexus.microservices.dictionary.api
 
-import cats.effect.IO
-
 import java.time.{Duration, Instant}
 
+import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.dictionary.domain.DictionaryNamespaceReminderOperations
 import riichinexus.microservices.dictionary.objects.apiTypes.{DictionaryNamespaceReminderAction as DictionaryNamespaceReminderActionResponse, *}
 import upickle.default.*
 
@@ -19,78 +19,40 @@ final case class DictionaryProcessNamespaceRemindersAPIMessage(
 ) extends APIMessage[Vector[DictionaryNamespaceReminderActionResponse]] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[Vector[DictionaryNamespaceReminderActionResponse]] =
-    IO {
-      val module = context.support.dictionaryModule
-      val request = ProcessDictionaryNamespaceRemindersRequest(operatorId, asOf, dueSoonHours, reminderIntervalHours, escalationGraceHours)
-      val actor = context.support.principal(request.operator)
-      val resolvedAsOf = request.parsedAsOf.getOrElse(Instant.now())
-      val dueSoonWindow = Duration.ofHours(request.dueSoonHours.toLong)
-      val reminderInterval = Duration.ofHours(request.reminderIntervalHours.toLong)
-      val escalationGrace = Duration.ofHours(request.escalationGraceHours.toLong)
+    for
+      request <- IO(ProcessDictionaryNamespaceRemindersRequest(operatorId, asOf, dueSoonHours, reminderIntervalHours, escalationGraceHours))
+      actor <- IO(context.support.principal(request.operator))
+      now <- IO.realTimeInstant
+      module = context.support.dictionaryModule
+      command = ProcessNamespaceRemindersCommand(
+        actor = actor,
+        asOf = request.parsedAsOf.getOrElse(now),
+        dueSoonWindow = Duration.ofHours(request.dueSoonHours.toLong),
+        reminderInterval = Duration.ofHours(request.reminderIntervalHours.toLong),
+        escalationGrace = Duration.ofHours(request.escalationGraceHours.toLong)
+      )
+      actions <- IO(
+        processReminders(module, command)
+      )
+    yield actions.map(DictionaryNamespaceReminderActionResponse.fromDomain)
 
-      module.transactionManager.inTransaction {
-        module.authorizationService.requirePermission(actor, Permission.ManageGlobalDictionary)
-        module.tables.listNamespaces()
-          .filter(_.status == DictionaryNamespaceReviewStatus.Pending)
-          .flatMap { registration =>
-            reminderKindFor(registration, resolvedAsOf, escalationGrace)
-              .filter { kind =>
-                kind != DictionaryNamespaceReminderKind.DueSoon || registration.isPendingDueSoon(resolvedAsOf, dueSoonWindow)
-              }
-              .filter(_ =>
-                registration.lastReminderAt.forall(lastSentAt =>
-                  lastSentAt.plus(reminderInterval).isBefore(resolvedAsOf) || lastSentAt.plus(reminderInterval).equals(resolvedAsOf)
-                )
-              )
-              .map { reminderKind =>
-                val updated = registration.markReminderSent(resolvedAsOf)
-                module.dictionaryNamespaceRepository.save(updated)
-                module.auditEventRepository.save(
-                  AuditEventEntry(
-                    id = IdGenerator.auditEventId(),
-                    aggregateType = "dictionary-namespace",
-                    aggregateId = registration.namespacePrefix,
-                    eventType = "DictionaryNamespaceReminderTriggered",
-                    occurredAt = resolvedAsOf,
-                    actorId = actor.playerId,
-                    details = Map(
-                      "contextClubId" -> registration.contextClubId.map(_.value).getOrElse(""),
-                      "ownerPlayerId" -> registration.ownerPlayerId.value,
-                      "coOwnerPlayerIds" -> registration.coOwnerPlayerIds.map(_.value).mkString(","),
-                      "editorPlayerIds" -> registration.editorPlayerIds.map(_.value).mkString(","),
-                      "reminderKind" -> reminderKind.toString,
-                      "reminderCount" -> updated.reminderCount.toString,
-                      "reviewDueAt" -> registration.reviewDueAt.map(_.toString).getOrElse("")
-                    ),
-                    note = Some(s"Namespace ${registration.namespacePrefix} is ${reminderKind.toString.toLowerCase}")
-                  )
-                )
-                riichinexus.domain.model.DictionaryNamespaceReminderAction(
-                  namespacePrefix = registration.namespacePrefix,
-                  contextClubId = registration.contextClubId,
-                  ownerPlayerId = registration.ownerPlayerId,
-                  coOwnerPlayerIds = registration.coOwnerPlayerIds,
-                  editorPlayerIds = registration.editorPlayerIds,
-                  reminderKind = reminderKind,
-                  triggeredAt = resolvedAsOf,
-                  dueAt = registration.reviewDueAt,
-                  reminderCount = updated.reminderCount
-                )
-              }
-          }
-          .sortBy(action => (action.namespacePrefix, action.reminderKind.toString))
-          .map(DictionaryNamespaceReminderActionResponse.fromDomain)
-      }
-    }
+  private def processReminders(
+      module: riichinexus.bootstrap.DictionaryModuleContext,
+      command: ProcessNamespaceRemindersCommand
+  ): Vector[DictionaryNamespaceReminderAction] =
+    DictionaryNamespaceReminderOperations.processReminders(
+      module = module,
+      actor = command.actor,
+      asOf = command.asOf,
+      dueSoonWindow = command.dueSoonWindow,
+      reminderInterval = command.reminderInterval,
+      escalationGrace = command.escalationGrace
+    )
 
-  private def reminderKindFor(
-      registration: riichinexus.domain.model.DictionaryNamespaceRegistration,
+  private final case class ProcessNamespaceRemindersCommand(
+      actor: AccessPrincipal,
       asOf: Instant,
+      dueSoonWindow: Duration,
+      reminderInterval: Duration,
       escalationGrace: Duration
-  ): Option[DictionaryNamespaceReminderKind] =
-    registration.reviewDueAt.flatMap { dueAt =>
-      if registration.status != DictionaryNamespaceReviewStatus.Pending then None
-      else if !dueAt.isBefore(asOf) then Some(DictionaryNamespaceReminderKind.DueSoon)
-      else if !dueAt.plus(escalationGrace).isAfter(asOf) then Some(DictionaryNamespaceReminderKind.Escalated)
-      else Some(DictionaryNamespaceReminderKind.Overdue)
-    }
+  )

@@ -95,10 +95,7 @@ final class PostgresTableRepository(
             connection.createArrayOf("text", tournamentIds.map(_.value).toArray)
           )
           Using.resource(statement.executeQuery()) { resultSet =>
-            val buffer = Vector.newBuilder[Table]
-            while resultSet.next() do
-              buffer += read[Table](resultSet.getString("payload"))
-            buffer.result()
+            readPayloads(resultSet)(payload => read[Table](payload))
           }
         }
       }

@@ -1,9 +1,12 @@
 package riichinexus.microservices.club.api
 
+import java.time.Instant
 import java.util.NoSuchElementException
 
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
+import riichinexus.application.changes.DomainChangeInterpreter
+import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
 import riichinexus.domain.service.*
 import riichinexus.infrastructure.json.JsonCodecs.given
@@ -19,63 +22,95 @@ final case class AdjustClubMemberContributionAPIMessage(
 ) extends APIMessage[ClubResponse] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[ClubResponse] =
-    IO {
-      val module = context.support.clubModule
-      val parsedClubId = ClubId(clubId)
-      val parsedPlayerId = PlayerId(playerId)
-      val actor = context.support.principal(PlayerId(operatorId))
-      val occurredAt = java.time.Instant.now()
-
-      module.transactionManager.inTransaction {
-        (for
-          club <- module.clubRepository.findById(parsedClubId)
-          player <- module.playerRepository.findById(parsedPlayerId)
-        yield
-          ensureClubActive(club)
-          requireActivePlayer(player, s"Player ${parsedPlayerId.value} cannot receive club contribution updates")
-          requireClubMember(club, parsedPlayerId, "adjust contribution")
-          module.authorizationService.requirePermission(
-            actor,
-            Permission.ManageClubOperations,
-            clubId = Some(parsedClubId)
-          )
-
-          val updatedBy = actor.playerId.getOrElse(club.creator)
-          val nextContribution = club.contributionOf(parsedPlayerId) + delta
-          require(nextContribution >= 0, s"Club member contribution for ${parsedPlayerId.value} cannot be negative")
-
-          val updatedClub = module.clubRepository.save(
-            club.updateMemberContribution(
-              ClubMemberContribution(
-                playerId = parsedPlayerId,
-                amount = nextContribution,
-                updatedAt = occurredAt,
-                updatedBy = updatedBy,
-                note = note
-              )
-            )
-          )
-          module.auditEventRepository.save(
-            AuditEventEntry(
-              id = IdGenerator.auditEventId(),
-              aggregateType = "club",
-              aggregateId = parsedClubId.value,
-              eventType = "ClubMemberContributionAdjusted",
-              occurredAt = occurredAt,
-              actorId = actor.playerId,
-              details = Map(
-                "playerId" -> parsedPlayerId.value,
-                "delta" -> delta.toString,
-                "contribution" -> nextContribution.toString,
-                "rankCode" -> updatedClub.rankFor(parsedPlayerId).map(_.code).getOrElse("unknown")
-              ),
-              note = note
-            )
-          )
-          ClubResponse.fromDomain(updatedClub)
-        ).getOrElse(throw NoSuchElementException("Resource not found"))
+    for
+      actor <- IO(context.support.principal(PlayerId(operatorId)))
+      occurredAt <- IO.realTimeInstant
+      module = context.support.clubModule
+      command = AdjustClubMemberContributionCommand(
+        clubId = ClubId(clubId),
+        playerId = PlayerId(playerId),
+        actor = actor,
+        delta = delta,
+        note = note,
+        occurredAt = occurredAt
+      )
+      club <- IO {
+        module.transactionManager.inTransaction {
+          adjustMemberContribution(module, command)
+        }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
-    }
+    yield ClubResponse.fromDomain(club)
+
+  private def adjustMemberContribution(
+      module: ClubModuleContext,
+      command: AdjustClubMemberContributionCommand
+  ): Option[Club] =
+    for
+      club <- module.clubRepository.findById(command.clubId)
+      player <- module.playerRepository.findById(command.playerId)
+    yield
+      ensureContributionCanBeAdjusted(module, club, player, command)
+      val nextContribution = resolveNextContribution(club, command)
+      val updatedBy = command.actor.playerId.getOrElse(club.creator)
+      commitContributionAdjustment(module, club, command, nextContribution, updatedBy)
+
+  private def ensureContributionCanBeAdjusted(
+      module: ClubModuleContext,
+      club: Club,
+      player: Player,
+      command: AdjustClubMemberContributionCommand
+  ): Unit =
+    ensureClubActive(club)
+    requireActivePlayer(player, s"Player ${command.playerId.value} cannot receive club contribution updates")
+    requireClubMember(club, command.playerId, "adjust contribution")
+    module.authorizationService.requirePermission(
+      command.actor,
+      Permission.ManageClubOperations,
+      clubId = Some(command.clubId)
+    )
+
+  private def resolveNextContribution(
+      club: Club,
+      command: AdjustClubMemberContributionCommand
+  ): Int =
+    val nextContribution = club.contributionOf(command.playerId) + command.delta
+    require(nextContribution >= 0, s"Club member contribution for ${command.playerId.value} cannot be negative")
+    nextContribution
+
+  private def commitContributionAdjustment(
+      module: ClubModuleContext,
+      club: Club,
+      command: AdjustClubMemberContributionCommand,
+      nextContribution: Int,
+      updatedBy: PlayerId
+  ): Club =
+    DomainChangeInterpreter
+      .auditOnly(module.transactionManager, module.auditEventRepository)
+      .commitAudited(
+        aggregate = club.updateMemberContribution(
+          ClubMemberContribution(
+            playerId = command.playerId,
+            amount = nextContribution,
+            updatedAt = command.occurredAt,
+            updatedBy = updatedBy,
+            note = command.note
+          )
+        ),
+        persist = module.clubRepository.save,
+        aggregateType = "club",
+        aggregateId = _.id.value,
+        eventType = "ClubMemberContributionAdjusted",
+        occurredAt = command.occurredAt,
+        actorId = command.actor.playerId,
+        details = updatedClub =>
+          Map(
+            "playerId" -> command.playerId.value,
+            "delta" -> command.delta.toString,
+            "contribution" -> nextContribution.toString,
+            "rankCode" -> updatedClub.rankFor(command.playerId).map(_.code).getOrElse("unknown")
+          ),
+        note = command.note
+      )
 
   private def ensureClubActive(club: Club): Unit =
     if club.dissolvedAt.nonEmpty then
@@ -90,3 +125,12 @@ final case class AdjustClubMemberContributionAPIMessage(
       throw IllegalArgumentException(
         s"Player ${playerId.value} must be a club member to $action in club ${club.id.value}"
       )
+
+  private final case class AdjustClubMemberContributionCommand(
+      clubId: ClubId,
+      playerId: PlayerId,
+      actor: AccessPrincipal,
+      delta: Int,
+      note: Option[String],
+      occurredAt: Instant
+  )
