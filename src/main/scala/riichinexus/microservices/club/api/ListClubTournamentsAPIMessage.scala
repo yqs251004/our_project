@@ -7,7 +7,7 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.objects.apiTypes.*
+import riichinexus.microservices.club.objects.apiTypes.{Club as _, ClubRelation as _, ClubMembershipApplication as _, ClubPrivilegeDefinition as _, ClubMemberPrivilegeSnapshot as _, *}
 import riichinexus.microservices.club.objects.apiTypes.ClubTournamentResponses.given
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
@@ -34,26 +34,25 @@ final case class ListClubTournamentsAPIMessage(
         .listTournamentsByClub(parsedClubId)
         .flatMap(tournament => buildClubTournamentParticipationView(context, parsedClubId, tournament, viewerPrincipal))
       val recentThreshold = Instant.now().minus(recentTournamentWindow)
+      val activeStatuses = Set(
+        TournamentStatus.RegistrationOpen.toString,
+        TournamentStatus.Scheduled.toString,
+        TournamentStatus.InProgress.toString
+      )
       val items = parsedScope.trim.toLowerCase match
         case "recent" =>
           allItems.filter(item =>
-            item.status == TournamentStatus.RegistrationOpen ||
-              item.status == TournamentStatus.Scheduled ||
-              item.status == TournamentStatus.InProgress ||
-              item.endsAt.isAfter(recentThreshold)
+            activeStatuses.contains(item.status) ||
+              Instant.parse(item.endsAt).isAfter(recentThreshold)
           )
         case "active" =>
-          allItems.filter(item =>
-            item.status == TournamentStatus.RegistrationOpen ||
-              item.status == TournamentStatus.Scheduled ||
-              item.status == TournamentStatus.InProgress
-          )
+          allItems.filter(item => activeStatuses.contains(item.status))
         case "all" => allItems
         case other =>
           throw IllegalArgumentException(
             s"Unsupported scope '$other'. Supported values: recent, active, all"
           )
-      val sortedItems = items.sortBy(item => (item.startsAt, item.tournamentId.value)).reverse
+      val sortedItems = items.sortBy(item => (item.startsAt, item.tournamentId)).reverse
       val resolvedLimit = limit.getOrElse(20)
       val resolvedOffset = offset.getOrElse(0)
       require(resolvedLimit > 0, "Input field limit must be positive")
@@ -93,16 +92,16 @@ final case class ListClubTournamentsAPIMessage(
         .map(_.name)
       Some(
         ClubTournamentParticipationView(
-          clubId = clubId,
-          tournamentId = tournament.id,
+          clubId = clubId.value,
+          tournamentId = tournament.id.value,
           name = tournament.name,
-          status = tournament.status,
+          status = tournament.status.toString,
           clubParticipationStatus =
-            if isParticipating then ClubTournamentParticipationStatus.Participating
-            else ClubTournamentParticipationStatus.Invited,
+            if isParticipating then ClubTournamentParticipationStatus.Participating.toString
+            else ClubTournamentParticipationStatus.Invited.toString,
           stageName = stageName,
-          startsAt = tournament.startsAt,
-          endsAt = tournament.endsAt,
+          startsAt = tournament.startsAt.toString,
+          endsAt = tournament.endsAt.toString,
           canViewDetail = tournament.status != TournamentStatus.Draft || clubVisibleToViewer,
           canSubmitLineup =
             clubVisibleToViewer &&
@@ -121,7 +120,7 @@ final case class ListClubTournamentsAPIMessage(
   private def canManageClubTournamentParticipation(
       context: ApiPlanContext,
       actor: AccessPrincipal,
-      club: Club
+      club: riichinexus.domain.model.Club
   ): Boolean =
     actor.isSuperAdmin ||
       context.support.clubModule.authorizationService.can(actor, Permission.SubmitTournamentLineup, clubId = Some(club.id)) ||

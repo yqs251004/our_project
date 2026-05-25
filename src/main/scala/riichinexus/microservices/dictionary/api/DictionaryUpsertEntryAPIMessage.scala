@@ -9,7 +9,7 @@ import riichinexus.domain.event.GlobalDictionaryUpdated
 import riichinexus.domain.model.*
 import riichinexus.domain.service.GlobalDictionaryRegistry
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.dictionary.objects.apiTypes.*
+import riichinexus.microservices.dictionary.objects.apiTypes.{GlobalDictionaryEntry as GlobalDictionaryEntryResponse, *}
 import upickle.default.*
 
 final case class DictionaryUpsertEntryAPIMessage(
@@ -17,9 +17,9 @@ final case class DictionaryUpsertEntryAPIMessage(
     key: String,
     value: String,
     note: Option[String] = None
-) extends APIMessage[GlobalDictionaryEntry] derives ReadWriter:
+) extends APIMessage[GlobalDictionaryEntryResponse] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[GlobalDictionaryEntry] =
+  override def plan(context: ApiPlanContext): IO[GlobalDictionaryEntryResponse] =
     IO {
       val module = context.support.dictionaryModule
       val request = UpsertDictionaryRequest(operatorId, key, value, note)
@@ -69,14 +69,14 @@ final case class DictionaryUpsertEntryAPIMessage(
           )
         )
         module.eventBus.publish(GlobalDictionaryUpdated(saved, updatedAt))
-        saved
+        GlobalDictionaryEntryResponse.fromDomain(saved)
       }
     }
 
   private def approvedMetadataNamespaceForKey(
       context: ApiPlanContext,
       key: String
-  ): Option[DictionaryNamespaceRegistration] =
+  ): Option[riichinexus.domain.model.DictionaryNamespaceRegistration] =
     val normalizedKey = GlobalDictionaryRegistry.normalizeKey(key)
     context.support.dictionaryModule.tables.listApprovedNamespaces()
       .filter(registration => normalizedKey.startsWith(registration.namespacePrefix))
@@ -86,7 +86,7 @@ final case class DictionaryUpsertEntryAPIMessage(
   private def requireNamespaceWriterActor(
       context: ApiPlanContext,
       actorId: PlayerId,
-      registration: DictionaryNamespaceRegistration,
+      registration: riichinexus.domain.model.DictionaryNamespaceRegistration,
       action: String
   ): Unit =
     if !registration.hasWriteAccess(actorId) then

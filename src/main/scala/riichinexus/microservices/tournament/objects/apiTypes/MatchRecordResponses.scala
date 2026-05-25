@@ -1,13 +1,11 @@
 package riichinexus.microservices.tournament.objects.apiTypes
 
-import java.time.Instant
-
 import riichinexus.domain.model.*
 
 final case class TournamentMatchRecordSeatResultView(
-    playerId: PlayerId,
-    seat: SeatWind,
-    clubId: Option[ClubId],
+    playerId: String,
+    seat: String,
+    clubId: Option[String],
     finalPoints: Int,
     placement: Int,
     scoreDelta: Int,
@@ -18,9 +16,9 @@ final case class TournamentMatchRecordSeatResultView(
 object TournamentMatchRecordSeatResultView:
   def fromDomain(result: MatchRecordSeatResult): TournamentMatchRecordSeatResultView =
     TournamentMatchRecordSeatResultView(
-      playerId = result.playerId,
-      seat = result.seat,
-      clubId = result.clubId,
+      playerId = result.playerId.value,
+      seat = result.seat.toString,
+      clubId = result.clubId.map(_.value),
       finalPoints = result.finalPoints,
       placement = result.placement,
       scoreDelta = result.scoreDelta,
@@ -29,15 +27,15 @@ object TournamentMatchRecordSeatResultView:
     )
 
 final case class TournamentMatchRecordView(
-    recordId: MatchRecordId,
-    tableId: TableId,
-    tournamentId: TournamentId,
-    stageId: TournamentStageId,
+    recordId: String,
+    tableId: String,
+    tournamentId: String,
+    stageId: String,
     stageRoundNumber: Int,
-    generatedAt: Instant,
+    generatedAt: String,
     seatResults: Vector[TournamentMatchRecordSeatResultView],
-    paifuId: Option[PaifuId],
-    finalizedBy: Option[PlayerId],
+    paifuId: Option[String],
+    finalizedBy: Option[String],
     sourceEvent: String,
     notes: Vector[String]
 ) derives CanEqual
@@ -45,15 +43,15 @@ final case class TournamentMatchRecordView(
 object TournamentMatchRecordView:
   def fromDomain(record: MatchRecord): TournamentMatchRecordView =
     TournamentMatchRecordView(
-      recordId = record.id,
-      tableId = record.tableId,
-      tournamentId = record.tournamentId,
-      stageId = record.stageId,
+      recordId = record.id.value,
+      tableId = record.tableId.value,
+      tournamentId = record.tournamentId.value,
+      stageId = record.stageId.value,
       stageRoundNumber = record.stageRoundNumber,
-      generatedAt = record.generatedAt,
+      generatedAt = record.generatedAt.toString,
       seatResults = record.seatResults.map(TournamentMatchRecordSeatResultView.fromDomain),
-      paifuId = record.paifuId,
-      finalizedBy = record.finalizedBy,
+      paifuId = record.paifuId.map(_.value),
+      finalizedBy = record.finalizedBy.map(_.value),
       sourceEvent = record.sourceEvent,
       notes = record.notes
     )

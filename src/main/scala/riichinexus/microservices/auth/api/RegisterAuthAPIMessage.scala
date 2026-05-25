@@ -67,7 +67,7 @@ final case class RegisterAuthAPIMessage(
         )
 
         riichinexus.microservices.auth.objects.apiTypes.AuthSuccessView(
-          userId = player.id,
+          userId = player.id.value,
           username = normalizedUsername,
           displayName = player.nickname,
           token = session.token,

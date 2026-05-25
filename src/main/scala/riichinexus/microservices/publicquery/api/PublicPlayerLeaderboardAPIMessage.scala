@@ -20,13 +20,13 @@ final case class PublicPlayerLeaderboardAPIMessage(
       context.support.authorizationService
         .requirePermission(AccessPrincipal.guest(), Permission.ViewPublicLeaderboard)
 
-      val parsedClubId = clubId.filter(_.nonEmpty).map(ClubId(_))
+      val parsedClubId = clubId.filter(_.nonEmpty).map(ClubId(_).value)
       val parsedStatus = status.filter(_.nonEmpty).map(
         context.support.parseEnum("status", _)(PlayerStatus.valueOf)
       )
       val leaderboard = module.tables.publicPlayerLeaderboard(Int.MaxValue)
         .filter(entry => parsedClubId.forall(entry.clubIds.contains))
-        .filter(entry => parsedStatus.forall(_ == entry.status))
+        .filter(entry => parsedStatus.forall(_.toString == entry.status))
       val resolvedLimit = limit.getOrElse(20)
       val resolvedOffset = offset.getOrElse(0)
       require(resolvedLimit > 0, "Input field limit must be positive")

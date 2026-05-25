@@ -6,6 +6,13 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.microservices.publicquery.objects.apiTypes.{PublicTournamentDetailView, PublicTournamentStageView}
+import riichinexus.microservices.tournament.objects.apiTypes.{
+  AdvancementRuleView,
+  KnockoutBracketSnapshot as KnockoutBracketSnapshotResponse,
+  KnockoutRuleConfigView,
+  StageRankingSnapshot as StageRankingSnapshotResponse,
+  SwissRuleConfigView
+}
 import upickle.default.*
 
 final case class GetPublicTournamentAPIMessage(
@@ -27,39 +34,39 @@ final case class GetPublicTournamentAPIMessage(
         .withDefaultValue(Vector.empty)
 
       PublicTournamentDetailView(
-        tournamentId = tournament.id,
+        tournamentId = tournament.id.value,
         name = tournament.name,
         organizer = tournament.organizer,
-        status = tournament.status,
-        startsAt = tournament.startsAt,
-        endsAt = tournament.endsAt,
-        clubIds = tournament.participatingClubs.distinct,
-        playerIds = tournamentParticipantIds(tournament, clubsById),
+        status = tournament.status.toString,
+        startsAt = tournament.startsAt.toString,
+        endsAt = tournament.endsAt.toString,
+        clubIds = tournament.participatingClubs.distinct.map(_.value),
+        playerIds = tournamentParticipantIds(tournament, clubsById).map(_.value),
         whitelistCount = tournament.whitelist.size,
         stages = tournament.stages.sortBy(_.order).map { stage =>
           val tables = tablesByStage(stage.id)
           val bracket =
             if stage.format == StageFormat.Knockout || stage.format == StageFormat.Finals then
-              Some(module.stageQueries.stageKnockoutBracket(tournament.id, stage.id))
+              Some(KnockoutBracketSnapshotResponse.fromDomain(module.stageQueries.stageKnockoutBracket(tournament.id, stage.id)))
             else None
 
           PublicTournamentStageView(
-            stageId = stage.id,
+            stageId = stage.id.value,
             name = stage.name,
-            format = stage.format,
+            format = stage.format.toString,
             order = stage.order,
-            status = stage.status,
+            status = stage.status.toString,
             currentRound = stage.currentRound,
             roundCount = stage.roundCount,
             schedulingPoolSize = stage.schedulingPoolSize,
             tableCount = tables.size,
             archivedTableCount = tables.count(_.status == TableStatus.Archived),
             pendingTablePlanCount = stage.pendingTablePlans.size,
-            standings = Some(module.stageQueries.stageStandings(tournament.id, stage.id)),
+            standings = Some(StageRankingSnapshotResponse.fromDomain(module.stageQueries.stageStandings(tournament.id, stage.id))),
             bracket = bracket,
-            advancementRule = stage.advancementRule,
-            swissRule = stage.swissRule,
-            knockoutRule = stage.knockoutRule
+            advancementRule = AdvancementRuleView.fromDomain(stage.advancementRule),
+            swissRule = stage.swissRule.map(SwissRuleConfigView.fromDomain),
+            knockoutRule = stage.knockoutRule.map(KnockoutRuleConfigView.fromDomain)
           )
         }
       )

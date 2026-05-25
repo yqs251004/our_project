@@ -1,7 +1,6 @@
 package riichinexus.microservices.dictionary.router
 
 import riichinexus.api.RegisteredAPIMessage
-import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.dictionary.api.*
 import riichinexus.microservices.dictionary.objects.apiTypes.*

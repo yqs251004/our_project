@@ -6,6 +6,7 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.opsanalytics.objects.apiTypes.{DomainEventOutboxRecord as DomainEventOutboxRecordResponse}
 import riichinexus.microservices.opsanalytics.objects.apiTypes.DomainEventResponses.given
 import upickle.default.*
 
@@ -13,9 +14,9 @@ final case class OpsAnalyticsQuarantineDomainEventOutboxRecordAPIMessage(
     recordId: DomainEventOutboxRecordId,
     operatorId: PlayerId,
     reason: String
-) extends APIMessage[DomainEventOutboxRecord] derives ReadWriter:
+) extends APIMessage[DomainEventOutboxRecordResponse] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[DomainEventOutboxRecord] =
+  override def plan(context: ApiPlanContext): IO[DomainEventOutboxRecordResponse] =
     IO {
       val module = context.support.opsAnalyticsModule
       val actor = context.support.principal(operatorId)
@@ -53,6 +54,6 @@ final case class OpsAnalyticsQuarantineDomainEventOutboxRecordAPIMessage(
             note = Some(normalizedReason)
           )
         )
-        quarantined
+        DomainEventOutboxRecordResponse.fromDomain(quarantined)
       }
     }

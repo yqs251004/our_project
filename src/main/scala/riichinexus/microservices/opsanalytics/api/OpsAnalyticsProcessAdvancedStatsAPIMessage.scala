@@ -10,20 +10,22 @@ import riichinexus.bootstrap.OpsAnalyticsModuleContext
 import riichinexus.domain.model.*
 import riichinexus.domain.service.AdvancedStatsRoundAnalysis.*
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.opsanalytics.objects.apiTypes.{AdvancedStatsRecomputeTask as AdvancedStatsRecomputeTaskResponse}
 import upickle.default.*
 
 final case class OpsAnalyticsProcessAdvancedStatsAPIMessage(
     operatorId: PlayerId,
     limit: Int = 50
-) extends APIMessage[Vector[AdvancedStatsRecomputeTask]] derives ReadWriter:
+) extends APIMessage[Vector[AdvancedStatsRecomputeTaskResponse]] derives ReadWriter:
 
   require(limit > 0, "Advanced stats task processing limit must be positive")
 
-  override def plan(context: ApiPlanContext): IO[Vector[AdvancedStatsRecomputeTask]] =
+  override def plan(context: ApiPlanContext): IO[Vector[AdvancedStatsRecomputeTaskResponse]] =
     IO {
       val operator = context.support.principal(operatorId)
       context.support.requirePermission(operator, Permission.ManageGlobalDictionary)
       processPending(context.support.opsAnalyticsModule, limit = limit, processedAt = Instant.now())
+        .map(AdvancedStatsRecomputeTaskResponse.fromDomain)
     }
 
   private val retryDelay = Duration.ofMinutes(5)

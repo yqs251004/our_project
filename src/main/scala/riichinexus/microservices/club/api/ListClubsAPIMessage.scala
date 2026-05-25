@@ -4,6 +4,7 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.club.objects.apiTypes.{Club as ClubResponse}
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 
@@ -15,9 +16,9 @@ final case class ListClubsAPIMessage(
     name: Option[String] = None,
     limit: Option[Int] = None,
     offset: Option[Int] = None
-) extends APIMessage[PagedResponse[Club]] derives ReadWriter:
+) extends APIMessage[PagedResponse[ClubResponse]] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[PagedResponse[Club]] =
+  override def plan(context: ApiPlanContext): IO[PagedResponse[ClubResponse]] =
     IO {
       val parsedActiveOnly = activeOnly.contains(true)
       val parsedJoinableOnly = joinableOnly.contains(true)
@@ -38,7 +39,7 @@ final case class ListClubsAPIMessage(
       require(resolvedLimit > 0, "Input field limit must be positive")
       require(resolvedOffset >= 0, "Input field offset must be non-negative")
       val boundedLimit = math.min(resolvedLimit, 100)
-      val page = clubs.slice(resolvedOffset, resolvedOffset + boundedLimit)
+      val page = clubs.slice(resolvedOffset, resolvedOffset + boundedLimit).map(ClubResponse.fromDomain)
       PagedResponse(
         items = page,
         total = clubs.size,

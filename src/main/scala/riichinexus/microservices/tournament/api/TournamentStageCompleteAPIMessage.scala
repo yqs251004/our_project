@@ -10,16 +10,16 @@ import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.tournament.domain.StageLineupSupport
 import riichinexus.microservices.tournament.objects.*
-import riichinexus.microservices.tournament.objects.apiTypes.*
+import riichinexus.microservices.tournament.objects.apiTypes.{Table as _, TableSeat as _, StageStandingEntry as _, StageRankingSnapshot as _, StageAdvancementSnapshot as _, KnockoutBracketSlot as _, KnockoutBracketResult as _, KnockoutBracketMatch as _, KnockoutBracketRound as _, KnockoutBracketSnapshot as _, *}
 import riichinexus.microservices.tournament.objects.apiTypes.ManagementRequests.given
 import riichinexus.microservices.tournament.objects.apiTypes.SettlementRequests.given
 import riichinexus.microservices.tournament.objects.apiTypes.StageRequests.given
 import riichinexus.microservices.tournament.objects.apiTypes.TableRequests.given
 import upickle.default.*
 
-final case class TournamentStageCompleteAPIMessage(tournamentId: String, stageId: String, request: CompleteStageRequest) extends APIMessage[StageAdvancementSnapshot] derives ReadWriter:
+final case class TournamentStageCompleteAPIMessage(tournamentId: String, stageId: String, request: CompleteStageRequest) extends APIMessage[riichinexus.microservices.tournament.objects.apiTypes.StageAdvancementSnapshot] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[StageAdvancementSnapshot] =
+  override def plan(context: ApiPlanContext): IO[riichinexus.microservices.tournament.objects.apiTypes.StageAdvancementSnapshot] =
     IO {
       val module = context.support.tournamentModule
       val tournamentIdValue = TournamentId(tournamentId)
@@ -81,7 +81,7 @@ final case class TournamentStageCompleteAPIMessage(tournamentId: String, stageId
             module.stageQueries.stageAdvancementPreview(tournamentIdValue, stageIdValue, completedAt)
 
           module.tournamentRepository.save(tournament.updateStage(stageIdValue, _.complete))
-          advancement
+          riichinexus.microservices.tournament.objects.apiTypes.StageAdvancementSnapshot.fromDomain(advancement)
         }
       }.getOrElse(throw NoSuchElementException("Resource not found"))
     }

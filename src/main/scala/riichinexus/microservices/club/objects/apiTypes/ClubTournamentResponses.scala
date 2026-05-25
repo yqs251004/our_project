@@ -1,32 +1,30 @@
 package riichinexus.microservices.club.objects.apiTypes
 
-import java.time.Instant
-
 import riichinexus.domain.model.*
-import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.tournament.objects.apiTypes.RankSnapshotView
 import upickle.default.*
 
 final case class ClubMembershipApplicantView(
-    playerId: Option[PlayerId],
+    playerId: Option[String],
     applicantUserId: Option[String],
     displayName: String,
-    playerStatus: Option[PlayerStatus],
-    currentRank: Option[RankSnapshot],
+    playerStatus: Option[String],
+    currentRank: Option[RankSnapshotView],
     elo: Option[Int],
-    clubIds: Vector[ClubId]
+    clubIds: Vector[String]
 ) derives CanEqual
 
 final case class ClubMembershipApplicationView(
-    applicationId: MembershipApplicationId,
-    clubId: ClubId,
+    applicationId: String,
+    clubId: String,
     clubName: String,
     applicant: ClubMembershipApplicantView,
-    submittedAt: Instant,
+    submittedAt: String,
     message: Option[String],
-    status: ClubMembershipApplicationStatus,
-    reviewedBy: Option[PlayerId],
+    status: String,
+    reviewedBy: Option[String],
     reviewedByDisplayName: Option[String],
-    reviewedAt: Option[Instant],
+    reviewedAt: Option[String],
     reviewNote: Option[String],
     withdrawnByPrincipalId: Option[String],
     canReview: Boolean,
@@ -38,20 +36,46 @@ enum ClubTournamentParticipationStatus derives CanEqual:
   case Participating
 
 final case class ClubTournamentParticipationView(
-    clubId: ClubId,
-    tournamentId: TournamentId,
+    clubId: String,
+    tournamentId: String,
     name: String,
-    status: TournamentStatus,
-    clubParticipationStatus: ClubTournamentParticipationStatus,
+    status: String,
+    clubParticipationStatus: String,
     stageName: Option[String],
-    startsAt: Instant,
-    endsAt: Instant,
+    startsAt: String,
+    endsAt: String,
     canViewDetail: Boolean,
     canSubmitLineup: Boolean,
     canDecline: Boolean
 ) derives CanEqual
 
-type ClubMembershipApplication = riichinexus.domain.model.ClubMembershipApplication
+final case class ClubMembershipApplication(
+    id: String,
+    applicantUserId: Option[String],
+    displayName: String,
+    submittedAt: String,
+    message: Option[String],
+    status: String,
+    reviewedBy: Option[String],
+    reviewedAt: Option[String],
+    reviewNote: Option[String],
+    withdrawnByPrincipalId: Option[String]
+) derives ReadWriter
+
+object ClubMembershipApplication:
+  def fromDomain(application: riichinexus.domain.model.ClubMembershipApplication): ClubMembershipApplication =
+    ClubMembershipApplication(
+      id = application.id.value,
+      applicantUserId = application.applicantUserId,
+      displayName = application.displayName,
+      submittedAt = application.submittedAt.toString,
+      message = application.message,
+      status = application.status.toString,
+      reviewedBy = application.reviewedBy.map(_.value),
+      reviewedAt = application.reviewedAt.map(_.toString),
+      reviewNote = application.reviewNote,
+      withdrawnByPrincipalId = application.withdrawnByPrincipalId
+    )
 
 final case class ClubTournamentQuery(
     scope: Option[String] = None,
@@ -66,7 +90,6 @@ type ClubTournamentParticipationResponse = ClubTournamentParticipationView
 object ClubTournamentResponses:
   given ReadWriter[ClubMembershipApplicantView] = macroRW
   given ReadWriter[ClubMembershipApplicationView] = macroRW
-  given ReadWriter[ClubTournamentParticipationStatus] =
-    readwriter[String].bimap[ClubTournamentParticipationStatus](_.toString, ClubTournamentParticipationStatus.valueOf)
   given ReadWriter[ClubTournamentParticipationView] = macroRW
+  given ReadWriter[ClubMembershipApplication] = macroRW
   given ReadWriter[ClubTournamentQuery] = macroRW

@@ -36,16 +36,16 @@ final class PublicQueryTables(
           clubsById.get(clubId).toVector.flatMap(_.members)
         }
         PublicScheduleView(
-          tournamentId = tournament.id,
+          tournamentId = tournament.id.value,
           tournamentName = tournament.name,
-          tournamentStatus = tournament.status,
-          stageId = stage.id,
+          tournamentStatus = tournament.status.toString,
+          stageId = stage.id.value,
           stageName = stage.name,
-          stageStatus = stage.status,
+          stageStatus = stage.status.toString,
           currentRound = stage.currentRound,
           roundCount = stage.roundCount,
-          startsAt = tournament.startsAt,
-          endsAt = tournament.endsAt,
+          startsAt = tournament.startsAt.toString,
+          endsAt = tournament.endsAt.toString,
           tableCount = stageTables.size,
           activeTableCount = activeTableCount,
           pendingTablePlanCount = stage.pendingTablePlans.size,
@@ -90,7 +90,7 @@ final class PublicQueryTables(
         strongestRivalClubId = strongestRival.map(_.id),
         strongestRivalPower = strongestRival.map(rival => round2(rival.powerRating)),
         honorTitles = club.honors.map(_.title).sorted,
-        relations = club.relations
+        relations = club.relations.map(PublicClubRelationView.fromDomain)
       )
     }
 
@@ -108,7 +108,7 @@ final class PublicQueryTables(
           playerId = player.id,
           nickname = player.nickname,
           elo = player.elo,
-          currentRank = player.currentRank,
+          currentRank = RankSnapshotView.fromDomain(player.currentRank),
           normalizedRankScore = normalizedRank.map(_.score),
           clubIds = player.boundClubIds,
           status = player.status

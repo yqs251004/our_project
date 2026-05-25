@@ -16,7 +16,7 @@ final case class CreateGuestSessionAuthAPIMessage(
     deviceFingerprint: Option[String] = None
 ) extends APIMessage[GuestSessionResponse] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[GuestAccessSession] =
+  override def plan(context: ApiPlanContext): IO[GuestSessionResponse] =
     IO {
       val module = context.support.authModule
       val createdAt = Instant.now()
@@ -46,6 +46,6 @@ final case class CreateGuestSessionAuthAPIMessage(
             )
           )
         )
-        savedSession
+        GuestSessionResponse.fromDomain(savedSession)
       }
     }

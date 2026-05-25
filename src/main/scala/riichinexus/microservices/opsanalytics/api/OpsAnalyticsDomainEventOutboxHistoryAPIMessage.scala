@@ -22,7 +22,7 @@ final case class OpsAnalyticsDomainEventOutboxHistoryAPIMessage(
       module.authorizationService.requirePermission(actor, Permission.ManageGlobalDictionary)
       val record = module.domainEventOutboxRepository.findById(recordId)
         .getOrElse(throw NoSuchElementException(s"Domain event outbox record ${recordId.value} was not found"))
-      DomainEventOutboxHistoryView(
+      DomainEventOutboxHistoryView.fromDomain(
         record = record,
         auditTrail = module.auditEventRepository
           .findByAggregate("domain-event-outbox-record", recordId.value)

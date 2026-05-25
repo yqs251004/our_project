@@ -8,7 +8,7 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.domain.service.GlobalDictionaryRegistry
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.dictionary.objects.apiTypes.*
+import riichinexus.microservices.dictionary.objects.apiTypes.{DictionaryNamespaceRegistration as DictionaryNamespaceRegistrationResponse, *}
 import upickle.default.*
 
 final case class DictionaryRequestNamespaceAPIMessage(
@@ -20,9 +20,9 @@ final case class DictionaryRequestNamespaceAPIMessage(
     editorPlayerIds: Vector[String] = Vector.empty,
     note: Option[String] = None,
     reviewDueAt: Option[String] = None
-) extends APIMessage[DictionaryNamespaceRegistration] derives ReadWriter:
+) extends APIMessage[DictionaryNamespaceRegistrationResponse] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[DictionaryNamespaceRegistration] =
+  override def plan(context: ApiPlanContext): IO[DictionaryNamespaceRegistrationResponse] =
     IO {
       val module = context.support.dictionaryModule
       val request = RequestDictionaryNamespaceRequest(operatorId, namespacePrefix, contextClubId, ownerPlayerId, coOwnerPlayerIds, editorPlayerIds, note, reviewDueAt)
@@ -67,14 +67,14 @@ final case class DictionaryRequestNamespaceAPIMessage(
                 existing.coOwnerPlayerIds == normalizedCoOwners &&
                 existing.editorPlayerIds == normalizedEditors &&
                 existing.contextClubId == normalizedContextClubId =>
-            existing
+            DictionaryNamespaceRegistrationResponse.fromDomain(existing)
           case Some(existing) if existing.status == DictionaryNamespaceReviewStatus.Approved =>
             throw IllegalArgumentException(s"Dictionary namespace $normalizedPrefix is already owned by ${existing.ownerPlayerId.value}")
           case Some(existing) if existing.status == DictionaryNamespaceReviewStatus.Pending =>
             throw IllegalArgumentException(s"Dictionary namespace $normalizedPrefix already has a pending review")
           case _ =>
             val registration = module.dictionaryNamespaceRepository.save(
-              DictionaryNamespaceRegistration(
+              riichinexus.domain.model.DictionaryNamespaceRegistration(
                 namespacePrefix = normalizedPrefix,
                 contextClubId = normalizedContextClubId,
                 ownerPlayerId = effectiveOwner,
@@ -104,7 +104,7 @@ final case class DictionaryRequestNamespaceAPIMessage(
                 note = request.note
               )
             )
-            registration
+            DictionaryNamespaceRegistrationResponse.fromDomain(registration)
       }
     }
 

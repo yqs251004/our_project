@@ -1,17 +1,14 @@
 package riichinexus.microservices.platformadmin.objects.apiTypes
 
-import java.time.Instant
-
 import riichinexus.domain.model.*
-import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.*
 
 final case class PlatformAdminPlayerView(
-    playerId: PlayerId,
+    playerId: String,
     userId: String,
     nickname: String,
-    status: PlayerStatus,
-    clubIds: Vector[ClubId],
+    status: String,
+    clubIds: Vector[String],
     bannedReason: Option[String],
     isSuperAdmin: Boolean
 ) derives CanEqual
@@ -19,41 +16,41 @@ final case class PlatformAdminPlayerView(
 object PlatformAdminPlayerView:
   def fromDomain(player: Player): PlatformAdminPlayerView =
     PlatformAdminPlayerView(
-      playerId = player.id,
+      playerId = player.id.value,
       userId = player.userId,
       nickname = player.nickname,
-      status = player.status,
-      clubIds = player.boundClubIds,
+      status = player.status.toString,
+      clubIds = player.boundClubIds.map(_.value),
       bannedReason = player.bannedReason,
       isSuperAdmin = player.roleGrants.exists(_.role == RoleKind.SuperAdmin)
     )
 
 final case class PlatformAdminClubView(
-    clubId: ClubId,
+    clubId: String,
     name: String,
-    creator: PlayerId,
-    createdAt: Instant,
+    creator: String,
+    createdAt: String,
     memberCount: Int,
     adminCount: Int,
     totalPoints: Int,
     powerRating: Double,
-    dissolvedAt: Option[Instant],
-    dissolvedBy: Option[PlayerId]
+    dissolvedAt: Option[String],
+    dissolvedBy: Option[String]
 ) derives CanEqual
 
 object PlatformAdminClubView:
   def fromDomain(club: Club): PlatformAdminClubView =
     PlatformAdminClubView(
-      clubId = club.id,
+      clubId = club.id.value,
       name = club.name,
-      creator = club.creator,
-      createdAt = club.createdAt,
+      creator = club.creator.value,
+      createdAt = club.createdAt.toString,
       memberCount = club.members.size,
       adminCount = club.admins.size,
       totalPoints = club.totalPoints,
       powerRating = club.powerRating,
-      dissolvedAt = club.dissolvedAt,
-      dissolvedBy = club.dissolvedBy
+      dissolvedAt = club.dissolvedAt.map(_.toString),
+      dissolvedBy = club.dissolvedBy.map(_.value)
     )
 
 type PlatformAdminPlayerResponse = PlatformAdminPlayerView

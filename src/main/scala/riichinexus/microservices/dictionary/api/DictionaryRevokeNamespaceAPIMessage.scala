@@ -9,16 +9,16 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.domain.service.GlobalDictionaryRegistry
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.dictionary.objects.apiTypes.*
+import riichinexus.microservices.dictionary.objects.apiTypes.{DictionaryNamespaceRegistration as DictionaryNamespaceRegistrationResponse, *}
 import upickle.default.*
 
 final case class DictionaryRevokeNamespaceAPIMessage(
     operatorId: String,
     namespacePrefix: String,
     note: Option[String] = None
-) extends APIMessage[DictionaryNamespaceRegistration] derives ReadWriter:
+) extends APIMessage[DictionaryNamespaceRegistrationResponse] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[DictionaryNamespaceRegistration] =
+  override def plan(context: ApiPlanContext): IO[DictionaryNamespaceRegistrationResponse] =
     IO {
       val module = context.support.dictionaryModule
       val request = RevokeDictionaryNamespaceRequest(operatorId, namespacePrefix, note)
@@ -49,7 +49,7 @@ final case class DictionaryRevokeNamespaceAPIMessage(
               note = request.note
             )
           )
-          revoked
+          DictionaryNamespaceRegistrationResponse.fromDomain(revoked)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
     }

@@ -5,25 +5,33 @@ import riichinexus.domain.model.*
 final case class TournamentListQuery(
     status: Option[TournamentStatus] = None,
     adminId: Option[PlayerId] = None,
-    organizer: Option[String] = None
+    organizer: Option[String] = None,
+    limit: Option[Int] = None,
+    offset: Option[Int] = None
 )
 
 final case class TournamentWhitelistQuery(
     participantKind: Option[TournamentParticipantKind] = None,
     playerId: Option[PlayerId] = None,
-    clubId: Option[ClubId] = None
+    clubId: Option[ClubId] = None,
+    limit: Option[Int] = None,
+    offset: Option[Int] = None
 )
 
 final case class TournamentSettlementQuery(
     stageId: Option[TournamentStageId] = None,
     status: Option[TournamentSettlementStatus] = None,
-    championId: Option[PlayerId] = None
+    championId: Option[PlayerId] = None,
+    limit: Option[Int] = None,
+    offset: Option[Int] = None
 )
 
 final case class StageTableQuery(
     status: Option[TableStatus] = None,
     roundNumber: Option[Int] = None,
-    playerId: Option[PlayerId] = None
+    playerId: Option[PlayerId] = None,
+    limit: Option[Int] = None,
+    offset: Option[Int] = None
 )
 
 final case class TableListQuery(
@@ -31,19 +39,25 @@ final case class TableListQuery(
     tournamentId: Option[TournamentId] = None,
     stageId: Option[TournamentStageId] = None,
     roundNumber: Option[Int] = None,
-    playerId: Option[PlayerId] = None
+    playerId: Option[PlayerId] = None,
+    limit: Option[Int] = None,
+    offset: Option[Int] = None
 )
 
 final case class MatchRecordListQuery(
     playerId: Option[PlayerId] = None,
     tournamentId: Option[TournamentId] = None,
     stageId: Option[TournamentStageId] = None,
-    tableId: Option[TableId] = None
+    tableId: Option[TableId] = None,
+    limit: Option[Int] = None,
+    offset: Option[Int] = None
 )
 
 final case class PaifuListQuery(
     playerId: Option[PlayerId] = None,
     tournamentId: Option[TournamentId] = None,
     stageId: Option[TournamentStageId] = None,
-    tableId: Option[TableId] = None
+    tableId: Option[TableId] = None,
+    limit: Option[Int] = None,
+    offset: Option[Int] = None
 )

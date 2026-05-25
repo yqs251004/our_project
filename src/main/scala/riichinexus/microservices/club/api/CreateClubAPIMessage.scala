@@ -8,15 +8,16 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.domain.service.*
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.club.objects.apiTypes.{Club as ClubResponse}
 import riichinexus.microservices.dictionary.domain.RuntimeDictionary
 import upickle.default.*
 
 final case class CreateClubAPIMessage(
     name: String,
     creatorId: String
-) extends APIMessage[Club] derives ReadWriter:
+) extends APIMessage[ClubResponse] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[Club] =
+  override def plan(context: ApiPlanContext): IO[ClubResponse] =
     IO {
       val module = context.support.clubModule
       val parsedCreatorId = PlayerId(creatorId)
@@ -57,7 +58,7 @@ final case class CreateClubAPIMessage(
 
         val savedCreator = module.playerRepository.save(updatedCreator)
         ensurePlayerDashboard(context, savedCreator.id, createdAt)
-        module.clubRepository.save(refreshClubProjection(context, club, createdAt))
+        ClubResponse.fromDomain(module.clubRepository.save(refreshClubProjection(context, club, createdAt)))
       }
     }
 

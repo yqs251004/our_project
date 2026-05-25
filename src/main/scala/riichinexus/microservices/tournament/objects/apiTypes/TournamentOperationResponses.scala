@@ -35,6 +35,14 @@ object TournamentOperationResponses:
   given ReadWriter[TournamentMatchRecordSeatResultView] = macroRW
   given ReadWriter[TournamentMatchRecordView] = macroRW
   given ReadWriter[TournamentPaifuFinalStandingView] = macroRW
+  given ReadWriter[TournamentPaifuYakuView] = macroRW
+  given ReadWriter[TournamentPaifuScoreChangeView] = macroRW
+  given ReadWriter[TournamentPaifuRoundSettlementView] = macroRW
+  given ReadWriter[TournamentPaifuActionView] = macroRW
+  given ReadWriter[TournamentPaifuRoundDescriptorView] = macroRW
+  given ReadWriter[TournamentPaifuRoundResultView] = macroRW
+  given ReadWriter[TournamentPaifuRoundView] = macroRW
+  given ReadWriter[TournamentPaifuMetadataView] = macroRW
   given ReadWriter[TournamentPaifuSummaryView] = macroRW
   given ReadWriter[TournamentSettlementAdjustmentView] = macroRW
   given ReadWriter[TournamentSettlementEntryView] = macroRW

@@ -9,7 +9,7 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.domain.service.GlobalDictionaryRegistry
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.dictionary.objects.apiTypes.*
+import riichinexus.microservices.dictionary.objects.apiTypes.{DictionaryNamespaceRegistration as DictionaryNamespaceRegistrationResponse, *}
 import upickle.default.*
 
 final case class DictionaryUpdateNamespaceContextAPIMessage(
@@ -17,9 +17,9 @@ final case class DictionaryUpdateNamespaceContextAPIMessage(
     namespacePrefix: String,
     contextClubId: Option[String] = None,
     note: Option[String] = None
-) extends APIMessage[DictionaryNamespaceRegistration] derives ReadWriter:
+) extends APIMessage[DictionaryNamespaceRegistrationResponse] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[DictionaryNamespaceRegistration] =
+  override def plan(context: ApiPlanContext): IO[DictionaryNamespaceRegistrationResponse] =
     IO {
       val module = context.support.dictionaryModule
       val request = UpdateDictionaryNamespaceContextRequest(operatorId, namespacePrefix, contextClubId, note)
@@ -59,14 +59,14 @@ final case class DictionaryUpdateNamespaceContextAPIMessage(
               note = request.note
             )
           )
-          updated
+          DictionaryNamespaceRegistrationResponse.fromDomain(updated)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
     }
 
   private def requireNamespaceManagementActor(
       actor: AccessPrincipal,
-      registration: DictionaryNamespaceRegistration,
+      registration: riichinexus.domain.model.DictionaryNamespaceRegistration,
       action: String
   ): PlayerId =
     if actor.isSuperAdmin then actor.playerId.getOrElse(PlayerId("system"))

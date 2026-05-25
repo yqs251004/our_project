@@ -25,7 +25,7 @@ final case class ListPublicClubsAPIMessage(
       )
       val clubs = module.tables.publicClubDirectory()
         .filter(club => name.filter(_.nonEmpty).forall(context.support.containsIgnoreCase(club.name, _)))
-        .filter(club => parsedRelation.forall(relationKind => club.relations.exists(_.relation == relationKind)))
+        .filter(club => parsedRelation.forall(relationKind => club.relations.exists(_.relation == relationKind.toString)))
         .sortBy(_.name)
       val resolvedLimit = limit.getOrElse(20)
       val resolvedOffset = offset.getOrElse(0)

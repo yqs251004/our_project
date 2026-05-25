@@ -10,10 +10,10 @@ final case class AppealAttachmentView(
     name: String,
     uri: String,
     contentType: Option[String],
-    storageKind: AppealAttachmentStorageKind,
-    mediaKind: AppealAttachmentMediaKind,
+    storageKind: String,
+    mediaKind: String,
     sizeBytes: Option[Long],
-    uploadedAt: Option[Instant]
+    uploadedAt: Option[String]
 ) derives CanEqual
 
 object AppealAttachmentView:
@@ -22,65 +22,65 @@ object AppealAttachmentView:
       name = attachment.name,
       uri = attachment.uri,
       contentType = attachment.contentType,
-      storageKind = attachment.storageKind,
-      mediaKind = attachment.mediaKind,
+      storageKind = attachment.storageKind.toString,
+      mediaKind = attachment.mediaKind.toString,
       sizeBytes = attachment.sizeBytes,
-      uploadedAt = attachment.uploadedAt
+      uploadedAt = attachment.uploadedAt.map(_.toString)
     )
 
 final case class AppealDecisionLogView(
-    operatorId: PlayerId,
+    operatorId: String,
     decision: String,
-    decidedAt: Instant,
+    decidedAt: String,
     note: Option[String]
 ) derives CanEqual
 
 object AppealDecisionLogView:
   def fromDomain(log: AppealDecisionLog): AppealDecisionLogView =
     AppealDecisionLogView(
-      operatorId = log.operatorId,
+      operatorId = log.operatorId.value,
       decision = log.decision,
-      decidedAt = log.decidedAt,
+      decidedAt = log.decidedAt.toString,
       note = log.note
     )
 
 final case class AppealTicketView(
-    appealId: AppealTicketId,
-    tableId: TableId,
-    tournamentId: TournamentId,
-    stageId: TournamentStageId,
-    openedBy: PlayerId,
+    appealId: String,
+    tableId: String,
+    tournamentId: String,
+    stageId: String,
+    openedBy: String,
     description: String,
     attachments: Vector[AppealAttachmentView],
-    priority: AppealPriority,
-    assigneeId: Option[PlayerId],
-    dueAt: Option[Instant],
-    status: AppealStatus,
+    priority: String,
+    assigneeId: Option[String],
+    dueAt: Option[String],
+    status: String,
     logs: Vector[AppealDecisionLogView],
     reopenCount: Int,
-    createdAt: Instant,
-    updatedAt: Instant,
+    createdAt: String,
+    updatedAt: String,
     resolution: Option[String]
 ) derives CanEqual
 
 object AppealTicketView:
   def fromDomain(ticket: AppealTicket): AppealTicketView =
     AppealTicketView(
-      appealId = ticket.id,
-      tableId = ticket.tableId,
-      tournamentId = ticket.tournamentId,
-      stageId = ticket.stageId,
-      openedBy = ticket.openedBy,
+      appealId = ticket.id.value,
+      tableId = ticket.tableId.value,
+      tournamentId = ticket.tournamentId.value,
+      stageId = ticket.stageId.value,
+      openedBy = ticket.openedBy.value,
       description = ticket.description,
       attachments = ticket.attachments.map(AppealAttachmentView.fromDomain),
-      priority = ticket.priority,
-      assigneeId = ticket.assigneeId,
-      dueAt = ticket.dueAt,
-      status = ticket.status,
+      priority = ticket.priority.toString,
+      assigneeId = ticket.assigneeId.map(_.value),
+      dueAt = ticket.dueAt.map(_.toString),
+      status = ticket.status.toString,
       logs = ticket.logs.map(AppealDecisionLogView.fromDomain),
       reopenCount = ticket.reopenCount,
-      createdAt = ticket.createdAt,
-      updatedAt = ticket.updatedAt,
+      createdAt = ticket.createdAt.toString,
+      updatedAt = ticket.updatedAt.toString,
       resolution = ticket.resolution
     )
 

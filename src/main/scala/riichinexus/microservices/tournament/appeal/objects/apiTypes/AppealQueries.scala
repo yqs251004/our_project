@@ -15,5 +15,7 @@ final case class AppealListQuery(
     overdueOnly: Boolean = false,
     dueBefore: Option[Instant] = None,
     dueAfter: Option[Instant] = None,
-    asOf: Instant = Instant.now()
+    asOf: Instant = Instant.now(),
+    limit: Option[Int] = None,
+    offset: Option[Int] = None
 )

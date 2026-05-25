@@ -7,6 +7,7 @@ import java.time.Instant
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.dictionary.objects.apiTypes.{DictionaryNamespaceRegistration as DictionaryNamespaceRegistrationResponse}
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 
@@ -23,9 +24,9 @@ final case class DictionaryListNamespacesAPIMessage(
     dueAfter: Option[String] = None,
     limit: Option[Int] = None,
     offset: Option[Int] = None
-) extends APIMessage[PagedResponse[DictionaryNamespaceRegistration]] derives ReadWriter:
+) extends APIMessage[PagedResponse[DictionaryNamespaceRegistrationResponse]] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[PagedResponse[DictionaryNamespaceRegistration]] =
+  override def plan(context: ApiPlanContext): IO[PagedResponse[DictionaryNamespaceRegistrationResponse]] =
     IO {
       val parsedStatus = status.filter(_.nonEmpty).map(value => context.support.parseEnum("status", value)(DictionaryNamespaceReviewStatus.valueOf))
       val parsedContextClubId = contextClubId.filter(_.nonEmpty).map(ClubId(_))
@@ -67,14 +68,14 @@ final case class DictionaryListNamespacesAPIMessage(
       )
     }
 
-  private def page(items: Vector[DictionaryNamespaceRegistration], appliedFilters: Map[String, String]): PagedResponse[DictionaryNamespaceRegistration] =
+  private def page(items: Vector[DictionaryNamespaceRegistration], appliedFilters: Map[String, String]): PagedResponse[DictionaryNamespaceRegistrationResponse] =
     val resolvedLimit = limit.getOrElse(20)
     val resolvedOffset = offset.getOrElse(0)
     require(resolvedLimit > 0, "Input field limit must be positive")
     require(resolvedOffset >= 0, "Input field offset must be non-negative")
     val boundedLimit = math.min(resolvedLimit, 100)
     val pageItems = items.slice(resolvedOffset, resolvedOffset + boundedLimit)
-    PagedResponse(pageItems, items.size, boundedLimit, resolvedOffset, resolvedOffset + pageItems.size < items.size, appliedFilters)
+    PagedResponse(pageItems.map(DictionaryNamespaceRegistrationResponse.fromDomain), items.size, boundedLimit, resolvedOffset, resolvedOffset + pageItems.size < items.size, appliedFilters)
 
   private def filters(values: Option[(String, String)]*): Map[String, String] =
     values.flatten.toMap

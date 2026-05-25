@@ -4,6 +4,7 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.opsanalytics.objects.apiTypes.{EventCascadeRecord as EventCascadeRecordResponse}
 import riichinexus.microservices.opsanalytics.objects.apiTypes.DomainEventResponses.given
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
@@ -17,9 +18,9 @@ final case class OpsAnalyticsListEventCascadeRecordsAPIMessage(
     aggregateId: Option[String] = None,
     limit: Option[Int] = None,
     offset: Option[Int] = None
-) extends APIMessage[PagedResponse[EventCascadeRecord]] derives ReadWriter:
+) extends APIMessage[PagedResponse[EventCascadeRecordResponse]] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[PagedResponse[EventCascadeRecord]] =
+  override def plan(context: ApiPlanContext): IO[PagedResponse[EventCascadeRecordResponse]] =
     IO {
       val operator = context.support.principal(operatorId)
       context.support.requirePermission(operator, Permission.ManageGlobalDictionary)
@@ -44,11 +45,11 @@ final case class OpsAnalyticsListEventCascadeRecordsAPIMessage(
       )
     }
 
-  private def paged(items: Vector[EventCascadeRecord], appliedFilters: Map[String, String]): PagedResponse[EventCascadeRecord] =
+  private def paged(items: Vector[EventCascadeRecord], appliedFilters: Map[String, String]): PagedResponse[EventCascadeRecordResponse] =
     val resolvedLimit = limit.getOrElse(20)
     val resolvedOffset = offset.getOrElse(0)
     require(resolvedLimit > 0, "Input field limit must be positive")
     require(resolvedOffset >= 0, "Input field offset must be non-negative")
     val boundedLimit = math.min(resolvedLimit, 100)
     val page = items.slice(resolvedOffset, resolvedOffset + boundedLimit)
-    PagedResponse(page, items.size, boundedLimit, resolvedOffset, resolvedOffset + page.size < items.size, appliedFilters)
+    PagedResponse(page.map(EventCascadeRecordResponse.fromDomain), items.size, boundedLimit, resolvedOffset, resolvedOffset + page.size < items.size, appliedFilters)

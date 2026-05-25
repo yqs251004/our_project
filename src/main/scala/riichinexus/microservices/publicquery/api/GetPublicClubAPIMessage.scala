@@ -48,7 +48,7 @@ final case class GetPublicClubAPIMessage(
               playerId = player.id,
               nickname = player.nickname,
               elo = player.elo,
-              currentRank = player.currentRank,
+              currentRank = RankSnapshotView.fromDomain(player.currentRank),
               status = player.status,
               isAdmin = club.admins.contains(player.id),
               internalTitle = privilegeSnapshot.flatMap(_.internalTitle),
@@ -77,7 +77,7 @@ final case class GetPublicClubAPIMessage(
                   playerId = result.playerId,
                   nickname = nicknameFor(result.playerId),
                   clubId = result.clubId,
-                  seat = result.seat,
+                  seat = result.seat.toString,
                   placement = result.placement,
                   scoreDelta = result.scoreDelta,
                   finalPoints = result.finalPoints
@@ -98,8 +98,8 @@ final case class GetPublicClubAPIMessage(
           totalPoints = club.totalPoints,
           treasuryBalance = club.treasuryBalance,
           pointPool = club.pointPool,
-          relations = club.relations,
-          honors = club.honors.sortBy(honor => (honor.achievedAt, honor.title)).reverse,
+          relations = club.relations.map(PublicClubRelationView.fromDomain),
+          honors = club.honors.sortBy(honor => (honor.achievedAt, honor.title)).reverse.map(PublicClubHonorView.fromDomain),
           applicationPolicy = clubApplicationPolicy(club),
           currentLineup = currentLineup,
           recentMatches = recentMatches

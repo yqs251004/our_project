@@ -45,7 +45,7 @@ final case class LoginAuthAPIMessage(
         )
 
         riichinexus.microservices.auth.objects.apiTypes.AuthSuccessView(
-          userId = player.id,
+          userId = player.id.value,
           username = credential.username,
           displayName = player.nickname,
           token = session.token,

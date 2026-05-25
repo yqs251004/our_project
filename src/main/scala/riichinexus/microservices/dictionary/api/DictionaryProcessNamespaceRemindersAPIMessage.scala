@@ -7,7 +7,7 @@ import java.time.{Duration, Instant}
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.dictionary.objects.apiTypes.*
+import riichinexus.microservices.dictionary.objects.apiTypes.{DictionaryNamespaceReminderAction as DictionaryNamespaceReminderActionResponse, *}
 import upickle.default.*
 
 final case class DictionaryProcessNamespaceRemindersAPIMessage(
@@ -16,9 +16,9 @@ final case class DictionaryProcessNamespaceRemindersAPIMessage(
     dueSoonHours: Int = 24,
     reminderIntervalHours: Int = 12,
     escalationGraceHours: Int = 72
-) extends APIMessage[Vector[DictionaryNamespaceReminderAction]] derives ReadWriter:
+) extends APIMessage[Vector[DictionaryNamespaceReminderActionResponse]] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[Vector[DictionaryNamespaceReminderAction]] =
+  override def plan(context: ApiPlanContext): IO[Vector[DictionaryNamespaceReminderActionResponse]] =
     IO {
       val module = context.support.dictionaryModule
       val request = ProcessDictionaryNamespaceRemindersRequest(operatorId, asOf, dueSoonHours, reminderIntervalHours, escalationGraceHours)
@@ -65,7 +65,7 @@ final case class DictionaryProcessNamespaceRemindersAPIMessage(
                     note = Some(s"Namespace ${registration.namespacePrefix} is ${reminderKind.toString.toLowerCase}")
                   )
                 )
-                DictionaryNamespaceReminderAction(
+                riichinexus.domain.model.DictionaryNamespaceReminderAction(
                   namespacePrefix = registration.namespacePrefix,
                   contextClubId = registration.contextClubId,
                   ownerPlayerId = registration.ownerPlayerId,
@@ -79,11 +79,12 @@ final case class DictionaryProcessNamespaceRemindersAPIMessage(
               }
           }
           .sortBy(action => (action.namespacePrefix, action.reminderKind.toString))
+          .map(DictionaryNamespaceReminderActionResponse.fromDomain)
       }
     }
 
   private def reminderKindFor(
-      registration: DictionaryNamespaceRegistration,
+      registration: riichinexus.domain.model.DictionaryNamespaceRegistration,
       asOf: Instant,
       escalationGrace: Duration
   ): Option[DictionaryNamespaceReminderKind] =

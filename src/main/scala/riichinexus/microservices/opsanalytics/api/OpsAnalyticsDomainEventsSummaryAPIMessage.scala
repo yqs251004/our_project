@@ -7,15 +7,16 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.application.ports.DomainEventSubscriber
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.opsanalytics.objects.apiTypes.{DomainEventBusSummary as DomainEventBusSummaryResponse}
 import riichinexus.microservices.opsanalytics.objects.apiTypes.DomainEventResponses.given
 import upickle.default.*
 
 final case class OpsAnalyticsDomainEventsSummaryAPIMessage(
     operatorId: PlayerId,
     asOf: Option[Instant] = None
-) extends APIMessage[DomainEventBusSummary] derives ReadWriter:
+) extends APIMessage[DomainEventBusSummaryResponse] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[DomainEventBusSummary] =
+  override def plan(context: ApiPlanContext): IO[DomainEventBusSummaryResponse] =
     IO {
       val operator = context.support.principal(operatorId)
       context.support.requirePermission(operator, Permission.ManageGlobalDictionary)
@@ -27,7 +28,7 @@ final case class OpsAnalyticsDomainEventsSummaryAPIMessage(
             status.blockedByInFlightProcessing || status.blockedBySequenceGap
         )
       }
-      DomainEventBusSummary(
+      DomainEventBusSummaryResponse.fromDomain(DomainEventBusSummary(
         asOf = resolvedAsOf,
         registeredSubscriberCount = context.support.opsAnalyticsModule.domainEventSubscribers.size,
         cursorCount = context.support.opsAnalyticsModule.domainEventSubscriberCursorRepository.findAll().size,
@@ -45,7 +46,7 @@ final case class OpsAnalyticsDomainEventsSummaryAPIMessage(
         oldestDeadLetterOccurredAt = records.find(_.status == DomainEventOutboxStatus.DeadLetter).map(_.occurredAt),
         oldestQuarantinedOccurredAt = records.find(_.status == DomainEventOutboxStatus.Quarantined).map(_.occurredAt),
         blockedSubscriberCount = blockedSubscriberCount
-      )
+      ))
     }
 
   private def buildPartitionStatuses(

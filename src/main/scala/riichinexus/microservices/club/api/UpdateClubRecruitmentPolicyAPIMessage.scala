@@ -7,6 +7,7 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.domain.service.*
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.club.objects.apiTypes.{Club as ClubResponse}
 import upickle.default.*
 
 final case class UpdateClubRecruitmentPolicyAPIMessage(
@@ -16,13 +17,13 @@ final case class UpdateClubRecruitmentPolicyAPIMessage(
     requirementsText: Option[String] = None,
     expectedReviewSlaHours: Option[Int] = None,
     note: Option[String] = None
-) extends APIMessage[Club] derives ReadWriter:
+) extends APIMessage[ClubResponse] derives ReadWriter:
 
   expectedReviewSlaHours.foreach(hours =>
     require(hours > 0, "Recruitment policy expectedReviewSlaHours must be positive")
   )
 
-  override def plan(context: ApiPlanContext): IO[Club] =
+  override def plan(context: ApiPlanContext): IO[ClubResponse] =
     IO {
       val policy = ClubRecruitmentPolicy(
         applicationsOpen = applicationsOpen,
@@ -62,7 +63,7 @@ final case class UpdateClubRecruitmentPolicyAPIMessage(
               note = note
             )
           )
-          updatedClub
+          ClubResponse.fromDomain(updatedClub)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
     }

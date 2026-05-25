@@ -7,7 +7,7 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.tournament.objects.*
-import riichinexus.microservices.tournament.objects.apiTypes.*
+import riichinexus.microservices.tournament.objects.apiTypes.{Table as _, TableSeat as _, StageStandingEntry as _, StageRankingSnapshot as _, StageAdvancementSnapshot as _, KnockoutBracketSlot as _, KnockoutBracketResult as _, KnockoutBracketMatch as _, KnockoutBracketRound as _, KnockoutBracketSnapshot as _, *}
 import riichinexus.microservices.tournament.objects.apiTypes.ManagementRequests.given
 import riichinexus.microservices.tournament.objects.apiTypes.SettlementRequests.given
 import riichinexus.microservices.tournament.objects.apiTypes.StageRequests.given
@@ -98,7 +98,7 @@ final case class TournamentRemoveClubParticipationAPIMessage(tournamentId: Strin
           memberCount = club.members.size
         )
       }
-    }.sortBy(_.clubId.value)
+    }.sortBy(_.clubId)
 
     val participatingPlayers = participantIds.flatMap { playerId =>
       playersById.get(playerId).map { player =>
@@ -111,7 +111,7 @@ final case class TournamentRemoveClubParticipationAPIMessage(tournamentId: Strin
           clubIds = player.boundClubIds
         )
       }
-    }.sortBy(player => (player.nickname, player.playerId.value))
+    }.sortBy(player => (player.nickname, player.playerId))
 
     val whitelistedClubIds = tournament.whitelist.flatMap(_.clubId).distinct.sortBy(_.value)
     val whitelistedPlayerIds = tournament.whitelist.flatMap(_.playerId).distinct.sortBy(_.value)
@@ -129,8 +129,8 @@ final case class TournamentRemoveClubParticipationAPIMessage(tournamentId: Strin
         totalEntries = tournament.whitelist.size,
         clubCount = whitelistedClubIds.size,
         playerCount = whitelistedPlayerIds.size,
-        clubIds = whitelistedClubIds,
-        playerIds = whitelistedPlayerIds
+        clubIds = whitelistedClubIds.map(_.value),
+        playerIds = whitelistedPlayerIds.map(_.value)
       ),
       stages = tournament.stages.sortBy(_.order).map(stage =>
         buildTournamentOperationsStageView(stage, clubsById, playersById)
@@ -143,11 +143,11 @@ final case class TournamentRemoveClubParticipationAPIMessage(tournamentId: Strin
       playersById: Map[PlayerId, Player]
   ): TournamentOperationsStageView =
     TournamentOperationsStageView(
-      stageId = stage.id,
+      stageId = stage.id.value,
       name = stage.name,
-      format = stage.format,
+      format = stage.format.toString,
       order = stage.order,
-      status = stage.status,
+      status = stage.status.toString,
       currentRound = stage.currentRound,
       roundCount = stage.roundCount,
       schedulingPoolSize = stage.schedulingPoolSize,
@@ -164,12 +164,12 @@ final case class TournamentRemoveClubParticipationAPIMessage(tournamentId: Strin
       playersById: Map[PlayerId, Player]
   ): TournamentLineupSubmissionView =
     TournamentLineupSubmissionView(
-      submissionId = submission.id,
-      clubId = submission.clubId,
-      submittedBy = submission.submittedBy,
-      submittedAt = submission.submittedAt,
-      activePlayerIds = submission.seats.filterNot(_.reserve).map(_.playerId),
-      reservePlayerIds = submission.seats.filter(_.reserve).map(_.playerId),
+      submissionId = submission.id.value,
+      clubId = submission.clubId.value,
+      submittedBy = submission.submittedBy.value,
+      submittedAt = submission.submittedAt.toString,
+      activePlayerIds = submission.seats.filterNot(_.reserve).map(_.playerId.value),
+      reservePlayerIds = submission.seats.filter(_.reserve).map(_.playerId.value),
       note = submission.note
     )
 

@@ -1,7 +1,6 @@
 package riichinexus.microservices.club.router
 
 import riichinexus.api.RegisteredAPIMessage
-import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.api.*
 import riichinexus.microservices.club.objects.apiTypes.*
@@ -9,7 +8,7 @@ import riichinexus.microservices.club.objects.apiTypes.ClubTournamentResponses.g
 import riichinexus.microservices.player.objects.apiTypes.*
 import riichinexus.microservices.player.objects.apiTypes.PlayerResponses.given
 import riichinexus.system.objects.PagedResponse
-import riichinexus.microservices.tournament.objects.apiTypes.*
+import riichinexus.microservices.tournament.objects.apiTypes.{Table as _, TableSeat as _, StageStandingEntry as _, StageRankingSnapshot as _, StageAdvancementSnapshot as _, KnockoutBracketSlot as _, KnockoutBracketResult as _, KnockoutBracketMatch as _, KnockoutBracketRound as _, KnockoutBracketSnapshot as _, *}
 import riichinexus.microservices.tournament.objects.apiTypes.TournamentOperationResponses.given
 
 object ClubAPIMessageRegistry:

@@ -6,17 +6,19 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.opsanalytics.objects.apiTypes.{AdvancedStatsBoard as AdvancedStatsBoardResponse}
 import upickle.default.*
 
 final case class OpsAnalyticsClubAdvancedStatsAPIMessage(
     clubId: ClubId,
     operatorId: PlayerId
-) extends APIMessage[AdvancedStatsBoard] derives ReadWriter:
+) extends APIMessage[AdvancedStatsBoardResponse] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[AdvancedStatsBoard] =
+  override def plan(context: ApiPlanContext): IO[AdvancedStatsBoardResponse] =
     IO {
       val operator = context.support.principal(operatorId)
       context.support.requirePermission(operator, Permission.ViewClubDashboard, clubId = Some(clubId))
       context.support.opsAnalyticsModule.tables.findAdvancedStatsBoard(DashboardOwner.Club(clubId))
+        .map(AdvancedStatsBoardResponse.fromDomain)
         .getOrElse(throw NoSuchElementException(s"Advanced stats board for club ${clubId.value} was not found"))
     }

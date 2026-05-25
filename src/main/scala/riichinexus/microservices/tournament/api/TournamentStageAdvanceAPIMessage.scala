@@ -8,16 +8,16 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.tournament.objects.*
-import riichinexus.microservices.tournament.objects.apiTypes.*
+import riichinexus.microservices.tournament.objects.apiTypes.{Table as _, TableSeat as _, StageStandingEntry as _, StageRankingSnapshot as _, StageAdvancementSnapshot as _, KnockoutBracketSlot as _, KnockoutBracketResult as _, KnockoutBracketMatch as _, KnockoutBracketRound as _, KnockoutBracketSnapshot as _, *}
 import riichinexus.microservices.tournament.objects.apiTypes.ManagementRequests.given
 import riichinexus.microservices.tournament.objects.apiTypes.SettlementRequests.given
 import riichinexus.microservices.tournament.objects.apiTypes.StageRequests.given
 import riichinexus.microservices.tournament.objects.apiTypes.TableRequests.given
 import upickle.default.*
 
-final case class TournamentStageAdvanceAPIMessage(tournamentId: String, stageId: String, request: AdvanceKnockoutStageRequest) extends APIMessage[Vector[Table]] derives ReadWriter:
+final case class TournamentStageAdvanceAPIMessage(tournamentId: String, stageId: String, request: AdvanceKnockoutStageRequest) extends APIMessage[Vector[riichinexus.microservices.tournament.objects.apiTypes.Table]] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[Vector[Table]] =
+  override def plan(context: ApiPlanContext): IO[Vector[riichinexus.microservices.tournament.objects.apiTypes.Table]] =
     IO {
       val module = context.support.tournamentModule
       val tournamentIdValue = TournamentId(tournamentId)
@@ -50,5 +50,6 @@ final case class TournamentStageAdvanceAPIMessage(tournamentId: String, stageId:
           )
 
         module.knockoutStageCoordinator.materializeUnlockedTables(tournamentIdValue, stageIdValue, at)
+          .map(riichinexus.microservices.tournament.objects.apiTypes.Table.fromDomain)
       }
     }

@@ -8,6 +8,7 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.application.ports.DomainEventSubscriber
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.opsanalytics.objects.apiTypes.{DomainEventSubscriberStatus as DomainEventSubscriberStatusResponse}
 import riichinexus.microservices.opsanalytics.objects.apiTypes.DomainEventResponses.given
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
@@ -18,9 +19,9 @@ final case class OpsAnalyticsListDomainEventSubscribersAPIMessage(
     subscriberId: Option[String] = None,
     limit: Option[Int] = None,
     offset: Option[Int] = None
-) extends APIMessage[PagedResponse[DomainEventSubscriberStatus]] derives ReadWriter:
+) extends APIMessage[PagedResponse[DomainEventSubscriberStatusResponse]] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[PagedResponse[DomainEventSubscriberStatus]] =
+  override def plan(context: ApiPlanContext): IO[PagedResponse[DomainEventSubscriberStatusResponse]] =
     IO {
       requireOpsAdmin(context)
       val subscribers = subscriberStatuses(context, asOf.getOrElse(Instant.now()), subscriberId.filter(_.nonEmpty))
@@ -38,14 +39,14 @@ final case class OpsAnalyticsListDomainEventSubscribersAPIMessage(
     context.support.requirePermission(operator, Permission.ManageGlobalDictionary)
     operator
 
-  private def paged(items: Vector[DomainEventSubscriberStatus], appliedFilters: Map[String, String]): PagedResponse[DomainEventSubscriberStatus] =
+  private def paged(items: Vector[DomainEventSubscriberStatus], appliedFilters: Map[String, String]): PagedResponse[DomainEventSubscriberStatusResponse] =
     val resolvedLimit = limit.getOrElse(20)
     val resolvedOffset = offset.getOrElse(0)
     require(resolvedLimit > 0, "Input field limit must be positive")
     require(resolvedOffset >= 0, "Input field offset must be non-negative")
     val boundedLimit = math.min(resolvedLimit, 100)
     val page = items.slice(resolvedOffset, resolvedOffset + boundedLimit)
-    PagedResponse(page, items.size, boundedLimit, resolvedOffset, resolvedOffset + page.size < items.size, appliedFilters)
+    PagedResponse(page.map(DomainEventSubscriberStatusResponse.fromDomain), items.size, boundedLimit, resolvedOffset, resolvedOffset + page.size < items.size, appliedFilters)
 
   private def subscriberStatuses(
       context: ApiPlanContext,

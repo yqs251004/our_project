@@ -5,7 +5,7 @@ import java.time.Instant
 import riichinexus.domain.model.*
 
 final case class TournamentSettlementAdjustmentView(
-    playerId: PlayerId,
+    playerId: String,
     label: String,
     amount: Long,
     note: Option[String]
@@ -13,16 +13,16 @@ final case class TournamentSettlementAdjustmentView(
 
 object TournamentSettlementAdjustmentView:
   def fromDomain(adjustment: TournamentSettlementAdjustment): TournamentSettlementAdjustmentView =
-    TournamentSettlementAdjustmentView(adjustment.playerId, adjustment.label, adjustment.amount, adjustment.note)
+    TournamentSettlementAdjustmentView(adjustment.playerId.value, adjustment.label, adjustment.amount, adjustment.note)
 
 final case class TournamentSettlementEntryView(
-    playerId: PlayerId,
+    playerId: String,
     rank: Int,
     awardAmount: Long,
     baseAwardAmount: Long,
     adjustmentAmount: Long,
     deductionAmount: Long,
-    clubId: Option[ClubId],
+    clubId: Option[String],
     clubShareAmount: Long,
     playerRetainedAmount: Long,
     finalPoints: Int,
@@ -32,13 +32,13 @@ final case class TournamentSettlementEntryView(
 object TournamentSettlementEntryView:
   def fromDomain(entry: TournamentSettlementEntry): TournamentSettlementEntryView =
     TournamentSettlementEntryView(
-      playerId = entry.playerId,
+      playerId = entry.playerId.value,
       rank = entry.rank,
       awardAmount = entry.awardAmount,
       baseAwardAmount = entry.baseAwardAmount,
       adjustmentAmount = entry.adjustmentAmount,
       deductionAmount = entry.deductionAmount,
-      clubId = entry.clubId,
+      clubId = entry.clubId.map(_.value),
       clubShareAmount = entry.clubShareAmount,
       playerRetainedAmount = entry.playerRetainedAmount,
       finalPoints = entry.finalPoints,
@@ -46,38 +46,38 @@ object TournamentSettlementEntryView:
     )
 
 final case class TournamentSettlementView(
-    settlementId: SettlementSnapshotId,
-    tournamentId: TournamentId,
-    stageId: TournamentStageId,
+    settlementId: String,
+    tournamentId: String,
+    stageId: String,
     revision: Int,
-    status: TournamentSettlementStatus,
-    generatedAt: Instant,
-    finalizedAt: Option[Instant],
-    supersededAt: Option[Instant],
-    supersedesSettlementId: Option[SettlementSnapshotId],
-    championId: PlayerId,
+    status: String,
+    generatedAt: String,
+    finalizedAt: Option[String],
+    supersededAt: Option[String],
+    supersedesSettlementId: Option[String],
+    championId: String,
     prizePool: Long,
     houseFeeAmount: Long,
     netPrizePool: Long,
     clubShareRatio: Double,
     adjustments: Vector[TournamentSettlementAdjustmentView],
     entries: Vector[TournamentSettlementEntryView],
-    summary: String
+      summary: String
 ) derives CanEqual
 
 object TournamentSettlementView:
   def fromDomain(snapshot: TournamentSettlementSnapshot): TournamentSettlementView =
     TournamentSettlementView(
-      settlementId = snapshot.id,
-      tournamentId = snapshot.tournamentId,
-      stageId = snapshot.stageId,
+      settlementId = snapshot.id.value,
+      tournamentId = snapshot.tournamentId.value,
+      stageId = snapshot.stageId.value,
       revision = snapshot.revision,
-      status = snapshot.status,
-      generatedAt = snapshot.generatedAt,
-      finalizedAt = snapshot.finalizedAt,
-      supersededAt = snapshot.supersededAt,
-      supersedesSettlementId = snapshot.supersedesSettlementId,
-      championId = snapshot.championId,
+      status = snapshot.status.toString,
+      generatedAt = snapshot.generatedAt.toString,
+      finalizedAt = snapshot.finalizedAt.map(_.toString),
+      supersededAt = snapshot.supersededAt.map(_.toString),
+      supersedesSettlementId = snapshot.supersedesSettlementId.map(_.value),
+      championId = snapshot.championId.value,
       prizePool = snapshot.prizePool,
       houseFeeAmount = snapshot.houseFeeAmount,
       netPrizePool = snapshot.netPrizePool,

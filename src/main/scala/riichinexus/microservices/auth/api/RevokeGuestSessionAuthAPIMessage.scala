@@ -5,7 +5,7 @@ import java.util.NoSuchElementException
 
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
-import riichinexus.domain.model.{AuditEventEntry, GuestAccessSession, GuestSessionId, IdGenerator}
+import riichinexus.domain.model.{AuditEventEntry, GuestSessionId, IdGenerator}
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.auth.objects.apiTypes.GuestSessionResponse
 import upickle.default.*
@@ -15,7 +15,7 @@ final case class RevokeGuestSessionAuthAPIMessage(
     reason: Option[String] = None
 ) extends APIMessage[GuestSessionResponse] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[GuestAccessSession] =
+  override def plan(context: ApiPlanContext): IO[GuestSessionResponse] =
     IO {
       val module = context.support.authModule
       val revokedAt = Instant.now()
@@ -36,7 +36,7 @@ final case class RevokeGuestSessionAuthAPIMessage(
               details = Map("reason" -> updated.revokedReason.getOrElse(revokeReason))
             )
           )
-          updated
+          GuestSessionResponse.fromDomain(updated)
         }.getOrElse(
           throw NoSuchElementException(s"Guest session $sessionId was not found")
         )

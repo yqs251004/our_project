@@ -5,11 +5,14 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.tournament.objects.*
+import riichinexus.microservices.tournament.objects.apiTypes.{KnockoutBracketSnapshot as KnockoutBracketSnapshotResponse}
 import upickle.default.*
 
-final case class TournamentStageKnockoutBracketAPIMessage(tournamentId: String, stageId: String) extends APIMessage[KnockoutBracketSnapshot] derives ReadWriter:
+final case class TournamentStageKnockoutBracketAPIMessage(tournamentId: String, stageId: String) extends APIMessage[KnockoutBracketSnapshotResponse] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[KnockoutBracketSnapshot] =
+  override def plan(context: ApiPlanContext): IO[KnockoutBracketSnapshotResponse] =
     IO {
-      context.support.tournamentModule.stageQueries.stageKnockoutBracket(TournamentId(tournamentId), TournamentStageId(stageId))
+      KnockoutBracketSnapshotResponse.fromDomain(
+        context.support.tournamentModule.stageQueries.stageKnockoutBracket(TournamentId(tournamentId), TournamentStageId(stageId))
+      )
     }

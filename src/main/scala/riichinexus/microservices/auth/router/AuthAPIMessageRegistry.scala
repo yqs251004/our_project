@@ -1,7 +1,6 @@
 package riichinexus.microservices.auth.router
 
 import riichinexus.api.RegisteredAPIMessage
-import riichinexus.domain.model.GuestAccessSession
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.auth.api.*
 import riichinexus.microservices.auth.objects.apiTypes.*
@@ -18,9 +17,9 @@ object AuthAPIMessageRegistry:
       RegisteredAPIMessage.apiWithToken[LogoutAuthAPIMessage, ApiMessage],
       RegisteredAPIMessage.api[CurrentSessionAuthAPIMessage, CurrentSessionResponse],
       RegisteredAPIMessage.api[AuthCheckPermissionAPIMessage, Boolean],
-      RegisteredAPIMessage.api[ListGuestSessionsAuthAPIMessage, PagedResponse[GuestAccessSession]],
-      RegisteredAPIMessage.created[CreateGuestSessionAuthAPIMessage, GuestAccessSession],
-      RegisteredAPIMessage.api[GetGuestSessionAuthAPIMessage, GuestAccessSession],
-      RegisteredAPIMessage.api[RevokeGuestSessionAuthAPIMessage, GuestAccessSession],
-      RegisteredAPIMessage.api[UpgradeGuestSessionAuthAPIMessage, GuestAccessSession]
+      RegisteredAPIMessage.api[ListGuestSessionsAuthAPIMessage, PagedResponse[GuestSessionResponse]],
+      RegisteredAPIMessage.created[CreateGuestSessionAuthAPIMessage, GuestSessionResponse],
+      RegisteredAPIMessage.api[GetGuestSessionAuthAPIMessage, GuestSessionResponse],
+      RegisteredAPIMessage.api[RevokeGuestSessionAuthAPIMessage, GuestSessionResponse],
+      RegisteredAPIMessage.api[UpgradeGuestSessionAuthAPIMessage, GuestSessionResponse]
     )

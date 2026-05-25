@@ -9,7 +9,7 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.domain.service.GlobalDictionaryRegistry
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.dictionary.objects.apiTypes.*
+import riichinexus.microservices.dictionary.objects.apiTypes.{DictionaryNamespaceRegistration as DictionaryNamespaceRegistrationResponse, *}
 import upickle.default.*
 
 final case class DictionaryTransferNamespaceAPIMessage(
@@ -17,9 +17,9 @@ final case class DictionaryTransferNamespaceAPIMessage(
     namespacePrefix: String,
     newOwnerPlayerId: String,
     note: Option[String] = None
-) extends APIMessage[DictionaryNamespaceRegistration] derives ReadWriter:
+) extends APIMessage[DictionaryNamespaceRegistrationResponse] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[DictionaryNamespaceRegistration] =
+  override def plan(context: ApiPlanContext): IO[DictionaryNamespaceRegistrationResponse] =
     IO {
       val module = context.support.dictionaryModule
       val request = TransferDictionaryNamespaceRequest(operatorId, namespacePrefix, newOwnerPlayerId, note)
@@ -59,7 +59,7 @@ final case class DictionaryTransferNamespaceAPIMessage(
               note = request.note
             )
           )
-          transferred
+          DictionaryNamespaceRegistrationResponse.fromDomain(transferred)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
     }

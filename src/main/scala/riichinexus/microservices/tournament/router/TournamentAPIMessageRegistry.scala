@@ -1,7 +1,6 @@
 package riichinexus.microservices.tournament.router
 
 import riichinexus.api.RegisteredAPIMessage
-import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.tournament.api.*
 import riichinexus.microservices.tournament.objects.apiTypes.*

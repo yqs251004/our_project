@@ -8,6 +8,7 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.domain.service.*
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.club.objects.apiTypes.{Club as ClubResponse}
 import upickle.default.*
 
 final case class AssignClubTitleAPIMessage(
@@ -16,9 +17,9 @@ final case class AssignClubTitleAPIMessage(
     operatorId: String,
     title: String,
     note: Option[String] = None
-) extends APIMessage[Club] derives ReadWriter:
+) extends APIMessage[ClubResponse] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[Club] =
+  override def plan(context: ApiPlanContext): IO[ClubResponse] =
     IO {
       val module = context.support.clubModule
       val parsedClubId = ClubId(clubId)
@@ -67,7 +68,7 @@ final case class AssignClubTitleAPIMessage(
               note = note
             )
           )
-          updatedClub
+          ClubResponse.fromDomain(updatedClub)
         ).getOrElse(throw NoSuchElementException("Resource not found"))
       }
     }

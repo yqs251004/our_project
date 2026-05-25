@@ -4,6 +4,7 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.club.objects.apiTypes.{ClubMemberPrivilegeSnapshot as ClubMemberPrivilegeSnapshotResponse}
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 
@@ -14,9 +15,9 @@ final case class ListClubMemberPrivilegesAPIMessage(
     rankCode: Option[String] = None,
     limit: Option[Int] = None,
     offset: Option[Int] = None
-) extends APIMessage[PagedResponse[ClubMemberPrivilegeSnapshot]] derives ReadWriter:
+) extends APIMessage[PagedResponse[ClubMemberPrivilegeSnapshotResponse]] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[PagedResponse[ClubMemberPrivilegeSnapshot]] =
+  override def plan(context: ApiPlanContext): IO[PagedResponse[ClubMemberPrivilegeSnapshotResponse]] =
     IO {
       val parsedPlayerId = playerId.filter(_.nonEmpty).map(PlayerId(_))
       val parsedPrivilege = privilege.filter(_.nonEmpty).map(ClubPrivilegeRegistry.requireSupported)
@@ -31,7 +32,7 @@ final case class ListClubMemberPrivilegesAPIMessage(
       require(resolvedLimit > 0, "Input field limit must be positive")
       require(resolvedOffset >= 0, "Input field offset must be non-negative")
       val boundedLimit = math.min(resolvedLimit, 100)
-      val page = snapshots.slice(resolvedOffset, resolvedOffset + boundedLimit)
+      val page = snapshots.slice(resolvedOffset, resolvedOffset + boundedLimit).map(ClubMemberPrivilegeSnapshotResponse.fromDomain)
       PagedResponse(
         items = page,
         total = snapshots.size,

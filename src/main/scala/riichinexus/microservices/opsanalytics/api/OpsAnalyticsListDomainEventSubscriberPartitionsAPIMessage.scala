@@ -8,6 +8,7 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.application.ports.DomainEventSubscriber
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.opsanalytics.objects.apiTypes.{DomainEventSubscriberPartitionStatus as DomainEventSubscriberPartitionStatusResponse}
 import riichinexus.microservices.opsanalytics.objects.apiTypes.DomainEventResponses.given
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
@@ -21,9 +22,9 @@ final case class OpsAnalyticsListDomainEventSubscriberPartitionsAPIMessage(
     partitionKey: Option[String] = None,
     limit: Option[Int] = None,
     offset: Option[Int] = None
-) extends APIMessage[PagedResponse[DomainEventSubscriberPartitionStatus]] derives ReadWriter:
+) extends APIMessage[PagedResponse[DomainEventSubscriberPartitionStatusResponse]] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[PagedResponse[DomainEventSubscriberPartitionStatus]] =
+  override def plan(context: ApiPlanContext): IO[PagedResponse[DomainEventSubscriberPartitionStatusResponse]] =
     IO {
       requireOpsAdmin(context)
       val partitions = subscriberPartitionStatuses(
@@ -50,14 +51,14 @@ final case class OpsAnalyticsListDomainEventSubscriberPartitionsAPIMessage(
     context.support.requirePermission(operator, Permission.ManageGlobalDictionary)
     operator
 
-  private def paged(items: Vector[DomainEventSubscriberPartitionStatus], appliedFilters: Map[String, String]): PagedResponse[DomainEventSubscriberPartitionStatus] =
+  private def paged(items: Vector[DomainEventSubscriberPartitionStatus], appliedFilters: Map[String, String]): PagedResponse[DomainEventSubscriberPartitionStatusResponse] =
     val resolvedLimit = limit.getOrElse(20)
     val resolvedOffset = offset.getOrElse(0)
     require(resolvedLimit > 0, "Input field limit must be positive")
     require(resolvedOffset >= 0, "Input field offset must be non-negative")
     val boundedLimit = math.min(resolvedLimit, 100)
     val page = items.slice(resolvedOffset, resolvedOffset + boundedLimit)
-    PagedResponse(page, items.size, boundedLimit, resolvedOffset, resolvedOffset + page.size < items.size, appliedFilters)
+    PagedResponse(page.map(DomainEventSubscriberPartitionStatusResponse.fromDomain), items.size, boundedLimit, resolvedOffset, resolvedOffset + page.size < items.size, appliedFilters)
 
   private def subscriberPartitionStatuses(
       context: ApiPlanContext,

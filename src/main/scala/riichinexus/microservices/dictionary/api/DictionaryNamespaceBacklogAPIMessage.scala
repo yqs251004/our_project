@@ -34,21 +34,21 @@ final case class DictionaryNamespaceBacklogAPIMessage(
           .toVector
           .map { case (ownerId, registrations) =>
             DictionaryNamespaceOwnerBacklog(
-              ownerPlayerId = ownerId,
+              ownerPlayerId = ownerId.value,
               pendingCount = registrations.size,
               overdueCount = registrations.count(_.isPendingOverdue(resolvedAsOf)),
               dueSoonCount = registrations.count(_.isPendingDueSoon(resolvedAsOf, dueSoonWindow))
             )
           }
-          .sortBy(bucket => (-bucket.overdueCount, -bucket.pendingCount, bucket.ownerPlayerId.value))
+          .sortBy(bucket => (-bucket.overdueCount, -bucket.pendingCount, bucket.ownerPlayerId))
 
         DictionaryNamespaceBacklogView(
-          asOf = resolvedAsOf,
+          asOf = resolvedAsOf.toString,
           pendingCount = pending.size,
           overdueCount = pending.count(_.isPendingOverdue(resolvedAsOf)),
           dueSoonCount = pending.count(_.isPendingDueSoon(resolvedAsOf, dueSoonWindow)),
-          oldestPendingRequestedAt = pending.map(_.requestedAt).sorted.headOption,
-          nextDueAt = pending.flatMap(_.reviewDueAt).sorted.headOption,
+          oldestPendingRequestedAt = pending.map(_.requestedAt).sorted.headOption.map(_.toString),
+          nextDueAt = pending.flatMap(_.reviewDueAt).sorted.headOption.map(_.toString),
           ownerBacklog = ownerBacklog
         )
       }

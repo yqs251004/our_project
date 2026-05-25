@@ -1,7 +1,6 @@
 package riichinexus.microservices.auth.objects.apiTypes
 
-import riichinexus.domain.model.{GuestAccessSession, Player, PlayerId}
-import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.domain.model.{GuestAccessSession, Player}
 import upickle.default.*
 
 enum SessionPrincipalKind derives CanEqual:
@@ -17,18 +16,44 @@ final case class CurrentSessionRoleFlags(
     isSuperAdmin: Boolean
 ) derives CanEqual
 
+final case class CurrentSessionPlayerView(
+    id: String,
+    userId: String,
+    nickname: String
+) derives CanEqual
+
+object CurrentSessionPlayerView:
+  def fromDomain(player: Player): CurrentSessionPlayerView =
+    CurrentSessionPlayerView(
+      id = player.id.value,
+      userId = player.userId,
+      nickname = player.nickname
+    )
+
+final case class CurrentSessionGuestSessionView(
+    id: String,
+    displayName: String
+) derives CanEqual
+
+object CurrentSessionGuestSessionView:
+  def fromDomain(session: GuestAccessSession): CurrentSessionGuestSessionView =
+    CurrentSessionGuestSessionView(
+      id = session.id.value,
+      displayName = session.displayName
+    )
+
 final case class CurrentSessionView(
-    principalKind: SessionPrincipalKind,
+    principalKind: String,
     principalId: String,
     displayName: String,
     authenticated: Boolean,
     roles: CurrentSessionRoleFlags,
-    player: Option[Player] = None,
-    guestSession: Option[GuestAccessSession] = None
+    player: Option[CurrentSessionPlayerView] = None,
+    guestSession: Option[CurrentSessionGuestSessionView] = None
 ) derives CanEqual
 
 final case class AuthSuccessView(
-    userId: PlayerId,
+    userId: String,
     username: String,
     displayName: String,
     token: String,
@@ -36,7 +61,7 @@ final case class AuthSuccessView(
 ) derives CanEqual
 
 final case class AuthSessionView(
-    userId: PlayerId,
+    userId: String,
     username: String,
     displayName: String,
     authenticated: Boolean,
@@ -56,12 +81,9 @@ object ApiMessage:
 
 object AuthResponses:
   given ReadWriter[ApiMessage] = macroRW
-  given ReadWriter[SessionPrincipalKind] =
-    readwriter[String].bimap[SessionPrincipalKind](
-      _.toString,
-      SessionPrincipalKind.valueOf
-    )
   given ReadWriter[CurrentSessionRoleFlags] = macroRW
+  given ReadWriter[CurrentSessionPlayerView] = macroRW
+  given ReadWriter[CurrentSessionGuestSessionView] = macroRW
   given ReadWriter[CurrentSessionView] = macroRW
   given ReadWriter[AuthSuccessView] = macroRW
   given ReadWriter[AuthSessionView] = macroRW

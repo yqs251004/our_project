@@ -29,7 +29,7 @@ final case class RestoreAuthSessionAPIMessage() extends APIWithTokenMessage[Auth
           throw AuthenticationFailure(s"Player ${player.id.value} is not active", "inactive_account")
 
         riichinexus.microservices.auth.objects.apiTypes.AuthSessionView(
-          userId = player.id,
+          userId = player.id.value,
           username = touched.username,
           displayName = player.nickname,
           authenticated = true,

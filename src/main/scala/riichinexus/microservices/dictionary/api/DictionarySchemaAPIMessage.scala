@@ -14,7 +14,7 @@ final case class DictionarySchemaAPIMessage() extends APIMessage[GlobalDictionar
     IO {
       val schema = GlobalDictionaryRegistry.schemaView
       GlobalDictionarySchemaView(
-        entries = schema.entries,
+        entries = schema.entries.map(GlobalDictionarySchemaEntry.fromDomain),
         unknownKeyPolicy = schema.unknownKeyPolicy
       )
     }

@@ -16,7 +16,7 @@ final case class UpgradeGuestSessionAuthAPIMessage(
     playerId: String
 ) extends APIMessage[GuestSessionResponse] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[GuestAccessSession] =
+  override def plan(context: ApiPlanContext): IO[GuestSessionResponse] =
     IO {
       val module = context.support.authModule
       val guestSessionId = GuestSessionId(sessionId)
@@ -46,7 +46,7 @@ final case class UpgradeGuestSessionAuthAPIMessage(
               details = Map("playerId" -> targetPlayerId.value)
             )
           )
-          updated
+          GuestSessionResponse.fromDomain(updated)
         }.getOrElse(throw NoSuchElementException(s"Guest session $sessionId was not found"))
       }
     }

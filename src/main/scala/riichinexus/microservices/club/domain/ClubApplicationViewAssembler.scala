@@ -2,7 +2,8 @@ package riichinexus.microservices.club.domain
 
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
-import riichinexus.microservices.club.objects.apiTypes.*
+import riichinexus.microservices.club.objects.apiTypes.{Club as _, ClubRelation as _, ClubMembershipApplication as _, ClubPrivilegeDefinition as _, ClubMemberPrivilegeSnapshot as _, *}
+import riichinexus.microservices.tournament.objects.apiTypes.RankSnapshotView
 
 object ClubApplicationViewAssembler:
   def canManageClubApplications(actor: AccessPrincipal, club: Club): Boolean =
@@ -38,24 +39,24 @@ object ClubApplicationViewAssembler:
     val tables = module.tables
     val applicantPlayer = application.applicantUserId.flatMap(tables.findPlayerByUserId)
     ClubMembershipApplicationView(
-      applicationId = application.id,
-      clubId = club.id,
+      applicationId = application.id.value,
+      clubId = club.id.value,
       clubName = club.name,
       applicant = ClubMembershipApplicantView(
-        playerId = applicantPlayer.map(_.id),
+        playerId = applicantPlayer.map(_.id.value),
         applicantUserId = application.applicantUserId,
         displayName = application.displayName,
-        playerStatus = applicantPlayer.map(_.status),
-        currentRank = applicantPlayer.map(_.currentRank),
+        playerStatus = applicantPlayer.map(_.status.toString),
+        currentRank = applicantPlayer.map(player => RankSnapshotView.fromDomain(player.currentRank)),
         elo = applicantPlayer.map(_.elo),
-        clubIds = applicantPlayer.map(_.boundClubIds).getOrElse(Vector.empty)
+        clubIds = applicantPlayer.map(_.boundClubIds.map(_.value)).getOrElse(Vector.empty)
       ),
-      submittedAt = application.submittedAt,
+      submittedAt = application.submittedAt.toString,
       message = application.message,
-      status = application.status,
-      reviewedBy = application.reviewedBy,
+      status = application.status.toString,
+      reviewedBy = application.reviewedBy.map(_.value),
       reviewedByDisplayName = application.reviewedBy.flatMap(playerId => tables.findPlayer(playerId).map(_.nickname)),
-      reviewedAt = application.reviewedAt,
+      reviewedAt = application.reviewedAt.map(_.toString),
       reviewNote = application.reviewNote,
       withdrawnByPrincipalId = application.withdrawnByPrincipalId,
       canReview = application.isPending && canManageClubApplications(actor, club),

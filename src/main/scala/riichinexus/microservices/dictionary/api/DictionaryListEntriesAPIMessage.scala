@@ -5,6 +5,7 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.dictionary.objects.apiTypes.{GlobalDictionaryEntry as GlobalDictionaryEntryResponse}
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 
@@ -13,9 +14,9 @@ final case class DictionaryListEntriesAPIMessage(
     updatedBy: Option[String] = None,
     limit: Option[Int] = None,
     offset: Option[Int] = None
-) extends APIMessage[PagedResponse[GlobalDictionaryEntry]] derives ReadWriter:
+) extends APIMessage[PagedResponse[GlobalDictionaryEntryResponse]] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[PagedResponse[GlobalDictionaryEntry]] =
+  override def plan(context: ApiPlanContext): IO[PagedResponse[GlobalDictionaryEntryResponse]] =
     IO {
       val parsedPrefix = prefix.filter(_.nonEmpty)
       val parsedUpdatedBy = updatedBy.filter(_.nonEmpty).map(PlayerId(_))
@@ -26,14 +27,14 @@ final case class DictionaryListEntriesAPIMessage(
       page(entries, filters(prefix.filter(_.nonEmpty).map("prefix" -> _), updatedBy.filter(_.nonEmpty).map("updatedBy" -> _)))
     }
 
-  private def page(items: Vector[GlobalDictionaryEntry], appliedFilters: Map[String, String]): PagedResponse[GlobalDictionaryEntry] =
+  private def page(items: Vector[GlobalDictionaryEntry], appliedFilters: Map[String, String]): PagedResponse[GlobalDictionaryEntryResponse] =
     val resolvedLimit = limit.getOrElse(20)
     val resolvedOffset = offset.getOrElse(0)
     require(resolvedLimit > 0, "Input field limit must be positive")
     require(resolvedOffset >= 0, "Input field offset must be non-negative")
     val boundedLimit = math.min(resolvedLimit, 100)
     val pageItems = items.slice(resolvedOffset, resolvedOffset + boundedLimit)
-    PagedResponse(pageItems, items.size, boundedLimit, resolvedOffset, resolvedOffset + pageItems.size < items.size, appliedFilters)
+    PagedResponse(pageItems.map(GlobalDictionaryEntryResponse.fromDomain), items.size, boundedLimit, resolvedOffset, resolvedOffset + pageItems.size < items.size, appliedFilters)
 
   private def filters(values: Option[(String, String)]*): Map[String, String] =
     values.flatten.toMap

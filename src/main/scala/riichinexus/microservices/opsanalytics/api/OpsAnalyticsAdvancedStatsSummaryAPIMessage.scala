@@ -6,20 +6,21 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.opsanalytics.objects.apiTypes.{AdvancedStatsTaskQueueSummary as AdvancedStatsTaskQueueSummaryResponse}
 import upickle.default.*
 
 final case class OpsAnalyticsAdvancedStatsSummaryAPIMessage(
     operatorId: PlayerId,
     asOf: Option[Instant] = None
-) extends APIMessage[AdvancedStatsTaskQueueSummary] derives ReadWriter:
+) extends APIMessage[AdvancedStatsTaskQueueSummaryResponse] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[AdvancedStatsTaskQueueSummary] =
+  override def plan(context: ApiPlanContext): IO[AdvancedStatsTaskQueueSummaryResponse] =
     IO {
       val operator = context.support.principal(operatorId)
       context.support.requirePermission(operator, Permission.ManageGlobalDictionary)
       val resolvedAsOf = asOf.getOrElse(Instant.now())
       val tasks = context.support.opsAnalyticsModule.advancedStatsRecomputeTaskRepository.findAll()
-      AdvancedStatsTaskQueueSummary(
+      AdvancedStatsTaskQueueSummaryResponse.fromDomain(AdvancedStatsTaskQueueSummary(
         asOf = resolvedAsOf,
         runnablePendingCount = tasks.count(_.isRunnable(resolvedAsOf)),
         scheduledRetryCount = tasks.count(task =>
@@ -38,5 +39,5 @@ final case class OpsAnalyticsAdvancedStatsSummaryAPIMessage(
           .sorted
           .headOption,
         newestCompletedAt = tasks.flatMap(_.completedAt).sorted.lastOption
-      )
+      ))
     }

@@ -6,6 +6,7 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.opsanalytics.objects.apiTypes.{DomainEventOutboxBatchOperationResult as DomainEventOutboxBatchOperationResultResponse}
 import riichinexus.microservices.opsanalytics.objects.apiTypes.DomainEventResponses.given
 import upickle.default.*
 
@@ -13,11 +14,11 @@ final case class OpsAnalyticsQuarantineDomainEventOutboxAPIMessage(
     operatorId: PlayerId,
     recordIds: Vector[DomainEventOutboxRecordId],
     reason: String
-) extends APIMessage[DomainEventOutboxBatchOperationResult] derives ReadWriter:
+) extends APIMessage[DomainEventOutboxBatchOperationResultResponse] derives ReadWriter:
 
   require(recordIds.nonEmpty, "Batch quarantine requires at least one recordId")
 
-  override def plan(context: ApiPlanContext): IO[DomainEventOutboxBatchOperationResult] =
+  override def plan(context: ApiPlanContext): IO[DomainEventOutboxBatchOperationResultResponse] =
     IO {
       val actor = context.support.principal(operatorId)
       val at = java.time.Instant.now()
@@ -40,13 +41,13 @@ final case class OpsAnalyticsQuarantineDomainEventOutboxAPIMessage(
             failures += DomainEventOutboxOperationFailure(currentRecordId, error.getMessage)
       }
 
-      DomainEventOutboxBatchOperationResult(
+      DomainEventOutboxBatchOperationResultResponse.fromDomain(DomainEventOutboxBatchOperationResult(
         action = "quarantine",
         processedAt = at,
         requestedCount = normalizedIds.size,
         succeededRecordIds = succeededIds.result(),
         failures = failures.result()
-      )
+      ))
     }
 
   private def quarantineOutboxRecord(

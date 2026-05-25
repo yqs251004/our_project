@@ -8,6 +8,7 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.domain.service.*
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.club.objects.apiTypes.{ClubMembershipApplication as ClubMembershipApplicationResponse}
 import upickle.default.*
 
 final case class WithdrawClubApplicationAPIMessage(
@@ -16,9 +17,9 @@ final case class WithdrawClubApplicationAPIMessage(
     guestSessionId: Option[String] = None,
     operatorId: Option[String] = None,
     note: Option[String] = None
-) extends APIMessage[ClubMembershipApplication] derives ReadWriter:
+) extends APIMessage[ClubMembershipApplicationResponse] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[ClubMembershipApplication] =
+  override def plan(context: ApiPlanContext): IO[ClubMembershipApplicationResponse] =
     IO {
       val module = context.support.clubModule
       val parsedClubId = ClubId(clubId)
@@ -51,7 +52,7 @@ final case class WithdrawClubApplicationAPIMessage(
           requireApplicationOwnership(context, application, actor)
           val updatedApplication = application.withdraw(actor.principalId, withdrawnAt, note)
           module.clubRepository.save(club.reviewApplication(parsedMembershipId, _ => updatedApplication))
-          updatedApplication
+          ClubMembershipApplicationResponse.fromDomain(updatedApplication)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
     }

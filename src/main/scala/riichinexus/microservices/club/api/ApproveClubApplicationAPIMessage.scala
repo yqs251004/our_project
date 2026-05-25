@@ -8,6 +8,7 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.domain.service.*
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.club.objects.apiTypes.{Club as ClubResponse}
 import riichinexus.microservices.dictionary.domain.RuntimeDictionary
 import upickle.default.*
 
@@ -17,9 +18,9 @@ final case class ApproveClubApplicationAPIMessage(
     playerId: String,
     operatorId: String,
     note: Option[String] = None
-) extends APIMessage[Club] derives ReadWriter:
+) extends APIMessage[ClubResponse] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[Club] =
+  override def plan(context: ApiPlanContext): IO[ClubResponse] =
     IO {
       approveMembershipApplication(
         context = context,
@@ -29,7 +30,7 @@ final case class ApproveClubApplicationAPIMessage(
         actor = context.support.principal(PlayerId(operatorId)),
         note = note,
         approvedAt = Instant.now()
-      ).getOrElse(throw NoSuchElementException("Resource not found"))
+      ).map(ClubResponse.fromDomain).getOrElse(throw NoSuchElementException("Resource not found"))
     }
 
   private def approveMembershipApplication(

@@ -4,6 +4,7 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.opsanalytics.objects.apiTypes.{AuditEventEntry as AuditEventEntryResponse}
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 
@@ -15,9 +16,9 @@ final case class OpsAnalyticsListAggregateAuditsAPIMessage(
     eventType: Option[String] = None,
     limit: Option[Int] = None,
     offset: Option[Int] = None
-) extends APIMessage[PagedResponse[AuditEventEntry]] derives ReadWriter:
+) extends APIMessage[PagedResponse[AuditEventEntryResponse]] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[PagedResponse[AuditEventEntry]] =
+  override def plan(context: ApiPlanContext): IO[PagedResponse[AuditEventEntryResponse]] =
     IO {
       val operator = context.support.principal(operatorId)
       context.support.requirePermission(operator, Permission.ViewAuditTrail)
@@ -39,11 +40,11 @@ final case class OpsAnalyticsListAggregateAuditsAPIMessage(
       )
     }
 
-  private def paged(items: Vector[AuditEventEntry], appliedFilters: Map[String, String]): PagedResponse[AuditEventEntry] =
+  private def paged(items: Vector[AuditEventEntry], appliedFilters: Map[String, String]): PagedResponse[AuditEventEntryResponse] =
     val resolvedLimit = limit.getOrElse(20)
     val resolvedOffset = offset.getOrElse(0)
     require(resolvedLimit > 0, "Input field limit must be positive")
     require(resolvedOffset >= 0, "Input field offset must be non-negative")
     val boundedLimit = math.min(resolvedLimit, 100)
     val page = items.slice(resolvedOffset, resolvedOffset + boundedLimit)
-    PagedResponse(page, items.size, boundedLimit, resolvedOffset, resolvedOffset + page.size < items.size, appliedFilters)
+    PagedResponse(page.map(AuditEventEntryResponse.fromDomain), items.size, boundedLimit, resolvedOffset, resolvedOffset + page.size < items.size, appliedFilters)

@@ -8,6 +8,7 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.domain.service.*
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.club.objects.apiTypes.{ClubMembershipApplication as ClubMembershipApplicationResponse}
 import upickle.default.*
 
 final case class SubmitClubApplicationAPIMessage(
@@ -17,9 +18,9 @@ final case class SubmitClubApplicationAPIMessage(
     message: Option[String] = None,
     guestSessionId: Option[String] = None,
     operatorId: Option[String] = None
-) extends APIMessage[ClubMembershipApplication] derives ReadWriter:
+) extends APIMessage[ClubMembershipApplicationResponse] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[ClubMembershipApplication] =
+  override def plan(context: ApiPlanContext): IO[ClubMembershipApplicationResponse] =
     IO {
       val actor = context.support.requestActor(guestSessionId.filter(_.nonEmpty).map(GuestSessionId(_)), operatorId.filter(_.nonEmpty).map(PlayerId(_)))
       val resolvedApplicantUserId = applicantUserId
@@ -69,7 +70,7 @@ final case class SubmitClubApplicationAPIMessage(
           )
 
           module.clubRepository.save(club.submitApplication(application))
-          application
+          ClubMembershipApplicationResponse.fromDomain(application)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
     }

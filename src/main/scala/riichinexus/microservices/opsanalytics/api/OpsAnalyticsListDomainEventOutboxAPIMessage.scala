@@ -8,6 +8,7 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.application.ports.DomainEventSubscriber
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.opsanalytics.objects.apiTypes.{DomainEventOutboxRecord as DomainEventOutboxRecordResponse}
 import riichinexus.microservices.opsanalytics.objects.apiTypes.DomainEventResponses.given
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
@@ -25,9 +26,9 @@ final case class OpsAnalyticsListDomainEventOutboxAPIMessage(
     blockedOnly: Option[Boolean] = None,
     limit: Option[Int] = None,
     offset: Option[Int] = None
-) extends APIMessage[PagedResponse[DomainEventOutboxRecord]] derives ReadWriter:
+) extends APIMessage[PagedResponse[DomainEventOutboxRecordResponse]] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[PagedResponse[DomainEventOutboxRecord]] =
+  override def plan(context: ApiPlanContext): IO[PagedResponse[DomainEventOutboxRecordResponse]] =
     IO {
       requireOpsAdmin(context)
       val parsedAsOf = asOf.getOrElse(Instant.now())
@@ -85,14 +86,14 @@ final case class OpsAnalyticsListDomainEventOutboxAPIMessage(
     context.support.requirePermission(operator, Permission.ManageGlobalDictionary)
     operator
 
-  private def paged(items: Vector[DomainEventOutboxRecord], appliedFilters: Map[String, String]): PagedResponse[DomainEventOutboxRecord] =
+  private def paged(items: Vector[DomainEventOutboxRecord], appliedFilters: Map[String, String]): PagedResponse[DomainEventOutboxRecordResponse] =
     val resolvedLimit = limit.getOrElse(20)
     val resolvedOffset = offset.getOrElse(0)
     require(resolvedLimit > 0, "Input field limit must be positive")
     require(resolvedOffset >= 0, "Input field offset must be non-negative")
     val boundedLimit = math.min(resolvedLimit, 100)
     val page = items.slice(resolvedOffset, resolvedOffset + boundedLimit)
-    PagedResponse(page, items.size, boundedLimit, resolvedOffset, resolvedOffset + page.size < items.size, appliedFilters)
+    PagedResponse(page.map(DomainEventOutboxRecordResponse.fromDomain), items.size, boundedLimit, resolvedOffset, resolvedOffset + page.size < items.size, appliedFilters)
 
   private def resolveSubscriber(context: ApiPlanContext, subscriberId: String): DomainEventSubscriber =
     context.support.opsAnalyticsModule.domainEventSubscribers

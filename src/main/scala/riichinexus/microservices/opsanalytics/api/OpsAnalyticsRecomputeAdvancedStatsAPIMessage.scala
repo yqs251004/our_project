@@ -7,6 +7,7 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.OpsAnalyticsModuleContext
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.opsanalytics.objects.apiTypes.{AdvancedStatsRecomputeTask as AdvancedStatsRecomputeTaskResponse}
 import upickle.default.*
 
 final case class OpsAnalyticsRecomputeAdvancedStatsAPIMessage(
@@ -16,18 +17,18 @@ final case class OpsAnalyticsRecomputeAdvancedStatsAPIMessage(
     ownerId: Option[String] = None,
     reason: Option[String] = None,
     limit: Int = 500
-) extends APIMessage[Vector[AdvancedStatsRecomputeTask]] derives ReadWriter:
+) extends APIMessage[Vector[AdvancedStatsRecomputeTaskResponse]] derives ReadWriter:
 
   require(ownerType.nonEmpty == ownerId.nonEmpty, "ownerType and ownerId must be provided together")
   require(limit > 0, "Advanced stats recompute limit must be positive")
 
-  override def plan(context: ApiPlanContext): IO[Vector[AdvancedStatsRecomputeTask]] =
+  override def plan(context: ApiPlanContext): IO[Vector[AdvancedStatsRecomputeTaskResponse]] =
     IO {
       val operator = context.support.principal(operatorId)
       context.support.requirePermission(operator, Permission.ManageGlobalDictionary)
       val module = context.support.opsAnalyticsModule
       val requestedAt = Instant.now()
-      (ownerType, ownerId) match
+      val tasks = (ownerType, ownerId) match
         case (Some("player"), Some(id)) =>
           Vector(
             enqueueOwnerRecompute(
@@ -64,6 +65,7 @@ final case class OpsAnalyticsRecomputeAdvancedStatsAPIMessage(
                 reason = reason.getOrElse(s"manual-${selectedMode.toString.toLowerCase}-backfill"),
                 limit = limit
               )
+      tasks.map(AdvancedStatsRecomputeTaskResponse.fromDomain)
     }
 
   private def enqueueFullRecompute(

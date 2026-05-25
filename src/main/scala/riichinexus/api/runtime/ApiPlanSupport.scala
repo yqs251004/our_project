@@ -72,12 +72,12 @@ final class ApiPlanSupport(
     ) match
       case Some(player) =>
         CurrentSessionView(
-          principalKind = SessionPrincipalKind.RegisteredPlayer,
+          principalKind = SessionPrincipalKind.RegisteredPlayer.toString,
           principalId = player.id.value,
           displayName = player.nickname,
           authenticated = true,
           roles = registeredRoleFlags(player),
-          player = Some(player)
+          player = Some(CurrentSessionPlayerView.fromDomain(player))
         )
       case None =>
         guestSessionId.map(sessionId =>
@@ -86,7 +86,7 @@ final class ApiPlanSupport(
         ) match
           case Some(session) =>
             CurrentSessionView(
-              principalKind = SessionPrincipalKind.Guest,
+              principalKind = SessionPrincipalKind.Guest.toString,
               principalId = session.id.value,
               displayName = session.displayName,
               authenticated = true,
@@ -97,11 +97,11 @@ final class ApiPlanSupport(
                 isTournamentAdmin = false,
                 isSuperAdmin = false
               ),
-              guestSession = Some(session)
+              guestSession = Some(CurrentSessionGuestSessionView.fromDomain(session))
             )
           case None =>
             CurrentSessionView(
-              principalKind = SessionPrincipalKind.Anonymous,
+              principalKind = SessionPrincipalKind.Anonymous.toString,
               principalId = "anonymous",
               displayName = "Guest",
               authenticated = false,

@@ -7,6 +7,7 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.opsanalytics.objects.apiTypes.{DomainEventOutboxBatchOperationResult as DomainEventOutboxBatchOperationResultResponse}
 import riichinexus.microservices.opsanalytics.objects.apiTypes.DomainEventResponses.given
 import upickle.default.*
 
@@ -15,11 +16,11 @@ final case class OpsAnalyticsReplayDomainEventOutboxAPIMessage(
     recordIds: Vector[DomainEventOutboxRecordId],
     replayAt: Option[Instant] = None,
     note: Option[String] = None
-) extends APIMessage[DomainEventOutboxBatchOperationResult] derives ReadWriter:
+) extends APIMessage[DomainEventOutboxBatchOperationResultResponse] derives ReadWriter:
 
   require(recordIds.nonEmpty, "Batch replay requires at least one recordId")
 
-  override def plan(context: ApiPlanContext): IO[DomainEventOutboxBatchOperationResult] =
+  override def plan(context: ApiPlanContext): IO[DomainEventOutboxBatchOperationResultResponse] =
     IO {
       val actor = context.support.principal(operatorId)
       val replayAtInstant = replayAt.getOrElse(Instant.now())
@@ -41,13 +42,13 @@ final case class OpsAnalyticsReplayDomainEventOutboxAPIMessage(
             failures += DomainEventOutboxOperationFailure(currentRecordId, error.getMessage)
       }
 
-      DomainEventOutboxBatchOperationResult(
+      DomainEventOutboxBatchOperationResultResponse.fromDomain(DomainEventOutboxBatchOperationResult(
         action = "replay",
         processedAt = at,
         requestedCount = normalizedIds.size,
         succeededRecordIds = succeededIds.result(),
         failures = failures.result()
-      )
+      ))
     }
 
   private def replayOutboxRecord(

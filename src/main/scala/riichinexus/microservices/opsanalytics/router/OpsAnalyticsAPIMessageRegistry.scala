@@ -1,7 +1,6 @@
 package riichinexus.microservices.opsanalytics.router
 
 import riichinexus.api.RegisteredAPIMessage
-import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.opsanalytics.api.*
 import riichinexus.microservices.opsanalytics.objects.apiTypes.PerformanceDiagnosticsSnapshot
