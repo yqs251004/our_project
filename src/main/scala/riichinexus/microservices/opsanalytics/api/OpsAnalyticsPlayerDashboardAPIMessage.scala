@@ -5,26 +5,28 @@ import java.util.NoSuchElementException
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
+import riichinexus.microservices.player.objects.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.opsanalytics.objects.apiTypes.{Dashboard as DashboardResponse}
+import riichinexus.microservices.opsanalytics.objects.{Dashboard, DashboardOwner}
+import riichinexus.microservices.opsanalytics.tables.dashboard.DashboardTable
 import upickle.default.*
 
 final case class OpsAnalyticsPlayerDashboardAPIMessage(
     playerId: PlayerId,
     operatorId: PlayerId
-) extends APIMessage[DashboardResponse] derives ReadWriter:
+) extends APIMessage[Dashboard] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[DashboardResponse] =
+  override def plan(context: ApiPlanContext): IO[Dashboard] =
     for
-      operator <- IO(context.support.principal(operatorId))
+      operator <- IO(context.principal(operatorId))
       _ <- IO(requireDashboardPermission(context, operator))
       dashboard <- IO(findDashboard(context))
-    yield DashboardResponse.fromDomain(dashboard)
+    yield dashboard
 
   private def requireDashboardPermission(context: ApiPlanContext, operator: AccessPrincipal): Unit =
     context.support.requirePermission(operator, Permission.ViewOwnDashboard, subjectPlayerId = Some(playerId))
 
   private def findDashboard(context: ApiPlanContext): Dashboard =
-    context.support.opsAnalyticsModule.tables
-      .findDashboard(DashboardOwner.Player(playerId))
+    DashboardTable
+      .findByOwner(context.connection, DashboardOwner.Player(playerId))
       .getOrElse(throw NoSuchElementException(s"Dashboard for player ${playerId.value} was not found"))

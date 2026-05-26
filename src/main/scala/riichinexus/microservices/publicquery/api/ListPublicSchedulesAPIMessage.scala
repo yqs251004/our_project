@@ -4,6 +4,7 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.microservices.publicquery.objects.apiTypes.PublicScheduleView
+import riichinexus.microservices.publicquery.domain.PublicDirectoryQueries
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 
@@ -40,7 +41,7 @@ final case class ListPublicSchedulesAPIMessage(
       context: ApiPlanContext,
       query: ResolvedScheduleQuery
   ): Vector[PublicScheduleView] =
-    context.support.publicQueryModule.tables.publicSchedules()
+    PublicDirectoryQueries.publicSchedules(context.connection)
       .filter(schedule => query.tournamentStatus.forall(_.toString == schedule.tournamentStatus))
       .filter(schedule => query.stageStatus.forall(_.toString == schedule.stageStatus))
       .sortBy(schedule => (schedule.startsAt, schedule.tournamentName, schedule.stageName))

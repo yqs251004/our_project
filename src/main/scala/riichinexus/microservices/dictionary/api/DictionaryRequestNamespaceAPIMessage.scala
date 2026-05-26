@@ -7,16 +7,17 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.dictionary.domain.DictionaryNamespaceRequestOperations
-import riichinexus.microservices.dictionary.objects.apiTypes.{DictionaryNamespaceRegistration as DictionaryNamespaceRegistrationResponse, *}
+import riichinexus.microservices.dictionary.objects.{DictionaryNamespaceRegistration, DictionaryNamespaceRegistrationView}
+import riichinexus.microservices.dictionary.objects.apiTypes.*
 import upickle.default.*
 
 final case class DictionaryRequestNamespaceAPIMessage(
     request: RequestDictionaryNamespaceRequest
-) extends APIMessage[DictionaryNamespaceRegistrationResponse] derives ReadWriter:
+) extends APIMessage[DictionaryNamespaceRegistrationView] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[DictionaryNamespaceRegistrationResponse] =
+  override def plan(context: ApiPlanContext): IO[DictionaryNamespaceRegistrationView] =
     for
-      actor <- IO(context.support.principal(request.operator))
+      actor <- IO(context.principal(request.operator))
       requestedAt <- IO.realTimeInstant
       module = context.support.dictionaryModule
       command = RequestNamespaceCommand(
@@ -31,15 +32,17 @@ final case class DictionaryRequestNamespaceAPIMessage(
         requestedAt = requestedAt
       )
       registration <- IO(
-        requestNamespace(module, command)
+        requestNamespace(context.connection, module, command)
       )
-    yield DictionaryNamespaceRegistrationResponse.fromDomain(registration)
+    yield DictionaryNamespaceRegistrationView.fromDomain(registration)
 
   private def requestNamespace(
+      connection: java.sql.Connection,
       module: riichinexus.bootstrap.DictionaryModuleContext,
       command: RequestNamespaceCommand
   ): DictionaryNamespaceRegistration =
     DictionaryNamespaceRequestOperations.requestNamespace(
+      connection = connection,
       module = module,
       actor = command.actor,
       namespacePrefix = command.namespacePrefix,

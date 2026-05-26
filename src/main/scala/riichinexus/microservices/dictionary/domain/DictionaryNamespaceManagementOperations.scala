@@ -1,13 +1,16 @@
 package riichinexus.microservices.dictionary.domain
 
+import java.sql.Connection
 import java.time.Instant
 
 import riichinexus.bootstrap.DictionaryModuleContext
 import riichinexus.domain.model.*
 import riichinexus.domain.service.GlobalDictionaryRegistry
+import riichinexus.microservices.dictionary.objects.DictionaryNamespaceRegistration
 
 object DictionaryNamespaceManagementOperations:
   def updateCollaborators(
+      connection: Connection,
       module: DictionaryModuleContext,
       actor: AccessPrincipal,
       namespacePrefix: String,
@@ -18,13 +21,14 @@ object DictionaryNamespaceManagementOperations:
   ): DictionaryNamespaceRegistration =
     module.transactionManager.inTransaction {
       val normalizedPrefix = GlobalDictionaryRegistry.normalizeNamespacePrefix(namespacePrefix)
-      val existing = DictionaryNamespaceValidation.requireNamespace(module, normalizedPrefix)
+      val existing = DictionaryNamespaceValidation.requireNamespace(connection, module, normalizedPrefix)
       val reviewer = DictionaryNamespaceValidation.requireManagementActor(
         actor,
         existing,
         s"update collaborators for $normalizedPrefix"
       )
       val (normalizedCoOwners, normalizedEditors) = DictionaryNamespaceValidation.normalizeCollaborators(
+        connection,
         module,
         existing.ownerPlayerId,
         coOwnerPlayerIds,
@@ -32,9 +36,11 @@ object DictionaryNamespaceManagementOperations:
         s"update collaborators for $normalizedPrefix"
       )
       DictionaryNamespaceValidation.validateContextMembership(
+        connection,
         module,
         existing.contextClubId,
         DictionaryNamespaceValidation.requireActiveOwner(
+          connection,
           module,
           existing.ownerPlayerId,
           s"update collaborators for $normalizedPrefix owner ${existing.ownerPlayerId.value}"
@@ -61,6 +67,7 @@ object DictionaryNamespaceManagementOperations:
     }
 
   def updateContext(
+      connection: Connection,
       module: DictionaryModuleContext,
       actor: AccessPrincipal,
       namespacePrefix: String,
@@ -70,12 +77,14 @@ object DictionaryNamespaceManagementOperations:
   ): DictionaryNamespaceRegistration =
     module.transactionManager.inTransaction {
       val normalizedPrefix = GlobalDictionaryRegistry.normalizeNamespacePrefix(namespacePrefix)
-      val existing = DictionaryNamespaceValidation.requireNamespace(module, normalizedPrefix)
+      val existing = DictionaryNamespaceValidation.requireNamespace(connection, module, normalizedPrefix)
       val reviewer = DictionaryNamespaceValidation.requireManagementActor(actor, existing, s"update context for $normalizedPrefix")
       val normalizedContextClubId = DictionaryNamespaceValidation.validateContextMembership(
+        connection,
         module,
         contextClubId,
         DictionaryNamespaceValidation.requireActiveOwner(
+          connection,
           module,
           existing.ownerPlayerId,
           s"update context for $normalizedPrefix owner ${existing.ownerPlayerId.value}"

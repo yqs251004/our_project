@@ -4,8 +4,8 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.player.objects.apiTypes.*
-import riichinexus.microservices.player.objects.apiTypes.PlayerResponses.given
+import riichinexus.microservices.player.objects.{PlayerProfileView, PlayerStatus}
+import riichinexus.microservices.player.tables.player.PlayerTable
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 
@@ -40,8 +40,8 @@ final case class ListClubMembersAPIMessage(
       context: ApiPlanContext,
       query: ResolvedClubMembersQuery
   ): Vector[PlayerProfileView] =
-    context.support.clubModule.tables
-      .listPlayersByClub(query.clubId)
+    PlayerTable
+      .findByClub(context.connection, query.clubId)
       .filter(player => query.status.forall(_ == player.status))
       .filter(player => query.nickname.forall(context.support.containsIgnoreCase(player.nickname, _)))
       .sortBy(player => (player.nickname, player.id.value))

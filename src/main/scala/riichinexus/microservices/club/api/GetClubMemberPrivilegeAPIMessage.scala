@@ -6,7 +6,8 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.objects.apiTypes.{ClubMemberPrivilegeSnapshot as ClubMemberPrivilegeSnapshotResponse}
+import riichinexus.microservices.club.objects.{ClubMemberPrivilegeSnapshot as ClubMemberPrivilegeSnapshotResponse}
+import riichinexus.microservices.club.tables.club.ClubTable
 import upickle.default.*
 
 final case class GetClubMemberPrivilegeAPIMessage(
@@ -24,7 +25,12 @@ final case class GetClubMemberPrivilegeAPIMessage(
       context: ApiPlanContext,
       input: GetClubMemberPrivilegeInput
   ): ClubMemberPrivilegeSnapshot =
-    context.support.clubModule.tables.memberPrivilegeSnapshot(input.clubId, input.playerId)
+    ClubTable.findById(context.connection, input.clubId)
+      .flatMap { club =>
+        if club.dissolvedAt.nonEmpty then
+          throw IllegalArgumentException(s"Club ${club.id.value} has already been dissolved")
+        club.memberPrivilegeSnapshot(input.playerId)
+      }
       .getOrElse(throw NoSuchElementException("Resource not found"))
 
   private final case class GetClubMemberPrivilegeInput(

@@ -15,12 +15,12 @@ final case class CurrentSessionAuthAPIMessage(
     for
       input <- IO(resolveInput)
       session <- IO(
-        context.support.resolveCurrentSessionView(
+        context.resolveCurrentSessionView(
         operatorId = input.operatorId,
         guestSessionId = input.guestSessionId
         )
       )
-    yield session
+    yield CurrentSessionResponse.fromView(session)
 
   private def resolveInput: CurrentSessionInput =
     CurrentSessionInput(

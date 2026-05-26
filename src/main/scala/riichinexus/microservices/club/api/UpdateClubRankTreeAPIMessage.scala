@@ -10,7 +10,7 @@ import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
 import riichinexus.domain.service.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.objects.apiTypes.{Club as ClubResponse}
+import riichinexus.microservices.club.objects.{Club as ClubResponse}
 import riichinexus.microservices.club.objects.apiTypes.ClubRankNodeRequest
 import upickle.default.*
 
@@ -23,7 +23,7 @@ final case class UpdateClubRankTreeAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubResponse] =
     for
-      actor <- IO(context.support.principal(PlayerId(operatorId)))
+      actor <- IO(context.principal(PlayerId(operatorId)))
       occurredAt <- IO.realTimeInstant
       module = context.support.clubModule
       command = UpdateClubRankTreeCommand(

@@ -4,10 +4,8 @@ import java.time.Instant
 
 import munit.FunSuite
 
-import riichinexus.application.ports.GlobalDictionaryRepository
 import riichinexus.bootstrap.ApplicationContext
 import riichinexus.domain.model.*
-import riichinexus.microservices.publicquery.tables.PublicQueryTables
 
 class RiichiNexusTournamentDictionarySuite extends FunSuite with RiichiNexusSuiteSupport:
 
@@ -37,7 +35,7 @@ class RiichiNexusTournamentDictionarySuite extends FunSuite with RiichiNexusSuit
     val tenhou = playerService(app).registerPlayer("rank-dict-a", "RankA", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1700)
     val soul = playerService(app).registerPlayer("rank-dict-b", "RankB", RankSnapshot(RankPlatform.MahjongSoul, "Master", Some(2)), now, 1700)
 
-    val leaderboard = publicQueryOperations(app).publicPlayerLeaderboard(10)
+    val leaderboard = publicPlayerLeaderboard(app, 10)
     val soulEntry = leaderboard.find(_.playerId == soul.id).getOrElse(fail("soul entry missing"))
     val tenhouEntry = leaderboard.find(_.playerId == tenhou.id).getOrElse(fail("tenhou entry missing"))
 
@@ -72,19 +70,12 @@ class RiichiNexusTournamentDictionarySuite extends FunSuite with RiichiNexusSuit
     playerService(app).registerPlayer("rank-cache-a", "RankCacheA", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1700)
     playerService(app).registerPlayer("rank-cache-b", "RankCacheB", RankSnapshot(RankPlatform.MahjongSoul, "Master", Some(2)), now, 1700)
 
-    val countingDictionaryRepository = new CountingGlobalDictionaryRepository(globalDictionaryRepository(app))
-    val publicQueryTables = PublicQueryTables(
-      tournamentRepository(app),
-      tableRepository(app),
-      playerRepository(app),
-      clubRepository(app),
-      countingDictionaryRepository
-    )
-
-    val leaderboard = publicQueryTables.publicPlayerLeaderboard(10)
+    val beforeCalls = repositoryCallCount(app, "GlobalDictionaryRepository.findAll")
+    val leaderboard = publicPlayerLeaderboard(app, 10)
+    val afterCalls = repositoryCallCount(app, "GlobalDictionaryRepository.findAll")
 
     assertEquals(leaderboard.size, 2)
-    assertEquals(countingDictionaryRepository.findAllCalls, 1)
+    assertEquals(afterCalls - beforeCalls, 1L)
   }
 
   test("public player leaderboard records dictionary timing diagnostics") {
@@ -99,7 +90,7 @@ class RiichiNexusTournamentDictionarySuite extends FunSuite with RiichiNexusSuit
     )
     playerService(app).registerPlayer("rank-diag-a", "RankDiagA", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1700)
 
-    publicQueryOperations(app).publicPlayerLeaderboard(10)
+    publicPlayerLeaderboard(app, 10)
 
     assertEquals(repositoryCallCount(app, "GlobalDictionaryRepository.findAll"), 1L)
     assert(repositoryTotalMillis(app, "GlobalDictionaryRepository.findAll") >= 0.0)

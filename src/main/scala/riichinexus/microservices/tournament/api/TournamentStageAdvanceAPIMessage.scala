@@ -8,19 +8,16 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.tournament.objects.*
-import riichinexus.microservices.tournament.objects.apiTypes.{Table as _, TableSeat as _, StageStandingEntry as _, StageRankingSnapshot as _, StageAdvancementSnapshot as _, KnockoutBracketSlot as _, KnockoutBracketResult as _, KnockoutBracketMatch as _, KnockoutBracketRound as _, KnockoutBracketSnapshot as _, *}
+import riichinexus.microservices.tournament.objects.apiTypes.*
+import riichinexus.microservices.tournament.objects.apiTypes.*
 import riichinexus.microservices.tournament.objects.apiTypes.ManagementRequests.given
-import riichinexus.microservices.tournament.objects.apiTypes.SettlementRequests.given
-import riichinexus.microservices.tournament.objects.apiTypes.StageRequests.given
-import riichinexus.microservices.tournament.objects.apiTypes.TableRequests.given
 import upickle.default.*
 
-final case class TournamentStageAdvanceAPIMessage(tournamentId: String, stageId: String, request: AdvanceKnockoutStageRequest) extends APIMessage[Vector[riichinexus.microservices.tournament.objects.apiTypes.Table]] derives ReadWriter:
+final case class TournamentStageAdvanceAPIMessage(tournamentId: String, stageId: String, request: AdvanceKnockoutStageRequest) extends APIMessage[Vector[riichinexus.microservices.tournament.objects.Table]] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[Vector[riichinexus.microservices.tournament.objects.apiTypes.Table]] =
+  override def plan(context: ApiPlanContext): IO[Vector[riichinexus.microservices.tournament.objects.Table]] =
     for
-      actor <- IO(request.operator.map(context.support.principal).getOrElse(AccessPrincipal.system))
+      actor <- IO(request.operator.map(context.principal).getOrElse(AccessPrincipal.system))
       at <- IO.realTimeInstant
       module = context.support.tournamentModule
       command = AdvanceKnockoutStageCommand(
@@ -31,12 +28,13 @@ final case class TournamentStageAdvanceAPIMessage(tournamentId: String, stageId:
       )
       tables <- IO {
         module.transactionManager.inTransaction {
-          advanceStage(module, command)
+          advanceStage(context.connection, module, command)
         }
       }
-    yield tables.map(riichinexus.microservices.tournament.objects.apiTypes.Table.fromDomain)
+    yield tables.map(riichinexus.microservices.tournament.objects.Table.fromDomain)
 
   private def advanceStage(
+      connection: java.sql.Connection,
       module: TournamentModuleContext,
       command: AdvanceKnockoutStageCommand
   ): Vector[Table] =
@@ -52,7 +50,7 @@ final case class TournamentStageAdvanceAPIMessage(tournamentId: String, stageId:
       tournamentId = Some(command.tournamentId)
     )
     ensureKnockoutStage(stage, command.stageId)
-    module.knockoutStageCoordinator.materializeUnlockedTables(command.tournamentId, command.stageId, command.at)
+    module.knockoutStageCoordinator.materializeUnlockedTables(connection, command.tournamentId, command.stageId, command.at)
 
   private def ensureKnockoutStage(stage: TournamentStage, stageId: TournamentStageId): Unit =
     val isKnockoutStage =

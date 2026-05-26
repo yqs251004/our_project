@@ -1,13 +1,18 @@
 package riichinexus.microservices.tournament.domain
 
+import java.sql.Connection
 import java.util.NoSuchElementException
 
 import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.player.objects.*
 import riichinexus.domain.service.PlannedTable
+import riichinexus.microservices.player.tables.player.PlayerTable
+import riichinexus.microservices.tournament.objects.SeatWind
 
 object TournamentStageTableScheduler:
   def schedule(
+      connection: Connection,
       module: TournamentModuleContext,
       tournamentId: TournamentId,
       stageId: TournamentStageId
@@ -31,19 +36,20 @@ object TournamentStageTableScheduler:
         stage.advancementRule.ruleType == AdvancementRuleType.KnockoutElimination
 
     if isKnockoutStage then
-      module.knockoutStageCoordinator.materializeUnlockedTables(tournamentId, stageId)
+      module.knockoutStageCoordinator.materializeUnlockedTables(connection, tournamentId, stageId)
       module.tableRepository.findByTournamentAndStage(tournamentId, stageId).sortBy(table =>
         (table.stageRoundNumber, table.tableNo, table.id.value)
       )
     else
-      scheduleNonKnockoutStage(module, tournament, stage)
+      scheduleNonKnockoutStage(connection, module, tournament, stage)
 
   private def scheduleNonKnockoutStage(
+      connection: Connection,
       module: TournamentModuleContext,
       tournament: Tournament,
       stage: TournamentStage
   ): Vector[Table] =
-    val tournamentPlayers = resolveParticipants(module, tournament, stage)
+    val tournamentPlayers = resolveParticipants(connection, module, tournament, stage)
     if tournamentPlayers.size < 4 then
       throw IllegalArgumentException(
         s"Stage ${stage.id.value} needs at least four active players before scheduling"
@@ -100,6 +106,7 @@ object TournamentStageTableScheduler:
     else Vector.empty
 
   private def resolveParticipants(
+      connection: Connection,
       module: TournamentModuleContext,
       tournament: Tournament,
       stage: TournamentStage
@@ -119,9 +126,10 @@ object TournamentStageTableScheduler:
 
       (tournament.participatingPlayers ++ whitelistedPlayers ++ registeredClubMembers ++ whitelistedClubMembers).distinct
 
-    val playersById = module.playerRepository.findByIds(
-      (stage.lineupSubmissions.flatMap(_.seats.map(_.playerId)) ++ fallbackPlayerIds).distinct
-    ).map(player => player.id -> player).toMap
+    val playersById = PlayerTable
+      .findByIds(connection, (stage.lineupSubmissions.flatMap(_.seats.map(_.playerId)) ++ fallbackPlayerIds).distinct)
+      .map(player => player.id -> player)
+      .toMap
     val stagePlayerIds = StageLineupSupport.resolveEligiblePlayers(stage, playersById.get)
 
     val targetPlayerIds =

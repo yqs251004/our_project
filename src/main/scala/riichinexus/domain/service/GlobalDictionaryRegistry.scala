@@ -3,6 +3,13 @@ package riichinexus.domain.service
 import scala.util.Try
 
 import riichinexus.domain.model.*
+import riichinexus.microservices.player.objects.*
+import riichinexus.microservices.dictionary.objects.{
+  GlobalDictionarySchema,
+  GlobalDictionarySchemaEntry,
+  GlobalDictionaryValueType
+}
+import riichinexus.microservices.player.objects.RankPlatform
 
 object GlobalDictionaryRegistry:
   val RatingKFactorKey = "rating.elo.kfactor"

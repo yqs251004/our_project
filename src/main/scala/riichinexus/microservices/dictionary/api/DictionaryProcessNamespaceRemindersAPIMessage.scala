@@ -7,7 +7,8 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.dictionary.domain.DictionaryNamespaceReminderOperations
-import riichinexus.microservices.dictionary.objects.apiTypes.{DictionaryNamespaceReminderAction as DictionaryNamespaceReminderActionResponse, *}
+import riichinexus.microservices.dictionary.objects.{DictionaryNamespaceReminderAction, DictionaryNamespaceReminderActionView}
+import riichinexus.microservices.dictionary.objects.apiTypes.*
 import upickle.default.*
 
 final case class DictionaryProcessNamespaceRemindersAPIMessage(
@@ -16,12 +17,12 @@ final case class DictionaryProcessNamespaceRemindersAPIMessage(
     dueSoonHours: Int = 24,
     reminderIntervalHours: Int = 12,
     escalationGraceHours: Int = 72
-) extends APIMessage[Vector[DictionaryNamespaceReminderActionResponse]] derives ReadWriter:
+) extends APIMessage[Vector[DictionaryNamespaceReminderActionView]] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[Vector[DictionaryNamespaceReminderActionResponse]] =
+  override def plan(context: ApiPlanContext): IO[Vector[DictionaryNamespaceReminderActionView]] =
     for
       request <- IO(ProcessDictionaryNamespaceRemindersRequest(operatorId, asOf, dueSoonHours, reminderIntervalHours, escalationGraceHours))
-      actor <- IO(context.support.principal(request.operator))
+      actor <- IO(context.principal(request.operator))
       now <- IO.realTimeInstant
       module = context.support.dictionaryModule
       command = ProcessNamespaceRemindersCommand(
@@ -32,15 +33,17 @@ final case class DictionaryProcessNamespaceRemindersAPIMessage(
         escalationGrace = Duration.ofHours(request.escalationGraceHours.toLong)
       )
       actions <- IO(
-        processReminders(module, command)
+        processReminders(context.connection, module, command)
       )
-    yield actions.map(DictionaryNamespaceReminderActionResponse.fromDomain)
+    yield actions.map(DictionaryNamespaceReminderActionView.fromDomain)
 
   private def processReminders(
+      connection: java.sql.Connection,
       module: riichinexus.bootstrap.DictionaryModuleContext,
       command: ProcessNamespaceRemindersCommand
   ): Vector[DictionaryNamespaceReminderAction] =
     DictionaryNamespaceReminderOperations.processReminders(
+      connection = connection,
       module = module,
       actor = command.actor,
       asOf = command.asOf,

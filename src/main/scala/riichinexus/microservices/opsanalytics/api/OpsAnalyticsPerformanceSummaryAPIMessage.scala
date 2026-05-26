@@ -4,7 +4,7 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.opsanalytics.objects.apiTypes.PerformanceDiagnosticsSnapshot
+import riichinexus.microservices.opsanalytics.objects.PerformanceDiagnosticsSnapshot
 import upickle.default.*
 
 final case class OpsAnalyticsPerformanceSummaryAPIMessage(
@@ -14,7 +14,7 @@ final case class OpsAnalyticsPerformanceSummaryAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[PerformanceDiagnosticsSnapshot] =
     for
-      operator <- IO(context.support.principal(operatorId))
+      operator <- IO(context.principal(operatorId))
       _ <- IO(requireOpsAdmin(context, operator))
       resolvedLimit <- IO(resolveLimit)
       snapshot <- IO(context.support.opsAnalyticsModule.performanceDiagnosticsService.snapshot(limit = resolvedLimit))

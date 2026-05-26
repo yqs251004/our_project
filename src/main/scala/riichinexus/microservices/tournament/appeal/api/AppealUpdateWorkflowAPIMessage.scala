@@ -19,11 +19,11 @@ final case class AppealUpdateWorkflowAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[AppealTicketView] =
     for
-      actor <- IO(context.support.principal(request.operator))
+      actor <- IO(context.principal(request.operator))
       updatedAt <- IO.realTimeInstant
       module = context.support.tournamentAppealModule
       command <- IO(resolveCommand(actor, updatedAt))
-      ticket <- IO(updateWorkflow(module, command))
+      ticket <- IO(updateWorkflow(context.connection, module, command))
     yield AppealTicketView.fromDomain(ticket)
 
   private def resolveCommand(actor: AccessPrincipal, updatedAt: Instant): UpdateAppealWorkflowCommand =
@@ -40,10 +40,12 @@ final case class AppealUpdateWorkflowAPIMessage(
     )
 
   private def updateWorkflow(
+      connection: java.sql.Connection,
       module: TournamentAppealModuleContext,
       command: UpdateAppealWorkflowCommand
   ): AppealTicket =
     module.service.updateAppealWorkflow(
+      connection = connection,
       ticketId = command.ticketId,
       actor = command.actor,
       assigneeId = command.assigneeId,

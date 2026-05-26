@@ -11,6 +11,7 @@ import riichinexus.application.ports.*
 import riichinexus.domain.event.*
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.infrastructure.postgres.JdbcConnectionFactory
 import upickle.default.*
 
 private object DomainEventSerializationSupport:
@@ -58,6 +59,7 @@ final class OutboxBackedDomainEventBus(
     outboxRepository: DomainEventOutboxRepository,
     deliveryReceiptRepository: DomainEventDeliveryReceiptRepository,
     subscriberCursorRepository: DomainEventSubscriberCursorRepository,
+    connectionFactory: JdbcConnectionFactory,
     transactionManager: TransactionManager,
     initialSubscribers: Vector[DomainEventSubscriber] = Vector.empty,
     eagerDrainOnPublish: Boolean = false,
@@ -186,7 +188,11 @@ final class OutboxBackedDomainEventBus(
         }
 
         if ready then
-          subscriber.handle(event)
+          transactionManager.inTransaction {
+            connectionFactory.withConnection { connection =>
+              subscriber.handle(connection, event)
+            }
+          }
           transactionManager.inTransaction {
             deliveryReceiptRepository.save(
               DomainEventDeliveryReceipt.delivered(
@@ -261,6 +267,7 @@ object OutboxBackedDomainEventBus:
       outboxRepository: DomainEventOutboxRepository,
       deliveryReceiptRepository: DomainEventDeliveryReceiptRepository,
       subscriberCursorRepository: DomainEventSubscriberCursorRepository,
+      connectionFactory: JdbcConnectionFactory,
       transactionManager: TransactionManager,
       initialSubscribers: Vector[DomainEventSubscriber] = Vector.empty,
       eagerDrainOnPublish: Boolean = false,
@@ -273,6 +280,7 @@ object OutboxBackedDomainEventBus:
       outboxRepository = outboxRepository,
       deliveryReceiptRepository = deliveryReceiptRepository,
       subscriberCursorRepository = subscriberCursorRepository,
+      connectionFactory = connectionFactory,
       transactionManager = transactionManager,
       initialSubscribers = initialSubscribers,
       eagerDrainOnPublish = eagerDrainOnPublish,

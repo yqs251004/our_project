@@ -4,7 +4,6 @@ import riichinexus.api.RegisteredAPIMessage
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.auth.api.*
 import riichinexus.microservices.auth.objects.apiTypes.*
-import riichinexus.microservices.auth.objects.apiTypes.AuthResponses.given
 import riichinexus.system.objects.PagedResponse
 
 object AuthAPIMessageRegistry:

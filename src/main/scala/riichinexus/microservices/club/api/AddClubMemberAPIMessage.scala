@@ -7,10 +7,12 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.player.objects.*
 import riichinexus.domain.service.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubProjectionRefresher
-import riichinexus.microservices.club.objects.apiTypes.{Club as ClubResponse}
+import riichinexus.microservices.club.objects.{Club as ClubResponse}
+import riichinexus.microservices.player.tables.player.PlayerTable
 import upickle.default.*
 
 final case class AddClubMemberAPIMessage(
@@ -33,7 +35,7 @@ final case class AddClubMemberAPIMessage(
       club <- IO {
         module.transactionManager
           .inTransaction {
-            addClubMember(module, command)
+            addClubMember(context.connection, module, command)
           }
           .getOrElse(throw NoSuchElementException("Resource not found"))
       }
@@ -41,16 +43,17 @@ final case class AddClubMemberAPIMessage(
 
   private def resolveOperatorActor(context: ApiPlanContext): AccessPrincipal =
     operatorId.filter(_.nonEmpty)
-      .map(id => context.support.principal(PlayerId(id)))
+      .map(id => context.principal(PlayerId(id)))
       .getOrElse(AccessPrincipal.system)
 
   private def addClubMember(
+      connection: java.sql.Connection,
       module: ClubModuleContext,
       command: AddClubMemberCommand
   ): Option[Club] =
     for
       club <- module.clubRepository.findById(command.clubId)
-      player <- module.playerRepository.findById(command.playerId)
+      player <- PlayerTable.findById(connection, command.playerId)
     yield
       ensureClubActive(club)
       requireActivePlayer(player, s"Player ${command.playerId.value} cannot join club ${command.clubId.value}")
@@ -62,10 +65,10 @@ final case class AddClubMemberAPIMessage(
         delegatedPrivileges = Set(ClubPrivilege.ApproveRoster)
       )
 
-      val savedPlayer = module.playerRepository.save(player.joinClub(command.clubId))
+      val savedPlayer = PlayerTable.save(connection, player.joinClub(command.clubId))
       ClubProjectionRefresher.ensurePlayerDashboard(module, savedPlayer.id, command.occurredAt)
       module.clubRepository.save(
-        ClubProjectionRefresher.refreshClubProjection(module, club.addMember(command.playerId), command.occurredAt)
+        ClubProjectionRefresher.refreshClubProjection(connection, module, club.addMember(command.playerId), command.occurredAt)
       )
 
   private def ensureClubActive(club: Club): Unit =

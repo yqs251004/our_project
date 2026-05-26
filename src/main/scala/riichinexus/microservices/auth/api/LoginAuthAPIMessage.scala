@@ -6,9 +6,14 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.AuthModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.player.objects.*
 import riichinexus.domain.service.AuthenticationFailure
+import riichinexus.microservices.auth.objects.{AccountCredential, AuthenticatedSession}
 import riichinexus.microservices.auth.objects.apiTypes.AuthSuccessResponse
 import riichinexus.microservices.auth.security.AuthPasswordHasher
+import riichinexus.microservices.auth.tables.accountcredential.AccountCredentialTable
+import riichinexus.microservices.auth.tables.authenticatedsession.AuthenticatedSessionTable
+import riichinexus.microservices.player.tables.player.PlayerTable
 import upickle.default.*
 
 final case class LoginAuthAPIMessage(
@@ -25,29 +30,32 @@ final case class LoginAuthAPIMessage(
       command = LoginCommand(AccountCredential.normalizeUsername(username), password, loginAt)
       result <- IO {
         module.transactionManager.inTransaction {
-          login(module, command)
+          login(context.connection, module, command)
         }
       }
-    yield riichinexus.microservices.auth.objects.apiTypes.AuthSuccessView(
-      userId = result.player.id.value,
-      username = result.credential.username,
-      displayName = result.player.nickname,
-      token = result.session.token,
-      roles = context.support.registeredRoleFlags(result.player)
+    yield AuthSuccessResponse.fromView(
+      riichinexus.microservices.auth.objects.AuthSuccessView(
+        userId = result.player.id.value,
+        username = result.credential.username,
+        displayName = result.player.nickname,
+        token = result.session.token,
+        roles = context.support.registeredRoleFlags(result.player)
+      )
     )
 
-  private def login(module: AuthModuleContext, command: LoginCommand): LoginResult =
+  private def login(connection: java.sql.Connection, module: AuthModuleContext, command: LoginCommand): LoginResult =
     require(command.password.nonEmpty, "Password is required")
-    val credential = module.accountCredentialRepository.findByUsername(command.username)
+    val credential = AccountCredentialTable.findByUsername(connection, command.username)
       .getOrElse(throw AuthenticationFailure("Invalid username or password", "invalid_credentials"))
     if !AuthPasswordHasher.verify(command.password, credential) then
       throw AuthenticationFailure("Invalid username or password", "invalid_credentials")
 
-    val player = module.playerTable.find(credential.playerId)
+    val player = PlayerTable.findById(connection, credential.playerId)
       .getOrElse(throw AuthenticationFailure(s"Player ${credential.playerId.value} was not found", "invalid_credentials"))
     ensureActivePlayer(player)
 
-    val session = module.authenticatedSessionRepository.save(
+    val session = AuthenticatedSessionTable.save(
+      connection,
       AuthenticatedSession.create(
         username = credential.username,
         playerId = credential.playerId,

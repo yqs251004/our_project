@@ -3,6 +3,8 @@ package riichinexus.domain.model
 import java.time.{Duration, Instant}
 import java.util.UUID
 
+import riichinexus.microservices.club.objects.ClubApplicationStatus
+
 final case class PlayerId(value: String) derives CanEqual
 final case class ClubId(value: String) derives CanEqual
 final case class TournamentId(value: String) derives CanEqual
@@ -264,101 +266,6 @@ object AccessPrincipal:
       roleGrants = Vector(RoleGrant.superAdmin(Instant.EPOCH, None))
     )
 
-enum RankPlatform derives CanEqual:
-  case Tenhou
-  case MahjongSoul
-  case Custom
-
-final case class RankSnapshot(
-    platform: RankPlatform,
-    tier: String,
-    stars: Option[Int] = None
-) derives CanEqual
-
-enum PlayerStatus derives CanEqual:
-  case Active
-  case Suspended
-  case Banned
-
-final case class Player(
-    id: PlayerId,
-    userId: String,
-    nickname: String,
-    registeredAt: Instant,
-    currentRank: RankSnapshot,
-    elo: Int,
-    clubId: Option[ClubId] = None,
-    affiliatedClubIds: Vector[ClubId] = Vector.empty,
-    status: PlayerStatus = PlayerStatus.Active,
-    roleGrants: Vector[RoleGrant] = Vector.empty,
-    bannedReason: Option[String] = None,
-    version: Int = 0
-) derives CanEqual:
-  def boundClubIds: Vector[ClubId] =
-    (clubId.toVector ++ affiliatedClubIds).distinct
-
-  def effectiveRoleGrants: Vector[RoleGrant] =
-    if roleGrants.exists(_.role == RoleKind.RegisteredPlayer) then roleGrants
-    else RoleGrant.registered(registeredAt) +: roleGrants
-
-  def asPrincipal: AccessPrincipal =
-    AccessPrincipal(
-      principalId = id.value,
-      displayName = nickname,
-      playerId = Some(id),
-      roleGrants = effectiveRoleGrants
-    )
-
-  def joinClub(newClubId: ClubId): Player =
-    val updatedBoundClubs = (boundClubIds :+ newClubId).distinct
-    val nextPrimaryClubId = clubId.orElse(Some(newClubId))
-    copy(
-      clubId = nextPrimaryClubId,
-      affiliatedClubIds = updatedBoundClubs.filterNot(nextPrimaryClubId.contains)
-    )
-
-  def leaveClub(existingClubId: ClubId): Player =
-    val remaining = boundClubIds.filterNot(_ == existingClubId)
-    copy(
-      clubId = remaining.headOption,
-      affiliatedClubIds = remaining.drop(1)
-    )
-
-  def leaveClub: Player =
-    clubId match
-      case Some(primaryClubId) => leaveClub(primaryClubId)
-      case None                => copy(affiliatedClubIds = Vector.empty)
-
-  def updateRank(rank: RankSnapshot): Player =
-    copy(currentRank = rank)
-
-  def applyElo(delta: Int): Player =
-    copy(elo = elo + delta)
-
-  def grantRole(grant: RoleGrant): Player =
-    val normalized = roleGrants.filterNot(existing =>
-      existing.role == grant.role &&
-        existing.clubId == grant.clubId &&
-        existing.tournamentId == grant.tournamentId
-    )
-    copy(roleGrants = (normalized :+ grant).sortBy(_.grantedAt.toEpochMilli))
-
-  def revokeClubAdmin(clubId: ClubId): Player =
-    copy(roleGrants = roleGrants.filterNot(grant =>
-      grant.role == RoleKind.ClubAdmin && grant.clubId.contains(clubId)
-    ))
-
-  def revokeTournamentAdmin(tournamentId: TournamentId): Player =
-    copy(roleGrants = roleGrants.filterNot(grant =>
-      grant.role == RoleKind.TournamentAdmin && grant.tournamentId.contains(tournamentId)
-    ))
-
-  def ban(reason: String): Player =
-    copy(
-      status = PlayerStatus.Banned,
-      bannedReason = Some(reason)
-    )
-
 final case class ClubHonor(
     title: String,
     achievedAt: Instant,
@@ -366,31 +273,25 @@ final case class ClubHonor(
 ) derives CanEqual:
   require(title.trim.nonEmpty, "Club honor title cannot be empty")
 
-enum ClubMembershipApplicationStatus derives CanEqual:
-  case Pending
-  case Approved
-  case Rejected
-  case Withdrawn
-
 final case class ClubMembershipApplication(
     id: MembershipApplicationId,
     applicantUserId: Option[String],
     displayName: String,
     submittedAt: Instant,
     message: Option[String] = None,
-    status: ClubMembershipApplicationStatus = ClubMembershipApplicationStatus.Pending,
+    status: ClubApplicationStatus = ClubApplicationStatus.Pending,
     reviewedBy: Option[PlayerId] = None,
     reviewedAt: Option[Instant] = None,
     reviewNote: Option[String] = None,
     withdrawnByPrincipalId: Option[String] = None
 ) derives CanEqual:
   def isPending: Boolean =
-    status == ClubMembershipApplicationStatus.Pending
+    status == ClubApplicationStatus.Pending
 
   def approve(by: PlayerId, at: Instant, note: Option[String] = None): ClubMembershipApplication =
     require(isPending, "Only pending applications can be approved")
     copy(
-      status = ClubMembershipApplicationStatus.Approved,
+      status = ClubApplicationStatus.Approved,
       reviewedBy = Some(by),
       reviewedAt = Some(at),
       reviewNote = note
@@ -399,7 +300,7 @@ final case class ClubMembershipApplication(
   def reject(by: PlayerId, at: Instant, note: Option[String] = None): ClubMembershipApplication =
     require(isPending, "Only pending applications can be rejected")
     copy(
-      status = ClubMembershipApplicationStatus.Rejected,
+      status = ClubApplicationStatus.Rejected,
       reviewedBy = Some(by),
       reviewedAt = Some(at),
       reviewNote = note
@@ -412,7 +313,7 @@ final case class ClubMembershipApplication(
   ): ClubMembershipApplication =
     require(isPending, "Only pending applications can be withdrawn")
     copy(
-      status = ClubMembershipApplicationStatus.Withdrawn,
+      status = ClubApplicationStatus.Withdrawn,
       reviewedAt = Some(at),
       reviewNote = note,
       withdrawnByPrincipalId = Some(byPrincipalId)
@@ -556,15 +457,6 @@ final case class ClubRecruitmentPolicy(
   expectedReviewSlaHours.foreach(hours =>
     require(hours > 0, "Club recruitment expected review SLA must be positive")
   )
-
-final case class GlobalDictionaryEntry(
-    key: String,
-    value: String,
-    updatedAt: Instant,
-    updatedBy: PlayerId,
-    note: Option[String] = None,
-    version: Int = 0
-) derives CanEqual
 
 final case class AuditEventEntry(
     id: AuditEventId,

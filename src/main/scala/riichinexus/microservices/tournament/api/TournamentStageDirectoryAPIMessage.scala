@@ -6,12 +6,11 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.tournament.objects.*
-import riichinexus.microservices.tournament.objects.apiTypes.{Table as _, TableSeat as _, StageStandingEntry as _, StageRankingSnapshot as _, StageAdvancementSnapshot as _, KnockoutBracketSlot as _, KnockoutBracketResult as _, KnockoutBracketMatch as _, KnockoutBracketRound as _, KnockoutBracketSnapshot as _, *}
+import riichinexus.microservices.tournament.objects.TournamentFormat
+import riichinexus.microservices.tournament.objects.apiTypes.*
+import riichinexus.microservices.tournament.objects.apiTypes.*
 import riichinexus.microservices.tournament.objects.apiTypes.ManagementRequests.given
-import riichinexus.microservices.tournament.objects.apiTypes.SettlementRequests.given
-import riichinexus.microservices.tournament.objects.apiTypes.StageRequests.given
-import riichinexus.microservices.tournament.objects.apiTypes.TableRequests.given
+import riichinexus.microservices.tournament.tables.tournament.TournamentTable
 import upickle.default.*
 
 final case class TournamentStageDirectoryAPIMessage(tournamentId: String) extends APIMessage[Vector[TournamentStageDirectoryEntry]] derives ReadWriter:
@@ -25,8 +24,8 @@ final case class TournamentStageDirectoryAPIMessage(tournamentId: String) extend
       .map(buildTournamentStageDirectoryEntry)
 
   private def resolveStages(context: ApiPlanContext, tournamentId: TournamentId): Vector[TournamentStage] =
-    context.support.tournamentModule.tables
-      .findTournament(tournamentId)
+    TournamentTable
+      .findById(context.connection, tournamentId)
       .getOrElse(throw NoSuchElementException(s"Tournament ${tournamentId.value} was not found"))
       .stages
 
@@ -34,7 +33,7 @@ final case class TournamentStageDirectoryAPIMessage(tournamentId: String) extend
     TournamentStageDirectoryEntry(
       stageId = stage.id.value,
       name = stage.name,
-      format = stage.format.toString,
+      format = TournamentFormat.fromStageFormat(stage.format),
       order = stage.order,
       status = stage.status.toString,
       currentRound = stage.currentRound,

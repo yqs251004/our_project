@@ -8,7 +8,7 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubApplicationReviewer
-import riichinexus.microservices.club.objects.apiTypes.{Club as ClubResponse}
+import riichinexus.microservices.club.objects.{Club as ClubResponse}
 import upickle.default.*
 
 final case class ApproveClubApplicationAPIMessage(
@@ -21,7 +21,7 @@ final case class ApproveClubApplicationAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubResponse] =
     for
-      actor <- IO(context.support.principal(PlayerId(operatorId)))
+      actor <- IO(context.principal(PlayerId(operatorId)))
       approvedAt <- IO.realTimeInstant
       module = context.support.clubModule
       command = ApproveClubApplicationCommand(
@@ -33,16 +33,18 @@ final case class ApproveClubApplicationAPIMessage(
         approvedAt = approvedAt
       )
       club <- IO(
-        approveApplication(module, command)
+        approveApplication(context.connection, module, command)
           .getOrElse(throw NoSuchElementException("Resource not found"))
       )
     yield ClubResponse.fromDomain(club)
 
   private def approveApplication(
+      connection: java.sql.Connection,
       module: riichinexus.bootstrap.ClubModuleContext,
       command: ApproveClubApplicationCommand
   ): Option[Club] =
     ClubApplicationReviewer.approve(
+      connection = connection,
       module = module,
       parsedClubId = command.clubId,
       parsedMembershipId = command.membershipId,

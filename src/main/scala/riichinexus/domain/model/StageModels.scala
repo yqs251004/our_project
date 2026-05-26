@@ -2,6 +2,8 @@ package riichinexus.domain.model
 
 import java.time.Instant
 
+import riichinexus.microservices.tournament.objects.SeatWind
+
 enum StageFormat derives CanEqual:
   case Swiss
   case Knockout
@@ -72,15 +74,6 @@ enum KnockoutLane derives CanEqual:
   case Championship
   case Bronze
   case Repechage
-
-enum SeatWind derives CanEqual:
-  case East
-  case South
-  case West
-  case North
-
-object SeatWind:
-  val all: Vector[SeatWind] = Vector(East, South, West, North)
 
 final case class StageLineupSeat(
     playerId: PlayerId,

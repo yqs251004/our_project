@@ -1,5 +1,6 @@
 package riichinexus.microservices.opsanalytics.projections
 
+import java.sql.Connection
 import java.time.Instant
 
 import riichinexus.application.ports.{
@@ -8,17 +9,18 @@ import riichinexus.application.ports.{
   DomainEventSubscriber,
   DomainEventSubscriberPartitionStrategy,
   MatchRecordRepository,
-  PaifuRepository,
-  PlayerRepository
+  PaifuRepository
 }
 import riichinexus.domain.event.*
 import riichinexus.domain.model.*
+import riichinexus.microservices.player.objects.*
 import riichinexus.domain.service.AdvancedStatsRoundAnalysis
+import riichinexus.microservices.opsanalytics.objects.{Dashboard, DashboardOwner}
+import riichinexus.microservices.player.tables.player.PlayerTable
 
 final class DashboardProjectionSubscriber(
     matchRecordRepository: MatchRecordRepository,
     paifuRepository: PaifuRepository,
-    playerRepository: PlayerRepository,
     clubRepository: ClubRepository,
     dashboardRepository: DashboardRepository
 ) extends DomainEventSubscriber:
@@ -27,7 +29,7 @@ final class DashboardProjectionSubscriber(
   override def partitionStrategy: DomainEventSubscriberPartitionStrategy =
     DomainEventSubscriberPartitionStrategy.AggregateRoot
 
-  override def handle(event: DomainEvent): Unit =
+  override def handle(connection: Connection, event: DomainEvent): Unit =
     event match
       case MatchRecordArchived(_, _, _, matchRecord, _, occurredAt) =>
         val impactedPlayers = matchRecord.playerIds.distinct
@@ -37,11 +39,11 @@ final class DashboardProjectionSubscriber(
         }
 
         impactedPlayers
-          .flatMap(playerId => playerRepository.findById(playerId).toVector.flatMap(_.boundClubIds))
+          .flatMap(playerId => findPlayer(connection, playerId).toVector.flatMap(_.boundClubIds))
           .distinct
           .foreach { clubId =>
             clubRepository.findById(clubId).foreach { club =>
-              dashboardRepository.save(buildClubDashboard(club, occurredAt))
+              dashboardRepository.save(buildClubDashboard(connection, club, occurredAt))
             }
           }
 
@@ -70,10 +72,10 @@ final class DashboardProjectionSubscriber(
       version = existingVersion
     )
 
-  private def buildClubDashboard(club: Club, at: Instant): Dashboard =
+  private def buildClubDashboard(connection: Connection, club: Club, at: Instant): Dashboard =
     val existingVersion = dashboardRepository.findByOwner(DashboardOwner.Club(club.id)).map(_.version).getOrElse(0)
     val memberDashboards = club.members.flatMap { playerId =>
-      playerRepository.findById(playerId)
+      findPlayer(connection, playerId)
         .filter(_.status == PlayerStatus.Active)
         .flatMap(_ => dashboardRepository.findByOwner(DashboardOwner.Player(playerId)))
     }
@@ -92,6 +94,9 @@ final class DashboardProjectionSubscriber(
         lastUpdatedAt = at,
         version = existingVersion
       )
+
+  private def findPlayer(connection: Connection, playerId: PlayerId): Option[Player] =
+    PlayerTable.findById(connection, playerId)
 
   private def weightedAverage(
       dashboards: Vector[Dashboard],

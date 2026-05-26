@@ -22,21 +22,23 @@ final case class AppealResolveAPIMessage(
   override def plan(context: ApiPlanContext): IO[AppealTicketView] =
     for
       resolved <- IO(resolveInput)
-      actor <- IO(context.support.principal(resolved.operator))
+      actor <- IO(context.principal(resolved.operator))
       resolvedAt <- IO.realTimeInstant
       module = context.support.tournamentAppealModule
       command = ResolveAppealCommand(AppealTicketId(appealId), resolved, actor, resolvedAt)
-      ticket <- IO(resolveAppeal(module, command))
+      ticket <- IO(resolveAppeal(context.connection, module, command))
     yield AppealTicketView.fromDomain(ticket)
 
   private def resolveInput: ResolveAppealRequest =
     ResolveAppealRequest(operatorId, verdict, note)
 
   private def resolveAppeal(
+      connection: java.sql.Connection,
       module: TournamentAppealModuleContext,
       command: ResolveAppealCommand
   ): AppealTicket =
     module.service.resolveAppeal(
+      connection = connection,
       ticketId = command.ticketId,
       verdict = command.input.verdict,
       actor = command.actor,

@@ -1,5 +1,7 @@
 package riichinexus.infrastructure.postgres
 
+import cats.effect.{IO, Resource}
+
 import java.sql.Connection
 import java.sql.DriverManager
 import java.sql.SQLException
@@ -23,6 +25,26 @@ final class JdbcConnectionFactory(config: DatabaseConfig):
         f(connection)
       case None =>
         openConnection(f)
+
+  def withTransactionConnection[A](operation: Connection => IO[A]): IO[A] =
+    connectionResource.use { connection =>
+      for
+        previousAutoCommit <- IO.blocking(connection.getAutoCommit)
+        _ <- IO.blocking {
+          connection.setAutoCommit(false)
+          currentConnection.set(connection)
+        }
+        result <- operation(connection).attempt
+        _ <- result match
+          case Right(_) => IO.blocking(connection.commit())
+          case Left(_)  => IO.blocking(connection.rollback()).handleErrorWith(_ => IO.unit)
+        _ <- IO.blocking {
+          currentConnection.remove()
+          connection.setAutoCommit(previousAutoCommit)
+        }
+        value <- IO.fromEither(result)
+      yield value
+    }
 
   def inTransaction[A](operation: => A): A =
     Option(currentConnection.get()) match
@@ -48,16 +70,23 @@ final class JdbcConnectionFactory(config: DatabaseConfig):
 
   private def openConnection[A](f: Connection => A): A =
     try
-      Using.resource(DriverManager.getConnection(config.url, config.user, config.password)) { connection =>
-        connection.setSchema(config.schema)
-        f(connection)
-      }
+      Using.resource(newConnection())(f)
     catch
       case error: SQLException if error.getMessage != null && error.getMessage.contains("No suitable driver") =>
         throw IllegalStateException(
           "PostgreSQL JDBC driver is not available. Run sbt once to download dependencies.",
           error
         )
+
+  private def connectionResource: Resource[IO, Connection] =
+    Resource.make(IO.blocking(newConnection())) { connection =>
+      IO.blocking(connection.close()).handleErrorWith(_ => IO.unit)
+    }
+
+  private def newConnection(): Connection =
+    val connection = DriverManager.getConnection(config.url, config.user, config.password)
+    connection.setSchema(config.schema)
+    connection
 
 object JdbcConnectionFactory:
   def apply(config: DatabaseConfig): JdbcConnectionFactory =

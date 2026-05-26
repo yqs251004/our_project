@@ -1,5 +1,6 @@
 package riichinexus.microservices.opsanalytics.projections
 
+import java.sql.Connection
 import java.time.{Duration, Instant}
 import java.util.NoSuchElementException
 
@@ -7,12 +8,14 @@ import riichinexus.application.ports.{DomainEventSubscriber, DomainEventSubscrib
 import riichinexus.application.ports.*
 import riichinexus.domain.event.*
 import riichinexus.domain.model.*
+import riichinexus.microservices.player.objects.*
 import riichinexus.domain.service.AdvancedStatsRoundAnalysis
+import riichinexus.microservices.opsanalytics.objects.{AdvancedStatsBoard, AdvancedStatsRecomputeTask, DashboardOwner}
+import riichinexus.microservices.player.tables.player.PlayerTable
 
 final class AdvancedStatsProjectionSubscriber(
     paifuRepository: PaifuRepository,
     matchRecordRepository: MatchRecordRepository,
-    playerRepository: PlayerRepository,
     clubRepository: ClubRepository,
     advancedStatsBoardRepository: AdvancedStatsBoardRepository,
     advancedStatsRecomputeTaskRepository: AdvancedStatsRecomputeTaskRepository,
@@ -26,23 +29,24 @@ final class AdvancedStatsProjectionSubscriber(
   override def partitionStrategy: DomainEventSubscriberPartitionStrategy =
     DomainEventSubscriberPartitionStrategy.AggregateRoot
 
-  override def handle(event: DomainEvent): Unit =
+  override def handle(connection: Connection, event: DomainEvent): Unit =
     event match
       case MatchRecordArchived(_, _, _, matchRecord, _, occurredAt) =>
-        enqueueImpactedOwners(matchRecord, occurredAt)
-        processPending(limit = 25, processedAt = occurredAt)
+        enqueueImpactedOwners(connection, matchRecord, occurredAt)
+        processPending(connection, limit = 25, processedAt = occurredAt)
         ()
       case _ =>
         ()
 
   private def enqueueImpactedOwners(
+      connection: Connection,
       matchRecord: MatchRecord,
       requestedAt: Instant,
       reason: String = "match-record-archived"
   ): Vector[AdvancedStatsRecomputeTask] =
     val impactedPlayers = matchRecord.playerIds.distinct
     val impactedClubs = impactedPlayers
-      .flatMap(playerId => playerRepository.findById(playerId).toVector.flatMap(_.boundClubIds))
+      .flatMap(playerId => findPlayer(connection, playerId).toVector.flatMap(_.boundClubIds))
       .distinct
 
     (impactedPlayers.map(playerId => DashboardOwner.Player(playerId)) ++
@@ -80,6 +84,7 @@ final class AdvancedStatsProjectionSubscriber(
     }
 
   private def processPending(
+      connection: Connection,
       limit: Int,
       processedAt: Instant
   ): Vector[AdvancedStatsRecomputeTask] =
@@ -99,7 +104,7 @@ final class AdvancedStatsProjectionSubscriber(
               val club = clubRepository.findById(clubId).getOrElse(
                 throw NoSuchElementException(s"Club ${clubId.value} was not found")
               )
-              advancedStatsBoardRepository.save(rebuildClubBoard(club, processedAt))
+              advancedStatsBoardRepository.save(rebuildClubBoard(connection, club, processedAt))
 
           try advancedStatsRecomputeTaskRepository.save(processing.markCompleted(processedAt))
           catch
@@ -131,14 +136,18 @@ final class AdvancedStatsProjectionSubscriber(
     buildPlayerBoard(playerId, records, paifus, at).copy(version = existingVersion)
 
   private def rebuildClubBoard(
+      connection: Connection,
       club: Club,
       at: Instant
   ): AdvancedStatsBoard =
     val memberBoards = club.members.flatMap { playerId =>
-      playerRepository.findById(playerId)
+      findPlayer(connection, playerId)
         .filter(_.status == PlayerStatus.Active)
         .map(_ => rebuildPlayerBoard(playerId, at))
     }
     val existingVersion =
       advancedStatsBoardRepository.findByOwner(DashboardOwner.Club(club.id)).map(_.version).getOrElse(0)
     buildClubBoard(club, memberBoards, at).copy(version = existingVersion)
+
+  private def findPlayer(connection: Connection, playerId: PlayerId): Option[Player] =
+    PlayerTable.findById(connection, playerId)

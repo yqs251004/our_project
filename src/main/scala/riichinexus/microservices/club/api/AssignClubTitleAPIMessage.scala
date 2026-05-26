@@ -8,9 +8,11 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.application.changes.DomainChangeInterpreter
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.player.objects.*
 import riichinexus.domain.service.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.objects.apiTypes.{Club as ClubResponse}
+import riichinexus.microservices.club.objects.{Club as ClubResponse}
+import riichinexus.microservices.player.tables.player.PlayerTable
 import upickle.default.*
 
 final case class AssignClubTitleAPIMessage(
@@ -23,7 +25,7 @@ final case class AssignClubTitleAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubResponse] =
     for
-      actor <- IO(context.support.principal(PlayerId(operatorId)))
+      actor <- IO(context.principal(PlayerId(operatorId)))
       assignedAt <- IO.realTimeInstant
       module = context.support.clubModule
       command = AssignClubTitleCommand(
@@ -36,18 +38,19 @@ final case class AssignClubTitleAPIMessage(
       )
       club <- IO {
         module.transactionManager.inTransaction {
-          assignTitle(module, command)
+          assignTitle(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
     yield ClubResponse.fromDomain(club)
 
   private def assignTitle(
+      connection: java.sql.Connection,
       module: ClubModuleContext,
       command: AssignClubTitleCommand
   ): Option[Club] =
     for
       club <- module.clubRepository.findById(command.clubId)
-      player <- module.playerRepository.findById(command.playerId)
+      player <- PlayerTable.findById(connection, command.playerId)
     yield
       ensureTitleCanBeAssigned(module, club, player, command)
       commitTitleAssignment(module, club, command, assignedBy = command.actor.playerId.getOrElse(club.creator))

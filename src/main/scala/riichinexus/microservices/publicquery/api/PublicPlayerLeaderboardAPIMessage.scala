@@ -2,8 +2,10 @@ package riichinexus.microservices.publicquery.api
 
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
-import riichinexus.domain.model.{AccessPrincipal, ClubId, Permission, PlayerStatus}
+import riichinexus.domain.model.{AccessPrincipal, ClubId, Permission}
+import riichinexus.microservices.player.objects.PlayerStatus
 import riichinexus.microservices.publicquery.objects.apiTypes.PlayerLeaderboardEntry
+import riichinexus.microservices.publicquery.domain.PublicDirectoryQueries
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 
@@ -38,7 +40,7 @@ final case class PublicPlayerLeaderboardAPIMessage(
       context: ApiPlanContext,
       query: ResolvedPlayerLeaderboardQuery
   ): Vector[PlayerLeaderboardEntry] =
-    context.support.publicQueryModule.tables.publicPlayerLeaderboard(Int.MaxValue)
+    PublicDirectoryQueries.publicPlayerLeaderboard(context.connection, Int.MaxValue)
       .filter(entry => query.clubId.forall(entry.clubIds.contains))
       .filter(entry => query.status.forall(_.toString == entry.status))
 

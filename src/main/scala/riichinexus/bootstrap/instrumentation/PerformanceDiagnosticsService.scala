@@ -4,7 +4,7 @@ import java.time.Instant
 import java.util.concurrent.atomic.AtomicReference
 
 import scala.annotation.tailrec
-import riichinexus.microservices.opsanalytics.objects.apiTypes.*
+import riichinexus.microservices.opsanalytics.objects.{PerformanceDiagnosticsSnapshot, PerformanceMetricEntry, PerformanceStatusCount}
 
 final class PerformanceDiagnosticsService(
     val startedAt: Instant = Instant.now()

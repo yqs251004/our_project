@@ -1,16 +1,24 @@
 package riichinexus.microservices.tournament.domain
 
+import java.sql.Connection
+
 import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.model.*
-import riichinexus.microservices.tournament.objects.apiTypes.{Table as _, TableSeat as _, StageStandingEntry as _, StageRankingSnapshot as _, StageAdvancementSnapshot as _, KnockoutBracketSlot as _, KnockoutBracketResult as _, KnockoutBracketMatch as _, KnockoutBracketRound as _, KnockoutBracketSnapshot as _, *}
+import riichinexus.microservices.player.objects.*
+import riichinexus.microservices.club.tables.club.ClubTable
+import riichinexus.microservices.player.tables.player.PlayerTable
+import riichinexus.microservices.tournament.objects.{AdvancementRuleView, KnockoutRuleConfigView, SwissRuleConfigView, TournamentFormat}
+import riichinexus.microservices.tournament.objects.apiTypes.*
+import riichinexus.microservices.tournament.tables.tournament.TournamentTable
 
 object TournamentOperationViewAssembler:
   def mutationView(
+      connection: Connection,
       module: TournamentModuleContext,
       tournamentId: TournamentId,
       scheduledTables: Vector[Table]
   ): Option[TournamentMutationView] =
-    detailView(module, tournamentId).map(detail =>
+    detailView(connection, module, tournamentId).map(detail =>
       TournamentMutationView(
         tournament = detail,
         scheduledTables = scheduledTables
@@ -20,19 +28,21 @@ object TournamentOperationViewAssembler:
     )
 
   def detailView(
+      connection: Connection,
       module: TournamentModuleContext,
       tournamentId: TournamentId
   ): Option[TournamentDetailView] =
-    module.tables.findTournament(tournamentId).map(tournament =>
-      detailView(module, tournament)
+    TournamentTable.findById(connection, tournamentId).map(tournament =>
+      detailView(connection, module, tournament)
     )
 
   def detailView(
+      connection: Connection,
       module: TournamentModuleContext,
       tournament: Tournament
   ): TournamentDetailView =
     val tournamentClubIds = relatedClubIds(tournament)
-    val clubsById = module.tables.findClubs(tournamentClubIds)
+    val clubsById = ClubTable.findByIds(connection, tournamentClubIds)
       .map(club => club.id -> club)
       .toMap
     val participantIds = tournamentParticipantIds(tournament, clubsById)
@@ -41,7 +51,7 @@ object TournamentOperationViewAssembler:
         participantIds ++
         tournament.stages.flatMap(_.lineupSubmissions.map(_.submittedBy))
     ).distinct
-    val playersById = module.tables.findPlayers(playerIdsForLookup)
+    val playersById = PlayerTable.findByIds(connection, playerIdsForLookup.toVector.distinct)
       .map(player => player.id -> player)
       .toMap
 
@@ -99,7 +109,7 @@ object TournamentOperationViewAssembler:
     TournamentOperationsStageView(
       stageId = stage.id.value,
       name = stage.name,
-      format = stage.format.toString,
+      format = TournamentFormat.fromStageFormat(stage.format),
       order = stage.order,
       status = stage.status.toString,
       currentRound = stage.currentRound,

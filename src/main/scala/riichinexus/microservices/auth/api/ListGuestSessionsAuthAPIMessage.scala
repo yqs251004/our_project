@@ -6,6 +6,7 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.auth.objects.apiTypes.GuestSessionResponse
+import riichinexus.microservices.auth.tables.guestsession.GuestSessionTable
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 
@@ -20,7 +21,8 @@ final case class ListGuestSessionsAuthAPIMessage(
       asOf <- IO.realTimeInstant
       query = resolveQuery(asOf)
       sessions <- IO {
-        context.support.authModule.guestSessionTable.list(
+        GuestSessionTable.list(
+          context.connection,
           activeOnly = query.activeOnly,
           asOf = query.asOf
         )

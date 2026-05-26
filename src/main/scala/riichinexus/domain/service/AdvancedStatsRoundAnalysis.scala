@@ -3,6 +3,8 @@ package riichinexus.domain.service
 import java.time.Instant
 
 import riichinexus.domain.model.*
+import riichinexus.microservices.player.objects.*
+import riichinexus.microservices.opsanalytics.objects.{AdvancedStatsBoard, DashboardOwner}
 
 private[riichinexus] object AdvancedStatsRoundAnalysis:
   final case class PlayerRoundStats(

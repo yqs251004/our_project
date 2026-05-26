@@ -4,12 +4,10 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.tournament.objects.*
-import riichinexus.microservices.tournament.objects.apiTypes.{Table as _, TableSeat as _, StageStandingEntry as _, StageRankingSnapshot as _, StageAdvancementSnapshot as _, KnockoutBracketSlot as _, KnockoutBracketResult as _, KnockoutBracketMatch as _, KnockoutBracketRound as _, KnockoutBracketSnapshot as _, *}
+import riichinexus.microservices.tournament.objects.apiTypes.*
+import riichinexus.microservices.tournament.objects.apiTypes.*
 import riichinexus.microservices.tournament.objects.apiTypes.ManagementRequests.given
-import riichinexus.microservices.tournament.objects.apiTypes.SettlementRequests.given
-import riichinexus.microservices.tournament.objects.apiTypes.StageRequests.given
-import riichinexus.microservices.tournament.objects.apiTypes.TableRequests.given
+import riichinexus.microservices.tournament.tables.settlement.TournamentSettlementTable
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 
@@ -39,8 +37,12 @@ final case class TournamentSettlementListAPIMessage(
       context: ApiPlanContext,
       resolved: ResolvedSettlementListQuery
   ): Vector[TournamentSettlementSnapshot] =
-    context.support.tournamentModule.tables
-      .listSettlements(resolved.tournamentId, resolved.query)
+    TournamentSettlementTable
+      .findByTournament(context.connection, resolved.tournamentId)
+      .filter(snapshot => resolved.query.stageId.forall(_ == snapshot.stageId))
+      .filter(snapshot => resolved.query.status.forall(_ == snapshot.status))
+      .filter(snapshot => resolved.query.championId.forall(_ == snapshot.championId))
+      .sortBy(snapshot => (snapshot.generatedAt, snapshot.revision))
 
   private def page(
       items: Vector[TournamentSettlementView],

@@ -19,11 +19,11 @@ final case class AppealFileAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[AppealTicketView] =
     for
-      actor <- IO(context.support.principal(request.player))
+      actor <- IO(context.principal(request.player))
       createdAt <- IO.realTimeInstant
       module = context.support.tournamentAppealModule
       command <- IO(resolveCommand(actor, createdAt))
-      ticket <- IO(fileAppeal(module, command))
+      ticket <- IO(fileAppeal(context.connection, module, command))
     yield AppealTicketView.fromDomain(ticket)
 
   private def resolveCommand(actor: AccessPrincipal, createdAt: Instant): FileAppealCommand =
@@ -39,10 +39,12 @@ final case class AppealFileAPIMessage(
     )
 
   private def fileAppeal(
+      connection: java.sql.Connection,
       module: TournamentAppealModuleContext,
       command: FileAppealCommand
   ): AppealTicket =
     module.service.fileAppeal(
+      connection = connection,
       tableId = command.tableId,
       openedBy = command.openedBy,
       description = command.description,

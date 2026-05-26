@@ -3,6 +3,7 @@ package riichinexus.domain.event
 import java.time.Instant
 
 import riichinexus.domain.model.*
+import riichinexus.microservices.dictionary.objects.GlobalDictionaryEntry
 
 sealed trait DomainEvent:
   def occurredAt: Instant

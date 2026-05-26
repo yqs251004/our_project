@@ -7,9 +7,11 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.player.objects.*
 import riichinexus.domain.service.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.objects.apiTypes.{Club as ClubResponse}
+import riichinexus.microservices.club.objects.{Club as ClubResponse}
+import riichinexus.microservices.player.tables.player.PlayerTable
 import upickle.default.*
 
 final case class AssignClubAdminAPIMessage(
@@ -20,7 +22,7 @@ final case class AssignClubAdminAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubResponse] =
     for
-      actor <- IO(context.support.principal(PlayerId(operatorId)))
+      actor <- IO(context.principal(PlayerId(operatorId)))
       grantedAt <- IO.realTimeInstant
       module = context.support.clubModule
       command = AssignClubAdminCommand(
@@ -31,21 +33,23 @@ final case class AssignClubAdminAPIMessage(
       )
       club <- IO {
         module.transactionManager.inTransaction {
-          assignAdmin(module, command)
+          assignAdmin(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
     yield ClubResponse.fromDomain(club)
 
   private def assignAdmin(
+      connection: java.sql.Connection,
       module: ClubModuleContext,
       command: AssignClubAdminCommand
   ): Option[Club] =
     for
       club <- module.clubRepository.findById(command.clubId)
-      player <- module.playerRepository.findById(command.playerId)
+      player <- PlayerTable.findById(connection, command.playerId)
     yield
       ensureAdminCanBeAssigned(module, club, player, command)
-      module.playerRepository.save(
+      PlayerTable.save(
+        connection,
         player.grantRole(RoleGrant.clubAdmin(command.clubId, command.grantedAt, command.actor.playerId))
       )
       module.clubRepository.save(club.grantAdmin(command.playerId))

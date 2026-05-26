@@ -11,7 +11,7 @@ import munit.FunSuite
 import riichinexus.api.{ApiRuntimeContext, ApiServerConfig, RiichiNexusApiServer}
 import riichinexus.bootstrap.ApplicationContext
 import riichinexus.domain.model.*
-import riichinexus.microservices.opsanalytics.objects.apiTypes.PerformanceDiagnosticsSnapshot
+import riichinexus.microservices.opsanalytics.objects.PerformanceDiagnosticsSnapshot
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.dictionary.objects.DictionaryTestClient
 import riichinexus.system.objects.PagedResponse

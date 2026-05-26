@@ -5,8 +5,9 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.tournament.appeal.objects.*
 import riichinexus.microservices.tournament.appeal.objects.apiTypes.*
+import riichinexus.microservices.tournament.appeal.objects.apiTypes.*
+import riichinexus.microservices.tournament.appeal.tables.appealticket.AppealTicketTable
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 
@@ -39,7 +40,19 @@ final case class AppealListAPIMessage(
     )
 
   private def listAppeals(context: ApiPlanContext, resolved: ResolvedAppealListQuery): Vector[AppealTicket] =
-    context.support.tournamentAppealModule.tables.listAppeals(resolved.query)
+    val asOf = resolved.query.asOf.getOrElse(java.time.Instant.now())
+    AppealTicketTable.findAll(context.connection)
+      .filter(ticket => resolved.query.status.forall(_ == ticket.status))
+      .filter(ticket => resolved.query.priority.forall(_ == ticket.priority))
+      .filter(ticket => resolved.query.tournamentId.forall(_ == ticket.tournamentId))
+      .filter(ticket => resolved.query.stageId.forall(_ == ticket.stageId))
+      .filter(ticket => resolved.query.tableId.forall(_ == ticket.tableId))
+      .filter(ticket => resolved.query.openedBy.forall(_ == ticket.openedBy))
+      .filter(ticket => resolved.query.assigneeId.forall(ticket.assigneeId.contains))
+      .filter(ticket => !resolved.query.overdueOnly || ticket.dueAt.exists(_.isBefore(asOf)))
+      .filter(ticket => resolved.query.dueBefore.forall(limit => ticket.dueAt.exists(dueAt => !dueAt.isAfter(limit))))
+      .filter(ticket => resolved.query.dueAfter.forall(limit => ticket.dueAt.exists(dueAt => !dueAt.isBefore(limit))))
+      .sortBy(ticket => (ticket.updatedAt, ticket.id.value))
 
   private def page(items: Vector[AppealTicketView], resolved: ResolvedAppealListQuery): PagedResponse[AppealTicketView] =
     val resolvedLimit = resolved.query.limit.getOrElse(20)

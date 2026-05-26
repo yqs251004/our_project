@@ -1,19 +1,10 @@
 package riichinexus.application.ports
 
 import riichinexus.domain.model.*
-
-trait PlayerRepository:
-  def save(player: Player): Player
-  def findById(id: PlayerId): Option[Player]
-  def findByUserId(userId: String): Option[Player]
-  def findAll(): Vector[Player]
-
-  def findByIds(ids: Vector[PlayerId]): Vector[Player] =
-    val allowed = ids.toSet
-    findAll().filter(player => allowed.contains(player.id))
-
-  def findByClub(clubId: ClubId): Vector[Player] =
-    findAll().filter(_.boundClubIds.contains(clubId))
+import riichinexus.microservices.auth.objects.{AccountCredential, AuthenticatedSession}
+import riichinexus.microservices.dictionary.objects.{DictionaryNamespaceRegistration, GlobalDictionaryEntry}
+import riichinexus.microservices.opsanalytics.objects.*
+import riichinexus.microservices.player.objects.Player
 
 trait AccountCredentialRepository:
   def save(credential: AccountCredential): AccountCredential

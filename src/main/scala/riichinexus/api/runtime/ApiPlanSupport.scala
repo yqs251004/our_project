@@ -1,5 +1,6 @@
 package riichinexus.api.runtime
 
+import java.sql.Connection
 import java.time.Instant
 import java.util.NoSuchElementException
 
@@ -8,7 +9,10 @@ import scala.util.Try
 import riichinexus.bootstrap.*
 import riichinexus.domain.model.*
 import riichinexus.domain.service.AuthorizationService
-import riichinexus.microservices.auth.objects.apiTypes.*
+import riichinexus.microservices.auth.objects.*
+import riichinexus.microservices.auth.tables.guestsession.GuestSessionTable
+import riichinexus.microservices.player.objects.Player
+import riichinexus.microservices.player.tables.player.PlayerTable
 
 final class ApiPlanSupport(
     val executionContext: ApiExecutionContext
@@ -25,23 +29,23 @@ final class ApiPlanSupport(
   val authorizationService: AuthorizationService = executionContext.authorizationService
   val storageLabel: String = executionContext.storageLabel
 
-  def principal(playerId: PlayerId): AccessPrincipal =
-    authModule.playerTable
-      .find(playerId)
+  def principal(connection: Connection, playerId: PlayerId): AccessPrincipal =
+    PlayerTable
+      .findById(connection, playerId)
       .map(_.asPrincipal)
       .getOrElse(throw NoSuchElementException(s"Player ${playerId.value} was not found"))
 
-  def guestPrincipal(sessionId: GuestSessionId): AccessPrincipal =
-    touchActiveGuestSession(sessionId)
+  def guestPrincipal(connection: Connection, sessionId: GuestSessionId): AccessPrincipal =
+    touchActiveGuestSession(connection, sessionId)
       .map(AccessPrincipal.guest)
       .getOrElse(throw NoSuchElementException(s"Guest session ${sessionId.value} was not found"))
 
-  def requestActor(guestSessionId: Option[GuestSessionId], operatorId: Option[PlayerId]): AccessPrincipal =
+  def requestActor(connection: Connection, guestSessionId: Option[GuestSessionId], operatorId: Option[PlayerId]): AccessPrincipal =
     if guestSessionId.nonEmpty && operatorId.nonEmpty then
       throw IllegalArgumentException("guestSessionId and operatorId cannot be provided together")
 
-    guestSessionId.map(guestPrincipal)
-      .orElse(operatorId.map(principal))
+    guestSessionId.map(guestPrincipal(connection, _))
+      .orElse(operatorId.map(principal(connection, _)))
       .getOrElse(AccessPrincipal.guest())
 
   def requirePermission(
@@ -60,6 +64,7 @@ final class ApiPlanSupport(
     )
 
   def resolveCurrentSessionView(
+      connection: Connection,
       operatorId: Option[PlayerId],
       guestSessionId: Option[GuestSessionId]
   ): CurrentSessionView =
@@ -67,7 +72,7 @@ final class ApiPlanSupport(
       throw IllegalArgumentException("guestSessionId and operatorId cannot be provided together")
 
     operatorId.map(playerId =>
-      authModule.playerTable.find(playerId)
+      PlayerTable.findById(connection, playerId)
         .getOrElse(throw NoSuchElementException(s"Player ${playerId.value} was not found"))
     ) match
       case Some(player) =>
@@ -81,7 +86,7 @@ final class ApiPlanSupport(
         )
       case None =>
         guestSessionId.map(sessionId =>
-          touchActiveGuestSession(sessionId)
+          touchActiveGuestSession(connection, sessionId)
             .getOrElse(throw NoSuchElementException(s"Guest session ${sessionId.value} was not found"))
         ) match
           case Some(session) =>
@@ -130,13 +135,14 @@ final class ApiPlanSupport(
     value.toLowerCase.contains(fragment.toLowerCase)
 
   private def touchActiveGuestSession(
+      connection: Connection,
       sessionId: GuestSessionId,
       seenAt: Instant = Instant.now()
   ): Option[GuestAccessSession] =
     authModule.transactionManager.inTransaction {
-      authModule.guestSessionRepository.findById(sessionId).map { session =>
+      GuestSessionTable.findById(connection, sessionId).map { session =>
         require(session.canAuthenticate(seenAt), inactiveSessionMessage(session, seenAt))
-        authModule.guestSessionRepository.save(session.touch(seenAt))
+        GuestSessionTable.save(connection, session.touch(seenAt))
       }
     }
 

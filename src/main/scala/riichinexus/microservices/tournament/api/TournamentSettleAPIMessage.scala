@@ -11,19 +11,17 @@ import riichinexus.domain.event.*
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.dictionary.domain.RuntimeDictionary
-import riichinexus.microservices.tournament.objects.*
-import riichinexus.microservices.tournament.objects.apiTypes.{Table as _, TableSeat as _, StageStandingEntry as _, StageRankingSnapshot as _, StageAdvancementSnapshot as _, KnockoutBracketSlot as _, KnockoutBracketResult as _, KnockoutBracketMatch as _, KnockoutBracketRound as _, KnockoutBracketSnapshot as _, *}
+import riichinexus.microservices.player.tables.player.PlayerTable
+import riichinexus.microservices.tournament.objects.apiTypes.*
+import riichinexus.microservices.tournament.objects.apiTypes.*
 import riichinexus.microservices.tournament.objects.apiTypes.ManagementRequests.given
-import riichinexus.microservices.tournament.objects.apiTypes.SettlementRequests.given
-import riichinexus.microservices.tournament.objects.apiTypes.StageRequests.given
-import riichinexus.microservices.tournament.objects.apiTypes.TableRequests.given
 import upickle.default.*
 
 final case class TournamentSettleAPIMessage(tournamentId: String, request: SettleTournamentRequest) extends APIMessage[TournamentSettlementView] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[TournamentSettlementView] =
     for
-      actor <- IO(context.support.principal(request.operator))
+      actor <- IO(context.principal(request.operator))
       settledAt <- IO.realTimeInstant
       module = context.support.tournamentModule
       command = SettleTournamentCommand(
@@ -34,12 +32,13 @@ final case class TournamentSettleAPIMessage(tournamentId: String, request: Settl
       )
       snapshot <- IO {
         module.transactionManager.inTransaction {
-          settleTournament(module, command)
+          settleTournament(context.connection, module, command)
         }
       }
     yield TournamentSettlementView.fromDomain(snapshot)
 
   private def settleTournament(
+      connection: java.sql.Connection,
       module: TournamentModuleContext,
       command: SettleTournamentCommand
   ): TournamentSettlementSnapshot =
@@ -54,12 +53,13 @@ final case class TournamentSettleAPIMessage(tournamentId: String, request: Settl
     )
 
     val ranking = module.stageQueries.stageStandings(
+      connection,
       command.tournamentId,
       command.request.stageId,
       command.settledAt
     )
     val resolvedPlayers =
-      resolveSettlementPlayers(module, command, finalStage, ranking)
+      resolveSettlementPlayers(connection, module, command, finalStage, ranking)
     val previousSnapshot =
       module.tournamentSettlementRepository.findByTournamentAndStage(command.tournamentId, command.request.stageId)
 
@@ -68,6 +68,7 @@ final case class TournamentSettleAPIMessage(tournamentId: String, request: Settl
 
     val snapshot = buildSettlementSnapshot(
       module = module,
+      connection = connection,
       command = command,
       ranking = ranking,
       resolvedPlayers = resolvedPlayers,
@@ -98,23 +99,25 @@ final case class TournamentSettleAPIMessage(tournamentId: String, request: Settl
       .getOrElse(throw NoSuchElementException(s"Stage ${stageId.value} was not found"))
 
   private def resolveSettlementPlayers(
+      connection: java.sql.Connection,
       module: TournamentModuleContext,
       command: SettleTournamentCommand,
       finalStage: TournamentStage,
       ranking: StageRankingSnapshot
   ): Vector[PlayerId] =
     if isKnockoutStage(finalStage) then
-      resolveKnockoutSettlementPlayers(module, command, finalStage, ranking)
+      resolveKnockoutSettlementPlayers(connection, module, command, finalStage, ranking)
     else ranking.entries.map(_.playerId)
 
   private def resolveKnockoutSettlementPlayers(
+      connection: java.sql.Connection,
       module: TournamentModuleContext,
       command: SettleTournamentCommand,
       finalStage: TournamentStage,
       ranking: StageRankingSnapshot
   ): Vector[PlayerId] =
     val bracket =
-      module.stageQueries.stageKnockoutBracket(command.tournamentId, command.request.stageId, command.settledAt)
+      module.stageQueries.stageKnockoutBracket(connection, command.tournamentId, command.request.stageId, command.settledAt)
     val championshipFinal = bracket.rounds
       .flatMap(_.matches)
       .find(matchNode => matchNode.lane == KnockoutLane.Championship && matchNode.nextMatchId.isEmpty)
@@ -171,6 +174,7 @@ final case class TournamentSettleAPIMessage(tournamentId: String, request: Settl
 
   private def buildSettlementSnapshot(
       module: TournamentModuleContext,
+      connection: java.sql.Connection,
       command: SettleTournamentCommand,
       ranking: StageRankingSnapshot,
       resolvedPlayers: Vector[PlayerId],
@@ -208,7 +212,7 @@ final case class TournamentSettleAPIMessage(tournamentId: String, request: Settl
       clubShareRatio = request.clubShareRatio,
       adjustments = adjustments,
       entries = buildSettlementEntries(
-        module = module,
+        connection = connection,
         request = request,
         resolvedPlayers = resolvedPlayers,
         baseAwards = baseAwards,
@@ -222,7 +226,7 @@ final case class TournamentSettleAPIMessage(tournamentId: String, request: Settl
     )
 
   private def buildSettlementEntries(
-      module: TournamentModuleContext,
+      connection: java.sql.Connection,
       request: SettleTournamentRequest,
       resolvedPlayers: Vector[PlayerId],
       baseAwards: Vector[Long],
@@ -239,7 +243,9 @@ final case class TournamentSettleAPIMessage(tournamentId: String, request: Settl
       val deductionAmount =
         adjustmentsByPlayer.getOrElse(playerId, Vector.empty).filter(_.amount < 0L).map(adjustment => math.abs(adjustment.amount)).sum
       val netAwardAmount = baseAwards.lift(index).getOrElse(0L) + adjustmentAmount - deductionAmount
-      val clubId = module.playerRepository.findById(playerId).flatMap(_.boundClubIds.headOption)
+      val clubId = PlayerTable
+        .findById(connection, playerId)
+        .flatMap(_.boundClubIds.headOption)
       val clubShareAmount =
         if clubId.nonEmpty then math.floor(netAwardAmount.toDouble * request.clubShareRatio).toLong
         else 0L

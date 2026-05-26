@@ -4,8 +4,7 @@ import cats.effect.IO
 
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.service.GlobalDictionaryRegistry
-import riichinexus.microservices.dictionary.objects.apiTypes.*
-import riichinexus.microservices.dictionary.objects.apiTypes.DictionaryResponses.given
+import riichinexus.microservices.dictionary.objects.*
 import upickle.default.*
 
 final case class DictionarySchemaAPIMessage() extends APIMessage[GlobalDictionarySchemaView] derives ReadWriter:
@@ -15,6 +14,6 @@ final case class DictionarySchemaAPIMessage() extends APIMessage[GlobalDictionar
       schema <- IO(GlobalDictionaryRegistry.schemaView)
     yield
       GlobalDictionarySchemaView(
-        entries = schema.entries.map(GlobalDictionarySchemaEntry.fromDomain),
+        entries = schema.entries.map(GlobalDictionarySchemaEntryView.fromDomain),
         unknownKeyPolicy = schema.unknownKeyPolicy
       )

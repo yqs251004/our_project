@@ -5,6 +5,7 @@ import java.time.Instant
 import cats.effect.IO
 import riichinexus.api.{APIWithTokenMessage, ApiPlanContext}
 import riichinexus.microservices.auth.objects.apiTypes.ApiMessage
+import riichinexus.microservices.auth.tables.authenticatedsession.AuthenticatedSessionTable
 import upickle.default.*
 
 final case class LogoutAuthAPIMessage() extends APIWithTokenMessage[ApiMessage] derives ReadWriter:
@@ -23,7 +24,7 @@ final case class LogoutAuthAPIMessage() extends APIWithTokenMessage[ApiMessage] 
 
   private def logout(context: ApiPlanContext, token: String, loggedOutAt: Instant): Unit =
     val module = context.support.authModule
-    module.authenticatedSessionRepository.findByToken(token).foreach { session =>
+    AuthenticatedSessionTable.findByToken(context.connection, token).foreach { session =>
       if session.canAuthenticate(loggedOutAt) then
-        module.authenticatedSessionRepository.save(session.revoke(loggedOutAt))
+        AuthenticatedSessionTable.save(context.connection, session.revoke(loggedOutAt))
     }

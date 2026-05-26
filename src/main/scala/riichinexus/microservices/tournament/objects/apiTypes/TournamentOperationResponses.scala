@@ -1,23 +1,6 @@
 package riichinexus.microservices.tournament.objects.apiTypes
-
 import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.*
-
-type TournamentStageDirectoryResponse = TournamentStageDirectoryEntry
-type TournamentStageSummaryResponse = TournamentStageSummaryView
-type TournamentSummaryResponse = TournamentSummaryView
-type TournamentWhitelistEntryResponse = TournamentWhitelistEntryView
-type TournamentTableResponse = TournamentTableView
-type TournamentMatchRecordResponse = TournamentMatchRecordView
-type TournamentPaifuSummaryResponse = TournamentPaifuSummaryView
-type TournamentSettlementResponse = TournamentSettlementView
-type TournamentParticipantClubResponse = TournamentParticipantClubView
-type TournamentParticipantPlayerResponse = TournamentParticipantPlayerView
-type TournamentWhitelistSummaryResponse = TournamentWhitelistSummaryView
-type TournamentLineupSubmissionResponse = TournamentLineupSubmissionView
-type TournamentOperationsStageResponse = TournamentOperationsStageView
-type TournamentDetailResponse = TournamentDetailView
-type TournamentMutationResponse = TournamentMutationView
 
 object TournamentOperationResponses:
   given ReadWriter[TournamentStageDirectoryEntry] = macroRW

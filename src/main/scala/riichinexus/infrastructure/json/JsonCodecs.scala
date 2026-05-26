@@ -5,6 +5,22 @@ import scala.annotation.targetName
 
 import riichinexus.domain.event.*
 import riichinexus.domain.model.*
+import riichinexus.microservices.player.objects.*
+import riichinexus.microservices.auth.objects.{AccountCredential, AuthenticatedSession, SessionPrincipalKind}
+import riichinexus.microservices.club.objects.ClubApplicationStatus
+import riichinexus.microservices.dictionary.objects.{
+  DictionaryNamespaceRegistration,
+  DictionaryNamespaceReminderAction,
+  DictionaryNamespaceReminderKind,
+  DictionaryNamespaceReviewStatus,
+  GlobalDictionaryEntry,
+  GlobalDictionarySchema,
+  GlobalDictionarySchemaEntry,
+  GlobalDictionaryValueType
+}
+import riichinexus.microservices.opsanalytics.objects.*
+import riichinexus.microservices.player.objects.{Player, PlayerStatus, RankPlatform, RankSnapshot}
+import riichinexus.microservices.tournament.objects.{SeatWind, TournamentFormat}
 import upickle.default.*
 
 object JsonCodecs:
@@ -13,6 +29,15 @@ object JsonCodecs:
       toStringValue: A => String
   ): ReadWriter[A] =
     readwriter[String].bimap[A](toStringValue, fromString)
+
+  private def eitherStringEnumReadWriter[A](
+      fromString: String => Either[String, A],
+      toStringValue: A => String
+  ): ReadWriter[A] =
+    stringEnumReadWriter(
+      value => fromString(value).fold(message => throw IllegalArgumentException(message), identity),
+      toStringValue
+    )
 
   given [A: ReadWriter]: ReadWriter[Option[A]] =
     readwriter[ujson.Value].bimap[Option[A]](
@@ -83,18 +108,32 @@ object JsonCodecs:
   given ReadWriter[RoleGrant] = macroRW
   given ReadWriter[AccountCredential] = macroRW
   given ReadWriter[GuestAccessSession] = macroRW
+  given ReadWriter[SessionPrincipalKind] =
+    eitherStringEnumReadWriter(
+      SessionPrincipalKind.fromString,
+      SessionPrincipalKind.toString
+    )
   given ReadWriter[AuthenticatedSession] = macroRW
   given ReadWriter[AccessPrincipal] = macroRW
 
   given ReadWriter[RankPlatform] =
-    stringEnumReadWriter(RankPlatform.valueOf, _.toString)
+    eitherStringEnumReadWriter(
+      RankPlatform.fromString,
+      RankPlatform.toString
+    )
   given ReadWriter[RankSnapshot] = macroRW
   given ReadWriter[PlayerStatus] =
-    stringEnumReadWriter(PlayerStatus.valueOf, _.toString)
+    eitherStringEnumReadWriter(
+      PlayerStatus.fromString,
+      PlayerStatus.toString
+    )
   given ReadWriter[Player] = macroRW
 
-  given ReadWriter[ClubMembershipApplicationStatus] =
-    stringEnumReadWriter(ClubMembershipApplicationStatus.valueOf, _.toString)
+  given ReadWriter[ClubApplicationStatus] =
+    eitherStringEnumReadWriter(
+      ClubApplicationStatus.fromString,
+      ClubApplicationStatus.toString
+    )
   given ReadWriter[ClubMembershipApplication] = macroRW
   given ReadWriter[ClubPrivilegeCode] =
     stringEnumReadWriter(ClubPrivilegeCode.valueOf, _.toString)
@@ -110,14 +149,23 @@ object JsonCodecs:
   given ReadWriter[ClubHonor] = macroRW
   given ReadWriter[GlobalDictionaryEntry] = macroRW
   given ReadWriter[GlobalDictionaryValueType] =
-    stringEnumReadWriter(GlobalDictionaryValueType.valueOf, _.toString)
+    eitherStringEnumReadWriter(
+      GlobalDictionaryValueType.fromString,
+      GlobalDictionaryValueType.toString
+    )
   given ReadWriter[GlobalDictionarySchemaEntry] = macroRW
   given ReadWriter[GlobalDictionarySchema] = macroRW
   given ReadWriter[DictionaryNamespaceReviewStatus] =
-    stringEnumReadWriter(DictionaryNamespaceReviewStatus.valueOf, _.toString)
+    eitherStringEnumReadWriter(
+      DictionaryNamespaceReviewStatus.fromString,
+      DictionaryNamespaceReviewStatus.toString
+    )
   given ReadWriter[DictionaryNamespaceRegistration] = macroRW
   given ReadWriter[DictionaryNamespaceReminderKind] =
-    stringEnumReadWriter(DictionaryNamespaceReminderKind.valueOf, _.toString)
+    eitherStringEnumReadWriter(
+      DictionaryNamespaceReminderKind.fromString,
+      DictionaryNamespaceReminderKind.toString
+    )
   given ReadWriter[DictionaryNamespaceReminderAction] = macroRW
   given ReadWriter[AuditEventEntry] = macroRW
   given ReadWriter[Club] = macroRW
@@ -126,6 +174,11 @@ object JsonCodecs:
     stringEnumReadWriter(TournamentStatus.valueOf, _.toString)
   given ReadWriter[StageFormat] =
     stringEnumReadWriter(StageFormat.valueOf, _.toString)
+  given ReadWriter[TournamentFormat] =
+    eitherStringEnumReadWriter(
+      TournamentFormat.fromString,
+      TournamentFormat.toString
+    )
   given ReadWriter[StageStatus] =
     stringEnumReadWriter(StageStatus.valueOf, _.toString)
   given ReadWriter[AdvancementRuleType] =
@@ -136,7 +189,10 @@ object JsonCodecs:
   given ReadWriter[KnockoutLane] =
     stringEnumReadWriter(KnockoutLane.valueOf, _.toString)
   given ReadWriter[SeatWind] =
-    stringEnumReadWriter(SeatWind.valueOf, _.toString)
+    eitherStringEnumReadWriter(
+      SeatWind.fromString,
+      SeatWind.toString
+    )
   given ReadWriter[StageLineupSeat] = macroRW
   given ReadWriter[StageLineupSubmission] = macroRW
   given ReadWriter[StageTablePlan] = macroRW
@@ -301,25 +357,22 @@ object JsonCodecs:
   given ReadWriter[Paifu] = macroRW
 
   given ReadWriter[DashboardOwner] =
-    readwriter[String].bimap[DashboardOwner](
-      {
-        case DashboardOwner.Player(playerId) => s"player:${playerId.value}"
-        case DashboardOwner.Club(clubId)     => s"club:${clubId.value}"
-      },
-      { raw =>
-        raw.split(":", 2).toList match
-          case "player" :: value :: Nil => DashboardOwner.Player(PlayerId(value))
-          case "club" :: value :: Nil   => DashboardOwner.Club(ClubId(value))
-          case _ =>
-            throw IllegalArgumentException(s"Unsupported dashboard owner value: $raw")
-      }
+    eitherStringEnumReadWriter(
+      DashboardOwner.fromString,
+      DashboardOwner.toString
     )
   given ReadWriter[Dashboard] = macroRW
   given ReadWriter[AdvancedStatsBoard] = macroRW
   given ReadWriter[AdvancedStatsRecomputeTaskStatus] =
-    stringEnumReadWriter(AdvancedStatsRecomputeTaskStatus.valueOf, _.toString)
+    eitherStringEnumReadWriter(
+      AdvancedStatsRecomputeTaskStatus.fromString,
+      AdvancedStatsRecomputeTaskStatus.toString
+    )
   given ReadWriter[AdvancedStatsBackfillMode] =
-    stringEnumReadWriter(AdvancedStatsBackfillMode.valueOf, _.toString)
+    eitherStringEnumReadWriter(
+      AdvancedStatsBackfillMode.fromString,
+      AdvancedStatsBackfillMode.toString
+    )
   given ReadWriter[AdvancedStatsRecomputeTask] = macroRW
   given ReadWriter[AdvancedStatsTaskQueueSummary] = macroRW
   given ReadWriter[EventCascadeConsumer] =

@@ -8,20 +8,19 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.application.changes.DomainChangeInterpreter
 import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.player.objects.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.tournament.objects.*
-import riichinexus.microservices.tournament.objects.apiTypes.{Table as _, TableSeat as _, StageStandingEntry as _, StageRankingSnapshot as _, StageAdvancementSnapshot as _, KnockoutBracketSlot as _, KnockoutBracketResult as _, KnockoutBracketMatch as _, KnockoutBracketRound as _, KnockoutBracketSnapshot as _, *}
+import riichinexus.microservices.player.tables.player.PlayerTable
+import riichinexus.microservices.tournament.objects.apiTypes.*
+import riichinexus.microservices.tournament.objects.apiTypes.*
 import riichinexus.microservices.tournament.objects.apiTypes.ManagementRequests.given
-import riichinexus.microservices.tournament.objects.apiTypes.SettlementRequests.given
-import riichinexus.microservices.tournament.objects.apiTypes.StageRequests.given
-import riichinexus.microservices.tournament.objects.apiTypes.TableRequests.given
 import upickle.default.*
 
 final case class TournamentAssignAdminAPIMessage(tournamentId: String, request: AssignTournamentAdminRequest) extends APIMessage[TournamentSummaryView] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[TournamentSummaryView] =
     for
-      actor <- IO(context.support.principal(request.operator))
+      actor <- IO(context.principal(request.operator))
       grantedAt <- IO.realTimeInstant
       module = context.support.tournamentModule
       command = AssignTournamentAdminCommand(
@@ -32,21 +31,22 @@ final case class TournamentAssignAdminAPIMessage(tournamentId: String, request: 
       )
       tournament <- IO {
         module.transactionManager.inTransaction {
-          assignAdmin(module, command)
+          assignAdmin(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
     yield TournamentSummaryView.fromDomain(tournament)
 
   private def assignAdmin(
+      connection: java.sql.Connection,
       module: TournamentModuleContext,
       command: AssignTournamentAdminCommand
   ): Option[Tournament] =
     for
       tournament <- module.tournamentRepository.findById(command.tournamentId)
-      player <- module.playerRepository.findById(command.playerId)
+      player <- PlayerTable.findById(connection, command.playerId)
     yield
       ensureAdminCanBeAssigned(module, player, command)
-      commitAdminAssignment(module, tournament, player, command)
+      commitAdminAssignment(connection, module, tournament, player, command)
 
   private def ensureAdminCanBeAssigned(
       module: TournamentModuleContext,
@@ -62,6 +62,7 @@ final case class TournamentAssignAdminAPIMessage(tournamentId: String, request: 
     )
 
   private def commitAdminAssignment(
+      connection: java.sql.Connection,
       module: TournamentModuleContext,
       tournament: Tournament,
       player: Player,
@@ -72,7 +73,8 @@ final case class TournamentAssignAdminAPIMessage(tournamentId: String, request: 
       .commitAudited(
         aggregate = tournament.assignAdmin(command.playerId),
         persist = nextTournament =>
-          module.playerRepository.save(
+          PlayerTable.save(
+            connection,
             player.grantRole(
               RoleGrant.tournamentAdmin(command.tournamentId, command.grantedAt, command.actor.playerId)
             )

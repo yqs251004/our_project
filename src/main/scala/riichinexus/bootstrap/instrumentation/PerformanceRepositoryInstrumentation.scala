@@ -3,6 +3,7 @@ package riichinexus.bootstrap.instrumentation
 import riichinexus.bootstrap.ApplicationRepositoryContext
 import riichinexus.application.ports.*
 import riichinexus.domain.model.*
+import riichinexus.microservices.dictionary.objects.GlobalDictionaryEntry
 
 object PerformanceRepositoryInstrumentation:
   def instrument(
@@ -10,8 +11,6 @@ object PerformanceRepositoryInstrumentation:
       diagnostics: PerformanceDiagnosticsService
   ): ApplicationRepositoryContext =
     repositories.copy(
-      playerRepository =
-        new InstrumentedPlayerRepository(repositories.playerRepository, diagnostics),
       clubRepository =
         new InstrumentedClubRepository(repositories.clubRepository, diagnostics),
       globalDictionaryRepository =
@@ -40,20 +39,6 @@ private trait RepositoryInstrumentationProbe:
         operation = operation,
         durationNanos = System.nanoTime() - startedAt
       )
-
-private final class InstrumentedPlayerRepository(
-    delegate: PlayerRepository,
-    protected val diagnostics: PerformanceDiagnosticsService
-) extends PlayerRepository
-    with RepositoryInstrumentationProbe:
-  protected val repositoryName = "PlayerRepository"
-
-  def save(player: Player): Player = instrument("save")(delegate.save(player))
-  def findById(id: PlayerId): Option[Player] = instrument("findById")(delegate.findById(id))
-  def findByUserId(userId: String): Option[Player] = instrument("findByUserId")(delegate.findByUserId(userId))
-  def findAll(): Vector[Player] = instrument("findAll")(delegate.findAll())
-  override def findByIds(ids: Vector[PlayerId]): Vector[Player] = instrument("findByIds")(delegate.findByIds(ids))
-  override def findByClub(clubId: ClubId): Vector[Player] = instrument("findByClub")(delegate.findByClub(clubId))
 
 private final class InstrumentedClubRepository(
     delegate: ClubRepository,

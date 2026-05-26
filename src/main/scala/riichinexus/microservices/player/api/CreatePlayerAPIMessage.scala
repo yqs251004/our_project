@@ -2,22 +2,25 @@ package riichinexus.microservices.player.api
 
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
-import riichinexus.microservices.player.objects.apiTypes.{CreatePlayerRequest, PlayerProfileView, PlayerResponse}
-import riichinexus.microservices.player.objects.apiTypes.PlayerRequests.given
+import riichinexus.microservices.player.objects.PlayerProfileView
+import riichinexus.microservices.player.objects.apiTypes.CreatePlayerRequest
 import upickle.default.*
 
 final case class CreatePlayerAPIMessage(
     request: CreatePlayerRequest
-) extends APIMessage[PlayerResponse] derives ReadWriter:
+) extends APIMessage[PlayerProfileView] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[PlayerResponse] =
+  override def plan(context: ApiPlanContext): IO[PlayerProfileView] =
     for
-      player <- IO(
+      registeredAt <- IO.realTimeInstant
+      player <- IO {
         context.support.playerModule.registration.registerPlayer(
+          connection = context.connection,
           userId = request.userId,
           nickname = request.nickname,
           rank = request.toRankSnapshot,
+          registeredAt = registeredAt,
           initialElo = request.initialElo
         )
-      )
+      }
     yield PlayerProfileView.fromDomain(player)

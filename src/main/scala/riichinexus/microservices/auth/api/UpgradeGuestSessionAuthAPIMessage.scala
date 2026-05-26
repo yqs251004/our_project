@@ -9,8 +9,11 @@ import riichinexus.application.changes.{DomainChange, DomainChangeInterpreter}
 import riichinexus.application.ports.ClubRepository
 import riichinexus.bootstrap.AuthModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.player.objects.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.auth.objects.apiTypes.GuestSessionResponse
+import riichinexus.microservices.auth.tables.guestsession.GuestSessionTable
+import riichinexus.microservices.player.tables.player.PlayerTable
 import upickle.default.*
 
 final case class UpgradeGuestSessionAuthAPIMessage(
@@ -29,19 +32,20 @@ final case class UpgradeGuestSessionAuthAPIMessage(
       )
       session <- IO {
         module.transactionManager.inTransaction {
-          upgradeGuestSession(module, command)
+          upgradeGuestSession(context.connection, module, command)
         }
       }
     yield GuestSessionResponse.fromDomain(session)
 
   private def upgradeGuestSession(
+      connection: java.sql.Connection,
       module: AuthModuleContext,
       command: UpgradeGuestSessionCommand
   ): GuestAccessSession =
-    val session = module.guestSessionRepository.findById(command.sessionId)
+    val session = GuestSessionTable.findById(connection, command.sessionId)
       .getOrElse(throw NoSuchElementException(s"Guest session ${command.sessionId.value} was not found"))
-    val player = module.playerRepository
-      .findById(command.playerId)
+    val player = PlayerTable
+      .findById(connection, command.playerId)
       .getOrElse(throw NoSuchElementException(s"Player ${command.playerId.value} was not found"))
     require(
       player.status == PlayerStatus.Active,
@@ -54,7 +58,7 @@ final case class UpgradeGuestSessionAuthAPIMessage(
         DomainChange(
           aggregate = session.upgrade(command.playerId, command.upgradedAt),
           persist = upgradedSession =>
-            val savedSession = module.guestSessionRepository.save(upgradedSession)
+            val savedSession = GuestSessionTable.save(connection, upgradedSession)
             reconcileGuestApplications(module.clubRepository, command.sessionId, player)
             savedSession,
           auditEntries = savedSession =>

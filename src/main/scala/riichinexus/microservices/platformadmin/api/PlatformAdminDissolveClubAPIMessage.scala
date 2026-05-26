@@ -11,18 +11,20 @@ import riichinexus.bootstrap.PlatformAdminModuleContext
 import riichinexus.domain.event.ClubDissolved
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.club.tables.club.ClubTable
+import riichinexus.microservices.player.tables.player.PlayerTable
+import riichinexus.microservices.platformadmin.objects.PlatformAdminClubView
 import riichinexus.microservices.platformadmin.objects.apiTypes.*
-import riichinexus.microservices.platformadmin.objects.apiTypes.PlatformAdminResponses.given
 import upickle.default.*
 
 final case class PlatformAdminDissolveClubAPIMessage(
     clubId: ClubId,
     operatorId: PlayerId
-) extends APIMessage[PlatformAdminClubResponse] derives ReadWriter:
+) extends APIMessage[PlatformAdminClubView] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[PlatformAdminClubResponse] =
+  override def plan(context: ApiPlanContext): IO[PlatformAdminClubView] =
     for
-      actor <- IO(context.support.principal(operatorId))
+      actor <- IO(context.principal(operatorId))
       module = context.support.platformAdminModule
       request = DissolveClubRequest(operatorId = operatorId)
       dissolvedAt <- IO.realTimeInstant
@@ -34,20 +36,21 @@ final case class PlatformAdminDissolveClubAPIMessage(
       club <- IO {
         module.transactionManager
           .inTransaction {
-            dissolveClub(module, command)
+            dissolveClub(context.connection, module, command)
           }
           .getOrElse(throw NoSuchElementException(s"Club ${command.clubId.value} was not found"))
       }
     yield PlatformAdminClubView.fromDomain(club)
 
   private def dissolveClub(
+      connection: java.sql.Connection,
       module: PlatformAdminModuleContext,
       command: DissolveClubCommand
   ): Option[Club] =
     module.authorizationService.requirePermission(command.actor, Permission.DissolveClub)
-    module.tables.findClub(command.clubId).map { club =>
+    ClubTable.findById(connection, command.clubId).map { club =>
       ensureClubCanDissolve(club, command.clubId)
-      removeMembersFromClub(module, club, command.clubId)
+      removeMembersFromClub(connection, club, command.clubId)
       removeRelationsToClub(module, command.clubId)
       commitDissolvedClub(module, club, command)
     }
@@ -56,10 +59,11 @@ final case class PlatformAdminDissolveClubAPIMessage(
     if club.dissolvedAt.nonEmpty then
       throw IllegalArgumentException(s"Club ${clubId.value} has already been dissolved")
 
-  private def removeMembersFromClub(module: PlatformAdminModuleContext, club: Club, clubId: ClubId): Unit =
+  private def removeMembersFromClub(connection: java.sql.Connection, club: Club, clubId: ClubId): Unit =
     club.members.foreach { memberId =>
-      module.playerRepository.findById(memberId).foreach { player =>
-        module.playerRepository.save(
+      PlayerTable.findById(connection, memberId).foreach { player =>
+        PlayerTable.save(
+          connection,
           player
             .leaveClub(clubId)
             .revokeClubAdmin(clubId)

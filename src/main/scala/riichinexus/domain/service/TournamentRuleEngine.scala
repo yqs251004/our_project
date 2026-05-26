@@ -3,6 +3,7 @@ package riichinexus.domain.service
 import java.time.Instant
 
 import riichinexus.domain.model.*
+import riichinexus.microservices.player.objects.Player
 
 trait TournamentRuleEngine:
   def buildStageRanking(

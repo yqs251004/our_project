@@ -6,22 +6,26 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.opsanalytics.objects.apiTypes.{AdvancedStatsTaskQueueSummary as AdvancedStatsTaskQueueSummaryResponse}
+import riichinexus.microservices.opsanalytics.objects.{
+  AdvancedStatsRecomputeTask,
+  AdvancedStatsRecomputeTaskStatus,
+  AdvancedStatsTaskQueueSummary
+}
 import upickle.default.*
 
 final case class OpsAnalyticsAdvancedStatsSummaryAPIMessage(
     operatorId: PlayerId,
     asOf: Option[Instant] = None
-) extends APIMessage[AdvancedStatsTaskQueueSummaryResponse] derives ReadWriter:
+) extends APIMessage[AdvancedStatsTaskQueueSummary] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[AdvancedStatsTaskQueueSummaryResponse] =
+  override def plan(context: ApiPlanContext): IO[AdvancedStatsTaskQueueSummary] =
     for
-      operator <- IO(context.support.principal(operatorId))
+      operator <- IO(context.principal(operatorId))
       _ <- IO(requireOpsAdmin(context, operator))
       resolvedAsOf <- resolveAsOf
       tasks <- IO(context.support.opsAnalyticsModule.advancedStatsRecomputeTaskRepository.findAll())
       summary = buildSummary(tasks, resolvedAsOf)
-    yield AdvancedStatsTaskQueueSummaryResponse.fromDomain(summary)
+    yield summary
 
   private def resolveAsOf: IO[Instant] =
     asOf match

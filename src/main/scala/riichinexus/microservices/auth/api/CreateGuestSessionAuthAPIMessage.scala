@@ -10,6 +10,7 @@ import riichinexus.bootstrap.AuthModuleContext
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.auth.objects.apiTypes.GuestSessionResponse
+import riichinexus.microservices.auth.tables.guestsession.GuestSessionTable
 import upickle.default.*
 
 final case class CreateGuestSessionAuthAPIMessage(
@@ -29,12 +30,13 @@ final case class CreateGuestSessionAuthAPIMessage(
       )
       session <- IO {
         module.transactionManager.inTransaction {
-          createGuestSession(module, command)
+          createGuestSession(context.connection, module, command)
         }
       }
     yield GuestSessionResponse.fromDomain(session)
 
   private def createGuestSession(
+      connection: java.sql.Connection,
       module: AuthModuleContext,
       command: CreateGuestSessionCommand
   ): GuestAccessSession =
@@ -50,7 +52,7 @@ final case class CreateGuestSessionAuthAPIMessage(
       .commitWithinTransaction(
         DomainChange(
           aggregate = session,
-          persist = module.guestSessionRepository.save,
+          persist = GuestSessionTable.save(connection, _),
           auditEntries = savedSession =>
             Vector(
               AuditEventEntry(

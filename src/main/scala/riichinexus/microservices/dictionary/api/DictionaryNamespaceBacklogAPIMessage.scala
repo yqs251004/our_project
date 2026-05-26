@@ -4,13 +4,15 @@ import java.time.{Duration, Instant}
 
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
-import riichinexus.domain.model.{DictionaryNamespaceRegistration as DomainDictionaryNamespaceRegistration, *}
+import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.dictionary.objects.apiTypes.{
+import riichinexus.microservices.dictionary.objects.{
   DictionaryNamespaceBacklogView,
-  DictionaryNamespaceOwnerBacklog
+  DictionaryNamespaceOwnerBacklog,
+  DictionaryNamespaceRegistration,
+  DictionaryNamespaceReviewStatus
 }
-import riichinexus.microservices.dictionary.objects.apiTypes.DictionaryResponses.given
+import riichinexus.microservices.dictionary.tables.dictionarynamespace.DictionaryNamespaceTable
 import upickle.default.*
 
 final case class DictionaryNamespaceBacklogAPIMessage(
@@ -28,7 +30,7 @@ final case class DictionaryNamespaceBacklogAPIMessage(
 
   private def resolveCommand(context: ApiPlanContext, now: Instant): BacklogCommand =
     val module = context.support.dictionaryModule
-    val actor = context.support.principal(PlayerId(operatorId))
+    val actor = context.principal(PlayerId(operatorId))
     module.authorizationService.requirePermission(actor, Permission.ManageGlobalDictionary)
     BacklogCommand(
       asOf = asOf.filter(_.nonEmpty).map(Instant.parse).getOrElse(now),
@@ -38,12 +40,12 @@ final case class DictionaryNamespaceBacklogAPIMessage(
   private def listPendingNamespaces(
       context: ApiPlanContext,
       command: BacklogCommand
-  ): Vector[DomainDictionaryNamespaceRegistration] =
-    context.support.dictionaryModule.tables.listNamespaces()
+  ): Vector[DictionaryNamespaceRegistration] =
+    DictionaryNamespaceTable.findAll(context.connection)
       .filter(_.status == DictionaryNamespaceReviewStatus.Pending)
 
   private def buildBacklogView(
-      pending: Vector[DomainDictionaryNamespaceRegistration],
+      pending: Vector[DictionaryNamespaceRegistration],
       command: BacklogCommand
   ): DictionaryNamespaceBacklogView =
     val ownerBacklog = pending

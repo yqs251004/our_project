@@ -4,7 +4,7 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.objects.apiTypes.{ClubPrivilegeDefinition as ClubPrivilegeDefinitionResponse}
+import riichinexus.microservices.club.objects.{ClubPrivilegeDefinition as ClubPrivilegeDefinitionResponse}
 import upickle.default.*
 
 final case class ClubPrivilegeDefinitionsAPIMessage() extends APIMessage[Vector[ClubPrivilegeDefinitionResponse]] derives ReadWriter:

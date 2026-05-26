@@ -8,9 +8,11 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.application.changes.DomainChangeInterpreter
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.player.objects.*
 import riichinexus.domain.service.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.objects.apiTypes.{Club as ClubResponse}
+import riichinexus.microservices.club.objects.{Club as ClubResponse}
+import riichinexus.microservices.player.tables.player.PlayerTable
 import upickle.default.*
 
 final case class ClearClubTitleAPIMessage(
@@ -22,7 +24,7 @@ final case class ClearClubTitleAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubResponse] =
     for
-      actor <- IO(context.support.principal(PlayerId(operatorId)))
+      actor <- IO(context.principal(PlayerId(operatorId)))
       clearedAt <- IO.realTimeInstant
       module = context.support.clubModule
       command = ClearClubTitleCommand(
@@ -34,18 +36,19 @@ final case class ClearClubTitleAPIMessage(
       )
       club <- IO {
         module.transactionManager.inTransaction {
-          clearTitle(module, command)
+          clearTitle(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
     yield ClubResponse.fromDomain(club)
 
   private def clearTitle(
+      connection: java.sql.Connection,
       module: ClubModuleContext,
       command: ClearClubTitleCommand
   ): Option[Club] =
     for
       club <- module.clubRepository.findById(command.clubId)
-      player <- module.playerRepository.findById(command.playerId)
+      player <- PlayerTable.findById(connection, command.playerId)
     yield
       ensureTitleCanBeCleared(module, club, player, command)
       val existingAssignment = resolveExistingAssignment(club, command)

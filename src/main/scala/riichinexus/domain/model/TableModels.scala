@@ -3,6 +3,8 @@ package riichinexus.domain.model
 import java.time.Instant
 import java.util.NoSuchElementException
 
+import riichinexus.microservices.tournament.objects.SeatWind
+
 final case class TableSeat(
     seat: SeatWind,
     playerId: PlayerId,

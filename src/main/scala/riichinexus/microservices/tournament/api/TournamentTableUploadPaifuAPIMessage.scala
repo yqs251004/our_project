@@ -9,12 +9,9 @@ import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.event.*
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.tournament.objects.*
-import riichinexus.microservices.tournament.objects.apiTypes.{Table as _, TableSeat as _, StageStandingEntry as _, StageRankingSnapshot as _, StageAdvancementSnapshot as _, KnockoutBracketSlot as _, KnockoutBracketResult as _, KnockoutBracketMatch as _, KnockoutBracketRound as _, KnockoutBracketSnapshot as _, *}
+import riichinexus.microservices.tournament.objects.apiTypes.*
+import riichinexus.microservices.tournament.objects.apiTypes.*
 import riichinexus.microservices.tournament.objects.apiTypes.ManagementRequests.given
-import riichinexus.microservices.tournament.objects.apiTypes.SettlementRequests.given
-import riichinexus.microservices.tournament.objects.apiTypes.StageRequests.given
-import riichinexus.microservices.tournament.objects.apiTypes.TableRequests.given
 import upickle.default.*
 
 final case class TournamentTableUploadPaifuAPIMessage(tableId: String, request: UploadPaifuRequest) extends APIMessage[TournamentTableView] derives ReadWriter:
@@ -30,15 +27,16 @@ final case class TournamentTableUploadPaifuAPIMessage(tableId: String, request: 
       )
       archivedTable <- IO {
         module.transactionManager.inTransaction {
-          archivePaifu(module, command)
+          archivePaifu(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
     yield TournamentTableView.fromDomain(archivedTable)
 
   private def resolveActor(context: ApiPlanContext): AccessPrincipal =
-    request.operator.map(context.support.principal).getOrElse(AccessPrincipal.system)
+    request.operator.map(context.principal).getOrElse(AccessPrincipal.system)
 
   private def archivePaifu(
+      connection: java.sql.Connection,
       module: TournamentModuleContext,
       command: UploadPaifuCommand
   ): Option[Table] =
@@ -52,7 +50,7 @@ final case class TournamentTableUploadPaifuAPIMessage(tableId: String, request: 
       ensureNotArchived(module, command.tableId)
 
       val archived = commitArchivedPaifu(module, table, command.paifu, command.actor)
-      materializeUnlockedTables(module, table, command.paifu)
+      materializeUnlockedTables(connection, module, table, command.paifu)
       archived.table
     }
 
@@ -108,12 +106,14 @@ final case class TournamentTableUploadPaifuAPIMessage(tableId: String, request: 
       )
 
   private def materializeUnlockedTables(
+      connection: java.sql.Connection,
       module: TournamentModuleContext,
       table: Table,
       paifu: Paifu
   ): Unit =
     if table.bracketMatchId.nonEmpty then
       module.knockoutStageCoordinator.materializeUnlockedTables(
+        connection,
         table.tournamentId,
         table.stageId,
         paifu.metadata.recordedAt

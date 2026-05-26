@@ -6,9 +6,11 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.player.objects.*
 import riichinexus.domain.service.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.objects.apiTypes.{Club as ClubResponse}
+import riichinexus.microservices.club.objects.{Club as ClubResponse}
+import riichinexus.microservices.player.tables.player.PlayerTable
 import upickle.default.*
 
 final case class RevokeClubAdminAPIMessage(
@@ -28,26 +30,27 @@ final case class RevokeClubAdminAPIMessage(
       )
       club <- IO {
         module.transactionManager.inTransaction {
-          revokeAdmin(module, command)
+          revokeAdmin(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
     yield ClubResponse.fromDomain(club)
 
   private def resolveOperatorActor(context: ApiPlanContext): AccessPrincipal =
     operatorId.filter(_.nonEmpty)
-      .map(id => context.support.principal(PlayerId(id)))
+      .map(id => context.principal(PlayerId(id)))
       .getOrElse(AccessPrincipal.system)
 
   private def revokeAdmin(
+      connection: java.sql.Connection,
       module: ClubModuleContext,
       command: RevokeClubAdminCommand
   ): Option[Club] =
     for
       club <- module.clubRepository.findById(command.clubId)
-      player <- module.playerRepository.findById(command.playerId)
+      player <- PlayerTable.findById(connection, command.playerId)
     yield
       ensureAdminCanBeRevoked(module, club, command)
-      module.playerRepository.save(player.revokeClubAdmin(command.clubId))
+      PlayerTable.save(connection, player.revokeClubAdmin(command.clubId))
       module.clubRepository.save(club.revokeAdmin(command.playerId))
 
   private def ensureAdminCanBeRevoked(

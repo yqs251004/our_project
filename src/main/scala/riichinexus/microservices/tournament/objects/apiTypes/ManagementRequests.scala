@@ -1,5 +1,4 @@
 package riichinexus.microservices.tournament.objects.apiTypes
-
 import riichinexus.domain.model.*
 import upickle.default.*
 

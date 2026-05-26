@@ -1,8 +1,12 @@
 package riichinexus.api
 
+import java.sql.Connection
+
 import cats.effect.IO
 import riichinexus.api.runtime.ApiPlanSupport
 import riichinexus.domain.service.AuthenticationFailure
+import riichinexus.domain.model.*
+import riichinexus.microservices.auth.objects.CurrentSessionView
 import upickle.default.*
 
 import scala.reflect.ClassTag
@@ -16,8 +20,24 @@ trait NoRequestAPIMessage[Response] extends APIMessage[Response]
 
 final case class ApiPlanContext(
     support: ApiPlanSupport,
-    bearerToken: Option[String]
+    bearerToken: Option[String],
+    connection: Connection
 ):
+  def principal(playerId: PlayerId): AccessPrincipal =
+    support.principal(connection, playerId)
+
+  def guestPrincipal(sessionId: GuestSessionId): AccessPrincipal =
+    support.guestPrincipal(connection, sessionId)
+
+  def requestActor(guestSessionId: Option[GuestSessionId], operatorId: Option[PlayerId]): AccessPrincipal =
+    support.requestActor(connection, guestSessionId, operatorId)
+
+  def resolveCurrentSessionView(
+      operatorId: Option[PlayerId],
+      guestSessionId: Option[GuestSessionId]
+  ): CurrentSessionView =
+    support.resolveCurrentSessionView(connection, operatorId, guestSessionId)
+
   def requireBearerToken: String =
     bearerToken
       .map(_.trim)

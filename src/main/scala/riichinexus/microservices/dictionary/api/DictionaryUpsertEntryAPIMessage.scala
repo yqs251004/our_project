@@ -7,7 +7,8 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.dictionary.domain.DictionaryEntryOperations
-import riichinexus.microservices.dictionary.objects.apiTypes.{GlobalDictionaryEntry as GlobalDictionaryEntryResponse, *}
+import riichinexus.microservices.dictionary.objects.{GlobalDictionaryEntry, GlobalDictionaryEntryView}
+import riichinexus.microservices.dictionary.objects.apiTypes.*
 import upickle.default.*
 
 final case class DictionaryUpsertEntryAPIMessage(
@@ -15,12 +16,12 @@ final case class DictionaryUpsertEntryAPIMessage(
     key: String,
     value: String,
     note: Option[String] = None
-) extends APIMessage[GlobalDictionaryEntryResponse] derives ReadWriter:
+) extends APIMessage[GlobalDictionaryEntryView] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[GlobalDictionaryEntryResponse] =
+  override def plan(context: ApiPlanContext): IO[GlobalDictionaryEntryView] =
     for
       request <- IO(UpsertDictionaryRequest(operatorId, key, value, note))
-      actor <- IO(context.support.principal(request.operator))
+      actor <- IO(context.principal(request.operator))
       updatedAt <- IO.realTimeInstant
       module = context.support.dictionaryModule
       command = UpsertDictionaryEntryCommand(
@@ -31,15 +32,17 @@ final case class DictionaryUpsertEntryAPIMessage(
         updatedAt = updatedAt
       )
       entry <- IO(
-        upsertEntry(module, command)
+        upsertEntry(context.connection, module, command)
       )
-    yield GlobalDictionaryEntryResponse.fromDomain(entry)
+    yield GlobalDictionaryEntryView.fromDomain(entry)
 
   private def upsertEntry(
+      connection: java.sql.Connection,
       module: riichinexus.bootstrap.DictionaryModuleContext,
       command: UpsertDictionaryEntryCommand
   ): GlobalDictionaryEntry =
     DictionaryEntryOperations.upsertEntry(
+      connection = connection,
       module = module,
       actor = command.actor,
       key = command.key,

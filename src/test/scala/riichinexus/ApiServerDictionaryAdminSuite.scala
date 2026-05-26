@@ -18,9 +18,9 @@ import riichinexus.microservices.club.objects.apiTypes.ClubTournamentResponses.g
 import riichinexus.microservices.dictionary.api.*
 import riichinexus.microservices.dictionary.objects.apiTypes.*
 import riichinexus.microservices.dictionary.objects.apiTypes.*
-import riichinexus.microservices.dictionary.objects.apiTypes.DictionaryResponses.given
+import riichinexus.microservices.dictionary.objects.*
 import riichinexus.microservices.opsanalytics.api.OpsAnalyticsListAggregateAuditsAPIMessage
-import riichinexus.microservices.opsanalytics.objects.apiTypes.PerformanceDiagnosticsSnapshot
+import riichinexus.microservices.opsanalytics.objects.PerformanceDiagnosticsSnapshot
 import riichinexus.microservices.tournament.appeal.objects.apiTypes.*
 import upickle.default.*
 

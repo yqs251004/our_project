@@ -1,0 +1,20 @@
+package riichinexus.microservices.club.objects
+
+import riichinexus.domain.model.{ClubRankNode as DomainClubRankNode}
+import upickle.default.*
+
+final case class ClubRankNodeView(
+    code: String,
+    label: String,
+    minimumContribution: Int,
+    privileges: Vector[String]
+) derives ReadWriter
+
+object ClubRankNodeView:
+  def fromDomain(node: DomainClubRankNode): ClubRankNodeView =
+    ClubRankNodeView(
+      code = node.code,
+      label = node.label,
+      minimumContribution = node.minimumContribution,
+      privileges = node.privileges
+    )

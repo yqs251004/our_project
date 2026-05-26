@@ -8,27 +8,29 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.application.ports.OptimisticConcurrencyException
 import riichinexus.bootstrap.OpsAnalyticsModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.player.objects.*
 import riichinexus.domain.service.AdvancedStatsRoundAnalysis.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.opsanalytics.objects.apiTypes.{AdvancedStatsRecomputeTask as AdvancedStatsRecomputeTaskResponse}
+import riichinexus.microservices.opsanalytics.objects.*
+import riichinexus.microservices.player.tables.player.PlayerTable
 import upickle.default.*
 
 final case class OpsAnalyticsProcessAdvancedStatsAPIMessage(
     operatorId: PlayerId,
     limit: Int = 50
-) extends APIMessage[Vector[AdvancedStatsRecomputeTaskResponse]] derives ReadWriter:
+) extends APIMessage[Vector[AdvancedStatsRecomputeTask]] derives ReadWriter:
 
   require(limit > 0, "Advanced stats task processing limit must be positive")
 
-  override def plan(context: ApiPlanContext): IO[Vector[AdvancedStatsRecomputeTaskResponse]] =
+  override def plan(context: ApiPlanContext): IO[Vector[AdvancedStatsRecomputeTask]] =
     for
-      operator <- IO(context.support.principal(operatorId))
+      operator <- IO(context.principal(operatorId))
       processedAt <- IO.realTimeInstant
       module = context.support.opsAnalyticsModule
       command = ProcessAdvancedStatsCommand(operator, limit, processedAt)
       _ <- IO(requireOpsAdmin(context, command.operator))
-      tasks <- IO(processPending(module, command))
-    yield tasks.map(AdvancedStatsRecomputeTaskResponse.fromDomain)
+      tasks <- IO(processPending(context.connection, module, command))
+    yield tasks
 
   private def requireOpsAdmin(context: ApiPlanContext, operator: AccessPrincipal): Unit =
     context.support.requirePermission(operator, Permission.ManageGlobalDictionary)
@@ -37,6 +39,7 @@ final case class OpsAnalyticsProcessAdvancedStatsAPIMessage(
   private val maxAttempts = 3
 
   private def processPending(
+      connection: java.sql.Connection,
       module: OpsAnalyticsModuleContext,
       command: ProcessAdvancedStatsCommand
   ): Vector[AdvancedStatsRecomputeTask] =
@@ -56,7 +59,7 @@ final case class OpsAnalyticsProcessAdvancedStatsAPIMessage(
               val club = module.clubRepository.findById(clubId).getOrElse(
                 throw NoSuchElementException(s"Club ${clubId.value} was not found")
               )
-              module.advancedStatsBoardRepository.save(rebuildClubBoard(module, club, command.processedAt))
+              module.advancedStatsBoardRepository.save(rebuildClubBoard(connection, module, club, command.processedAt))
 
           try module.advancedStatsRecomputeTaskRepository.save(processing.markCompleted(command.processedAt))
           catch
@@ -89,12 +92,13 @@ final case class OpsAnalyticsProcessAdvancedStatsAPIMessage(
     buildPlayerBoard(playerId, records, paifus, at).copy(version = existingVersion)
 
   private def rebuildClubBoard(
+      connection: java.sql.Connection,
       module: OpsAnalyticsModuleContext,
       club: Club,
       at: Instant
   ): AdvancedStatsBoard =
     val memberBoards = club.members.flatMap { playerId =>
-      module.playerRepository.findById(playerId)
+      PlayerTable.findById(connection, playerId)
         .filter(_.status == PlayerStatus.Active)
         .map(_ => rebuildPlayerBoard(module, playerId, at))
     }

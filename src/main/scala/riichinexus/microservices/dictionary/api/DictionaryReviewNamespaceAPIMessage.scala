@@ -7,7 +7,8 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.dictionary.domain.DictionaryNamespaceReviewOperations
-import riichinexus.microservices.dictionary.objects.apiTypes.{DictionaryNamespaceRegistration as DictionaryNamespaceRegistrationResponse, *}
+import riichinexus.microservices.dictionary.objects.{DictionaryNamespaceRegistration, DictionaryNamespaceRegistrationView}
+import riichinexus.microservices.dictionary.objects.apiTypes.*
 import upickle.default.*
 
 final case class DictionaryReviewNamespaceAPIMessage(
@@ -15,12 +16,12 @@ final case class DictionaryReviewNamespaceAPIMessage(
     namespacePrefix: String,
     approve: Boolean,
     note: Option[String] = None
-) extends APIMessage[DictionaryNamespaceRegistrationResponse] derives ReadWriter:
+) extends APIMessage[DictionaryNamespaceRegistrationView] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[DictionaryNamespaceRegistrationResponse] =
+  override def plan(context: ApiPlanContext): IO[DictionaryNamespaceRegistrationView] =
     for
       request <- IO(ReviewDictionaryNamespaceRequest(operatorId, namespacePrefix, approve, note))
-      actor <- IO(context.support.principal(request.operator))
+      actor <- IO(context.principal(request.operator))
       reviewedAt <- IO.realTimeInstant
       module = context.support.dictionaryModule
       command = ReviewNamespaceCommand(
@@ -31,15 +32,17 @@ final case class DictionaryReviewNamespaceAPIMessage(
         reviewedAt = reviewedAt
       )
       registration <- IO(
-        reviewNamespace(module, command)
+        reviewNamespace(context.connection, module, command)
       )
-    yield DictionaryNamespaceRegistrationResponse.fromDomain(registration)
+    yield DictionaryNamespaceRegistrationView.fromDomain(registration)
 
   private def reviewNamespace(
+      connection: java.sql.Connection,
       module: riichinexus.bootstrap.DictionaryModuleContext,
       command: ReviewNamespaceCommand
   ): DictionaryNamespaceRegistration =
     DictionaryNamespaceReviewOperations.reviewNamespace(
+      connection = connection,
       module = module,
       actor = command.actor,
       namespacePrefix = command.namespacePrefix,

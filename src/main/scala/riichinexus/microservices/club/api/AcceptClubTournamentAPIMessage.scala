@@ -9,7 +9,7 @@ import riichinexus.domain.model.*
 import riichinexus.domain.service.AuthorizationFailure
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.tournament.domain.TournamentOperationViewAssembler
-import riichinexus.microservices.tournament.objects.apiTypes.{Table as _, TableSeat as _, StageStandingEntry as _, StageRankingSnapshot as _, StageAdvancementSnapshot as _, KnockoutBracketSlot as _, KnockoutBracketResult as _, KnockoutBracketMatch as _, KnockoutBracketRound as _, KnockoutBracketSnapshot as _, *}
+import riichinexus.microservices.tournament.objects.apiTypes.*
 import riichinexus.microservices.tournament.objects.apiTypes.TournamentOperationResponses.given
 import upickle.default.*
 
@@ -34,14 +34,14 @@ final case class AcceptClubTournamentAPIMessage(
         }
       }
       view <- IO {
-        TournamentOperationViewAssembler.mutationView(module, command.tournamentId, Vector.empty)
+        TournamentOperationViewAssembler.mutationView(context.connection, module, command.tournamentId, Vector.empty)
         .getOrElse(throw NoSuchElementException("Resource not found"))
       }
     yield view
 
   private def resolveOperatorActor(context: ApiPlanContext): AccessPrincipal =
     operatorId.filter(_.nonEmpty)
-      .map(id => context.support.principal(PlayerId(id)))
+      .map(id => context.principal(PlayerId(id)))
       .getOrElse(throw IllegalArgumentException("operatorId is required"))
 
   private def acceptTournament(

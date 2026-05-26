@@ -10,20 +10,22 @@ import riichinexus.application.changes.{DomainChange, DomainChangeInterpreter}
 import riichinexus.bootstrap.PlatformAdminModuleContext
 import riichinexus.domain.event.PlayerBanned
 import riichinexus.domain.model.*
+import riichinexus.microservices.player.objects.*
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.player.tables.player.PlayerTable
+import riichinexus.microservices.platformadmin.objects.PlatformAdminPlayerView
 import riichinexus.microservices.platformadmin.objects.apiTypes.*
-import riichinexus.microservices.platformadmin.objects.apiTypes.PlatformAdminResponses.given
 import upickle.default.*
 
 final case class PlatformAdminBanPlayerAPIMessage(
     playerId: PlayerId,
     operatorId: PlayerId,
     reason: String
-) extends APIMessage[PlatformAdminPlayerResponse] derives ReadWriter:
+) extends APIMessage[PlatformAdminPlayerView] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[PlatformAdminPlayerResponse] =
+  override def plan(context: ApiPlanContext): IO[PlatformAdminPlayerView] =
     for
-      actor <- IO(context.support.principal(operatorId))
+      actor <- IO(context.principal(operatorId))
       module = context.support.platformAdminModule
       request = BanPlayerRequest(operatorId = operatorId, reason = reason)
       bannedAt <- IO.realTimeInstant
@@ -36,26 +38,27 @@ final case class PlatformAdminBanPlayerAPIMessage(
       player <- IO {
         module.transactionManager
           .inTransaction {
-            banPlayer(module, command)
+            banPlayer(context.connection, module, command)
           }
           .getOrElse(throw NoSuchElementException(s"Player ${command.playerId.value} was not found"))
       }
     yield PlatformAdminPlayerView.fromDomain(player)
 
   private def banPlayer(
+      connection: java.sql.Connection,
       module: PlatformAdminModuleContext,
       command: BanPlayerCommand
   ): Option[Player] =
     module.authorizationService.requirePermission(command.actor, Permission.BanRegisteredPlayer)
     require(command.reason.trim.nonEmpty, "Ban reason cannot be empty")
 
-    module.tables.findPlayer(command.playerId).map { player =>
+    PlayerTable.findById(connection, command.playerId).map { player =>
       DomainChangeInterpreter
         .auditAndEvents(module.transactionManager, module.auditEventRepository, module.eventBus)
         .commitWithinTransaction(
           DomainChange(
             aggregate = player.ban(command.reason),
-            persist = module.playerRepository.save,
+            persist = nextPlayer => PlayerTable.save(connection, nextPlayer),
             auditEntries = _ =>
               Vector(
                 AuditEventEntry(

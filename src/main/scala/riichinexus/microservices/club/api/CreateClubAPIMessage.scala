@@ -7,10 +7,12 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.player.objects.*
 import riichinexus.domain.service.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubProjectionRefresher
-import riichinexus.microservices.club.objects.apiTypes.{Club as ClubResponse}
+import riichinexus.microservices.club.objects.{Club as ClubResponse}
+import riichinexus.microservices.player.tables.player.PlayerTable
 import upickle.default.*
 
 final case class CreateClubAPIMessage(
@@ -21,7 +23,7 @@ final case class CreateClubAPIMessage(
   override def plan(context: ApiPlanContext): IO[ClubResponse] =
     for
       parsedCreatorId <- IO(PlayerId(creatorId))
-      actor <- IO(context.support.principal(parsedCreatorId))
+      actor <- IO(context.principal(parsedCreatorId))
       createdAt <- IO.realTimeInstant
       module = context.support.clubModule
       command = CreateClubCommand(
@@ -32,17 +34,17 @@ final case class CreateClubAPIMessage(
       )
       club <- IO {
         module.transactionManager.inTransaction {
-          createClub(module, command)
+          createClub(context.connection, module, command)
         }
       }
     yield ClubResponse.fromDomain(club)
 
-  private def createClub(module: ClubModuleContext, command: CreateClubCommand): Club =
+  private def createClub(connection: java.sql.Connection, module: ClubModuleContext, command: CreateClubCommand): Club =
     val normalizedName = command.name.trim
     require(normalizedName.nonEmpty, "Club name cannot be empty")
 
-    val creator = module.playerRepository
-      .findById(command.creatorId)
+    val creator = PlayerTable
+      .findById(connection, command.creatorId)
       .getOrElse(throw NoSuchElementException(s"Player ${command.creatorId.value} was not found"))
     requireActivePlayer(creator, s"Player ${command.creatorId.value} cannot create a club")
     ensureCreatorCanCreateClub(command.actor, command.creatorId)
@@ -52,9 +54,9 @@ final case class CreateClubAPIMessage(
       .joinClub(club.id)
       .grantRole(RoleGrant.clubAdmin(club.id, command.createdAt, command.actor.playerId))
 
-    val savedCreator = module.playerRepository.save(updatedCreator)
+    val savedCreator = PlayerTable.save(connection, updatedCreator)
     ClubProjectionRefresher.ensurePlayerDashboard(module, savedCreator.id, command.createdAt)
-    module.clubRepository.save(ClubProjectionRefresher.refreshClubProjection(module, club, command.createdAt))
+    module.clubRepository.save(ClubProjectionRefresher.refreshClubProjection(connection, module, club, command.createdAt))
 
   private def resolveClubToCreate(
       module: ClubModuleContext,

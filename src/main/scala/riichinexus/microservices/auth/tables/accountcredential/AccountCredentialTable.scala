@@ -1,0 +1,110 @@
+package riichinexus.microservices.auth.tables.accountcredential
+
+import java.sql.{Connection, ResultSet, SQLException}
+
+import scala.annotation.tailrec
+import scala.util.Using
+
+import org.postgresql.util.PSQLException
+import riichinexus.application.ports.OptimisticConcurrencyException
+import riichinexus.domain.model.PlayerId
+import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.auth.objects.AccountCredential
+import upickle.default.{read, write}
+
+object AccountCredentialTable:
+  private val upsertSql: String =
+    """
+      |insert into account_credentials (username, player_id, payload, updated_at)
+      |values (?, ?, cast(? as jsonb), now())
+      |on conflict (username) do update set
+      |  player_id = excluded.player_id,
+      |  payload = excluded.payload,
+      |  updated_at = now()
+      |where cast(account_credentials.payload ->> 'version' as integer) = ?
+      |""".stripMargin
+
+  private[riichinexus] def save(connection: Connection, credential: AccountCredential): AccountCredential =
+    try persist(connection, credential)
+    catch
+      case error: SQLException if isUniqueViolation(error, "idx_account_credentials_player_id") =>
+        throw IllegalArgumentException(s"Player ${credential.playerId.value} already has a registered account")
+
+  private def persist(connection: Connection, credential: AccountCredential): AccountCredential =
+    val persisted = credential.copy(version = credential.version + 1)
+    val rowsUpdated = Using.resource(connection.prepareStatement(upsertSql)) { statement =>
+      statement.setString(1, persisted.username)
+      statement.setString(2, persisted.playerId.value)
+      statement.setString(3, write[AccountCredential](persisted))
+      statement.setInt(4, credential.version)
+      statement.executeUpdate()
+    }
+    if rowsUpdated == 0 then
+      throw OptimisticConcurrencyException(
+        aggregateType = "account-credential",
+        aggregateId = persisted.username,
+        expectedVersion = credential.version,
+        actualVersion = findByUsername(connection, persisted.username).map(_.version)
+      )
+    persisted
+
+  private val findByUsernameSql: String =
+    """
+      |select payload
+      |from account_credentials
+      |where username = ?
+      |""".stripMargin
+
+  private[riichinexus] def findByUsername(connection: Connection, username: String): Option[AccountCredential] =
+    Using.resource(connection.prepareStatement(findByUsernameSql)) { statement =>
+      statement.setString(1, AccountCredential.normalizeUsername(username))
+      Using.resource(statement.executeQuery()) { resultSet =>
+        if resultSet.next() then Some(readCredential(resultSet))
+        else None
+      }
+    }
+
+  private val findByPlayerIdSql: String =
+    """
+      |select payload
+      |from account_credentials
+      |where player_id = ?
+      |""".stripMargin
+
+  private[riichinexus] def findByPlayerId(connection: Connection, playerId: PlayerId): Option[AccountCredential] =
+    Using.resource(connection.prepareStatement(findByPlayerIdSql)) { statement =>
+      statement.setString(1, playerId.value)
+      Using.resource(statement.executeQuery()) { resultSet =>
+        if resultSet.next() then Some(readCredential(resultSet))
+        else None
+      }
+    }
+
+  private val findAllSql: String =
+    """
+      |select payload
+      |from account_credentials
+      |order by username
+      |""".stripMargin
+
+  private[riichinexus] def findAll(connection: Connection): Vector[AccountCredential] =
+    Using.resource(connection.prepareStatement(findAllSql)) { statement =>
+      Using.resource(statement.executeQuery())(readCredentials)
+    }
+
+  private def readCredentials(resultSet: ResultSet): Vector[AccountCredential] =
+    @tailrec
+    def loop(acc: Vector[AccountCredential]): Vector[AccountCredential] =
+      if resultSet.next() then loop(readCredential(resultSet) +: acc)
+      else acc.reverse
+
+    loop(Vector.empty)
+
+  private def readCredential(resultSet: ResultSet): AccountCredential =
+    read[AccountCredential](resultSet.getString("payload"))
+
+  private def isUniqueViolation(error: SQLException, constraintName: String): Boolean =
+    error match
+      case postgresError: PSQLException =>
+        Option(postgresError.getServerErrorMessage).exists(_.getConstraint == constraintName)
+      case _ => false

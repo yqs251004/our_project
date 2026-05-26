@@ -3,6 +3,7 @@ package riichinexus.domain.service
 import java.time.Instant
 
 import riichinexus.domain.model.*
+import riichinexus.microservices.player.objects.Player
 
 private[service] object TournamentKnockoutBracketBuilder:
   def build(

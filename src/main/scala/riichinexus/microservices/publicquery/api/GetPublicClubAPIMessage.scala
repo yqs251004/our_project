@@ -6,7 +6,7 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.ClubId
 import riichinexus.microservices.publicquery.objects.apiTypes.PublicClubDetailView
-import riichinexus.microservices.publicquery.tables.PublicClubDetailQueries
+import riichinexus.microservices.publicquery.domain.PublicClubDetailQueries
 import upickle.default.*
 
 final case class GetPublicClubAPIMessage(
@@ -21,5 +21,5 @@ final case class GetPublicClubAPIMessage(
 
   private def findPublicClub(context: ApiPlanContext, clubId: ClubId): PublicClubDetailView =
     PublicClubDetailQueries
-      .detail(context.support.clubModule, clubId)
+      .detail(context.connection, context.support.clubModule, clubId)
       .getOrElse(throw NoSuchElementException("Resource not found"))

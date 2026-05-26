@@ -8,7 +8,7 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubApplicationReviewer
-import riichinexus.microservices.club.objects.apiTypes.{Club as ClubResponse}
+import riichinexus.microservices.club.objects.{Club as ClubResponse}
 import upickle.default.*
 
 final case class RejectClubApplicationAPIMessage(
@@ -20,7 +20,7 @@ final case class RejectClubApplicationAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubResponse] =
     for
-      actor <- IO(context.support.principal(PlayerId(operatorId)))
+      actor <- IO(context.principal(PlayerId(operatorId)))
       rejectedAt <- IO.realTimeInstant
       module = context.support.clubModule
       command = RejectClubApplicationCommand(

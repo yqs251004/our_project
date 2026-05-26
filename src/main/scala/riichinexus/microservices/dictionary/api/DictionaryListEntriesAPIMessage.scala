@@ -4,7 +4,8 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.dictionary.objects.apiTypes.{GlobalDictionaryEntry as GlobalDictionaryEntryResponse}
+import riichinexus.microservices.dictionary.objects.{GlobalDictionaryEntry, GlobalDictionaryEntryView}
+import riichinexus.microservices.dictionary.tables.globaldictionary.GlobalDictionaryTable
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 
@@ -13,15 +14,15 @@ final case class DictionaryListEntriesAPIMessage(
     updatedBy: Option[String] = None,
     limit: Option[Int] = None,
     offset: Option[Int] = None
-) extends APIMessage[PagedResponse[GlobalDictionaryEntryResponse]] derives ReadWriter:
+) extends APIMessage[PagedResponse[GlobalDictionaryEntryView]] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[PagedResponse[GlobalDictionaryEntryResponse]] =
+  override def plan(context: ApiPlanContext): IO[PagedResponse[GlobalDictionaryEntryView]] =
     for
       query <- IO(resolveQuery)
       entries <- IO(listEntries(context, query))
     yield
       PagedResponse.fromItems(entries, limit, offset, query.appliedFilters)(
-        GlobalDictionaryEntryResponse.fromDomain
+        GlobalDictionaryEntryView.fromDomain
       )
 
   private def resolveQuery: ResolvedEntriesQuery =
@@ -38,7 +39,7 @@ final case class DictionaryListEntriesAPIMessage(
       context: ApiPlanContext,
       query: ResolvedEntriesQuery
   ): Vector[GlobalDictionaryEntry] =
-    context.support.dictionaryModule.tables.listEntries()
+    GlobalDictionaryTable.findAll(context.connection)
       .filter(entry => query.prefix.forall(prefix => entry.key.startsWith(prefix)))
       .filter(entry => query.updatedBy.forall(_ == entry.updatedBy))
       .sortBy(_.key)

@@ -6,7 +6,8 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.objects.apiTypes.{Club as ClubResponse}
+import riichinexus.microservices.club.objects.{Club as ClubResponse}
+import riichinexus.microservices.club.tables.club.ClubTable
 import upickle.default.*
 
 final case class GetClubAPIMessage(clubId: String) extends APIMessage[ClubResponse] derives ReadWriter:
@@ -18,5 +19,5 @@ final case class GetClubAPIMessage(clubId: String) extends APIMessage[ClubRespon
     yield ClubResponse.fromDomain(club)
 
   private def resolveClub(context: ApiPlanContext, clubId: ClubId): Club =
-    context.support.clubModule.tables.findClub(clubId)
+    ClubTable.findById(context.connection, clubId)
       .getOrElse(throw NoSuchElementException("Resource not found"))

@@ -2,6 +2,7 @@ package riichinexus.infrastructure.memory
 
 import riichinexus.application.ports.*
 import riichinexus.domain.model.*
+import riichinexus.microservices.auth.objects.{AccountCredential, AuthenticatedSession}
 
 private object InMemoryRepositoryLockSupport:
   def nextVersion(

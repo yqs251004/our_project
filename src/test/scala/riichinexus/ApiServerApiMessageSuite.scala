@@ -17,17 +17,14 @@ import riichinexus.microservices.player.api.*
 import riichinexus.microservices.platformadmin.api.*
 import riichinexus.microservices.publicquery.api.*
 import riichinexus.microservices.auth.objects.apiTypes.*
-import riichinexus.microservices.auth.objects.apiTypes.AuthResponses.given
 import riichinexus.microservices.club.objects.apiTypes.*
 import riichinexus.microservices.club.objects.apiTypes.ClubTournamentResponses.given
+import riichinexus.microservices.dictionary.objects.*
 import riichinexus.microservices.dictionary.objects.apiTypes.*
-import riichinexus.microservices.dictionary.objects.apiTypes.DictionaryResponses.given
 import riichinexus.microservices.tournament.appeal.objects.apiTypes.*
 import riichinexus.microservices.tournament.appeal.objects.apiTypes.TournamentAppealResponses.given
 import riichinexus.microservices.player.objects.apiTypes.*
-import riichinexus.microservices.player.objects.apiTypes.PlayerResponses.given
 import riichinexus.microservices.platformadmin.objects.apiTypes.*
-import riichinexus.microservices.platformadmin.objects.apiTypes.PlatformAdminResponses.given
 import riichinexus.microservices.publicquery.objects.apiTypes.*
 import riichinexus.microservices.publicquery.objects.apiTypes.PublicQueryResponses.given
 import riichinexus.system.objects.{ErrorResponse, PagedResponse}
@@ -311,14 +308,14 @@ class ApiServerApiMessageSuite extends FunSuite with ApiServerSuiteSupport:
         write(PlatformAdminGrantSuperAdminAPIMessage(target.id, operator.id))
       )
       assertEquals(grantResponse.statusCode(), 200)
-      assertEquals(read[PlatformAdminPlayerView](grantResponse.body()).playerId, target.id)
+      assertEquals(read[PlatformAdminPlayerResponse](grantResponse.body()).playerId, target.id)
 
       val banResponse = postJson(
         s"$baseUrl/api/platformadminbanplayerapi",
         write(PlatformAdminBanPlayerAPIMessage(target.id, operator.id, "message moderation"))
       )
       assertEquals(banResponse.statusCode(), 200)
-      val banned = read[PlatformAdminPlayerView](banResponse.body())
+      val banned = read[PlatformAdminPlayerResponse](banResponse.body())
       assertEquals(banned.playerId, target.id)
       assertEquals(banned.bannedReason, Some("message moderation"))
     }

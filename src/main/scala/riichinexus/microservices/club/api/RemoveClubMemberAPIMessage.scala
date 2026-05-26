@@ -7,10 +7,12 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.player.objects.*
 import riichinexus.domain.service.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubProjectionRefresher
-import riichinexus.microservices.club.objects.apiTypes.{Club as ClubResponse}
+import riichinexus.microservices.club.objects.{Club as ClubResponse}
+import riichinexus.microservices.player.tables.player.PlayerTable
 import upickle.default.*
 
 final case class RemoveClubMemberAPIMessage(
@@ -33,7 +35,7 @@ final case class RemoveClubMemberAPIMessage(
       club <- IO {
         module.transactionManager
           .inTransaction {
-            removeClubMember(module, command)
+            removeClubMember(context.connection, module, command)
           }
           .getOrElse(throw NoSuchElementException("Resource not found"))
       }
@@ -41,16 +43,17 @@ final case class RemoveClubMemberAPIMessage(
 
   private def resolveOperatorActor(context: ApiPlanContext): AccessPrincipal =
     operatorId.filter(_.nonEmpty)
-      .map(id => context.support.principal(PlayerId(id)))
+      .map(id => context.principal(PlayerId(id)))
       .getOrElse(AccessPrincipal.system)
 
   private def removeClubMember(
+      connection: java.sql.Connection,
       module: ClubModuleContext,
       command: RemoveClubMemberCommand
   ): Option[Club] =
     for
       club <- module.clubRepository.findById(command.clubId)
-      player <- module.playerRepository.findById(command.playerId)
+      player <- PlayerTable.findById(connection, command.playerId)
     yield
       ensureClubActive(club)
       requireClubMember(club, command.playerId, "remove member")
@@ -63,13 +66,14 @@ final case class RemoveClubMemberAPIMessage(
       )
       ensureMemberCanBeRemoved(club, command.clubId, command.playerId)
 
-      module.playerRepository.save(
+      PlayerTable.save(
+        connection,
         player
           .leaveClub(command.clubId)
           .revokeClubAdmin(command.clubId)
       )
       module.clubRepository.save(
-        ClubProjectionRefresher.refreshClubProjection(module, club.removeMember(command.playerId), command.occurredAt)
+        ClubProjectionRefresher.refreshClubProjection(connection, module, club.removeMember(command.playerId), command.occurredAt)
       )
 
   private def ensureClubActive(club: Club): Unit =

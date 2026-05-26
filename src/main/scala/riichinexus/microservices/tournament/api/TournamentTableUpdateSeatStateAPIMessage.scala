@@ -7,23 +7,21 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.tournament.objects.*
-import riichinexus.microservices.tournament.objects.apiTypes.{Table as _, TableSeat as _, StageStandingEntry as _, StageRankingSnapshot as _, StageAdvancementSnapshot as _, KnockoutBracketSlot as _, KnockoutBracketResult as _, KnockoutBracketMatch as _, KnockoutBracketRound as _, KnockoutBracketSnapshot as _, *}
+import riichinexus.microservices.tournament.objects.SeatWind
+import riichinexus.microservices.tournament.objects.apiTypes.*
+import riichinexus.microservices.tournament.objects.apiTypes.*
 import riichinexus.microservices.tournament.objects.apiTypes.ManagementRequests.given
-import riichinexus.microservices.tournament.objects.apiTypes.SettlementRequests.given
-import riichinexus.microservices.tournament.objects.apiTypes.StageRequests.given
-import riichinexus.microservices.tournament.objects.apiTypes.TableRequests.given
 import upickle.default.*
 
 final case class TournamentTableUpdateSeatStateAPIMessage(tableId: String, seat: String, request: UpdateTableSeatStateRequest) extends APIMessage[TournamentTableView] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[TournamentTableView] =
     for
-      actor <- IO(context.support.principal(request.operator))
+      actor <- IO(context.principal(request.operator))
       module = context.support.tournamentModule
       command = UpdateSeatStateCommand(
         tableId = TableId(tableId),
-        seat = riichinexus.domain.model.SeatWind.valueOf(seat),
+        seat = SeatWind.valueOf(seat),
         actor = actor,
         ready = request.ready,
         disconnected = request.disconnected,
@@ -63,12 +61,12 @@ final case class TournamentTableUpdateSeatStateAPIMessage(tableId: String, seat:
       subjectPlayerId = Some(targetSeat.playerId)
     )
 
-  private def seatStateNote(actor: AccessPrincipal, seat: riichinexus.domain.model.SeatWind, note: Option[String]): Option[String] =
+  private def seatStateNote(actor: AccessPrincipal, seat: SeatWind, note: Option[String]): Option[String] =
     note.map(message => s"${actor.displayName} updated ${seat.toString} seat state: $message")
 
   private final case class UpdateSeatStateCommand(
       tableId: TableId,
-      seat: riichinexus.domain.model.SeatWind,
+      seat: SeatWind,
       actor: AccessPrincipal,
       ready: Option[Boolean],
       disconnected: Option[Boolean],

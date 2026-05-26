@@ -6,12 +6,10 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.tournament.objects.*
-import riichinexus.microservices.tournament.objects.apiTypes.{Table as _, TableSeat as _, StageStandingEntry as _, StageRankingSnapshot as _, StageAdvancementSnapshot as _, KnockoutBracketSlot as _, KnockoutBracketResult as _, KnockoutBracketMatch as _, KnockoutBracketRound as _, KnockoutBracketSnapshot as _, *}
+import riichinexus.microservices.tournament.objects.apiTypes.*
+import riichinexus.microservices.tournament.objects.apiTypes.*
 import riichinexus.microservices.tournament.objects.apiTypes.ManagementRequests.given
-import riichinexus.microservices.tournament.objects.apiTypes.SettlementRequests.given
-import riichinexus.microservices.tournament.objects.apiTypes.StageRequests.given
-import riichinexus.microservices.tournament.objects.apiTypes.TableRequests.given
+import riichinexus.microservices.tournament.tables.paifu.PaifuTable
 import upickle.default.*
 
 final case class TournamentPaifuGetAPIMessage(paifuId: String) extends APIMessage[TournamentPaifuSummaryView] derives ReadWriter:
@@ -23,5 +21,5 @@ final case class TournamentPaifuGetAPIMessage(paifuId: String) extends APIMessag
     yield TournamentPaifuSummaryView.fromDomain(paifu)
 
   private def resolvePaifu(context: ApiPlanContext, paifuId: PaifuId): Paifu =
-    context.support.tournamentModule.tables.findPaifu(paifuId)
+    PaifuTable.findById(context.connection, paifuId)
       .getOrElse(throw NoSuchElementException("Resource not found"))

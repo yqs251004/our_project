@@ -4,6 +4,7 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.{AccessPrincipal, Permission}
 import riichinexus.microservices.publicquery.objects.apiTypes.ClubLeaderboardEntry
+import riichinexus.microservices.publicquery.domain.PublicDirectoryQueries
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 
@@ -31,7 +32,7 @@ final case class PublicClubLeaderboardAPIMessage(
       context: ApiPlanContext,
       query: ResolvedClubLeaderboardQuery
   ): Vector[ClubLeaderboardEntry] =
-    context.support.publicQueryModule.tables.publicClubLeaderboard(Int.MaxValue)
+    PublicDirectoryQueries.publicClubLeaderboard(context.connection, Int.MaxValue)
       .filter(entry => query.name.forall(context.support.containsIgnoreCase(entry.name, _)))
 
   private final case class ResolvedClubLeaderboardQuery(

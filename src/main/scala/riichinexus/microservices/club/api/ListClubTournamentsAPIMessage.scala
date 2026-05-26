@@ -8,8 +8,10 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.objects.apiTypes.{Club as _, ClubRelation as _, ClubMembershipApplication as _, ClubPrivilegeDefinition as _, ClubMemberPrivilegeSnapshot as _, *}
-import riichinexus.microservices.club.objects.apiTypes.ClubTournamentResponses.given
+import riichinexus.microservices.club.objects.{ClubTournamentParticipationStatus, ClubTournamentParticipationView}
+import riichinexus.microservices.club.objects.apiTypes.*
+import riichinexus.microservices.club.tables.club.ClubTable
+import riichinexus.microservices.tournament.tables.tournament.TournamentTable
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 
@@ -27,7 +29,7 @@ final case class ListClubTournamentsAPIMessage(
       now <- IO.realTimeInstant
       module = context.support.clubModule
       query <- IO(resolveQuery(context, now))
-      items <- IO(listTournaments(module, query))
+      items <- IO(listTournaments(context.connection, module, query))
     yield pagedResponse(items, query)
 
   private def resolveQuery(context: ApiPlanContext, now: Instant): ClubTournamentQuery =
@@ -35,7 +37,7 @@ final case class ListClubTournamentsAPIMessage(
     ClubTournamentQuery(
       clubId = ClubId(clubId),
       scope = scope.filter(_.nonEmpty).getOrElse("recent"),
-      viewerPrincipal = parsedViewer.map(context.support.principal).getOrElse(AccessPrincipal.guest()),
+      viewerPrincipal = parsedViewer.map(context.principal).getOrElse(AccessPrincipal.guest()),
       limit = limit.getOrElse(20),
       offset = offset.getOrElse(0),
       recentThreshold = now.minus(recentTournamentWindow),
@@ -46,15 +48,16 @@ final case class ListClubTournamentsAPIMessage(
     )
 
   private def listTournaments(
+      connection: java.sql.Connection,
       module: ClubModuleContext,
       query: ClubTournamentQuery
   ): Vector[ClubTournamentParticipationView] =
-    module.tables
-      .findClub(query.clubId)
+    ClubTable
+      .findById(connection, query.clubId)
       .getOrElse(throw NoSuchElementException(s"Club ${query.clubId.value} was not found"))
-    val allItems = module.tables
-      .listTournamentsByClub(query.clubId)
-      .flatMap(tournament => buildClubTournamentParticipationView(module, query.clubId, tournament, query.viewerPrincipal))
+    val allItems = TournamentTable
+      .findByClub(connection, query.clubId)
+      .flatMap(tournament => buildClubTournamentParticipationView(connection, module, query.clubId, tournament, query.viewerPrincipal))
     filterByScope(allItems, query)
 
   private def filterByScope(
@@ -94,12 +97,13 @@ final case class ListClubTournamentsAPIMessage(
     )
 
   private def buildClubTournamentParticipationView(
+      connection: java.sql.Connection,
       module: ClubModuleContext,
       clubId: ClubId,
       tournament: Tournament,
       viewer: AccessPrincipal
   ): Option[ClubTournamentParticipationView] =
-    val club = module.tables.findClub(clubId)
+    val club = ClubTable.findById(connection, clubId)
     val clubVisibleToViewer =
       club.exists(currentClub => canManageClubTournamentParticipation(module, viewer, currentClub))
     val isWhitelisted = tournament.whitelist.exists(_.clubId.contains(clubId))

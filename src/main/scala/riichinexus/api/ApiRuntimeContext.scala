@@ -28,6 +28,7 @@ object ApiRuntimeContext:
   ): ApiRuntimeContext =
     ApiRuntimeContext(
       executionContext = ApiExecutionContext(
+        connectionFactory = app.connectionFactory,
         authModule = app.authModule,
         playerModule = app.playerModule,
         clubModule = app.clubModule,

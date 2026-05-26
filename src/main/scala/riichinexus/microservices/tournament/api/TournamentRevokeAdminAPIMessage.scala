@@ -8,13 +8,12 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.application.changes.DomainChangeInterpreter
 import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.player.objects.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.tournament.objects.*
-import riichinexus.microservices.tournament.objects.apiTypes.{Table as _, TableSeat as _, StageStandingEntry as _, StageRankingSnapshot as _, StageAdvancementSnapshot as _, KnockoutBracketSlot as _, KnockoutBracketResult as _, KnockoutBracketMatch as _, KnockoutBracketRound as _, KnockoutBracketSnapshot as _, *}
+import riichinexus.microservices.player.tables.player.PlayerTable
+import riichinexus.microservices.tournament.objects.apiTypes.*
+import riichinexus.microservices.tournament.objects.apiTypes.*
 import riichinexus.microservices.tournament.objects.apiTypes.ManagementRequests.given
-import riichinexus.microservices.tournament.objects.apiTypes.SettlementRequests.given
-import riichinexus.microservices.tournament.objects.apiTypes.StageRequests.given
-import riichinexus.microservices.tournament.objects.apiTypes.TableRequests.given
 import riichinexus.microservices.tournament.objects.apiTypes.OperatorRequest
 import upickle.default.*
 
@@ -33,26 +32,27 @@ final case class TournamentRevokeAdminAPIMessage(tournamentId: String, playerId:
       )
       tournament <- IO {
         module.transactionManager.inTransaction {
-          revokeAdmin(module, command)
+          revokeAdmin(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
     yield TournamentSummaryView.fromDomain(tournament)
 
   private def resolveOperatorActor(context: ApiPlanContext): AccessPrincipal =
     OperatorRequest(operatorId).operator
-      .map(context.support.principal)
+      .map(context.principal)
       .getOrElse(AccessPrincipal.system)
 
   private def revokeAdmin(
+      connection: java.sql.Connection,
       module: TournamentModuleContext,
       command: RevokeTournamentAdminCommand
   ): Option[Tournament] =
     for
       tournament <- module.tournamentRepository.findById(command.tournamentId)
-      player <- module.playerRepository.findById(command.playerId)
+      player <- PlayerTable.findById(connection, command.playerId)
     yield
       ensureAdminCanBeRevoked(module, tournament, command)
-      commitAdminRevocation(module, tournament, player, command)
+      commitAdminRevocation(connection, module, tournament, player, command)
 
   private def ensureAdminCanBeRevoked(
       module: TournamentModuleContext,
@@ -74,6 +74,7 @@ final case class TournamentRevokeAdminAPIMessage(tournamentId: String, playerId:
       )
 
   private def commitAdminRevocation(
+      connection: java.sql.Connection,
       module: TournamentModuleContext,
       tournament: Tournament,
       player: Player,
@@ -84,7 +85,7 @@ final case class TournamentRevokeAdminAPIMessage(tournamentId: String, playerId:
       .commitAudited(
         aggregate = tournament.copy(admins = tournament.admins.filterNot(_ == command.playerId)),
         persist = nextTournament =>
-          module.playerRepository.save(player.revokeTournamentAdmin(command.tournamentId))
+          PlayerTable.save(connection, player.revokeTournamentAdmin(command.tournamentId))
           module.tournamentRepository.save(nextTournament),
         aggregateType = "tournament",
         aggregateId = _.id.value,

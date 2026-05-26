@@ -1,16 +1,22 @@
 package riichinexus.microservices.dictionary.domain
 
+import java.sql.Connection
 import java.util.NoSuchElementException
 
 import riichinexus.bootstrap.DictionaryModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.player.objects.*
+import riichinexus.microservices.dictionary.objects.DictionaryNamespaceRegistration
+import riichinexus.microservices.dictionary.tables.dictionarynamespace.DictionaryNamespaceTable
+import riichinexus.microservices.player.tables.player.PlayerTable
 
 private[dictionary] object DictionaryNamespaceValidation:
   def requireNamespace(
+      connection: Connection,
       module: DictionaryModuleContext,
       namespacePrefix: String
   ): DictionaryNamespaceRegistration =
-    module.tables.findNamespaceByPrefix(namespacePrefix)
+    DictionaryNamespaceTable.findByPrefix(connection, namespacePrefix)
       .getOrElse(throw NoSuchElementException("Resource not found"))
 
   def requireManagementActor(
@@ -30,11 +36,12 @@ private[dictionary] object DictionaryNamespaceValidation:
         )
 
   def requireActiveOwner(
+      connection: Connection,
       module: DictionaryModuleContext,
       playerId: PlayerId,
       action: String
   ): Player =
-    module.playerRepository.findById(playerId) match
+    PlayerTable.findById(connection, playerId) match
       case Some(player) if player.status == PlayerStatus.Active => player
       case Some(player) =>
         throw IllegalArgumentException(
@@ -46,6 +53,7 @@ private[dictionary] object DictionaryNamespaceValidation:
         )
 
   def validateContextMembership(
+      connection: Connection,
       module: DictionaryModuleContext,
       contextClubId: Option[ClubId],
       owner: Player,
@@ -61,11 +69,11 @@ private[dictionary] object DictionaryNamespaceValidation:
       )
       requireContextMembership(owner, clubId, s"$action owner ${owner.id.value}")
       coOwnerPlayerIds.foreach { playerId =>
-        val player = requireActiveOwner(module, playerId, s"$action co-owner ${playerId.value}")
+        val player = requireActiveOwner(connection, module, playerId, s"$action co-owner ${playerId.value}")
         requireContextMembership(player, clubId, s"$action co-owner ${playerId.value}")
       }
       editorPlayerIds.foreach { playerId =>
-        val player = requireActiveOwner(module, playerId, s"$action editor ${playerId.value}")
+        val player = requireActiveOwner(connection, module, playerId, s"$action editor ${playerId.value}")
         requireContextMembership(player, clubId, s"$action editor ${playerId.value}")
       }
       clubId
@@ -78,6 +86,7 @@ private[dictionary] object DictionaryNamespaceValidation:
       )
 
   def normalizeCollaborators(
+      connection: Connection,
       module: DictionaryModuleContext,
       ownerPlayerId: PlayerId,
       coOwnerPlayerIds: Vector[PlayerId],
@@ -85,8 +94,8 @@ private[dictionary] object DictionaryNamespaceValidation:
       action: String
   ): (Vector[PlayerId], Vector[PlayerId]) =
     val normalizedCoOwners = coOwnerPlayerIds.distinct.filterNot(_ == ownerPlayerId)
-    normalizedCoOwners.foreach(playerId => requireActiveOwner(module, playerId, s"$action co-owner ${playerId.value}"))
+    normalizedCoOwners.foreach(playerId => requireActiveOwner(connection, module, playerId, s"$action co-owner ${playerId.value}"))
     val normalizedEditors =
       editorPlayerIds.distinct.filterNot(playerId => playerId == ownerPlayerId || normalizedCoOwners.contains(playerId))
-    normalizedEditors.foreach(playerId => requireActiveOwner(module, playerId, s"$action editor ${playerId.value}"))
+    normalizedEditors.foreach(playerId => requireActiveOwner(connection, module, playerId, s"$action editor ${playerId.value}"))
     (normalizedCoOwners, normalizedEditors)

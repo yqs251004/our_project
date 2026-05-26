@@ -7,7 +7,8 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.dictionary.domain.DictionaryNamespaceManagementOperations
-import riichinexus.microservices.dictionary.objects.apiTypes.{DictionaryNamespaceRegistration as DictionaryNamespaceRegistrationResponse, *}
+import riichinexus.microservices.dictionary.objects.{DictionaryNamespaceRegistration, DictionaryNamespaceRegistrationView}
+import riichinexus.microservices.dictionary.objects.apiTypes.*
 import upickle.default.*
 
 final case class DictionaryUpdateNamespaceCollaboratorsAPIMessage(
@@ -16,12 +17,12 @@ final case class DictionaryUpdateNamespaceCollaboratorsAPIMessage(
     coOwnerPlayerIds: Vector[String] = Vector.empty,
     editorPlayerIds: Vector[String] = Vector.empty,
     note: Option[String] = None
-) extends APIMessage[DictionaryNamespaceRegistrationResponse] derives ReadWriter:
+) extends APIMessage[DictionaryNamespaceRegistrationView] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[DictionaryNamespaceRegistrationResponse] =
+  override def plan(context: ApiPlanContext): IO[DictionaryNamespaceRegistrationView] =
     for
       request <- IO(UpdateDictionaryNamespaceCollaboratorsRequest(operatorId, namespacePrefix, coOwnerPlayerIds, editorPlayerIds, note))
-      actor <- IO(context.support.principal(request.operator))
+      actor <- IO(context.principal(request.operator))
       updatedAt <- IO.realTimeInstant
       module = context.support.dictionaryModule
       command = UpdateNamespaceCollaboratorsCommand(
@@ -33,15 +34,17 @@ final case class DictionaryUpdateNamespaceCollaboratorsAPIMessage(
         updatedAt = updatedAt
       )
       registration <- IO(
-        updateCollaborators(module, command)
+        updateCollaborators(context.connection, module, command)
       )
-    yield DictionaryNamespaceRegistrationResponse.fromDomain(registration)
+    yield DictionaryNamespaceRegistrationView.fromDomain(registration)
 
   private def updateCollaborators(
+      connection: java.sql.Connection,
       module: riichinexus.bootstrap.DictionaryModuleContext,
       command: UpdateNamespaceCollaboratorsCommand
   ): DictionaryNamespaceRegistration =
     DictionaryNamespaceManagementOperations.updateCollaborators(
+      connection = connection,
       module = module,
       actor = command.actor,
       namespacePrefix = command.namespacePrefix,

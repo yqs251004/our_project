@@ -6,8 +6,13 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.AuthModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.player.objects.*
+import riichinexus.microservices.auth.objects.{AccountCredential, AuthenticatedSession}
 import riichinexus.microservices.auth.objects.apiTypes.AuthSuccessResponse
 import riichinexus.microservices.auth.security.AuthPasswordHasher
+import riichinexus.microservices.auth.tables.accountcredential.AccountCredentialTable
+import riichinexus.microservices.auth.tables.authenticatedsession.AuthenticatedSessionTable
+import riichinexus.microservices.player.tables.player.PlayerTable
 import upickle.default.*
 
 final case class RegisterAuthAPIMessage(
@@ -31,26 +36,29 @@ final case class RegisterAuthAPIMessage(
       )
       result <- IO {
         module.transactionManager.inTransaction {
-          register(module, command)
+          register(context.connection, module, command)
         }
       }
-    yield riichinexus.microservices.auth.objects.apiTypes.AuthSuccessView(
-      userId = result.player.id.value,
-      username = result.username,
-      displayName = result.player.nickname,
-      token = result.session.token,
-      roles = context.support.registeredRoleFlags(result.player)
+    yield AuthSuccessResponse.fromView(
+      riichinexus.microservices.auth.objects.AuthSuccessView(
+        userId = result.player.id.value,
+        username = result.username,
+        displayName = result.player.nickname,
+        token = result.session.token,
+        roles = context.support.registeredRoleFlags(result.player)
+      )
     )
 
-  private def register(module: AuthModuleContext, command: RegisterAuthCommand): RegisterAuthResult =
+  private def register(connection: java.sql.Connection, module: AuthModuleContext, command: RegisterAuthCommand): RegisterAuthResult =
     validatePassword(command.password)
-    if module.accountCredentialRepository.findByUsername(command.username).nonEmpty then
+    if AccountCredentialTable.findByUsername(connection, command.username).nonEmpty then
       throw IllegalArgumentException(s"Username ${command.username} is already registered")
 
-    val player = resolveRegisteredPlayer(module, command)
+    val player = resolveRegisteredPlayer(connection, module, command)
     ensureActivePlayer(player)
-    saveCredential(module, command, player)
-    val session = module.authenticatedSessionRepository.save(
+    saveCredential(connection, command, player)
+    val session = AuthenticatedSessionTable.save(
+      connection,
       AuthenticatedSession.create(
         username = command.username,
         playerId = player.id,
@@ -61,29 +69,33 @@ final case class RegisterAuthAPIMessage(
     RegisterAuthResult(command.username, player, session)
 
   private def resolveRegisteredPlayer(
+      connection: java.sql.Connection,
       module: AuthModuleContext,
       command: RegisterAuthCommand
   ): Player =
-    module.playerRepository.findAll().find(_.userId.equalsIgnoreCase(command.username)) match
+    PlayerTable.findAll(connection).find(_.userId.equalsIgnoreCase(command.username)) match
       case Some(existing) if existing.nickname == command.displayName =>
         existing
       case Some(existing) =>
-        module.playerRepository.save(existing.copy(nickname = command.displayName))
+        PlayerTable.save(connection, existing.copy(nickname = command.displayName))
       case None =>
         module.playerRegistration.registerPlayer(
-          userId = command.username,
-          nickname = command.displayName,
-          rank = DefaultRank,
-          registeredAt = command.registeredAt
+          connection,
+          command.username,
+          command.displayName,
+          DefaultRank,
+          command.registeredAt,
+          initialElo = 1500
         )
 
   private def saveCredential(
-      module: AuthModuleContext,
+      connection: java.sql.Connection,
       command: RegisterAuthCommand,
       player: Player
   ): AccountCredential =
     val passwordDigest = AuthPasswordHasher.hash(command.password)
-    module.accountCredentialRepository.save(
+    AccountCredentialTable.save(
+      connection,
       AccountCredential(
         username = command.username,
         playerId = player.id,

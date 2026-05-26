@@ -18,12 +18,11 @@ import riichinexus.microservices.club.objects.apiTypes.*
 import riichinexus.microservices.club.objects.apiTypes.ClubTournamentResponses.given
 import riichinexus.microservices.club.objects.apiTypes.*
 import riichinexus.microservices.dictionary.objects.apiTypes.UpsertDictionaryRequest
-import riichinexus.microservices.opsanalytics.objects.apiTypes.PerformanceDiagnosticsSnapshot
+import riichinexus.microservices.opsanalytics.objects.PerformanceDiagnosticsSnapshot
 import riichinexus.microservices.tournament.objects.apiTypes.OperatorRequest
 import riichinexus.microservices.tournament.objects.apiTypes.OperatorRequest.given
 import riichinexus.microservices.player.api.ListPlayersAPIMessage
 import riichinexus.microservices.player.objects.apiTypes.*
-import riichinexus.microservices.player.objects.apiTypes.PlayerResponses.given
 import riichinexus.microservices.publicquery.api.ListPublicClubsAPIMessage
 import riichinexus.microservices.publicquery.objects.apiTypes.*
 import riichinexus.microservices.publicquery.objects.apiTypes.PublicQueryResponses.given

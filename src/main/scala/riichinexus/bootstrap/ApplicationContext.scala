@@ -1,9 +1,10 @@
 package riichinexus.bootstrap
 
 import riichinexus.domain.service.AuthorizationService
-import riichinexus.infrastructure.postgres.DatabaseConfig
+import riichinexus.infrastructure.postgres.{DatabaseConfig, JdbcConnectionFactory}
 
 final class ApplicationContext private[bootstrap] (
+    val connectionFactory: JdbcConnectionFactory,
     val authModule: AuthModuleContext,
     val playerModule: PlayerModuleContext,
     val clubModule: ClubModuleContext,

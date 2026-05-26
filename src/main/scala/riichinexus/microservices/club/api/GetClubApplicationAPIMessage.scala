@@ -9,7 +9,8 @@ import riichinexus.domain.model.*
 import riichinexus.domain.service.AuthorizationFailure
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubApplicationViewAssembler
-import riichinexus.microservices.club.objects.apiTypes.{Club as _, ClubRelation as _, ClubMembershipApplication as _, ClubPrivilegeDefinition as _, ClubMemberPrivilegeSnapshot as _, *}
+import riichinexus.microservices.club.objects.ClubMembershipApplicationView
+import riichinexus.microservices.club.tables.club.ClubTable
 import upickle.default.*
 
 final case class GetClubApplicationAPIMessage(
@@ -23,7 +24,7 @@ final case class GetClubApplicationAPIMessage(
     for
       input <- IO(resolveInput)
       actor <- IO(resolveActor(context, input))
-      view <- IO(getApplicationView(context.support.clubModule, input, actor))
+      view <- IO(getApplicationView(context, input, actor))
     yield view
 
   private def resolveInput: GetClubApplicationInput =
@@ -38,21 +39,22 @@ final case class GetClubApplicationAPIMessage(
       context: ApiPlanContext,
       input: GetClubApplicationInput
   ): AccessPrincipal =
-    context.support.requestActor(input.guestSessionId, input.operatorId)
+    context.requestActor(input.guestSessionId, input.operatorId)
 
   private def getApplicationView(
-      module: ClubModuleContext,
+      context: ApiPlanContext,
       input: GetClubApplicationInput,
       actor: AccessPrincipal
   ): ClubMembershipApplicationView =
-    val club = resolveClub(module, input.clubId)
+    val module = context.support.clubModule
+    val club = resolveClub(context.connection, input.clubId)
     val application = resolveApplication(club, input)
-    requireClubApplicationViewer(module, actor, club, application)
-    ClubApplicationViewAssembler.applicationView(module, club, application, actor)
+    requireClubApplicationViewer(context, actor, club, application)
+    ClubApplicationViewAssembler.applicationView(context.connection, module, club, application, actor)
 
-  private def resolveClub(module: ClubModuleContext, clubId: ClubId): Club =
-    module.tables
-      .findClub(clubId)
+  private def resolveClub(connection: java.sql.Connection, clubId: ClubId): Club =
+    ClubTable
+      .findById(connection, clubId)
       .getOrElse(throw NoSuchElementException(s"Club ${clubId.value} was not found"))
 
   private def resolveApplication(
@@ -66,13 +68,13 @@ final case class GetClubApplicationAPIMessage(
     )
 
   private def requireClubApplicationViewer(
-      module: ClubModuleContext,
+      context: ApiPlanContext,
       actor: AccessPrincipal,
       club: Club,
       application: ClubMembershipApplication
   ): Unit =
     if !ClubApplicationViewAssembler.canManageClubApplications(actor, club) &&
-        !ClubApplicationViewAssembler.canWithdrawClubApplication(module, actor, application)
+        !ClubApplicationViewAssembler.canWithdrawClubApplication(context.connection, context.support.clubModule, actor, application)
     then
       throw AuthorizationFailure(s"${actor.displayName} cannot view membership application ${application.id.value}")
 

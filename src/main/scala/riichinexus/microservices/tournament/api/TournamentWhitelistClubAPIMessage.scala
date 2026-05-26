@@ -7,12 +7,9 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.tournament.objects.*
-import riichinexus.microservices.tournament.objects.apiTypes.{Table as _, TableSeat as _, StageStandingEntry as _, StageRankingSnapshot as _, StageAdvancementSnapshot as _, KnockoutBracketSlot as _, KnockoutBracketResult as _, KnockoutBracketMatch as _, KnockoutBracketRound as _, KnockoutBracketSnapshot as _, *}
+import riichinexus.microservices.tournament.objects.apiTypes.*
+import riichinexus.microservices.tournament.objects.apiTypes.*
 import riichinexus.microservices.tournament.objects.apiTypes.ManagementRequests.given
-import riichinexus.microservices.tournament.objects.apiTypes.SettlementRequests.given
-import riichinexus.microservices.tournament.objects.apiTypes.StageRequests.given
-import riichinexus.microservices.tournament.objects.apiTypes.TableRequests.given
 import riichinexus.microservices.tournament.objects.apiTypes.OperatorRequest
 import upickle.default.*
 
@@ -32,7 +29,7 @@ final case class TournamentWhitelistClubAPIMessage(tournamentId: String, clubId:
 
   private def resolveOperatorActor(context: ApiPlanContext): AccessPrincipal =
     OperatorRequest(operatorId).operator
-      .map(context.support.principal)
+      .map(context.principal)
       .getOrElse(AccessPrincipal.system)
 
   private def whitelistClub(

@@ -21,7 +21,7 @@ final case class AuthCheckPermissionAPIMessage(
 
   private def checkPermission(context: ApiPlanContext): Boolean =
     Try {
-      val operator = context.support.principal(PlayerId(operatorId))
+      val operator = context.principal(PlayerId(operatorId))
       context.support.requirePermission(
         principal = operator,
         permission = permission,

@@ -10,6 +10,7 @@ import riichinexus.domain.model.*
 import riichinexus.domain.service.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.objects.apiTypes.{ClubMembershipApplication as ClubMembershipApplicationResponse}
+import riichinexus.microservices.player.tables.player.PlayerTable
 import upickle.default.*
 
 final case class WithdrawClubApplicationAPIMessage(
@@ -34,18 +35,19 @@ final case class WithdrawClubApplicationAPIMessage(
       )
       application <- IO {
         module.transactionManager.inTransaction {
-          withdrawApplication(module, command)
+          withdrawApplication(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
     yield ClubMembershipApplicationResponse.fromDomain(application)
 
   private def resolveActor(context: ApiPlanContext): AccessPrincipal =
-    context.support.requestActor(
+    context.requestActor(
       guestSessionId.filter(_.nonEmpty).map(GuestSessionId(_)),
       operatorId.filter(_.nonEmpty).map(PlayerId(_))
     )
 
   private def withdrawApplication(
+      connection: java.sql.Connection,
       module: ClubModuleContext,
       command: WithdrawClubApplicationCommand
   ): Option[ClubMembershipApplication] =
@@ -54,7 +56,7 @@ final case class WithdrawClubApplicationAPIMessage(
       ensureClubActive(club)
       val application = resolveApplication(club, command)
       ensureApplicationPending(application, command.membershipId)
-      requireApplicationOwnership(module, application, command.actor)
+      requireApplicationOwnership(connection, application, command.actor)
       val updatedApplication = application.withdraw(command.actor.principalId, command.withdrawnAt, command.note)
       module.clubRepository.save(club.reviewApplication(command.membershipId, _ => updatedApplication))
       updatedApplication
@@ -86,7 +88,7 @@ final case class WithdrawClubApplicationAPIMessage(
       throw IllegalArgumentException(s"Club ${club.id.value} has already been dissolved")
 
   private def requireApplicationOwnership(
-      module: ClubModuleContext,
+      connection: java.sql.Connection,
       application: ClubMembershipApplication,
       actor: AccessPrincipal
   ): Unit =
@@ -94,7 +96,9 @@ final case class WithdrawClubApplicationAPIMessage(
       actor.isGuest && application.applicantUserId.contains(s"guest:${actor.principalId}")
 
     val ownedByRegisteredPlayer =
-      actor.playerId.flatMap(module.playerRepository.findById).exists(player =>
+      actor.playerId.flatMap(playerId =>
+        PlayerTable.findById(connection, playerId)
+      ).exists(player =>
         application.applicantUserId.contains(player.userId)
       )
 

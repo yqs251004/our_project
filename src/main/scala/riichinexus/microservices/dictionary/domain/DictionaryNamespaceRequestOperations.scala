@@ -1,14 +1,18 @@
 package riichinexus.microservices.dictionary.domain
 
+import java.sql.Connection
 import java.time.{Duration, Instant}
 
 import riichinexus.application.changes.DomainChangeInterpreter
 import riichinexus.bootstrap.DictionaryModuleContext
 import riichinexus.domain.model.*
 import riichinexus.domain.service.GlobalDictionaryRegistry
+import riichinexus.microservices.dictionary.objects.{DictionaryNamespaceRegistration, DictionaryNamespaceReviewStatus}
+import riichinexus.microservices.dictionary.tables.dictionarynamespace.DictionaryNamespaceTable
 
 object DictionaryNamespaceRequestOperations:
   def requestNamespace(
+      connection: Connection,
       module: DictionaryModuleContext,
       actor: AccessPrincipal,
       namespacePrefix: String,
@@ -29,12 +33,14 @@ object DictionaryNamespaceRequestOperations:
         throw IllegalArgumentException("Only super admins can request a namespace on behalf of another owner")
 
       val owner = DictionaryNamespaceValidation.requireActiveOwner(
+        connection,
         module,
         effectiveOwner,
         s"request ownership for ${effectiveOwner.value}"
       )
       val normalizedPrefix = GlobalDictionaryRegistry.normalizeNamespacePrefix(namespacePrefix)
       val (normalizedCoOwners, normalizedEditors) = DictionaryNamespaceValidation.normalizeCollaborators(
+        connection,
         module,
         effectiveOwner,
         coOwnerPlayerIds,
@@ -47,6 +53,7 @@ object DictionaryNamespaceRequestOperations:
         "Dictionary namespace reviewDueAt cannot be earlier than requestedAt"
       )
       val normalizedContextClubId = DictionaryNamespaceValidation.validateContextMembership(
+        connection,
         module,
         contextClubId,
         owner,
@@ -55,7 +62,7 @@ object DictionaryNamespaceRequestOperations:
         s"request ${normalizedPrefix.trim}"
       )
 
-      module.tables.findNamespaceByPrefix(normalizedPrefix) match
+      DictionaryNamespaceTable.findByPrefix(connection, normalizedPrefix) match
         case Some(existing)
             if existing.status == DictionaryNamespaceReviewStatus.Approved &&
               existing.ownerPlayerId == effectiveOwner &&

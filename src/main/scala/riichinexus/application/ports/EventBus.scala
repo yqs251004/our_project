@@ -1,5 +1,6 @@
 package riichinexus.application.ports
 
+import java.sql.Connection
 import java.time.Instant
 
 import riichinexus.domain.event.DomainEvent
@@ -23,7 +24,10 @@ trait DomainEventSubscriber:
   def partitionStrategy: DomainEventSubscriberPartitionStrategy =
     DomainEventSubscriberPartitionStrategy.Global
 
-  def handle(event: DomainEvent): Unit
+  def handle(connection: Connection, event: DomainEvent): Unit
+
+  def handle(event: DomainEvent): Unit =
+    throw IllegalStateException("Domain event subscriber handling requires an active database connection")
 
 trait DomainEventBus:
   def publish(event: DomainEvent): Unit

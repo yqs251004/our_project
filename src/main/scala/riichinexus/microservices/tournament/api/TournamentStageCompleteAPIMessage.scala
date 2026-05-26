@@ -7,38 +7,38 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.player.objects.*
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.player.tables.player.PlayerTable
 import riichinexus.microservices.tournament.domain.StageLineupSupport
-import riichinexus.microservices.tournament.objects.*
-import riichinexus.microservices.tournament.objects.apiTypes.{Table as _, TableSeat as _, StageStandingEntry as _, StageRankingSnapshot as _, StageAdvancementSnapshot as _, KnockoutBracketSlot as _, KnockoutBracketResult as _, KnockoutBracketMatch as _, KnockoutBracketRound as _, KnockoutBracketSnapshot as _, *}
+import riichinexus.microservices.tournament.objects.apiTypes.*
+import riichinexus.microservices.tournament.objects.apiTypes.*
 import riichinexus.microservices.tournament.objects.apiTypes.ManagementRequests.given
-import riichinexus.microservices.tournament.objects.apiTypes.SettlementRequests.given
-import riichinexus.microservices.tournament.objects.apiTypes.StageRequests.given
-import riichinexus.microservices.tournament.objects.apiTypes.TableRequests.given
 import upickle.default.*
 
-final case class TournamentStageCompleteAPIMessage(tournamentId: String, stageId: String, request: CompleteStageRequest) extends APIMessage[riichinexus.microservices.tournament.objects.apiTypes.StageAdvancementSnapshot] derives ReadWriter:
+final case class TournamentStageCompleteAPIMessage(tournamentId: String, stageId: String, request: CompleteStageRequest) extends APIMessage[riichinexus.microservices.tournament.objects.StageAdvancementSnapshot] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[riichinexus.microservices.tournament.objects.apiTypes.StageAdvancementSnapshot] =
+  override def plan(context: ApiPlanContext): IO[riichinexus.microservices.tournament.objects.StageAdvancementSnapshot] =
     for
       completedAt <- IO.realTimeInstant
       module = context.support.tournamentModule
       command = CompleteStageCommand(
         tournamentId = TournamentId(tournamentId),
         stageId = TournamentStageId(stageId),
-        actor = request.operator.map(context.support.principal).getOrElse(AccessPrincipal.system),
+        actor = request.operator.map(context.principal).getOrElse(AccessPrincipal.system),
         completedAt = completedAt
       )
       advancement <- IO {
         module.transactionManager
           .inTransaction {
-            completeStage(module, command)
+            completeStage(context.connection, module, command)
           }
           .getOrElse(throw NoSuchElementException("Resource not found"))
       }
-    yield riichinexus.microservices.tournament.objects.apiTypes.StageAdvancementSnapshot.fromDomain(advancement)
+    yield riichinexus.microservices.tournament.objects.StageAdvancementSnapshot.fromDomain(advancement)
 
   private def completeStage(
+      connection: java.sql.Connection,
       module: TournamentModuleContext,
       command: CompleteStageCommand
   ): Option[StageAdvancementSnapshot] =
@@ -51,10 +51,10 @@ final case class TournamentStageCompleteAPIMessage(tournamentId: String, stageId
 
       val stage = requireStage(tournament, command.stageId)
       val stageTables = module.tableRepository.findByTournamentAndStage(command.tournamentId, command.stageId)
-      ensureStageCanComplete(module, tournament, stage, stageTables, command.completedAt)
+      ensureStageCanComplete(connection, module, tournament, stage, stageTables, command.completedAt)
 
       val advancement =
-        module.stageQueries.stageAdvancementPreview(command.tournamentId, command.stageId, command.completedAt)
+        module.stageQueries.stageAdvancementPreview(connection, command.tournamentId, command.stageId, command.completedAt)
 
       module.tournamentRepository.save(tournament.updateStage(command.stageId, _.complete))
       advancement
@@ -66,6 +66,7 @@ final case class TournamentStageCompleteAPIMessage(tournamentId: String, stageId
       .getOrElse(throw NoSuchElementException(s"Stage ${stageId.value} was not found"))
 
   private def ensureStageCanComplete(
+      connection: java.sql.Connection,
       module: TournamentModuleContext,
       tournament: Tournament,
       stage: TournamentStage,
@@ -75,7 +76,7 @@ final case class TournamentStageCompleteAPIMessage(tournamentId: String, stageId
     ensureAllTablesMaterialized(stage, stageTables)
     ensureAllTablesArchived(stage, stageTables)
     if !isKnockoutStage(stage) then
-      ensureNonKnockoutRoundsComplete(module, tournament, stage, stageTables, completedAt)
+      ensureNonKnockoutRoundsComplete(connection, module, tournament, stage, stageTables, completedAt)
 
   private def ensureAllTablesMaterialized(stage: TournamentStage, stageTables: Vector[Table]): Unit =
     if stageTables.size != stage.scheduledTableIds.size then
@@ -90,13 +91,14 @@ final case class TournamentStageCompleteAPIMessage(tournamentId: String, stageId
       )
 
   private def ensureNonKnockoutRoundsComplete(
+      connection: java.sql.Connection,
       module: TournamentModuleContext,
       tournament: Tournament,
       stage: TournamentStage,
       stageTables: Vector[Table],
       completedAt: Instant
   ): Unit =
-    val participants = resolveParticipants(module, tournament, stage)
+    val participants = resolveParticipants(connection, module, tournament, stage)
     val records = module.matchRecordRepository.findByTournamentAndStage(tournament.id, stage.id)
     val effectiveRoundLimit = StageLineupSupport.effectiveRoundLimit(stage)
     val requiredTablesPerRound =
@@ -124,6 +126,7 @@ final case class TournamentStageCompleteAPIMessage(tournamentId: String, stageId
       stage.advancementRule.ruleType == AdvancementRuleType.KnockoutElimination
 
   private def resolveParticipants(
+      connection: java.sql.Connection,
       module: TournamentModuleContext,
       tournament: Tournament,
       stage: TournamentStage
@@ -143,9 +146,10 @@ final case class TournamentStageCompleteAPIMessage(tournamentId: String, stageId
 
       (tournament.participatingPlayers ++ whitelistedPlayers ++ registeredClubMembers ++ whitelistedClubMembers).distinct
 
-    val playersById = module.playerRepository.findByIds(
-      (stage.lineupSubmissions.flatMap(_.seats.map(_.playerId)) ++ fallbackPlayerIds).distinct
-    ).map(player => player.id -> player).toMap
+    val playersById = PlayerTable
+      .findByIds(connection, (stage.lineupSubmissions.flatMap(_.seats.map(_.playerId)) ++ fallbackPlayerIds).distinct)
+      .map(player => player.id -> player)
+      .toMap
     val stagePlayerIds = StageLineupSupport.resolveEligiblePlayers(stage, playersById.get)
 
     val targetPlayerIds =

@@ -6,7 +6,7 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.TournamentId
 import riichinexus.microservices.publicquery.objects.apiTypes.PublicTournamentDetailView
-import riichinexus.microservices.publicquery.tables.PublicTournamentViews
+import riichinexus.microservices.publicquery.domain.PublicTournamentViews
 import upickle.default.*
 
 final case class GetPublicTournamentAPIMessage(
@@ -24,5 +24,5 @@ final case class GetPublicTournamentAPIMessage(
       tournamentId: TournamentId
   ): PublicTournamentDetailView =
     PublicTournamentViews
-      .detail(context.support.tournamentModule, tournamentId)
+      .detail(context.connection, context.support.tournamentModule, tournamentId)
       .getOrElse(throw NoSuchElementException("Resource not found"))

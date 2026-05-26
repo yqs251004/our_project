@@ -6,24 +6,29 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.dictionary.objects.apiTypes.{
-  DictionaryListNamespacesQuery,
-  DictionaryNamespaceRegistration as DictionaryNamespaceRegistrationResponse
+import riichinexus.microservices.dictionary.objects.{
+  DictionaryNamespaceRegistration,
+  DictionaryNamespaceRegistrationView,
+  DictionaryNamespaceReviewStatus
 }
+import riichinexus.microservices.dictionary.objects.apiTypes.{
+  DictionaryListNamespacesQuery
+}
+import riichinexus.microservices.dictionary.tables.dictionarynamespace.DictionaryNamespaceTable
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 
 final case class DictionaryListNamespacesAPIMessage(
     query: DictionaryListNamespacesQuery
-) extends APIMessage[PagedResponse[DictionaryNamespaceRegistrationResponse]] derives ReadWriter:
+) extends APIMessage[PagedResponse[DictionaryNamespaceRegistrationView]] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[PagedResponse[DictionaryNamespaceRegistrationResponse]] =
+  override def plan(context: ApiPlanContext): IO[PagedResponse[DictionaryNamespaceRegistrationView]] =
     for
       now <- IO.realTimeInstant
       resolved <- IO(resolveQuery(context, now))
       namespaces <- IO(listNamespaces(context, resolved))
     yield PagedResponse.fromItems(namespaces, query.limit, query.offset, resolved.appliedFilters)(
-      DictionaryNamespaceRegistrationResponse.fromDomain
+      DictionaryNamespaceRegistrationView.fromDomain
     )
 
   private def resolveQuery(context: ApiPlanContext, now: Instant): ResolvedNamespacesQuery =
@@ -37,7 +42,7 @@ final case class DictionaryListNamespacesAPIMessage(
       overdueOnly = query.overdueOnly.contains(true),
       dueBefore = query.dueBefore.filter(_.nonEmpty).map(Instant.parse),
       dueAfter = query.dueAfter.filter(_.nonEmpty).map(Instant.parse),
-      actor = context.support.principal(PlayerId(query.operatorId)),
+      actor = context.principal(PlayerId(query.operatorId)),
       appliedFilters = Vector(
         query.status.filter(_.nonEmpty).map("status" -> _),
         query.contextClubId.filter(_.nonEmpty).map("contextClubId" -> _),
@@ -55,7 +60,7 @@ final case class DictionaryListNamespacesAPIMessage(
       context: ApiPlanContext,
       query: ResolvedNamespacesQuery
   ): Vector[DictionaryNamespaceRegistration] =
-    context.support.dictionaryModule.tables.listNamespaces()
+    DictionaryNamespaceTable.findAll(context.connection)
       .filter(registration => query.status.forall(_ == registration.status))
       .filter(registration => query.contextClubId.forall(clubId => registration.contextClubId.contains(clubId)))
       .filter(registration => query.ownerId.forall(_ == registration.ownerPlayerId))

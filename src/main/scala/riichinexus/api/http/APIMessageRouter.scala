@@ -43,14 +43,19 @@ object APIMessageRouter:
   ): IO[Response[IO]] =
     for
       body <- request.bodyText.compile.string
-      context = ApiPlanContext(
-        support = support.apiPlanSupport,
-        bearerToken = support.bearerToken(request)
-      )
-      _ <-
-        if apiMessage.requiresBearerToken then IO(context.requireBearerToken).void
-        else IO.unit
-      responseJson <- apiMessage.planJson(bodyForDecode(body), context)
+      responseJson <- support.apiPlanSupport.executionContext.connectionFactory.withTransactionConnection { connection =>
+        val context = ApiPlanContext(
+          support = support.apiPlanSupport,
+          bearerToken = support.bearerToken(request),
+          connection = connection
+        )
+        for
+          _ <-
+            if apiMessage.requiresBearerToken then IO(context.requireBearerToken).void
+            else IO.unit
+          responseJson <- apiMessage.planJson(bodyForDecode(body), context)
+        yield responseJson
+      }
       response <- support.textResponse(httpStatus(apiMessage.successStatus), ujson.write(responseJson, indent = 2), "application/json; charset=utf-8")
     yield response
 

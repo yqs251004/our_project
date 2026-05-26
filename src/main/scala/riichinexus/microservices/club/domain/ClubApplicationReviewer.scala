@@ -1,14 +1,18 @@
 package riichinexus.microservices.club.domain
 
+import java.sql.Connection
 import java.time.Instant
 import java.util.NoSuchElementException
 
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.player.objects.*
 import riichinexus.domain.service.AuthorizationFailure
+import riichinexus.microservices.player.tables.player.PlayerTable
 
 object ClubApplicationReviewer:
   def approve(
+      connection: Connection,
       module: ClubModuleContext,
       parsedClubId: ClubId,
       parsedMembershipId: MembershipApplicationId,
@@ -20,7 +24,7 @@ object ClubApplicationReviewer:
     module.transactionManager.inTransaction {
       for
         club <- module.clubRepository.findById(parsedClubId)
-        player <- module.playerRepository.findById(parsedPlayerId)
+        player <- PlayerTable.findById(connection, parsedPlayerId)
       yield
         ensureClubActive(club)
         requireActivePlayer(player, s"Player ${parsedPlayerId.value} cannot be approved into a club")
@@ -63,9 +67,9 @@ object ClubApplicationReviewer:
           .reviewApplication(parsedMembershipId, _.approve(reviewer, approvedAt, note))
           .addMember(parsedPlayerId)
 
-        val savedPlayer = module.playerRepository.save(player.joinClub(parsedClubId))
+        val savedPlayer = PlayerTable.save(connection, player.joinClub(parsedClubId))
         ClubProjectionRefresher.ensurePlayerDashboard(module, savedPlayer.id, approvedAt)
-        module.clubRepository.save(ClubProjectionRefresher.refreshClubProjection(module, updatedClub, approvedAt))
+        module.clubRepository.save(ClubProjectionRefresher.refreshClubProjection(connection, module, updatedClub, approvedAt))
     }
 
   def reject(

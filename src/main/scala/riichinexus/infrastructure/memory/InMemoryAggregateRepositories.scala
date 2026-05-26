@@ -2,6 +2,9 @@ package riichinexus.infrastructure.memory
 
 import riichinexus.application.ports.*
 import riichinexus.domain.model.*
+import riichinexus.microservices.dictionary.objects.{DictionaryNamespaceRegistration, GlobalDictionaryEntry}
+import riichinexus.microservices.opsanalytics.objects.*
+import riichinexus.microservices.player.objects.Player
 
 private object InMemoryAggregateRepositoryLockSupport:
   def nextVersion(
@@ -19,34 +22,6 @@ private object InMemoryAggregateRepositoryLockSupport:
         if actual != incomingVersion then
           throw OptimisticConcurrencyException(aggregateType, aggregateId, incomingVersion, Some(actual))
         actual + 1
-
-final class InMemoryPlayerRepository extends PlayerRepository:
-  private val state = InMemoryKeyValueStore[PlayerId, Player]()
-
-  override def save(player: Player): Player =
-    val persisted = player.copy(
-      version = InMemoryAggregateRepositoryLockSupport.nextVersion(
-        "player",
-        player.id.value,
-        player.version,
-        state.get(player.id).map(_.version)
-      )
-    )
-    state.upsert(persisted.id, persisted)
-    persisted
-
-  override def findById(id: PlayerId): Option[Player] =
-    state.get(id)
-
-  override def findByUserId(userId: String): Option[Player] =
-    state.values.find(_.userId == userId)
-
-  override def findAll(): Vector[Player] =
-    state.values
-
-object InMemoryPlayerRepository:
-  def apply(): InMemoryPlayerRepository =
-    new InMemoryPlayerRepository()
 
 final class InMemoryClubRepository extends ClubRepository:
   private val state = InMemoryKeyValueStore[ClubId, Club]()

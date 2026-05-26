@@ -4,7 +4,8 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.TournamentStatus
 import riichinexus.microservices.publicquery.objects.apiTypes.PublicTournamentSummaryView
-import riichinexus.microservices.publicquery.tables.PublicTournamentViews
+import riichinexus.microservices.publicquery.domain.PublicDirectoryQueries
+import riichinexus.microservices.publicquery.domain.PublicTournamentViews
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 
@@ -19,7 +20,7 @@ final case class ListPublicTournamentsAPIMessage(
     for
       query <- IO(resolveQuery(context))
       tournaments <- IO(listTournaments(context, query))
-      summaries <- IO(PublicTournamentViews.summaries(context.support.tournamentModule, tournaments))
+      summaries <- IO(PublicTournamentViews.summaries(context.connection, context.support.tournamentModule, tournaments))
     yield PagedResponse.fromItems(summaries, limit, offset, query.appliedFilters)(identity)
 
   private def resolveQuery(context: ApiPlanContext): ResolvedPublicTournamentsQuery =
@@ -38,8 +39,9 @@ final case class ListPublicTournamentsAPIMessage(
       context: ApiPlanContext,
       query: ResolvedPublicTournamentsQuery
   ) =
-    context.support.publicQueryModule.tables
+    PublicDirectoryQueries
       .listPublicTournaments(
+        connection = context.connection,
         status = query.status,
         organizer = query.organizer
       )

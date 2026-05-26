@@ -1,7 +1,8 @@
 package riichinexus.microservices.dictionary.domain
 
-import riichinexus.application.ports.{GlobalDictionaryRepository, PlayerRepository}
+import riichinexus.application.ports.GlobalDictionaryRepository
 import riichinexus.domain.model.*
+import riichinexus.microservices.player.objects.*
 import riichinexus.domain.service.{EloRatingConfig, GlobalDictionaryRegistry, RatingConfigProvider}
 
 object RuntimeDictionary:
@@ -96,18 +97,18 @@ object RuntimeDictionary:
 
   def calculateClubPowerRating(
       club: Club,
-      playerRepository: PlayerRepository,
+      findPlayer: PlayerId => Option[Player],
       globalDictionaryRepository: GlobalDictionaryRepository
   ): Double =
-    calculateClubPowerRating(club, playerRepository, snapshot(globalDictionaryRepository))
+    calculateClubPowerRating(club, findPlayer, snapshot(globalDictionaryRepository))
 
   def calculateClubPowerRating(
       club: Club,
-      playerRepository: PlayerRepository,
+      findPlayer: PlayerId => Option[Player],
       dictionarySnapshot: DictionarySnapshot
   ): Double =
     val memberElos = club.members.flatMap(memberId =>
-      playerRepository.findById(memberId).filter(_.status == PlayerStatus.Active).map(_.elo)
+      findPlayer(memberId).filter(_.status == PlayerStatus.Active).map(_.elo)
     )
     val averageElo =
       if memberElos.isEmpty then 0.0 else memberElos.sum.toDouble / memberElos.size.toDouble

@@ -4,7 +4,6 @@ import riichinexus.api.RegisteredAPIMessage
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.tournament.appeal.api.*
 import riichinexus.microservices.tournament.appeal.objects.apiTypes.*
-import riichinexus.microservices.tournament.appeal.objects.apiTypes.TournamentAppealResponses.given
 import riichinexus.system.objects.PagedResponse
 
 object TournamentAppealAPIMessageRegistry:

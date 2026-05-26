@@ -7,14 +7,13 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.player.objects.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.dictionary.domain.RuntimeDictionary
-import riichinexus.microservices.tournament.objects.*
-import riichinexus.microservices.tournament.objects.apiTypes.{Table as _, TableSeat as _, StageStandingEntry as _, StageRankingSnapshot as _, StageAdvancementSnapshot as _, KnockoutBracketSlot as _, KnockoutBracketResult as _, KnockoutBracketMatch as _, KnockoutBracketRound as _, KnockoutBracketSnapshot as _, *}
+import riichinexus.microservices.player.tables.player.PlayerTable
+import riichinexus.microservices.tournament.objects.apiTypes.*
+import riichinexus.microservices.tournament.objects.apiTypes.*
 import riichinexus.microservices.tournament.objects.apiTypes.ManagementRequests.given
-import riichinexus.microservices.tournament.objects.apiTypes.SettlementRequests.given
-import riichinexus.microservices.tournament.objects.apiTypes.StageRequests.given
-import riichinexus.microservices.tournament.objects.apiTypes.TableRequests.given
 import upickle.default.*
 
 final case class TournamentCreateAPIMessage(
@@ -27,7 +26,7 @@ final case class TournamentCreateAPIMessage(
       module = context.support.tournamentModule
       tournament <- IO {
         module.transactionManager.inTransaction {
-          createTournament(module, input)
+          createTournament(context.connection, module, input)
         }
       }
     yield TournamentSummaryView.fromDomain(tournament)
@@ -43,14 +42,15 @@ final case class TournamentCreateAPIMessage(
     )
 
   private def createTournament(
+      connection: java.sql.Connection,
       module: TournamentModuleContext,
       input: CreateTournamentInput
   ): Tournament =
     validateRequest(input)
     val normalizedStages = resolveNormalizedStages(module, input.stages)
-    validateAdmin(module, input.admin)
+    validateAdmin(connection, input.admin)
     val tournament = resolveTournament(module, input, normalizedStages)
-    grantAdminRole(module, tournament, input)
+    grantAdminRole(connection, tournament, input)
     module.tournamentRepository.save(input.admin.fold(tournament)(tournament.assignAdmin))
 
   private def validateRequest(input: CreateTournamentInput): Unit =
@@ -69,10 +69,10 @@ final case class TournamentCreateAPIMessage(
     requireUniqueStageConfiguration(normalizedStages)
     normalizedStages
 
-  private def validateAdmin(module: TournamentModuleContext, admin: Option[PlayerId]): Unit =
+  private def validateAdmin(connection: java.sql.Connection, admin: Option[PlayerId]): Unit =
     admin.foreach { targetAdminId =>
-      val adminPlayer = module.playerRepository
-        .findById(targetAdminId)
+      val adminPlayer = PlayerTable
+        .findById(connection, targetAdminId)
         .getOrElse(throw NoSuchElementException(s"Player ${targetAdminId.value} was not found"))
       requireActivePlayer(adminPlayer, s"Player ${targetAdminId.value} cannot administer tournaments")
     }
@@ -101,13 +101,14 @@ final case class TournamentCreateAPIMessage(
         )
 
   private def grantAdminRole(
-      module: TournamentModuleContext,
+      connection: java.sql.Connection,
       tournament: Tournament,
       input: CreateTournamentInput
   ): Unit =
     input.admin.foreach { targetAdminId =>
-      module.playerRepository.findById(targetAdminId).foreach { adminPlayer =>
-        module.playerRepository.save(
+      PlayerTable.findById(connection, targetAdminId).foreach { adminPlayer =>
+        PlayerTable.save(
+          connection,
           adminPlayer.grantRole(
             RoleGrant.tournamentAdmin(tournament.id, input.startsAt, AccessPrincipal.system.playerId)
           )

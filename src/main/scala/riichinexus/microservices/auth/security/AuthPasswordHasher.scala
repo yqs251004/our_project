@@ -5,7 +5,7 @@ import java.util.Base64
 import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.PBEKeySpec
 
-import riichinexus.domain.model.AccountCredential
+import riichinexus.microservices.auth.objects.AccountCredential
 
 object AuthPasswordHasher:
   private val Algorithm = "PBKDF2WithHmacSHA256"

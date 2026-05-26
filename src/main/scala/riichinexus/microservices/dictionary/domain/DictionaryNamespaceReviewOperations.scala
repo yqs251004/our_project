@@ -1,13 +1,16 @@
 package riichinexus.microservices.dictionary.domain
 
+import java.sql.Connection
 import java.time.Instant
 
 import riichinexus.bootstrap.DictionaryModuleContext
 import riichinexus.domain.model.*
 import riichinexus.domain.service.GlobalDictionaryRegistry
+import riichinexus.microservices.dictionary.objects.DictionaryNamespaceRegistration
 
 object DictionaryNamespaceReviewOperations:
   def reviewNamespace(
+      connection: Connection,
       module: DictionaryModuleContext,
       actor: AccessPrincipal,
       namespacePrefix: String,
@@ -19,7 +22,7 @@ object DictionaryNamespaceReviewOperations:
       module.authorizationService.requirePermission(actor, Permission.ManageGlobalDictionary)
       val reviewer = actor.playerId.getOrElse(PlayerId("system"))
       val normalizedPrefix = GlobalDictionaryRegistry.normalizeNamespacePrefix(namespacePrefix)
-      val existing = DictionaryNamespaceValidation.requireNamespace(module, normalizedPrefix)
+      val existing = DictionaryNamespaceValidation.requireNamespace(connection, module, normalizedPrefix)
       val reviewed =
         if approve then existing.approve(reviewer, reviewedAt, note)
         else existing.reject(reviewer, reviewedAt, note)
@@ -36,6 +39,7 @@ object DictionaryNamespaceReviewOperations:
     }
 
   def revokeNamespace(
+      connection: Connection,
       module: DictionaryModuleContext,
       actor: AccessPrincipal,
       namespacePrefix: String,
@@ -46,7 +50,7 @@ object DictionaryNamespaceReviewOperations:
       module.authorizationService.requirePermission(actor, Permission.ManageGlobalDictionary)
       val reviewer = actor.playerId.getOrElse(PlayerId("system"))
       val normalizedPrefix = GlobalDictionaryRegistry.normalizeNamespacePrefix(namespacePrefix)
-      val existing = DictionaryNamespaceValidation.requireNamespace(module, normalizedPrefix)
+      val existing = DictionaryNamespaceValidation.requireNamespace(connection, module, normalizedPrefix)
       DictionaryNamespaceAudit.commit(
         module = module,
         aggregate = existing.revoke(reviewer, revokedAt, note),

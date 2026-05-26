@@ -1,0 +1,44 @@
+package riichinexus.microservices.tournament.objects.apiTypes
+
+import java.time.Instant
+
+import riichinexus.domain.model.{TournamentId, TournamentStatus}
+
+final case class TournamentDetailView(
+    tournamentId: String,
+    name: String,
+    organizer: String,
+    status: String,
+    startsAt: String,
+    endsAt: String,
+    participatingClubs: Vector[TournamentParticipantClubView],
+    participatingPlayers: Vector[TournamentParticipantPlayerView],
+    whitelistSummary: TournamentWhitelistSummaryView,
+    stages: Vector[TournamentOperationsStageView]
+) derives CanEqual
+
+object TournamentDetailView:
+  def apply(
+      tournamentId: TournamentId,
+      name: String,
+      organizer: String,
+      status: TournamentStatus,
+      startsAt: Instant,
+      endsAt: Instant,
+      participatingClubs: Vector[TournamentParticipantClubView],
+      participatingPlayers: Vector[TournamentParticipantPlayerView],
+      whitelistSummary: TournamentWhitelistSummaryView,
+      stages: Vector[TournamentOperationsStageView]
+  ): TournamentDetailView =
+    TournamentDetailView(
+      tournamentId = tournamentId.value,
+      name = name,
+      organizer = organizer,
+      status = status.toString,
+      startsAt = startsAt.toString,
+      endsAt = endsAt.toString,
+      participatingClubs = participatingClubs,
+      participatingPlayers = participatingPlayers,
+      whitelistSummary = whitelistSummary,
+      stages = stages
+    )

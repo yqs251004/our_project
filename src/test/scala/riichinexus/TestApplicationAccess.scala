@@ -13,7 +13,8 @@ import riichinexus.microservices.club.tables.ClubTables
 import riichinexus.microservices.club.objects.ClubTestClient
 import riichinexus.microservices.dictionary.objects.DictionaryTestClient
 import riichinexus.microservices.player.domain.PlayerRegistrationOperations
-import riichinexus.microservices.publicquery.tables.PublicQueryTables
+import riichinexus.microservices.publicquery.api.PublicPlayerLeaderboardAPIMessage
+import riichinexus.microservices.publicquery.objects.apiTypes.PlayerLeaderboardEntry
 import riichinexus.microservices.tournament.appeal.domain.AppealApplicationService
 import riichinexus.microservices.tournament.domain.TournamentStageQueryService
 import riichinexus.microservices.tournament.objects.TournamentAPIMessageTestClient
@@ -35,8 +36,11 @@ trait TestApplicationAccess:
       .plan(apiPlanContext(app))
       .unsafeRunSync()
 
-  protected def publicQueryOperations(app: ApplicationContext): PublicQueryTables =
-    app.publicQueryModule.tables
+  protected def publicPlayerLeaderboard(app: ApplicationContext, limit: Int): Vector[PlayerLeaderboardEntry] =
+    PublicPlayerLeaderboardAPIMessage(limit = Some(limit))
+      .plan(apiPlanContext(app))
+      .unsafeRunSync()
+      .items
 
   protected def clubApi(app: ApplicationContext): ClubTestClient =
     ClubTestClient.from(app.clubModule)

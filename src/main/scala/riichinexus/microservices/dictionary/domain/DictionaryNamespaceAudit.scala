@@ -5,6 +5,7 @@ import java.time.Instant
 import riichinexus.application.changes.DomainChangeInterpreter
 import riichinexus.bootstrap.DictionaryModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.dictionary.objects.DictionaryNamespaceRegistration
 
 private[dictionary] object DictionaryNamespaceAudit:
   def commit(

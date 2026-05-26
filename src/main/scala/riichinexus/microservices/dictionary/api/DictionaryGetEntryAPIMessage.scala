@@ -6,17 +6,18 @@ import java.util.NoSuchElementException
 
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.dictionary.objects.apiTypes.{GlobalDictionaryEntry as GlobalDictionaryEntryResponse}
+import riichinexus.microservices.dictionary.objects.GlobalDictionaryEntryView
+import riichinexus.microservices.dictionary.tables.globaldictionary.GlobalDictionaryTable
 import upickle.default.*
 
 final case class DictionaryGetEntryAPIMessage(
     key: String
-) extends APIMessage[GlobalDictionaryEntryResponse] derives ReadWriter:
+) extends APIMessage[GlobalDictionaryEntryView] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[GlobalDictionaryEntryResponse] =
+  override def plan(context: ApiPlanContext): IO[GlobalDictionaryEntryView] =
     for
       entry <- IO(
-        context.support.dictionaryModule.tables.findEntryByKey(key)
+        GlobalDictionaryTable.findByKey(context.connection, key)
           .getOrElse(throw NoSuchElementException("Resource not found"))
       )
-    yield GlobalDictionaryEntryResponse.fromDomain(entry)
+    yield GlobalDictionaryEntryView.fromDomain(entry)

@@ -4,7 +4,9 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.objects.apiTypes.{Club as ClubResponse, ClubListQuery}
+import riichinexus.microservices.club.objects.{Club as ClubResponse}
+import riichinexus.microservices.club.objects.apiTypes.ClubListQuery
+import riichinexus.microservices.club.tables.club.ClubTable
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 
@@ -40,8 +42,9 @@ final case class ListClubsAPIMessage(
       context: ApiPlanContext,
       query: ResolvedClubListQuery
   ): Vector[Club] =
-    context.support.clubModule.tables
-      .listClubs(
+    ClubTable
+      .findFiltered(
+        context.connection,
         activeOnly = query.activeOnly,
         joinableOnly = query.joinableOnly,
         memberId = query.memberId,

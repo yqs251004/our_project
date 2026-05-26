@@ -4,7 +4,9 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.objects.apiTypes.{ClubMemberPrivilegeListQuery, ClubMemberPrivilegeSnapshot as ClubMemberPrivilegeSnapshotResponse}
+import riichinexus.microservices.club.objects.{ClubMemberPrivilegeSnapshot as ClubMemberPrivilegeSnapshotResponse}
+import riichinexus.microservices.club.objects.apiTypes.ClubMemberPrivilegeListQuery
+import riichinexus.microservices.club.tables.club.ClubTable
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 
@@ -38,8 +40,13 @@ final case class ListClubMemberPrivilegesAPIMessage(
       context: ApiPlanContext,
       query: ResolvedClubMemberPrivilegeQuery
   ): Vector[ClubMemberPrivilegeSnapshot] =
-    context.support.clubModule.tables
-      .listMemberPrivilegeSnapshots(query.clubId)
+    ClubTable.findById(context.connection, query.clubId)
+      .map { club =>
+        if club.dissolvedAt.nonEmpty then
+          throw IllegalArgumentException(s"Club ${club.id.value} has already been dissolved")
+        club.memberPrivilegeSnapshots
+      }
+      .getOrElse(throw java.util.NoSuchElementException(s"Club ${query.clubId.value} was not found"))
       .filter(snapshot => query.playerId.forall(_ == snapshot.playerId))
       .filter(snapshot => query.privilege.forall(snapshot.privileges.contains))
       .filter(snapshot => query.rankCode.forall(_ == snapshot.rankCode.trim.toLowerCase))

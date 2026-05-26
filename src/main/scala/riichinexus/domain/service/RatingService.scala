@@ -1,6 +1,7 @@
 package riichinexus.domain.service
 
 import riichinexus.domain.model.*
+import riichinexus.microservices.player.objects.Player
 
 final case class RatingChange(
     playerId: PlayerId,

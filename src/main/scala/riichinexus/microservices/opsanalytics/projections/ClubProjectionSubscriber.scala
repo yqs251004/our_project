@@ -1,30 +1,31 @@
 package riichinexus.microservices.opsanalytics.projections
 
+import java.sql.Connection
+
 import riichinexus.application.ports.{
   ClubRepository,
   DomainEventSubscriber,
   DomainEventSubscriberPartitionStrategy,
-  GlobalDictionaryRepository,
-  PlayerRepository
+  GlobalDictionaryRepository
 }
 import riichinexus.domain.event.*
-import riichinexus.domain.model.Club
+import riichinexus.domain.model.{Club, PlayerId}
 import riichinexus.microservices.dictionary.domain.RuntimeDictionary
+import riichinexus.microservices.player.tables.player.PlayerTable
 
 final class ClubProjectionSubscriber(
     clubRepository: ClubRepository,
-    playerRepository: PlayerRepository,
     globalDictionaryRepository: GlobalDictionaryRepository
 ) extends DomainEventSubscriber:
   override def partitionStrategy: DomainEventSubscriberPartitionStrategy =
     DomainEventSubscriberPartitionStrategy.AggregateRoot
 
-  override def handle(event: DomainEvent): Unit =
+  override def handle(connection: Connection, event: DomainEvent): Unit =
     event match
       case MatchRecordArchived(_, _, _, matchRecord, _, _) =>
         val representedClubIds = matchRecord.seatResults.flatMap(_.clubId).distinct
         val memberClubIds = matchRecord.seatResults.flatMap { result =>
-          playerRepository.findById(result.playerId).toVector.flatMap(_.boundClubIds)
+          findPlayer(connection, result.playerId).toVector.flatMap(_.boundClubIds)
         }.distinct
         val impactedClubIds = (representedClubIds ++ memberClubIds).distinct
         val dictionarySnapshot = RuntimeDictionary.snapshot(globalDictionaryRepository)
@@ -39,7 +40,7 @@ final class ClubProjectionSubscriber(
 
         impactedClubIds.foreach { clubId =>
           clubRepository.findById(clubId).foreach { club =>
-            clubRepository.save(recalculateClubPowerRating(club, dictionarySnapshot))
+            clubRepository.save(recalculateClubPowerRating(connection, club, dictionarySnapshot))
           }
         }
 
@@ -47,9 +48,13 @@ final class ClubProjectionSubscriber(
         ()
 
   private def recalculateClubPowerRating(
+      connection: Connection,
       club: Club,
       dictionarySnapshot: RuntimeDictionary.DictionarySnapshot
   ): Club =
     club.updatePowerRating(
-      RuntimeDictionary.calculateClubPowerRating(club, playerRepository, dictionarySnapshot)
+      RuntimeDictionary.calculateClubPowerRating(club, findPlayer(connection, _), dictionarySnapshot)
     )
+
+  private def findPlayer(connection: Connection, playerId: PlayerId) =
+    PlayerTable.findById(connection, playerId)

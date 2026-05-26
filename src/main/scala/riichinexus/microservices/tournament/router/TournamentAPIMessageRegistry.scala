@@ -3,11 +3,9 @@ package riichinexus.microservices.tournament.router
 import riichinexus.api.RegisteredAPIMessage
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.tournament.api.*
+import riichinexus.microservices.tournament.objects.{KnockoutBracketSnapshot, StageAdvancementSnapshot, StageRankingSnapshot, Table}
 import riichinexus.microservices.tournament.objects.apiTypes.*
 import riichinexus.microservices.tournament.objects.apiTypes.ManagementRequests.given
-import riichinexus.microservices.tournament.objects.apiTypes.SettlementRequests.given
-import riichinexus.microservices.tournament.objects.apiTypes.StageRequests.given
-import riichinexus.microservices.tournament.objects.apiTypes.TableRequests.given
 import riichinexus.microservices.tournament.objects.apiTypes.TournamentOperationResponses.given
 import riichinexus.system.objects.PagedResponse
 

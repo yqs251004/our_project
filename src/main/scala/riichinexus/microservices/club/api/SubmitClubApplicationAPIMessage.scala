@@ -7,9 +7,11 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.player.objects.*
 import riichinexus.domain.service.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.objects.apiTypes.{ClubMembershipApplication as ClubMembershipApplicationResponse, ClubMembershipApplicationRequest}
+import riichinexus.microservices.player.tables.player.PlayerTable
 import upickle.default.*
 
 final case class SubmitClubApplicationAPIMessage(
@@ -19,11 +21,11 @@ final case class SubmitClubApplicationAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubMembershipApplicationResponse] =
     for
-      actor <- IO(context.support.requestActor(request.session, request.operator))
+      actor <- IO(context.requestActor(request.session, request.operator))
       module = context.support.clubModule
       parsedClubId = ClubId(clubId)
       submittedAt <- IO.realTimeInstant
-      resolvedInput <- IO(resolveApplicantInput(module, actor, request))
+      resolvedInput <- IO(resolveApplicantInput(context.connection, module, actor, request))
       command = SubmitClubApplicationCommand(
         actor = actor,
         clubId = parsedClubId,
@@ -33,18 +35,19 @@ final case class SubmitClubApplicationAPIMessage(
       )
       application <- IO {
         module.transactionManager.inTransaction {
-          submitApplication(module, command)
+          submitApplication(context.connection, module, command)
         }
       }
     yield ClubMembershipApplicationResponse.fromDomain(application)
 
   private def resolveApplicantInput(
+      connection: java.sql.Connection,
       module: ClubModuleContext,
       actor: AccessPrincipal,
       request: ClubMembershipApplicationRequest
   ): ResolvedClubApplicationInput =
     val operatorPlayer = request.operatorId.filter(_.nonEmpty)
-      .flatMap(id => module.tables.findPlayer(PlayerId(id)))
+      .flatMap(id => PlayerTable.findById(connection, PlayerId(id)))
     val applicantUserId = request.applicantUserId
       .orElse(request.guestSessionId.filter(_.nonEmpty).map(session => s"guest:$session"))
       .orElse(operatorPlayer.map(_.userId))
@@ -57,18 +60,20 @@ final case class SubmitClubApplicationAPIMessage(
     )
 
   private def submitApplication(
+      connection: java.sql.Connection,
       module: ClubModuleContext,
       command: SubmitClubApplicationCommand
   ): ClubMembershipApplication =
     module.authorizationService.requirePermission(command.actor, Permission.SubmitClubApplication)
     val club = module.clubRepository.findById(command.clubId)
       .getOrElse(throw NoSuchElementException("Resource not found"))
-    validateSubmission(module, club, command)
+    validateSubmission(connection, module, club, command)
     val application = createApplication(command)
     module.clubRepository.save(club.submitApplication(application))
     application
 
   private def validateSubmission(
+      connection: java.sql.Connection,
       module: ClubModuleContext,
       club: Club,
       command: SubmitClubApplicationCommand
@@ -77,7 +82,7 @@ final case class SubmitClubApplicationAPIMessage(
     ensureApplicationsOpen(club, command.clubId)
     ensureDisplayNameNonEmpty(command.input.displayName)
     ensureNoPendingApplication(club, command)
-    ensureApplicantNotAlreadyMember(module, command)
+    ensureApplicantNotAlreadyMember(connection, command)
 
   private def ensureClubActive(club: Club): Unit =
     if club.dissolvedAt.nonEmpty then
@@ -103,11 +108,11 @@ final case class SubmitClubApplicationAPIMessage(
     }
 
   private def ensureApplicantNotAlreadyMember(
-      module: ClubModuleContext,
+      connection: java.sql.Connection,
       command: SubmitClubApplicationCommand
   ): Unit =
     command.input.applicantUserId.foreach { userId =>
-      module.playerRepository.findByUserId(userId).foreach { existingPlayer =>
+      PlayerTable.findByUserId(connection, userId).foreach { existingPlayer =>
         if existingPlayer.boundClubIds.contains(command.clubId) then
           throw IllegalArgumentException(
             s"Player ${existingPlayer.id.value} is already a member of club ${command.clubId.value}"

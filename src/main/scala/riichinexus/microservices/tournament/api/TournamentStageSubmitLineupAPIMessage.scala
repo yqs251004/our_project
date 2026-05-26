@@ -6,22 +6,21 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.player.objects.*
 import riichinexus.domain.service.AuthorizationFailure
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.player.tables.player.PlayerTable
 import riichinexus.microservices.tournament.domain.TournamentOperationViewAssembler
-import riichinexus.microservices.tournament.objects.*
-import riichinexus.microservices.tournament.objects.apiTypes.{Table as _, TableSeat as _, StageStandingEntry as _, StageRankingSnapshot as _, StageAdvancementSnapshot as _, KnockoutBracketSlot as _, KnockoutBracketResult as _, KnockoutBracketMatch as _, KnockoutBracketRound as _, KnockoutBracketSnapshot as _, *}
+import riichinexus.microservices.tournament.objects.apiTypes.*
+import riichinexus.microservices.tournament.objects.apiTypes.*
 import riichinexus.microservices.tournament.objects.apiTypes.ManagementRequests.given
-import riichinexus.microservices.tournament.objects.apiTypes.SettlementRequests.given
-import riichinexus.microservices.tournament.objects.apiTypes.StageRequests.given
-import riichinexus.microservices.tournament.objects.apiTypes.TableRequests.given
 import upickle.default.*
 
 final case class TournamentStageSubmitLineupAPIMessage(tournamentId: String, stageId: String, request: SubmitStageLineupRequest) extends APIMessage[TournamentMutationView] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[TournamentMutationView] =
     for
-      actor <- IO(context.support.principal(request.operator))
+      actor <- IO(context.principal(request.operator))
       module = context.support.tournamentModule
       command = SubmitStageLineupCommand(
         tournamentId = TournamentId(tournamentId),
@@ -31,16 +30,17 @@ final case class TournamentStageSubmitLineupAPIMessage(tournamentId: String, sta
       )
       _ <- IO {
         module.transactionManager.inTransaction {
-          submitLineup(module, command)
+          submitLineup(context.connection, module, command)
         }
       }
       view <- IO {
-        TournamentOperationViewAssembler.mutationView(module, command.tournamentId, Vector.empty)
+        TournamentOperationViewAssembler.mutationView(context.connection, module, command.tournamentId, Vector.empty)
         .getOrElse(throw NoSuchElementException("Resource not found"))
       }
     yield view
 
   private def submitLineup(
+      connection: java.sql.Connection,
       module: TournamentModuleContext,
       command: SubmitStageLineupCommand
   ): Option[Tournament] =
@@ -51,7 +51,7 @@ final case class TournamentStageSubmitLineupAPIMessage(tournamentId: String, sta
       requireClubLineupCapability(module, command.actor, club)
       ensureSubmitterMatchesActor(command.actor, command.submission)
       ensureClubRegistered(tournament, command)
-      ensureLineupPlayersActiveMembers(module, club, command.submission)
+      ensureLineupPlayersActiveMembers(connection, club, command.submission)
       module.tournamentRepository.save(
         tournament.updateStage(command.stageId, _.submitLineup(command.submission))
       )
@@ -101,7 +101,7 @@ final case class TournamentStageSubmitLineupAPIMessage(tournamentId: String, sta
       )
 
   private def ensureLineupPlayersActiveMembers(
-      module: TournamentModuleContext,
+      connection: java.sql.Connection,
       club: Club,
       submission: StageLineupSubmission
   ): Unit =
@@ -112,8 +112,8 @@ final case class TournamentStageSubmitLineupAPIMessage(tournamentId: String, sta
           s"Player ${playerId.value} is not a member of club ${submission.clubId.value}"
         )
 
-      val player = module.playerRepository
-        .findById(playerId)
+      val player = PlayerTable
+        .findById(connection, playerId)
         .getOrElse(throw NoSuchElementException(s"Player ${playerId.value} was not found"))
       if player.status != PlayerStatus.Active then
         throw IllegalArgumentException(s"Player ${playerId.value} cannot be submitted to tournament lineups")

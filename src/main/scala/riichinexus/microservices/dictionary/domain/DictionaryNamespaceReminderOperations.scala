@@ -1,12 +1,21 @@
 package riichinexus.microservices.dictionary.domain
 
+import java.sql.Connection
 import java.time.{Duration, Instant}
 
 import riichinexus.bootstrap.DictionaryModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.dictionary.objects.{
+  DictionaryNamespaceRegistration,
+  DictionaryNamespaceReminderAction,
+  DictionaryNamespaceReminderKind,
+  DictionaryNamespaceReviewStatus
+}
+import riichinexus.microservices.dictionary.tables.dictionarynamespace.DictionaryNamespaceTable
 
 object DictionaryNamespaceReminderOperations:
   def processReminders(
+      connection: Connection,
       module: DictionaryModuleContext,
       actor: AccessPrincipal,
       asOf: Instant,
@@ -16,7 +25,7 @@ object DictionaryNamespaceReminderOperations:
   ): Vector[DictionaryNamespaceReminderAction] =
     module.transactionManager.inTransaction {
       module.authorizationService.requirePermission(actor, Permission.ManageGlobalDictionary)
-      module.tables.listNamespaces()
+      DictionaryNamespaceTable.findAll(connection)
         .filter(_.status == DictionaryNamespaceReviewStatus.Pending)
         .flatMap { registration =>
           reminderKindFor(registration, asOf, escalationGrace)

@@ -7,19 +7,20 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.dictionary.domain.DictionaryNamespaceReviewOperations
-import riichinexus.microservices.dictionary.objects.apiTypes.{DictionaryNamespaceRegistration as DictionaryNamespaceRegistrationResponse, *}
+import riichinexus.microservices.dictionary.objects.{DictionaryNamespaceRegistration, DictionaryNamespaceRegistrationView}
+import riichinexus.microservices.dictionary.objects.apiTypes.*
 import upickle.default.*
 
 final case class DictionaryRevokeNamespaceAPIMessage(
     operatorId: String,
     namespacePrefix: String,
     note: Option[String] = None
-) extends APIMessage[DictionaryNamespaceRegistrationResponse] derives ReadWriter:
+) extends APIMessage[DictionaryNamespaceRegistrationView] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[DictionaryNamespaceRegistrationResponse] =
+  override def plan(context: ApiPlanContext): IO[DictionaryNamespaceRegistrationView] =
     for
       request <- IO(RevokeDictionaryNamespaceRequest(operatorId, namespacePrefix, note))
-      actor <- IO(context.support.principal(request.operator))
+      actor <- IO(context.principal(request.operator))
       revokedAt <- IO.realTimeInstant
       module = context.support.dictionaryModule
       command = RevokeNamespaceCommand(
@@ -29,15 +30,17 @@ final case class DictionaryRevokeNamespaceAPIMessage(
         revokedAt = revokedAt
       )
       registration <- IO(
-        revokeNamespace(module, command)
+        revokeNamespace(context.connection, module, command)
       )
-    yield DictionaryNamespaceRegistrationResponse.fromDomain(registration)
+    yield DictionaryNamespaceRegistrationView.fromDomain(registration)
 
   private def revokeNamespace(
+      connection: java.sql.Connection,
       module: riichinexus.bootstrap.DictionaryModuleContext,
       command: RevokeNamespaceCommand
   ): DictionaryNamespaceRegistration =
     DictionaryNamespaceReviewOperations.revokeNamespace(
+      connection = connection,
       module = module,
       actor = command.actor,
       namespacePrefix = command.namespacePrefix,

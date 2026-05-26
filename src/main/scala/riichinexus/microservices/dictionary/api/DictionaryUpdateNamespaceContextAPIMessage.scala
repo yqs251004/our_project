@@ -7,7 +7,8 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.dictionary.domain.DictionaryNamespaceManagementOperations
-import riichinexus.microservices.dictionary.objects.apiTypes.{DictionaryNamespaceRegistration as DictionaryNamespaceRegistrationResponse, *}
+import riichinexus.microservices.dictionary.objects.{DictionaryNamespaceRegistration, DictionaryNamespaceRegistrationView}
+import riichinexus.microservices.dictionary.objects.apiTypes.*
 import upickle.default.*
 
 final case class DictionaryUpdateNamespaceContextAPIMessage(
@@ -15,12 +16,12 @@ final case class DictionaryUpdateNamespaceContextAPIMessage(
     namespacePrefix: String,
     contextClubId: Option[String] = None,
     note: Option[String] = None
-) extends APIMessage[DictionaryNamespaceRegistrationResponse] derives ReadWriter:
+) extends APIMessage[DictionaryNamespaceRegistrationView] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[DictionaryNamespaceRegistrationResponse] =
+  override def plan(context: ApiPlanContext): IO[DictionaryNamespaceRegistrationView] =
     for
       request <- IO(UpdateDictionaryNamespaceContextRequest(operatorId, namespacePrefix, contextClubId, note))
-      actor <- IO(context.support.principal(request.operator))
+      actor <- IO(context.principal(request.operator))
       updatedAt <- IO.realTimeInstant
       module = context.support.dictionaryModule
       command = UpdateNamespaceContextCommand(
@@ -31,15 +32,17 @@ final case class DictionaryUpdateNamespaceContextAPIMessage(
         updatedAt = updatedAt
       )
       registration <- IO(
-        updateContext(module, command)
+        updateContext(context.connection, module, command)
       )
-    yield DictionaryNamespaceRegistrationResponse.fromDomain(registration)
+    yield DictionaryNamespaceRegistrationView.fromDomain(registration)
 
   private def updateContext(
+      connection: java.sql.Connection,
       module: riichinexus.bootstrap.DictionaryModuleContext,
       command: UpdateNamespaceContextCommand
   ): DictionaryNamespaceRegistration =
     DictionaryNamespaceManagementOperations.updateContext(
+      connection = connection,
       module = module,
       actor = command.actor,
       namespacePrefix = command.namespacePrefix,

@@ -8,7 +8,10 @@ import riichinexus.domain.model.*
 import riichinexus.domain.service.AuthorizationFailure
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubApplicationViewAssembler
-import riichinexus.microservices.club.objects.apiTypes.{Club as _, ClubRelation as _, ClubMembershipApplication as _, ClubPrivilegeDefinition as _, ClubMemberPrivilegeSnapshot as _, *}
+import riichinexus.microservices.club.objects.ClubApplicationStatus
+import riichinexus.microservices.club.objects.ClubMembershipApplicationView
+import riichinexus.microservices.club.objects.apiTypes.ClubApplicationListQuery
+import riichinexus.microservices.club.tables.club.ClubTable
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 
@@ -27,14 +30,14 @@ final case class ListClubApplicationsAPIMessage(
     ResolvedClubApplicationListQuery(
       clubId = ClubId(clubId),
       operatorId = Option(query.operatorId).filter(_.nonEmpty).map(PlayerId(_)),
-      status = query.status.filter(_.nonEmpty).map(context.support.parseEnum("status", _)(ClubMembershipApplicationStatus.valueOf)),
+      status = query.status,
       applicantUserId = query.applicantUserId.filter(_.nonEmpty),
       displayName = query.displayName.filter(_.nonEmpty),
       limit = query.limit.getOrElse(20),
       offset = query.offset.getOrElse(0),
       appliedFilters = Vector(
         Option(query.operatorId).filter(_.nonEmpty).map("operatorId" -> _),
-        query.status.filter(_.nonEmpty).map("status" -> _),
+        query.status.map(status => "status" -> status.toString),
         query.applicantUserId.filter(_.nonEmpty).map("applicantUserId" -> _),
         query.displayName.filter(_.nonEmpty).map("displayName" -> _)
       ).flatten.toMap
@@ -45,10 +48,10 @@ final case class ListClubApplicationsAPIMessage(
       query: ResolvedClubApplicationListQuery
   ): PagedResponse[ClubMembershipApplicationView] =
     val module = context.support.clubModule
-    val club = module.tables
-      .findClub(query.clubId)
+    val club = ClubTable
+      .findById(context.connection, query.clubId)
       .getOrElse(throw NoSuchElementException(s"Club ${query.clubId.value} was not found"))
-    val actor = context.support.requestActor(
+    val actor = context.requestActor(
       guestSessionId = None,
       operatorId = query.operatorId
     )
@@ -59,7 +62,7 @@ final case class ListClubApplicationsAPIMessage(
       .filter(application => query.applicantUserId.forall(value => application.applicantUserId.contains(value)))
       .filter(application => query.displayName.forall(context.support.containsIgnoreCase(application.displayName, _)))
       .sortBy(_.submittedAt)
-      .map(application => ClubApplicationViewAssembler.applicationView(module, club, application, actor))
+      .map(application => ClubApplicationViewAssembler.applicationView(context.connection, module, club, application, actor))
     pagedResponse(applications, query)
 
   private def pagedResponse(
@@ -86,7 +89,7 @@ final case class ListClubApplicationsAPIMessage(
   private final case class ResolvedClubApplicationListQuery(
       clubId: ClubId,
       operatorId: Option[PlayerId],
-      status: Option[ClubMembershipApplicationStatus],
+      status: Option[ClubApplicationStatus],
       applicantUserId: Option[String],
       displayName: Option[String],
       limit: Int,

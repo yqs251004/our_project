@@ -2,6 +2,8 @@ package riichinexus.domain.model
 
 import java.time.Instant
 
+import riichinexus.microservices.tournament.objects.SeatWind
+
 enum HandOutcome derives CanEqual:
   case Tsumo
   case Ron

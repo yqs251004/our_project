@@ -4,6 +4,7 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.{AccessPrincipal, ClubRelationKind, Permission}
 import riichinexus.microservices.publicquery.objects.apiTypes.PublicClubDirectoryEntry
+import riichinexus.microservices.publicquery.domain.PublicDirectoryQueries
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 
@@ -38,7 +39,7 @@ final case class ListPublicClubsAPIMessage(
       context: ApiPlanContext,
       query: ResolvedClubDirectoryQuery
   ): Vector[PublicClubDirectoryEntry] =
-    context.support.publicQueryModule.tables.publicClubDirectory()
+    PublicDirectoryQueries.publicClubDirectory(context.connection)
       .filter(club => query.name.forall(context.support.containsIgnoreCase(club.name, _)))
       .filter(club => query.relation.forall(relationKind => club.relations.exists(_.relation == relationKind.toString)))
       .sortBy(_.name)

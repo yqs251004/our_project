@@ -3,7 +3,6 @@ package riichinexus.bootstrap
 import riichinexus.application.ports.*
 
 final case class ApplicationRepositoryContext(
-    playerRepository: PlayerRepository,
     accountCredentialRepository: AccountCredentialRepository,
     authenticatedSessionRepository: AuthenticatedSessionRepository,
     guestSessionRepository: GuestSessionRepository,

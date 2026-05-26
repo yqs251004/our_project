@@ -10,6 +10,7 @@ import riichinexus.bootstrap.AuthModuleContext
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.auth.objects.apiTypes.GuestSessionResponse
+import riichinexus.microservices.auth.tables.guestsession.GuestSessionTable
 import upickle.default.*
 
 final case class RevokeGuestSessionAuthAPIMessage(
@@ -28,23 +29,24 @@ final case class RevokeGuestSessionAuthAPIMessage(
       )
       session <- IO {
         module.transactionManager.inTransaction {
-          revokeGuestSession(module, command)
+          revokeGuestSession(context.connection, module, command)
         }
       }
     yield GuestSessionResponse.fromDomain(session)
 
   private def revokeGuestSession(
+      connection: java.sql.Connection,
       module: AuthModuleContext,
       command: RevokeGuestSessionCommand
   ): GuestAccessSession =
-    val session = module.guestSessionRepository.findById(command.input.sessionId)
+    val session = GuestSessionTable.findById(connection, command.input.sessionId)
       .getOrElse(throw NoSuchElementException(s"Guest session ${command.input.sessionId.value} was not found"))
     DomainChangeInterpreter
       .auditOnly(module.transactionManager, module.auditEventRepository)
       .commitWithinTransaction(
         DomainChange(
           aggregate = session.revoke(command.input.reason, command.revokedAt),
-          persist = module.guestSessionRepository.save,
+          persist = GuestSessionTable.save(connection, _),
           auditEntries = updated =>
             Vector(
               AuditEventEntry(

@@ -9,20 +9,22 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.application.changes.{DomainChange, DomainChangeInterpreter}
 import riichinexus.bootstrap.PlatformAdminModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.player.objects.*
 import riichinexus.domain.service.AuthorizationFailure
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.player.tables.player.PlayerTable
+import riichinexus.microservices.platformadmin.objects.PlatformAdminPlayerView
 import riichinexus.microservices.platformadmin.objects.apiTypes.*
-import riichinexus.microservices.platformadmin.objects.apiTypes.PlatformAdminResponses.given
 import upickle.default.*
 
 final case class PlatformAdminGrantSuperAdminAPIMessage(
     playerId: PlayerId,
     operatorId: PlayerId
-) extends APIMessage[PlatformAdminPlayerResponse] derives ReadWriter:
+) extends APIMessage[PlatformAdminPlayerView] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[PlatformAdminPlayerResponse] =
+  override def plan(context: ApiPlanContext): IO[PlatformAdminPlayerView] =
     for
-      actor <- IO(context.support.principal(operatorId))
+      actor <- IO(context.principal(operatorId))
       module = context.support.platformAdminModule
       request = GrantSuperAdminRequest(operatorId = operatorId)
       grantedAt <- IO.realTimeInstant
@@ -34,24 +36,25 @@ final case class PlatformAdminGrantSuperAdminAPIMessage(
       player <- IO {
         module.transactionManager
           .inTransaction {
-            grantSuperAdmin(module, command)
+            grantSuperAdmin(context.connection, module, command)
           }
           .getOrElse(throw NoSuchElementException(s"Player ${command.playerId.value} was not found"))
       }
     yield PlatformAdminPlayerView.fromDomain(player)
 
   private def grantSuperAdmin(
+      connection: java.sql.Connection,
       module: PlatformAdminModuleContext,
     command: GrantSuperAdminCommand
   ): Option[Player] =
     ensureSuperAdmin(command.actor)
-    module.tables.findPlayer(command.playerId).map { player =>
+    PlayerTable.findById(connection, command.playerId).map { player =>
       DomainChangeInterpreter
         .auditOnly(module.transactionManager, module.auditEventRepository)
         .commitWithinTransaction(
           DomainChange(
             aggregate = player.grantRole(RoleGrant.superAdmin(command.grantedAt, command.actor.playerId)),
-            persist = module.playerRepository.save,
+            persist = nextPlayer => PlayerTable.save(connection, nextPlayer),
             auditEntries = _ =>
               Vector(
                 AuditEventEntry(

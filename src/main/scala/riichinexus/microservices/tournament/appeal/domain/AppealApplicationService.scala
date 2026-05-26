@@ -1,6 +1,7 @@
 package riichinexus.microservices.tournament.appeal.domain
 
 import java.net.URI
+import java.sql.Connection
 import java.time.{Duration, Instant}
 import java.util.NoSuchElementException
 
@@ -8,7 +9,9 @@ import riichinexus.application.changes.{DomainChange, DomainChangeInterpreter}
 import riichinexus.application.ports.*
 import riichinexus.domain.event.*
 import riichinexus.domain.model.*
+import riichinexus.microservices.player.objects.*
 import riichinexus.domain.service.*
+import riichinexus.microservices.player.tables.player.PlayerTable
 import riichinexus.microservices.tournament.domain.KnockoutStageCoordinator
 
 private object AppealAttachmentPolicySupport:
@@ -142,7 +145,6 @@ private object AppealAttachmentPolicySupport:
 final class AppealApplicationService(
     appealTicketRepository: AppealTicketRepository,
     tableRepository: TableRepository,
-    playerRepository: PlayerRepository,
     knockoutStageCoordinator: KnockoutStageCoordinator,
     auditEventRepository: AuditEventRepository,
     eventBus: DomainEventBus,
@@ -150,6 +152,7 @@ final class AppealApplicationService(
     authorizationService: AuthorizationService = NoOpAuthorizationService
 ):
   def fileAppeal(
+      connection: Connection,
       tableId: TableId,
       openedBy: PlayerId,
       description: String,
@@ -232,6 +235,7 @@ final class AppealApplicationService(
     }
 
   def updateAppealWorkflow(
+      connection: Connection,
       ticketId: AppealTicketId,
       actor: AccessPrincipal,
       assigneeId: Option[PlayerId] = None,
@@ -251,7 +255,7 @@ final class AppealApplicationService(
         )
 
         val operatorId = actor.playerId.getOrElse(ticket.openedBy)
-        assigneeId.foreach(id => requireActiveAppealOperator(id, "Appeal assignee must be an active player"))
+        assigneeId.foreach(id => requireActiveAppealOperator(connection, id, "Appeal assignee must be an active player"))
         val nextAssignee =
           if clearAssignee then None
           else assigneeId.orElse(ticket.assigneeId)
@@ -304,6 +308,7 @@ final class AppealApplicationService(
     }
 
   def resolveAppeal(
+      connection: Connection,
       ticketId: AppealTicketId,
       verdict: String,
       actor: AccessPrincipal,
@@ -311,6 +316,7 @@ final class AppealApplicationService(
       note: Option[String] = None
   ): Option[AppealTicket] =
     adjudicateAppeal(
+      connection = connection,
       ticketId = ticketId,
       decision = AppealDecisionType.Resolve,
       verdict = verdict,
@@ -321,6 +327,7 @@ final class AppealApplicationService(
     )
 
   def adjudicateAppeal(
+      connection: Connection,
       ticketId: AppealTicketId,
       decision: AppealDecisionType,
       verdict: String,
@@ -375,6 +382,7 @@ final class AppealApplicationService(
 
                     if updatedTable.bracketMatchId.nonEmpty && updatedTable.status != TableStatus.Archived then
                       knockoutStageCoordinator.reconcileAfterMatchMutation(
+                        connection,
                         updatedTable.tournamentId,
                         updatedTable.stageId,
                         updatedTable.bracketMatchId.get,
@@ -420,6 +428,7 @@ final class AppealApplicationService(
     }
 
   def reopenAppeal(
+      connection: Connection,
       ticketId: AppealTicketId,
       reason: String,
       actor: AccessPrincipal,
@@ -472,8 +481,8 @@ final class AppealApplicationService(
       }
     }
 
-  private def requireActiveAppealOperator(playerId: PlayerId, context: String): Unit =
-    val player = playerRepository.findById(playerId)
+  private def requireActiveAppealOperator(connection: Connection, playerId: PlayerId, context: String): Unit =
+    val player = PlayerTable.findById(connection, playerId)
       .getOrElse(throw NoSuchElementException(s"Player ${playerId.value} was not found"))
     if player.status != PlayerStatus.Active then
       throw IllegalArgumentException(context)

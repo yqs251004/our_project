@@ -10,7 +10,8 @@ import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
 import riichinexus.domain.service.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.objects.apiTypes.{Club as ClubResponse, UpdateClubRecruitmentPolicyRequest}
+import riichinexus.microservices.club.objects.{Club as ClubResponse}
+import riichinexus.microservices.club.objects.apiTypes.UpdateClubRecruitmentPolicyRequest
 import upickle.default.*
 
 final case class UpdateClubRecruitmentPolicyAPIMessage(
@@ -20,7 +21,7 @@ final case class UpdateClubRecruitmentPolicyAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubResponse] =
     for
-      actor <- IO(context.support.principal(request.operator))
+      actor <- IO(context.principal(request.operator))
       occurredAt <- IO.realTimeInstant
       module = context.support.clubModule
       command = UpdateClubRecruitmentPolicyCommand(

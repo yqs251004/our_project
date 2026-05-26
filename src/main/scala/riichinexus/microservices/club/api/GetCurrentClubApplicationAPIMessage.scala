@@ -8,7 +8,8 @@ import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubApplicationViewAssembler
-import riichinexus.microservices.club.objects.apiTypes.{Club as _, ClubRelation as _, ClubMembershipApplication as _, ClubPrivilegeDefinition as _, ClubMemberPrivilegeSnapshot as _, *}
+import riichinexus.microservices.club.objects.ClubMembershipApplicationView
+import riichinexus.microservices.club.tables.club.ClubTable
 import upickle.default.*
 
 final case class GetCurrentClubApplicationAPIMessage(
@@ -21,7 +22,7 @@ final case class GetCurrentClubApplicationAPIMessage(
     for
       input <- IO(resolveInput)
       actor <- IO(resolveActor(context, input))
-      view <- IO(getCurrentApplicationView(context.support.clubModule, input, actor))
+      view <- IO(getCurrentApplicationView(context, input, actor))
     yield view
 
   private def resolveInput: CurrentClubApplicationInput =
@@ -39,21 +40,22 @@ final case class GetCurrentClubApplicationAPIMessage(
       context: ApiPlanContext,
       input: CurrentClubApplicationInput
   ): AccessPrincipal =
-    context.support.requestActor(input.guestSessionId, input.operatorId)
+    context.requestActor(input.guestSessionId, input.operatorId)
 
   private def getCurrentApplicationView(
-      module: ClubModuleContext,
+      context: ApiPlanContext,
       input: CurrentClubApplicationInput,
       actor: AccessPrincipal
   ): ClubMembershipApplicationView =
-    val club = module.tables
-      .findClub(input.clubId)
+    val module = context.support.clubModule
+    val club = ClubTable
+      .findById(context.connection, input.clubId)
       .getOrElse(throw NoSuchElementException(s"Club ${input.clubId.value} was not found"))
     val application = club.membershipApplications
-      .filter(application => application.isPending && ClubApplicationViewAssembler.ownsClubApplication(module, actor, application))
+      .filter(application => application.isPending && ClubApplicationViewAssembler.ownsClubApplication(context.connection, module, actor, application))
       .maxByOption(_.submittedAt)
       .getOrElse(throw NoSuchElementException("Resource not found"))
-    ClubApplicationViewAssembler.applicationView(module, club, application, actor)
+    ClubApplicationViewAssembler.applicationView(context.connection, module, club, application, actor)
 
   private final case class CurrentClubApplicationInput(
       clubId: ClubId,

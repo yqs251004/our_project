@@ -8,9 +8,11 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.application.changes.DomainChangeInterpreter
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.player.objects.*
 import riichinexus.domain.service.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.objects.apiTypes.{Club as ClubResponse}
+import riichinexus.microservices.club.objects.{Club as ClubResponse}
+import riichinexus.microservices.player.tables.player.PlayerTable
 import upickle.default.*
 
 final case class AdjustClubMemberContributionAPIMessage(
@@ -23,7 +25,7 @@ final case class AdjustClubMemberContributionAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubResponse] =
     for
-      actor <- IO(context.support.principal(PlayerId(operatorId)))
+      actor <- IO(context.principal(PlayerId(operatorId)))
       occurredAt <- IO.realTimeInstant
       module = context.support.clubModule
       command = AdjustClubMemberContributionCommand(
@@ -36,18 +38,19 @@ final case class AdjustClubMemberContributionAPIMessage(
       )
       club <- IO {
         module.transactionManager.inTransaction {
-          adjustMemberContribution(module, command)
+          adjustMemberContribution(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
     yield ClubResponse.fromDomain(club)
 
   private def adjustMemberContribution(
+      connection: java.sql.Connection,
       module: ClubModuleContext,
       command: AdjustClubMemberContributionCommand
   ): Option[Club] =
     for
       club <- module.clubRepository.findById(command.clubId)
-      player <- module.playerRepository.findById(command.playerId)
+      player <- PlayerTable.findById(connection, command.playerId)
     yield
       ensureContributionCanBeAdjusted(module, club, player, command)
       val nextContribution = resolveNextContribution(club, command)

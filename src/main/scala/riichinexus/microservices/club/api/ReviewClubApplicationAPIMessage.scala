@@ -7,9 +7,13 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.player.objects.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.{ClubApplicationReviewer, ClubApplicationViewAssembler}
-import riichinexus.microservices.club.objects.apiTypes.{Club as _, ClubRelation as _, ClubMembershipApplication as _, ClubPrivilegeDefinition as _, ClubMemberPrivilegeSnapshot as _, *}
+import riichinexus.microservices.club.objects.ClubMembershipApplicationView
+import riichinexus.microservices.club.objects.apiTypes.ReviewClubApplicationRequest
+import riichinexus.microservices.club.tables.club.ClubTable
+import riichinexus.microservices.player.tables.player.PlayerTable
 import upickle.default.*
 
 final case class ReviewClubApplicationAPIMessage(
@@ -21,7 +25,7 @@ final case class ReviewClubApplicationAPIMessage(
   override def plan(context: ApiPlanContext): IO[ClubMembershipApplicationView] =
     for
       decision <- IO(resolveDecision(request.decision))
-      actor <- IO(context.support.principal(request.operator))
+      actor <- IO(context.principal(request.operator))
       reviewedAt <- IO.realTimeInstant
       module = context.support.clubModule
       command = ReviewClubApplicationCommand(
@@ -33,8 +37,9 @@ final case class ReviewClubApplicationAPIMessage(
         note = request.note,
         reviewedAt = reviewedAt
       )
-      result <- IO(reviewApplication(module, command))
+      result <- IO(reviewApplication(context.connection, module, command))
     yield ClubApplicationViewAssembler.applicationView(
+      context.connection,
       module,
       result.club,
       result.application,
@@ -42,10 +47,11 @@ final case class ReviewClubApplicationAPIMessage(
     )
 
   private def reviewApplication(
+      connection: java.sql.Connection,
       module: ClubModuleContext,
       command: ReviewClubApplicationCommand
   ): ReviewClubApplicationResult =
-    val reviewedClub = submitReview(module, command)
+    val reviewedClub = submitReview(connection, module, command)
       .getOrElse(throw NoSuchElementException(s"Club ${command.clubId.value} was not found"))
     val reviewedApplication = reviewedClub.findApplication(command.membershipId).getOrElse(
       throw NoSuchElementException(
@@ -55,13 +61,15 @@ final case class ReviewClubApplicationAPIMessage(
     ReviewClubApplicationResult(reviewedClub, reviewedApplication)
 
   private def submitReview(
+      connection: java.sql.Connection,
       module: ClubModuleContext,
       command: ReviewClubApplicationCommand
   ): Option[Club] =
     command.decision match
       case ApplicationReviewDecision.Approve =>
-        val player = resolveApprovedPlayer(module, command)
+        val player = resolveApprovedPlayer(connection, module, command)
         ClubApplicationReviewer.approve(
+          connection = connection,
           module = module,
           parsedClubId = command.clubId,
           parsedMembershipId = command.membershipId,
@@ -81,11 +89,12 @@ final case class ReviewClubApplicationAPIMessage(
         )
 
   private def resolveApprovedPlayer(
+      connection: java.sql.Connection,
       module: ClubModuleContext,
       command: ReviewClubApplicationCommand
   ): Player =
-    val club = module.tables
-      .findClub(command.clubId)
+    val club = ClubTable
+      .findById(connection, command.clubId)
       .getOrElse(throw NoSuchElementException(s"Club ${command.clubId.value} was not found"))
     val application = club.findApplication(command.membershipId).getOrElse(
       throw NoSuchElementException(
@@ -93,11 +102,11 @@ final case class ReviewClubApplicationAPIMessage(
       )
     )
     command.requestedPlayerId
-      .flatMap(module.tables.findPlayer)
+      .flatMap(PlayerTable.findById(connection, _))
       .orElse(
         application.applicantUserId
           .filterNot(_.startsWith("guest:"))
-          .flatMap(module.tables.findPlayerByUserId)
+          .flatMap(PlayerTable.findByUserId(connection, _))
       )
       .getOrElse(
         throw IllegalArgumentException(

@@ -8,7 +8,7 @@ import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.tournament.domain.{TournamentOperationViewAssembler, TournamentStageTableScheduler}
-import riichinexus.microservices.tournament.objects.apiTypes.{Table as _, TableSeat as _, StageStandingEntry as _, StageRankingSnapshot as _, StageAdvancementSnapshot as _, KnockoutBracketSlot as _, KnockoutBracketResult as _, KnockoutBracketMatch as _, KnockoutBracketRound as _, KnockoutBracketSnapshot as _, *}
+import riichinexus.microservices.tournament.objects.apiTypes.*
 import riichinexus.microservices.tournament.objects.apiTypes.OperatorRequest
 import upickle.default.*
 
@@ -29,22 +29,23 @@ final case class TournamentStageScheduleTablesAPIMessage(
       )
       scheduledTables <- IO {
         module.transactionManager.inTransaction {
-          scheduleTables(module, command)
+          scheduleTables(context.connection, module, command)
         }
       }
       view <- IO {
         TournamentOperationViewAssembler
-        .mutationView(module, command.tournamentId, scheduledTables)
+        .mutationView(context.connection, module, command.tournamentId, scheduledTables)
         .getOrElse(throw NoSuchElementException("Resource not found"))
       }
     yield view
 
   private def resolveOperatorActor(context: ApiPlanContext): AccessPrincipal =
     OperatorRequest(operatorId.filter(_.nonEmpty)).operator
-      .map(context.support.principal)
+      .map(context.principal)
       .getOrElse(AccessPrincipal.system)
 
   private def scheduleTables(
+      connection: java.sql.Connection,
       module: TournamentModuleContext,
       command: ScheduleStageTablesCommand
   ): Vector[Table] =
@@ -54,6 +55,7 @@ final case class TournamentStageScheduleTablesAPIMessage(
       tournamentId = Some(command.tournamentId)
     )
     TournamentStageTableScheduler.schedule(
+      connection = connection,
       module = module,
       tournamentId = command.tournamentId,
       stageId = command.stageId

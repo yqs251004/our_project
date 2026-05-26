@@ -1,7 +1,7 @@
 package riichinexus.microservices.tournament.domain
 
-import riichinexus.application.ports.PlayerRepository
 import riichinexus.domain.model.*
+import riichinexus.microservices.player.objects.*
 
 object StageLineupSupport:
   def directPlayerIds(tournament: Tournament): Vector[PlayerId] =
@@ -59,12 +59,6 @@ object StageLineupSupport:
       val needed = 4 - remainder
       if reserveCandidates.size >= needed then selected ++ reserveCandidates.take(needed)
       else selected
-
-  def resolveEligiblePlayers(
-      stage: TournamentStage,
-      playerRepository: PlayerRepository
-  ): Vector[PlayerId] =
-    resolveEligiblePlayers(stage, playerRepository.findById)
 
   def effectiveRoundLimit(stage: TournamentStage): Int =
     stage.swissRule.flatMap(_.maxRounds) match
