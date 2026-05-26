@@ -6,8 +6,8 @@ import java.util.NoSuchElementException
 
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.player.objects.*
-import riichinexus.domain.service.AuthorizationFailure
 import riichinexus.microservices.player.tables.player.PlayerTable
 
 object ClubApplicationReviewer:
@@ -23,12 +23,12 @@ object ClubApplicationReviewer:
   ): Option[Club] =
     module.transactionManager.inTransaction {
       for
-        club <- module.clubRepository.findById(parsedClubId)
+        club <- riichinexus.microservices.club.tables.club.ClubTable.findById(connection, parsedClubId)
         player <- PlayerTable.findById(connection, parsedPlayerId)
       yield
-        ensureClubActive(club)
+        ClubAuthorization.ensureClubActive(club)
         requireActivePlayer(player, s"Player ${parsedPlayerId.value} cannot be approved into a club")
-        requireClubCapability(
+        ClubAuthorization.requireClubCapability(
           module = module,
           actor = actor,
           club = club,
@@ -68,11 +68,12 @@ object ClubApplicationReviewer:
           .addMember(parsedPlayerId)
 
         val savedPlayer = PlayerTable.save(connection, player.joinClub(parsedClubId))
-        ClubProjectionRefresher.ensurePlayerDashboard(module, savedPlayer.id, approvedAt)
-        module.clubRepository.save(ClubProjectionRefresher.refreshClubProjection(connection, module, updatedClub, approvedAt))
+        ClubProjectionRefresher.ensurePlayerDashboard(connection, savedPlayer.id, approvedAt)
+        riichinexus.microservices.club.tables.club.ClubTable.save(connection, ClubProjectionRefresher.refreshClubProjection(connection, module, updatedClub, approvedAt))
     }
 
   def reject(
+      connection: Connection,
       module: ClubModuleContext,
       parsedClubId: ClubId,
       parsedMembershipId: MembershipApplicationId,
@@ -81,9 +82,9 @@ object ClubApplicationReviewer:
       rejectedAt: Instant
   ): Option[Club] =
     module.transactionManager.inTransaction {
-      module.clubRepository.findById(parsedClubId).map { club =>
-        ensureClubActive(club)
-        requireClubCapability(
+      riichinexus.microservices.club.tables.club.ClubTable.findById(connection, parsedClubId).map { club =>
+        ClubAuthorization.ensureClubActive(club)
+        ClubAuthorization.requireClubCapability(
           module = module,
           actor = actor,
           club = club,
@@ -105,35 +106,12 @@ object ClubApplicationReviewer:
           )
 
         val reviewer = actor.playerId.getOrElse(club.creator)
-        module.clubRepository.save(
+        riichinexus.microservices.club.tables.club.ClubTable.save(connection, 
           club.reviewApplication(parsedMembershipId, _.reject(reviewer, rejectedAt, note))
         )
       }
     }
 
-  private def ensureClubActive(club: Club): Unit =
-    if club.dissolvedAt.nonEmpty then
-      throw IllegalArgumentException(s"Club ${club.id.value} has already been dissolved")
-
   private def requireActivePlayer(player: Player, context: String): Unit =
     if player.status != PlayerStatus.Active then
       throw IllegalArgumentException(context)
-
-  private def requireClubCapability(
-      module: ClubModuleContext,
-      actor: AccessPrincipal,
-      club: Club,
-      permission: Permission,
-      delegatedPrivileges: Set[String]
-  ): Unit =
-    val authorizationService = module.authorizationService
-    val hasBasePermission = authorizationService.can(actor, permission, clubId = Some(club.id))
-    val hasDelegatedPrivilege = actor.playerId.exists { playerId =>
-      club.members.contains(playerId) &&
-        delegatedPrivileges.exists(privilege => club.hasPrivilege(playerId, privilege))
-    }
-
-    if !hasBasePermission && !hasDelegatedPrivilege then
-      throw AuthorizationFailure(
-        s"${actor.displayName} is not allowed to perform $permission in club ${club.id.value}"
-      )

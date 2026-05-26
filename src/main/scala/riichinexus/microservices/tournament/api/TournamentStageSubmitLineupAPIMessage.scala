@@ -6,6 +6,7 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.player.objects.*
 import riichinexus.domain.service.AuthorizationFailure
 import riichinexus.infrastructure.json.JsonCodecs.given
@@ -44,15 +45,15 @@ final case class TournamentStageSubmitLineupAPIMessage(tournamentId: String, sta
       module: TournamentModuleContext,
       command: SubmitStageLineupCommand
   ): Option[Tournament] =
-    module.tournamentRepository.findById(command.tournamentId).map { tournament =>
+    riichinexus.microservices.tournament.tables.tournament.TournamentTable.findById(connection, command.tournamentId).map { tournament =>
       val stage = requireStage(tournament, command.stageId)
       ensureNoLineupConflict(stage, command)
-      val club = resolveActiveClub(module, command.submission.clubId)
+      val club = resolveActiveClub(connection, command.submission.clubId)
       requireClubLineupCapability(module, command.actor, club)
       ensureSubmitterMatchesActor(command.actor, command.submission)
       ensureClubRegistered(tournament, command)
       ensureLineupPlayersActiveMembers(connection, club, command.submission)
-      module.tournamentRepository.save(
+      riichinexus.microservices.tournament.tables.tournament.TournamentTable.save(connection, 
         tournament.updateStage(command.stageId, _.submitLineup(command.submission))
       )
     }
@@ -81,9 +82,9 @@ final case class TournamentStageSubmitLineupAPIMessage(tournamentId: String, sta
         s"Stage ${command.stageId.value} already has player(s) assigned by another club: ${conflictingPlayers.mkString(", ")}"
       )
 
-  private def resolveActiveClub(module: TournamentModuleContext, clubId: ClubId): Club =
-    val club = module.clubRepository
-      .findById(clubId)
+  private def resolveActiveClub(connection: java.sql.Connection, clubId: ClubId): Club =
+    val club = riichinexus.microservices.club.tables.club.ClubTable
+      .findById(connection, clubId)
       .getOrElse(throw NoSuchElementException(s"Club ${clubId.value} was not found"))
     ensureClubActive(club)
     club

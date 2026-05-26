@@ -9,8 +9,8 @@ import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.model.*
 import riichinexus.microservices.player.objects.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.dictionary.domain.RuntimeDictionary
 import riichinexus.microservices.player.tables.player.PlayerTable
+import riichinexus.microservices.tournament.domain.TournamentRuntimeDefaults
 import riichinexus.microservices.tournament.objects.apiTypes.*
 import riichinexus.microservices.tournament.objects.apiTypes.*
 import riichinexus.microservices.tournament.objects.apiTypes.ManagementRequests.given
@@ -49,9 +49,9 @@ final case class TournamentCreateAPIMessage(
     validateRequest(input)
     val normalizedStages = resolveNormalizedStages(module, input.stages)
     validateAdmin(connection, input.admin)
-    val tournament = resolveTournament(module, input, normalizedStages)
+    val tournament = resolveTournament(connection, input, normalizedStages)
     grantAdminRole(connection, tournament, input)
-    module.tournamentRepository.save(input.admin.fold(tournament)(tournament.assignAdmin))
+    riichinexus.microservices.tournament.tables.tournament.TournamentTable.save(connection, input.admin.fold(tournament)(tournament.assignAdmin))
 
   private def validateRequest(input: CreateTournamentInput): Unit =
     require(input.name.trim.nonEmpty, "Tournament name cannot be empty")
@@ -62,9 +62,8 @@ final case class TournamentCreateAPIMessage(
       module: TournamentModuleContext,
       stages: Vector[TournamentStage]
   ): Vector[TournamentStage] =
-    val dictionarySnapshot = RuntimeDictionary.snapshot(module.globalDictionaryRepository)
     val normalizedStages = TournamentDefaults.initialStages(stages)
-      .map(stage => normalizeStage(stage, dictionarySnapshot))
+      .map(TournamentRuntimeDefaults.normalizeStage)
       .sortBy(_.order)
     requireUniqueStageConfiguration(normalizedStages)
     normalizedStages
@@ -78,11 +77,11 @@ final case class TournamentCreateAPIMessage(
     }
 
   private def resolveTournament(
-      module: TournamentModuleContext,
+      connection: java.sql.Connection,
       input: CreateTournamentInput,
       normalizedStages: Vector[TournamentStage]
   ): Tournament =
-    module.tournamentRepository.findByNameAndOrganizer(input.name, input.organizer) match
+    riichinexus.microservices.tournament.tables.tournament.TournamentTable.findByNameAndOrganizer(connection, input.name, input.organizer) match
       case Some(existing) =>
         existing.copy(
           startsAt = input.startsAt,
@@ -115,19 +114,6 @@ final case class TournamentCreateAPIMessage(
         )
       }
     }
-
-  private def normalizeStage(
-      stage: TournamentStage,
-      dictionarySnapshot: RuntimeDictionary.DictionarySnapshot
-  ): TournamentStage =
-    val templatedStage =
-      RuntimeDictionary.resolveStageRules(stage, dictionarySnapshot)
-
-    if templatedStage.advancementRule.ruleType == AdvancementRuleType.Custom &&
-        templatedStage.advancementRule.note.contains("unconfigured") &&
-        templatedStage.advancementRule.templateKey.isEmpty
-    then templatedStage.copy(advancementRule = AdvancementRule.defaultFor(templatedStage.format))
-    else templatedStage
 
   private def requireUniqueStageConfiguration(stages: Vector[TournamentStage]): Unit =
     if stages.map(_.id).distinct.size != stages.size then

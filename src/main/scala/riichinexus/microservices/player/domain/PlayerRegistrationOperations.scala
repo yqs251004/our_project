@@ -3,25 +3,23 @@ package riichinexus.microservices.player.domain
 import java.sql.Connection
 import java.time.Instant
 
-import riichinexus.application.ports.*
 import riichinexus.domain.model.*
 import riichinexus.microservices.player.objects.*
 import riichinexus.microservices.opsanalytics.objects.{Dashboard, DashboardOwner}
+import riichinexus.microservices.opsanalytics.tables.dashboard.DashboardTable
 import riichinexus.microservices.player.tables.player.PlayerTable
 
 private object PlayerProjectionSupport:
   def ensurePlayerDashboard(
+      connection: Connection,
       playerId: PlayerId,
-      dashboardRepository: DashboardRepository,
       at: Instant
   ): Unit =
     val owner = DashboardOwner.Player(playerId)
-    if dashboardRepository.findByOwner(owner).isEmpty then
-      dashboardRepository.save(Dashboard.empty(owner, at))
+    if DashboardTable.findByOwner(connection, owner).isEmpty then
+      DashboardTable.save(connection, Dashboard.empty(owner, at))
 
-final class PlayerRegistrationOperations(
-    dashboardRepository: DashboardRepository
-):
+final class PlayerRegistrationOperations:
   def registerPlayer(
       connection: Connection,
       userId: String,
@@ -48,5 +46,5 @@ final class PlayerRegistrationOperations(
         )
 
     val savedPlayer = PlayerTable.save(connection, player)
-    PlayerProjectionSupport.ensurePlayerDashboard(savedPlayer.id, dashboardRepository, registeredAt)
+    PlayerProjectionSupport.ensurePlayerDashboard(connection, savedPlayer.id, registeredAt)
     savedPlayer

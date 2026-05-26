@@ -5,21 +5,22 @@ import java.util.NoSuchElementException
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.objects.{ClubMemberPrivilegeSnapshot as ClubMemberPrivilegeSnapshotResponse}
+import riichinexus.microservices.club.objects.ClubMemberPrivilegeSnapshotView
 import riichinexus.microservices.club.tables.club.ClubTable
 import upickle.default.*
 
 final case class GetClubMemberPrivilegeAPIMessage(
     clubId: String,
     playerId: String
-) extends APIMessage[ClubMemberPrivilegeSnapshotResponse] derives ReadWriter:
+) extends APIMessage[ClubMemberPrivilegeSnapshotView] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[ClubMemberPrivilegeSnapshotResponse] =
+  override def plan(context: ApiPlanContext): IO[ClubMemberPrivilegeSnapshotView] =
     for
       input <- IO(GetClubMemberPrivilegeInput(ClubId(clubId), PlayerId(playerId)))
       snapshot <- IO(resolveSnapshot(context, input))
-    yield ClubMemberPrivilegeSnapshotResponse.fromDomain(snapshot)
+    yield ClubMemberPrivilegeSnapshotView.fromDomain(snapshot)
 
   private def resolveSnapshot(
       context: ApiPlanContext,

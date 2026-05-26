@@ -7,10 +7,12 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.player.objects.*
 import riichinexus.domain.service.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.objects.apiTypes.{ClubMembershipApplication as ClubMembershipApplicationResponse, ClubMembershipApplicationRequest}
+import riichinexus.microservices.club.domain.ClubAuthorization
+import riichinexus.microservices.club.objects.apiTypes.{ClubMembershipApplicationResponse, ClubMembershipApplicationRequest}
 import riichinexus.microservices.player.tables.player.PlayerTable
 import upickle.default.*
 
@@ -65,11 +67,11 @@ final case class SubmitClubApplicationAPIMessage(
       command: SubmitClubApplicationCommand
   ): ClubMembershipApplication =
     module.authorizationService.requirePermission(command.actor, Permission.SubmitClubApplication)
-    val club = module.clubRepository.findById(command.clubId)
+    val club = riichinexus.microservices.club.tables.club.ClubTable.findById(connection, command.clubId)
       .getOrElse(throw NoSuchElementException("Resource not found"))
     validateSubmission(connection, module, club, command)
     val application = createApplication(command)
-    module.clubRepository.save(club.submitApplication(application))
+    riichinexus.microservices.club.tables.club.ClubTable.save(connection, club.submitApplication(application))
     application
 
   private def validateSubmission(
@@ -78,15 +80,11 @@ final case class SubmitClubApplicationAPIMessage(
       club: Club,
       command: SubmitClubApplicationCommand
   ): Unit =
-    ensureClubActive(club)
+    ClubAuthorization.ensureClubActive(club)
     ensureApplicationsOpen(club, command.clubId)
     ensureDisplayNameNonEmpty(command.input.displayName)
     ensureNoPendingApplication(club, command)
     ensureApplicantNotAlreadyMember(connection, command)
-
-  private def ensureClubActive(club: Club): Unit =
-    if club.dissolvedAt.nonEmpty then
-      throw IllegalArgumentException(s"Club ${club.id.value} has already been dissolved")
 
   private def ensureApplicationsOpen(club: Club, clubId: ClubId): Unit =
     if !club.recruitmentPolicy.applicationsOpen then

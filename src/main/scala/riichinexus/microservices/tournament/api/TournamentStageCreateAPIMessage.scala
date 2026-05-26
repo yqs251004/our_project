@@ -7,7 +7,7 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.dictionary.domain.RuntimeDictionary
+import riichinexus.microservices.tournament.domain.TournamentRuntimeDefaults
 import riichinexus.microservices.tournament.objects.apiTypes.*
 import riichinexus.microservices.tournament.objects.apiTypes.*
 import riichinexus.microservices.tournament.objects.apiTypes.ManagementRequests.given
@@ -26,19 +26,19 @@ final case class TournamentStageCreateAPIMessage(tournamentId: String, request: 
       )
       tournament <- IO {
         module.transactionManager.inTransaction {
-          createStage(module, command)
+          createStage(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
     yield TournamentSummaryView.fromDomain(tournament)
 
   private def createStage(
+      connection: java.sql.Connection,
       module: TournamentModuleContext,
       command: CreateStageCommand
   ): Option[Tournament] =
-    module.tournamentRepository.findById(command.tournamentId).map { tournament =>
+    riichinexus.microservices.tournament.tables.tournament.TournamentTable.findById(connection, command.tournamentId).map { tournament =>
       ensureStageCanBeAdded(module, tournament, command)
-      val dictionarySnapshot = RuntimeDictionary.snapshot(module.globalDictionaryRepository)
-      module.tournamentRepository.save(tournament.addStage(normalizeStage(command.stage, dictionarySnapshot)))
+      riichinexus.microservices.tournament.tables.tournament.TournamentTable.save(connection, tournament.addStage(TournamentRuntimeDefaults.normalizeStage(command.stage)))
     }
 
   private def ensureStageCanBeAdded(
@@ -55,19 +55,6 @@ final case class TournamentStageCreateAPIMessage(tournamentId: String, request: 
       Permission.ManageTournamentStages,
       tournamentId = Some(command.tournamentId)
     )
-
-  private def normalizeStage(
-      stage: TournamentStage,
-      dictionarySnapshot: RuntimeDictionary.DictionarySnapshot
-  ): TournamentStage =
-    val templatedStage =
-      RuntimeDictionary.resolveStageRules(stage, dictionarySnapshot)
-
-    if templatedStage.advancementRule.ruleType == AdvancementRuleType.Custom &&
-        templatedStage.advancementRule.note.contains("unconfigured") &&
-        templatedStage.advancementRule.templateKey.isEmpty
-    then templatedStage.copy(advancementRule = AdvancementRule.defaultFor(templatedStage.format))
-    else templatedStage
 
   private final case class CreateStageCommand(
       tournamentId: TournamentId,

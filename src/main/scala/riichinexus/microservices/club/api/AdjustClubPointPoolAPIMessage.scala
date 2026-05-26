@@ -8,9 +8,11 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.application.changes.DomainChangeInterpreter
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.domain.model.*
 import riichinexus.domain.service.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.objects.{Club as ClubResponse}
+import riichinexus.microservices.club.domain.ClubAuthorization
+import riichinexus.microservices.club.objects.ClubView
 import upickle.default.*
 
 final case class AdjustClubPointPoolAPIMessage(
@@ -18,9 +20,9 @@ final case class AdjustClubPointPoolAPIMessage(
     operatorId: String,
     delta: Int,
     note: Option[String] = None
-) extends APIMessage[ClubResponse] derives ReadWriter:
+) extends APIMessage[ClubView] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[ClubResponse] =
+  override def plan(context: ApiPlanContext): IO[ClubView] =
     for
       actor <- IO(context.principal(PlayerId(operatorId)))
       occurredAt <- IO.realTimeInstant
@@ -34,28 +36,30 @@ final case class AdjustClubPointPoolAPIMessage(
       )
       club <- IO {
         module.transactionManager.inTransaction {
-          adjustPointPool(module, command)
+          adjustPointPool(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
-    yield ClubResponse.fromDomain(club)
+    yield ClubView.fromDomain(club)
 
   private def adjustPointPool(
+      connection: java.sql.Connection,
       module: ClubModuleContext,
       command: AdjustClubPointPoolCommand
   ): Option[Club] =
-    module.clubRepository.findById(command.clubId).map { club =>
-      ensureClubActive(club)
-      requireClubCapability(
+    riichinexus.microservices.club.tables.club.ClubTable.findById(connection, command.clubId).map { club =>
+      ClubAuthorization.ensureClubActive(club)
+      ClubAuthorization.requireClubCapability(
         module = module,
         actor = command.actor,
         club = club,
         permission = Permission.ManageClubOperations,
         delegatedPrivileges = Set(ClubPrivilege.ManageBank)
       )
-      commitPointPoolAdjustment(module, club, command)
+      commitPointPoolAdjustment(connection, module, club, command)
     }
 
   private def commitPointPoolAdjustment(
+      connection: java.sql.Connection,
       module: ClubModuleContext,
       club: Club,
       command: AdjustClubPointPoolCommand
@@ -64,7 +68,7 @@ final case class AdjustClubPointPoolAPIMessage(
       .auditOnly(module.transactionManager, module.auditEventRepository)
       .commitAudited(
         aggregate = club.adjustPointPool(command.delta),
-        persist = module.clubRepository.save,
+        persist = updatedClub => riichinexus.microservices.club.tables.club.ClubTable.save(connection, updatedClub),
         aggregateType = "club",
         aggregateId = _.id.value,
         eventType = "ClubPointPoolAdjusted",
@@ -76,29 +80,6 @@ final case class AdjustClubPointPoolAPIMessage(
             "pointPool" -> updatedClub.pointPool.toString
           ),
         note = command.note
-      )
-
-  private def ensureClubActive(club: Club): Unit =
-    if club.dissolvedAt.nonEmpty then
-      throw IllegalArgumentException(s"Club ${club.id.value} has already been dissolved")
-
-  private def requireClubCapability(
-      module: ClubModuleContext,
-      actor: AccessPrincipal,
-      club: Club,
-      permission: Permission,
-      delegatedPrivileges: Set[String]
-  ): Unit =
-    val authorizationService = module.authorizationService
-    val hasBasePermission = authorizationService.can(actor, permission, clubId = Some(club.id))
-    val hasDelegatedPrivilege = actor.playerId.exists { playerId =>
-      club.members.contains(playerId) &&
-        delegatedPrivileges.exists(privilege => club.hasPrivilege(playerId, privilege))
-    }
-
-    if !hasBasePermission && !hasDelegatedPrivilege then
-      throw AuthorizationFailure(
-        s"${actor.displayName} is not allowed to perform $permission in club ${club.id.value}"
       )
 
   private final case class AdjustClubPointPoolCommand(

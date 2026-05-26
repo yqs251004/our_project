@@ -30,20 +30,21 @@ final case class TournamentSettlementFinalizeAPIMessage(tournamentId: String, se
       )
       settlement <- IO {
         module.transactionManager.inTransaction {
-          finalizeSettlement(module, command)
+          finalizeSettlement(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
     yield TournamentSettlementView.fromDomain(settlement)
 
   private def finalizeSettlement(
+      connection: java.sql.Connection,
       module: TournamentModuleContext,
       command: FinalizeSettlementCommand
   ): Option[TournamentSettlementSnapshot] =
     requireFinalizePermission(module, command)
-    module.tournamentSettlementRepository
-      .findById(command.settlementId)
+    riichinexus.microservices.tournament.tables.settlement.TournamentSettlementTable
+      .findById(connection, command.settlementId)
       .filter(_.tournamentId == command.tournamentId)
-      .map(settlement => commitFinalizedSettlement(module, command, settlement))
+      .map(settlement => commitFinalizedSettlement(connection, module, command, settlement))
 
   private def requireFinalizePermission(
       module: TournamentModuleContext,
@@ -56,6 +57,7 @@ final case class TournamentSettlementFinalizeAPIMessage(tournamentId: String, se
     )
 
   private def commitFinalizedSettlement(
+      connection: java.sql.Connection,
       module: TournamentModuleContext,
       command: FinalizeSettlementCommand,
       settlement: TournamentSettlementSnapshot
@@ -68,7 +70,7 @@ final case class TournamentSettlementFinalizeAPIMessage(tournamentId: String, se
           else settlement.finalize(command.finalizedAt),
         persist = finalized =>
           if settlement.status == TournamentSettlementStatus.Finalized then finalized
-          else module.tournamentSettlementRepository.save(finalized),
+          else riichinexus.microservices.tournament.tables.settlement.TournamentSettlementTable.save(connection, finalized),
         aggregateType = "tournament",
         aggregateId = _.tournamentId.value,
         eventType = "TournamentSettlementFinalized",

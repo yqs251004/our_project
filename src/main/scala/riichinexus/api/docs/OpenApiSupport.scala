@@ -13,7 +13,7 @@ object OpenApiSupport:
     "ClubMembershipApplicationView" -> Obj("$ref" -> "#/components/schemas/ClubMembershipApplicationView"),
     "ClubMembershipApplicationPage" -> Obj("$ref" -> "#/components/schemas/ClubMembershipApplicationPage"),
     "ClubTournamentParticipationPage" -> Obj("$ref" -> "#/components/schemas/ClubTournamentParticipationPage"),
-    "Club" -> Obj("$ref" -> "#/components/schemas/Club"),
+    "ClubView" -> Obj("$ref" -> "#/components/schemas/ClubView"),
     "ClubPage" -> Obj("$ref" -> "#/components/schemas/ClubPage"),
     "TournamentDetailView" -> Obj("$ref" -> "#/components/schemas/TournamentDetailView"),
     "TournamentMutationView" -> Obj("$ref" -> "#/components/schemas/TournamentMutationView"),
@@ -40,7 +40,6 @@ object OpenApiSupport:
       AuthOpenApiSchemas.schemas ++
       ClubOpenApiSchemas.schemas ++
       PublicOpenApiSchemas.schemas ++
-      DictionaryOpenApiSchemas.schemas ++
       AnalyticsOpenApiSchemas.schemas
 
   private def components: Value =

@@ -6,20 +6,20 @@ import java.time.Instant
 import riichinexus.application.ports.*
 import riichinexus.domain.event.*
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.player.objects.*
 import riichinexus.domain.service.AdvancedStatsRoundAnalysis
-import riichinexus.microservices.dictionary.domain.RuntimeDictionary
+import riichinexus.microservices.club.domain.ClubPowerRatingService
+import riichinexus.microservices.club.tables.club.ClubTable
 import riichinexus.microservices.opsanalytics.objects.{AdvancedStatsBoard, Dashboard, DashboardOwner}
+import riichinexus.microservices.opsanalytics.tables.advancedstatsboard.AdvancedStatsBoardTable
+import riichinexus.microservices.opsanalytics.tables.dashboard.DashboardTable
 import riichinexus.microservices.player.tables.player.PlayerTable
+import riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTable
+import riichinexus.microservices.tournament.tables.paifu.PaifuTable
 
 final class SystemEventCascadeSubscriber(
-    paifuRepository: PaifuRepository,
-    matchRecordRepository: MatchRecordRepository,
-    clubRepository: ClubRepository,
-    dashboardRepository: DashboardRepository,
-    advancedStatsBoardRepository: AdvancedStatsBoardRepository,
-    eventCascadeRecordRepository: EventCascadeRecordRepository,
-    globalDictionaryRepository: GlobalDictionaryRepository
+    eventCascadeRecordRepository: EventCascadeRecordRepository
 ) extends DomainEventSubscriber:
   import AdvancedStatsRoundAnalysis.*
 
@@ -130,49 +130,25 @@ final class SystemEventCascadeSubscriber(
             )
           )
         )
-      case GlobalDictionaryUpdated(entry, occurredAt) =>
-        val repairedClubCount =
-          if entry.key.trim.toLowerCase.startsWith("club.power.") then
-            val dictionarySnapshot = RuntimeDictionary.snapshot(globalDictionaryRepository)
-            clubRepository.findActive().map { club =>
-              val refreshed = refreshClubProjection(connection, club, dictionarySnapshot, occurredAt)
-              clubRepository.save(refreshed)
-            }.size
-          else 0
-
-        eventCascadeRecordRepository.save(
-          EventCascadeRecord.completed(
-            eventType = "GlobalDictionaryUpdated",
-            consumer = EventCascadeConsumer.ProjectionRepair,
-            aggregateType = "dictionary",
-            aggregateId = entry.key,
-            summary = s"Dictionary update cascaded for ${entry.key}",
-            occurredAt = occurredAt,
-            handledAt = occurredAt,
-            metadata = Map(
-              "repairedClubCount" -> repairedClubCount.toString,
-              "updatedBy" -> entry.updatedBy.value
-            )
-          )
-        )
       case PlayerBanned(playerId, reason, occurredAt) =>
         val playerOwner = DashboardOwner.Player(playerId)
-        dashboardRepository.save(
+        DashboardTable.save(
+          connection,
           Dashboard.empty(playerOwner, occurredAt).copy(
-            version = dashboardRepository.findByOwner(playerOwner).map(_.version).getOrElse(0)
+            version = DashboardTable.findByOwner(connection, playerOwner).map(_.version).getOrElse(0)
           )
         )
-        advancedStatsBoardRepository.save(
+        AdvancedStatsBoardTable.save(
+          connection,
           AdvancedStatsBoard.empty(playerOwner, occurredAt).copy(
-            version = advancedStatsBoardRepository.findByOwner(playerOwner).map(_.version).getOrElse(0)
+            version = AdvancedStatsBoardTable.findByOwner(connection, playerOwner).map(_.version).getOrElse(0)
           )
         )
-        val dictionarySnapshot = RuntimeDictionary.snapshot(globalDictionaryRepository)
         val repairedClubIds = findPlayer(connection, playerId).toVector.flatMap(_.boundClubIds).distinct.flatMap { clubId =>
-          clubRepository.findById(clubId).map { club =>
-            val refreshed = refreshClubProjection(connection, club, dictionarySnapshot, occurredAt)
-            clubRepository.save(refreshed)
-            advancedStatsBoardRepository.save(rebuildClubBoard(connection, refreshed, occurredAt))
+          ClubTable.findById(connection, clubId).map { club =>
+            val refreshed = refreshClubProjection(connection, club, occurredAt)
+            ClubTable.save(connection, refreshed)
+            AdvancedStatsBoardTable.save(connection, rebuildClubBoard(connection, refreshed, occurredAt))
             clubId.value
           }
         }
@@ -194,14 +170,16 @@ final class SystemEventCascadeSubscriber(
         )
       case ClubDissolved(clubId, occurredAt) =>
         val clubOwner = DashboardOwner.Club(clubId)
-        dashboardRepository.save(
+        DashboardTable.save(
+          connection,
           Dashboard.empty(clubOwner, occurredAt).copy(
-            version = dashboardRepository.findByOwner(clubOwner).map(_.version).getOrElse(0)
+            version = DashboardTable.findByOwner(connection, clubOwner).map(_.version).getOrElse(0)
           )
         )
-        advancedStatsBoardRepository.save(
+        AdvancedStatsBoardTable.save(
+          connection,
           AdvancedStatsBoard.empty(clubOwner, occurredAt).copy(
-            version = advancedStatsBoardRepository.findByOwner(clubOwner).map(_.version).getOrElse(0)
+            version = AdvancedStatsBoardTable.findByOwner(connection, clubOwner).map(_.version).getOrElse(0)
           )
         )
         eventCascadeRecordRepository.save(
@@ -221,28 +199,26 @@ final class SystemEventCascadeSubscriber(
   private def refreshClubProjection(
       connection: Connection,
       club: Club,
-      dictionarySnapshot: RuntimeDictionary.DictionarySnapshot,
       at: Instant
   ): Club =
-    val refreshedClub = recalculateClubPowerRating(connection, club, dictionarySnapshot)
-    dashboardRepository.save(buildClubDashboard(connection, refreshedClub, at))
+    val refreshedClub = recalculateClubPowerRating(connection, club)
+    DashboardTable.save(connection, buildClubDashboard(connection, refreshedClub, at))
     refreshedClub
 
   private def recalculateClubPowerRating(
       connection: Connection,
-      club: Club,
-      dictionarySnapshot: RuntimeDictionary.DictionarySnapshot
+      club: Club
   ): Club =
     club.updatePowerRating(
-      RuntimeDictionary.calculateClubPowerRating(club, findPlayer(connection, _), dictionarySnapshot)
+      ClubPowerRatingService.calculate(club, findPlayer(connection, _))
     )
 
   private def buildClubDashboard(connection: Connection, club: Club, at: Instant): Dashboard =
-    val existingVersion = dashboardRepository.findByOwner(DashboardOwner.Club(club.id)).map(_.version).getOrElse(0)
+    val existingVersion = DashboardTable.findByOwner(connection, DashboardOwner.Club(club.id)).map(_.version).getOrElse(0)
     val memberDashboards = club.members.flatMap { playerId =>
       findPlayer(connection, playerId)
         .filter(_.status == PlayerStatus.Active)
-        .flatMap(_ => dashboardRepository.findByOwner(DashboardOwner.Player(playerId)))
+        .flatMap(_ => DashboardTable.findByOwner(connection, DashboardOwner.Player(playerId)))
     }
 
     if memberDashboards.isEmpty then Dashboard.empty(DashboardOwner.Club(club.id), at).copy(version = existingVersion)
@@ -273,13 +249,14 @@ final class SystemEventCascadeSubscriber(
       )
 
   private def rebuildPlayerBoard(
+      connection: Connection,
       playerId: PlayerId,
       at: Instant
   ): AdvancedStatsBoard =
-    val records = matchRecordRepository.findByPlayer(playerId)
-    val paifus = paifuRepository.findByPlayer(playerId)
+    val records = MatchRecordTable.findByPlayer(connection, playerId)
+    val paifus = PaifuTable.findByPlayer(connection, playerId)
     val existingVersion =
-      advancedStatsBoardRepository.findByOwner(DashboardOwner.Player(playerId)).map(_.version).getOrElse(0)
+      AdvancedStatsBoardTable.findByOwner(connection, DashboardOwner.Player(playerId)).map(_.version).getOrElse(0)
     buildPlayerBoard(playerId, records, paifus, at).copy(version = existingVersion)
 
   private def rebuildClubBoard(
@@ -290,10 +267,10 @@ final class SystemEventCascadeSubscriber(
     val memberBoards = club.members.flatMap { playerId =>
       findPlayer(connection, playerId)
         .filter(_.status == PlayerStatus.Active)
-        .map(_ => rebuildPlayerBoard(playerId, at))
+        .map(_ => rebuildPlayerBoard(connection, playerId, at))
     }
     val existingVersion =
-      advancedStatsBoardRepository.findByOwner(DashboardOwner.Club(club.id)).map(_.version).getOrElse(0)
+      AdvancedStatsBoardTable.findByOwner(connection, DashboardOwner.Club(club.id)).map(_.version).getOrElse(0)
     buildClubBoard(club, memberBoards, at).copy(version = existingVersion)
 
   private def findPlayer(connection: Connection, playerId: PlayerId): Option[Player] =

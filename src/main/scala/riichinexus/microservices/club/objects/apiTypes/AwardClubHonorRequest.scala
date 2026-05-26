@@ -2,7 +2,8 @@ package riichinexus.microservices.club.objects.apiTypes
 
 import java.time.Instant
 
-import riichinexus.domain.model.{ClubHonor, PlayerId}
+import riichinexus.domain.model.PlayerId
+import riichinexus.microservices.club.domain.model.ClubHonor
 import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.*
 

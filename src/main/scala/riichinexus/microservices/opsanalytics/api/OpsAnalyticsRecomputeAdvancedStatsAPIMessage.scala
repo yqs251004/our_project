@@ -6,6 +6,7 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.OpsAnalyticsModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.player.objects.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.opsanalytics.objects.*
@@ -43,7 +44,7 @@ final case class OpsAnalyticsRecomputeAdvancedStatsAPIMessage(
     )
 
   private def requireOpsAdmin(context: ApiPlanContext, operator: AccessPrincipal): Unit =
-    context.support.requirePermission(operator, Permission.ManageGlobalDictionary)
+    context.support.requirePermission(operator, Permission.ManagePlatformOperations)
 
   private def enqueueRecompute(
       connection: java.sql.Connection,
@@ -54,6 +55,7 @@ final case class OpsAnalyticsRecomputeAdvancedStatsAPIMessage(
       case Some(owner) =>
         Vector(
           enqueueOwnerRecompute(
+            connection,
             module,
             owner = owner,
             reason = command.targetedReason,
@@ -87,9 +89,9 @@ final case class OpsAnalyticsRecomputeAdvancedStatsAPIMessage(
   ): Vector[AdvancedStatsRecomputeTask] =
     val owners =
       PlayerTable.findAll(connection).map(player => DashboardOwner.Player(player.id)) ++
-        module.clubRepository.findActive().map(club => DashboardOwner.Club(club.id))
+        riichinexus.microservices.club.tables.club.ClubTable.findActive(connection).map(club => DashboardOwner.Club(club.id))
 
-    owners.distinct.map(owner => enqueueOwnerRecompute(module, owner, reason, requestedAt))
+    owners.distinct.map(owner => enqueueOwnerRecompute(connection, module, owner, reason, requestedAt))
 
   private def enqueueBackfill(
       connection: java.sql.Connection,
@@ -101,14 +103,15 @@ final case class OpsAnalyticsRecomputeAdvancedStatsAPIMessage(
   ): Vector[AdvancedStatsRecomputeTask] =
     val owners =
       PlayerTable.findAll(connection).map(player => DashboardOwner.Player(player.id)) ++
-        module.clubRepository.findActive().map(club => DashboardOwner.Club(club.id))
+        riichinexus.microservices.club.tables.club.ClubTable.findActive(connection).map(club => DashboardOwner.Club(club.id))
 
     owners.distinct
-      .filter(owner => shouldBackfillOwner(module, owner, mode))
+      .filter(owner => shouldBackfillOwner(connection, module, owner, mode))
       .take(limit)
-      .map(owner => enqueueOwnerRecompute(module, owner, reason, requestedAt))
+      .map(owner => enqueueOwnerRecompute(connection, module, owner, reason, requestedAt))
 
   private def enqueueOwnerRecompute(
+      connection: java.sql.Connection,
       module: OpsAnalyticsModuleContext,
       owner: DashboardOwner,
       reason: String,
@@ -116,10 +119,10 @@ final case class OpsAnalyticsRecomputeAdvancedStatsAPIMessage(
       lastMatchRecordId: Option[MatchRecordId] = None
   ): AdvancedStatsRecomputeTask =
     module.transactionManager.inTransaction {
-      module.advancedStatsRecomputeTaskRepository
-        .findActiveByOwner(owner, AdvancedStatsBoard.CurrentCalculatorVersion)
+      riichinexus.microservices.opsanalytics.tables.advancedstatsrecomputetask.AdvancedStatsRecomputeTaskTable
+        .findActiveByOwner(connection, owner, AdvancedStatsBoard.CurrentCalculatorVersion)
         .getOrElse(
-          module.advancedStatsRecomputeTaskRepository.save(
+          riichinexus.microservices.opsanalytics.tables.advancedstatsrecomputetask.AdvancedStatsRecomputeTaskTable.save(connection, 
             AdvancedStatsRecomputeTask.create(
               owner = owner,
               reason = reason,
@@ -132,11 +135,12 @@ final case class OpsAnalyticsRecomputeAdvancedStatsAPIMessage(
     }
 
   private def shouldBackfillOwner(
+      connection: java.sql.Connection,
       module: OpsAnalyticsModuleContext,
       owner: DashboardOwner,
       mode: AdvancedStatsBackfillMode
   ): Boolean =
-    val board = module.advancedStatsBoardRepository.findByOwner(owner)
+    val board = riichinexus.microservices.opsanalytics.tables.advancedstatsboard.AdvancedStatsBoardTable.findByOwner(connection, owner)
     mode match
       case AdvancedStatsBackfillMode.Full    => true
       case AdvancedStatsBackfillMode.Missing => board.isEmpty

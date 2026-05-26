@@ -42,7 +42,7 @@ final case class TournamentAssignAdminAPIMessage(tournamentId: String, request: 
       command: AssignTournamentAdminCommand
   ): Option[Tournament] =
     for
-      tournament <- module.tournamentRepository.findById(command.tournamentId)
+      tournament <- riichinexus.microservices.tournament.tables.tournament.TournamentTable.findById(connection, command.tournamentId)
       player <- PlayerTable.findById(connection, command.playerId)
     yield
       ensureAdminCanBeAssigned(module, player, command)
@@ -79,7 +79,7 @@ final case class TournamentAssignAdminAPIMessage(tournamentId: String, request: 
               RoleGrant.tournamentAdmin(command.tournamentId, command.grantedAt, command.actor.playerId)
             )
           )
-          module.tournamentRepository.save(nextTournament),
+          riichinexus.microservices.tournament.tables.tournament.TournamentTable.save(connection, nextTournament),
         aggregateType = "tournament",
         aggregateId = _.id.value,
         eventType = "TournamentAdminAssigned",

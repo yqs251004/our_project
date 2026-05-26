@@ -52,8 +52,8 @@ final case class TournamentRegisterPlayerAPIMessage(tournamentId: String, player
       .findById(connection, command.playerId)
       .getOrElse(throw NoSuchElementException(s"Player ${command.playerId.value} was not found"))
     ensurePlayerCanEnter(player, command)
-    module.tournamentRepository.findById(command.tournamentId).map { tournament =>
-      module.tournamentRepository.save(tournament.registerPlayer(command.playerId))
+    riichinexus.microservices.tournament.tables.tournament.TournamentTable.findById(connection, command.tournamentId).map { tournament =>
+      riichinexus.microservices.tournament.tables.tournament.TournamentTable.save(connection, tournament.registerPlayer(command.playerId))
     }
 
   private def ensurePlayerCanEnter(player: Player, command: RegisterTournamentPlayerCommand): Unit =

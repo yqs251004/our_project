@@ -3,6 +3,7 @@ package riichinexus.domain.service
 import java.time.Instant
 
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.player.objects.*
 import riichinexus.microservices.opsanalytics.objects.{AdvancedStatsBoard, DashboardOwner}
 

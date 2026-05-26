@@ -32,7 +32,7 @@ private[postgres] object PostgresSchemaDefinitions:
       5 -> "Added advanced stats board persistence schema",
       6 -> "Added advanced stats recompute task pipeline schema",
       7 -> "Added event cascade record subscriber schema",
-      8 -> "Added dictionary namespace governance schema",
+      8 -> "Added legacy metadata governance schema",
       9 -> "Added durable domain event outbox schema",
       10 -> "Added domain event delivery receipt schema",
       11 -> "Added subscriber ordering cursor and partitioned outbox schema",

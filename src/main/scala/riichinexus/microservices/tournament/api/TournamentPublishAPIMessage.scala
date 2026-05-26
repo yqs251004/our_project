@@ -23,7 +23,7 @@ final case class TournamentPublishAPIMessage(tournamentId: String, operatorId: O
       command = PublishTournamentCommand(TournamentId(tournamentId), actor)
       _ <- IO {
         module.transactionManager.inTransaction {
-          publishTournament(module, command)
+          publishTournament(context.connection, module, command)
         }
       }
       view <- IO {
@@ -38,17 +38,18 @@ final case class TournamentPublishAPIMessage(tournamentId: String, operatorId: O
       .getOrElse(AccessPrincipal.system)
 
   private def publishTournament(
+      connection: java.sql.Connection,
       module: TournamentModuleContext,
       command: PublishTournamentCommand
   ): Unit =
-    module.tournamentRepository.findById(command.tournamentId).foreach { tournament =>
+    riichinexus.microservices.tournament.tables.tournament.TournamentTable.findById(connection, command.tournamentId).foreach { tournament =>
       module.authorizationService.requirePermission(
         command.actor,
         Permission.ManageTournamentStages,
         tournamentId = Some(command.tournamentId)
       )
       ensureTournamentHasStages(tournament, command.tournamentId)
-      module.tournamentRepository.save(tournament.publish)
+      riichinexus.microservices.tournament.tables.tournament.TournamentTable.save(connection, tournament.publish)
     }
 
   private def ensureTournamentHasStages(tournament: Tournament, tournamentId: TournamentId): Unit =

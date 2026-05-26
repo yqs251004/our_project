@@ -4,18 +4,19 @@ import java.sql.Connection
 import java.time.Instant
 import java.util.NoSuchElementException
 
-import riichinexus.application.ports.*
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.player.objects.*
 import riichinexus.domain.service.TournamentRuleEngine
+import riichinexus.application.ports.{NoOpTransactionManager, TransactionManager}
+import riichinexus.microservices.club.tables.club.ClubTable
 import riichinexus.microservices.player.tables.player.PlayerTable
 import riichinexus.microservices.tournament.objects.SeatWind
+import riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTable
+import riichinexus.microservices.tournament.tables.tournament.TournamentTable
+import riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable
 
 final class KnockoutStageCoordinator(
-    tournamentRepository: TournamentRepository,
-    clubRepository: ClubRepository,
-    tableRepository: TableRepository,
-    matchRecordRepository: MatchRecordRepository,
     tournamentRuleEngine: TournamentRuleEngine,
     transactionManager: TransactionManager = NoOpTransactionManager
 ):
@@ -25,18 +26,18 @@ final class KnockoutStageCoordinator(
       stageId: TournamentStageId,
       at: Instant = Instant.now()
   ): KnockoutBracketSnapshot =
-    val tournament = tournamentRepository
-      .findById(tournamentId)
+    val tournament = TournamentTable
+      .findById(connection, tournamentId)
       .getOrElse(throw NoSuchElementException(s"Tournament ${tournamentId.value} was not found"))
     val stage = requireStage(tournament, stageId)
     val participants = resolveParticipants(connection, tournament, stage)
-    val records = stageRecords(tournamentId, stageId)
+    val records = stageRecords(connection, tournamentId, stageId)
     buildProgression(
       tournament = tournament,
       stage = stage,
       participants = participants,
       records = records,
-      tables = tableRepository.findByTournamentAndStage(tournamentId, stageId),
+      tables = TournamentGameTable.findByTournamentAndStage(connection, tournamentId, stageId),
       at = at
     )
 
@@ -78,14 +79,14 @@ final class KnockoutStageCoordinator(
       at: Instant = Instant.now()
   ): Vector[Table] =
     transactionManager.inTransaction {
-      val tournament = tournamentRepository
-        .findById(tournamentId)
+      val tournament = TournamentTable
+        .findById(connection, tournamentId)
         .getOrElse(throw NoSuchElementException(s"Tournament ${tournamentId.value} was not found"))
       val stage = requireStage(tournament, stageId)
-      val existingTables = tableRepository.findByTournamentAndStage(tournamentId, stageId)
+      val existingTables = TournamentGameTable.findByTournamentAndStage(connection, tournamentId, stageId)
       val participants = resolveParticipants(connection, tournament, stage)
       val participantsById = participants.map(player => player.id -> player).toMap
-      val records = stageRecords(tournamentId, stageId)
+      val records = stageRecords(connection, tournamentId, stageId)
       val progression = buildProgression(tournament, stage, participants, records, existingTables, at)
       val representedClubByPlayer = representativeClubMap(stage)
 
@@ -127,14 +128,15 @@ final class KnockoutStageCoordinator(
           )
         }
 
-      val savedTables = tablesToCreate.map(tableRepository.save)
+      val savedTables = tablesToCreate.map(TournamentGameTable.save(connection, _))
 
       if savedTables.nonEmpty then
         val updatedTournament = tournament
           .activateStage(stageId)
           .updateStage(stageId, _.registerScheduledTables(savedTables.map(_.id)))
 
-        tournamentRepository.save(
+        TournamentTable.save(
+          connection,
           if tournament.status == TournamentStatus.RegistrationOpen then updatedTournament.markScheduled
           else updatedTournament
         )
@@ -150,7 +152,7 @@ final class KnockoutStageCoordinator(
       at: Instant = Instant.now()
   ): Vector[Table] =
     transactionManager.inTransaction {
-      pruneDependentTables(tournamentId, stageId, mutatedMatchId)
+      pruneDependentTables(connection, tournamentId, stageId, mutatedMatchId)
       materializeUnlockedTables(connection, tournamentId, stageId, at)
     }
 
@@ -163,17 +165,19 @@ final class KnockoutStageCoordinator(
       .getOrElse(throw NoSuchElementException(s"Stage ${stageId.value} was not found"))
 
   private def stageRecords(
+      connection: Connection,
       tournamentId: TournamentId,
       stageId: TournamentStageId
   ): Vector[MatchRecord] =
-    matchRecordRepository.findByTournamentAndStage(tournamentId, stageId)
+    MatchRecordTable.findByTournamentAndStage(connection, tournamentId, stageId)
 
   private def resolveParticipants(
       connection: Connection,
       tournament: Tournament,
       stage: TournamentStage
   ): Vector[Player] =
-    val clubsById = clubRepository.findByIds(
+    val clubsById = ClubTable.findByIds(
+      connection,
       (tournament.participatingClubs ++ tournament.whitelist.flatMap(_.clubId)).distinct
     ).map(club => club.id -> club).toMap
 
@@ -202,11 +206,12 @@ final class KnockoutStageCoordinator(
     }
 
   private def pruneDependentTables(
+      connection: Connection,
       tournamentId: TournamentId,
       stageId: TournamentStageId,
       sourceMatchId: String
   ): Unit =
-    val dependentTables = tableRepository.findByTournamentAndStage(tournamentId, stageId)
+    val dependentTables = TournamentGameTable.findByTournamentAndStage(connection, tournamentId, stageId)
       .filter(_.feederMatchIds.contains(sourceMatchId))
 
     dependentTables.foreach { table =>
@@ -216,10 +221,10 @@ final class KnockoutStageCoordinator(
         )
 
       table.bracketMatchId.foreach { downstreamMatchId =>
-        pruneDependentTables(tournamentId, stageId, downstreamMatchId)
+        pruneDependentTables(connection, tournamentId, stageId, downstreamMatchId)
       }
 
-      tableRepository.delete(table.id)
+      TournamentGameTable.delete(connection, table.id)
     }
 
   private def representativeClubMap(stage: TournamentStage): Map[PlayerId, ClubId] =

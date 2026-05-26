@@ -9,7 +9,6 @@ final case class ApiExecutionContext(
     authModule: AuthModuleContext,
     playerModule: PlayerModuleContext,
     clubModule: ClubModuleContext,
-    dictionaryModule: DictionaryModuleContext,
     publicQueryModule: PublicQueryModuleContext,
     opsAnalyticsModule: OpsAnalyticsModuleContext,
     tournamentModule: TournamentModuleContext,

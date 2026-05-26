@@ -1,6 +1,7 @@
 package riichinexus.microservices.opsanalytics.objects.apiTypes
 
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.player.objects.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.opsanalytics.objects.{DashboardOwner, AdvancedStatsBackfillMode}

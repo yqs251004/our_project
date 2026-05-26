@@ -8,6 +8,7 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.application.ports.OptimisticConcurrencyException
 import riichinexus.bootstrap.OpsAnalyticsModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.player.objects.*
 import riichinexus.domain.service.AdvancedStatsRoundAnalysis.*
 import riichinexus.infrastructure.json.JsonCodecs.given
@@ -33,7 +34,7 @@ final case class OpsAnalyticsProcessAdvancedStatsAPIMessage(
     yield tasks
 
   private def requireOpsAdmin(context: ApiPlanContext, operator: AccessPrincipal): Unit =
-    context.support.requirePermission(operator, Permission.ManageGlobalDictionary)
+    context.support.requirePermission(operator, Permission.ManagePlatformOperations)
 
   private val retryDelay = Duration.ofMinutes(5)
   private val maxAttempts = 3
@@ -43,9 +44,9 @@ final case class OpsAnalyticsProcessAdvancedStatsAPIMessage(
       module: OpsAnalyticsModuleContext,
       command: ProcessAdvancedStatsCommand
   ): Vector[AdvancedStatsRecomputeTask] =
-    module.advancedStatsRecomputeTaskRepository.findPending(command.limit, command.processedAt).flatMap { task =>
+    riichinexus.microservices.opsanalytics.tables.advancedstatsrecomputetask.AdvancedStatsRecomputeTaskTable.findPending(connection, command.limit, command.processedAt).flatMap { task =>
       val maybeProcessing =
-        try Some(module.advancedStatsRecomputeTaskRepository.save(task.markProcessing(command.processedAt)))
+        try Some(riichinexus.microservices.opsanalytics.tables.advancedstatsrecomputetask.AdvancedStatsRecomputeTaskTable.save(connection, task.markProcessing(command.processedAt)))
         catch
           case _: OptimisticConcurrencyException =>
             None
@@ -54,41 +55,42 @@ final case class OpsAnalyticsProcessAdvancedStatsAPIMessage(
         try
           processing.owner match
             case DashboardOwner.Player(playerId) =>
-              module.advancedStatsBoardRepository.save(rebuildPlayerBoard(module, playerId, command.processedAt))
+              riichinexus.microservices.opsanalytics.tables.advancedstatsboard.AdvancedStatsBoardTable.save(connection, rebuildPlayerBoard(connection, module, playerId, command.processedAt))
             case DashboardOwner.Club(clubId) =>
-              val club = module.clubRepository.findById(clubId).getOrElse(
+              val club = riichinexus.microservices.club.tables.club.ClubTable.findById(connection, clubId).getOrElse(
                 throw NoSuchElementException(s"Club ${clubId.value} was not found")
               )
-              module.advancedStatsBoardRepository.save(rebuildClubBoard(connection, module, club, command.processedAt))
+              riichinexus.microservices.opsanalytics.tables.advancedstatsboard.AdvancedStatsBoardTable.save(connection, rebuildClubBoard(connection, module, club, command.processedAt))
 
-          try module.advancedStatsRecomputeTaskRepository.save(processing.markCompleted(command.processedAt))
+          try riichinexus.microservices.opsanalytics.tables.advancedstatsrecomputetask.AdvancedStatsRecomputeTaskTable.save(connection, processing.markCompleted(command.processedAt))
           catch
             case _: OptimisticConcurrencyException =>
-              module.advancedStatsRecomputeTaskRepository.findById(processing.id).getOrElse(processing)
+              riichinexus.microservices.opsanalytics.tables.advancedstatsrecomputetask.AdvancedStatsRecomputeTaskTable.findById(connection, processing.id).getOrElse(processing)
         catch
           case _: OptimisticConcurrencyException =>
-            module.advancedStatsRecomputeTaskRepository.findById(processing.id).getOrElse(processing)
+            riichinexus.microservices.opsanalytics.tables.advancedstatsrecomputetask.AdvancedStatsRecomputeTaskTable.findById(connection, processing.id).getOrElse(processing)
           case error: Throwable =>
             val errorMessage = Option(error.getMessage).getOrElse(error.getClass.getSimpleName)
             if processing.attempts >= maxAttempts then
-              module.advancedStatsRecomputeTaskRepository.save(processing.markDeadLetter(errorMessage, command.processedAt))
+              riichinexus.microservices.opsanalytics.tables.advancedstatsrecomputetask.AdvancedStatsRecomputeTaskTable.save(connection, processing.markDeadLetter(errorMessage, command.processedAt))
             else
               val retryAt = command.processedAt.plus(retryDelay)
-              module.advancedStatsRecomputeTaskRepository.save(
+              riichinexus.microservices.opsanalytics.tables.advancedstatsrecomputetask.AdvancedStatsRecomputeTaskTable.save(connection, 
                 processing.markRetryScheduled(errorMessage, command.processedAt, retryAt)
               )
       }
     }
 
   private def rebuildPlayerBoard(
+      connection: java.sql.Connection,
       module: OpsAnalyticsModuleContext,
       playerId: PlayerId,
       at: Instant
   ): AdvancedStatsBoard =
-    val records = module.matchRecordRepository.findByPlayer(playerId)
-    val paifus = module.paifuRepository.findByPlayer(playerId)
+    val records = riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTable.findByPlayer(connection, playerId)
+    val paifus = riichinexus.microservices.tournament.tables.paifu.PaifuTable.findByPlayer(connection, playerId)
     val existingVersion =
-      module.advancedStatsBoardRepository.findByOwner(DashboardOwner.Player(playerId)).map(_.version).getOrElse(0)
+      riichinexus.microservices.opsanalytics.tables.advancedstatsboard.AdvancedStatsBoardTable.findByOwner(connection, DashboardOwner.Player(playerId)).map(_.version).getOrElse(0)
     buildPlayerBoard(playerId, records, paifus, at).copy(version = existingVersion)
 
   private def rebuildClubBoard(
@@ -100,10 +102,10 @@ final case class OpsAnalyticsProcessAdvancedStatsAPIMessage(
     val memberBoards = club.members.flatMap { playerId =>
       PlayerTable.findById(connection, playerId)
         .filter(_.status == PlayerStatus.Active)
-        .map(_ => rebuildPlayerBoard(module, playerId, at))
+        .map(_ => rebuildPlayerBoard(connection, module, playerId, at))
     }
     val existingVersion =
-      module.advancedStatsBoardRepository.findByOwner(DashboardOwner.Club(club.id)).map(_.version).getOrElse(0)
+      riichinexus.microservices.opsanalytics.tables.advancedstatsboard.AdvancedStatsBoardTable.findByOwner(connection, DashboardOwner.Club(club.id)).map(_.version).getOrElse(0)
     buildClubBoard(club, memberBoards, at).copy(version = existingVersion)
 
   private final case class ProcessAdvancedStatsCommand(

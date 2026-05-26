@@ -22,17 +22,17 @@ final case class TournamentTableUpdateOwnReadyAPIMessage(tableId: String, reques
       command = UpdateOwnReadyCommand(TableId(tableId), actor, request.ready, request.note)
       table <- IO {
         module.transactionManager.inTransaction {
-          updateOwnReady(module, command)
+          updateOwnReady(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
     yield TournamentTableView.fromDomain(table)
 
-  private def updateOwnReady(module: TournamentModuleContext, command: UpdateOwnReadyCommand): Option[Table] =
-    module.tableRepository.findById(command.tableId).map { table =>
+  private def updateOwnReady(connection: java.sql.Connection, module: TournamentModuleContext, command: UpdateOwnReadyCommand): Option[Table] =
+    riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.findById(connection, command.tableId).map { table =>
       val playerId = requireAuthenticatedPlayer(command.actor)
       val targetSeat = requirePlayerSeat(table, command.tableId, playerId)
       requireSeatStatePermission(module, command.actor, table, targetSeat)
-      module.tableRepository.save(
+      riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.save(connection, 
         table.updateSeatState(
           targetSeat = targetSeat.seat,
           ready = Some(command.ready),

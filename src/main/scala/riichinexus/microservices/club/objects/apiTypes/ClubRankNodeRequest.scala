@@ -1,6 +1,6 @@
 package riichinexus.microservices.club.objects.apiTypes
 
-import riichinexus.domain.model.ClubRankNode
+import riichinexus.microservices.club.domain.model.ClubRankNode
 import upickle.default.*
 
 final case class ClubRankNodeRequest(

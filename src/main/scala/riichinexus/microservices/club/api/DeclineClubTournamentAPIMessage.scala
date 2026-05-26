@@ -6,8 +6,9 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.model.*
-import riichinexus.domain.service.AuthorizationFailure
+import riichinexus.microservices.club.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.club.domain.ClubAuthorization
 import riichinexus.microservices.tournament.domain.TournamentOperationViewAssembler
 import riichinexus.microservices.tournament.objects.apiTypes.*
 import riichinexus.microservices.tournament.objects.apiTypes.TournamentOperationResponses.given
@@ -30,7 +31,7 @@ final case class DeclineClubTournamentAPIMessage(
       )
       _ <- IO {
         module.transactionManager.inTransaction {
-          declineTournament(module, command)
+          declineTournament(context.connection, module, command)
         }
       }
       view <- IO {
@@ -45,21 +46,22 @@ final case class DeclineClubTournamentAPIMessage(
       .getOrElse(throw IllegalArgumentException("operatorId is required"))
 
   private def declineTournament(
+      connection: java.sql.Connection,
       module: TournamentModuleContext,
       command: DeclineClubTournamentCommand
   ): Unit =
-    val club = resolveActiveClub(module, command.clubId)
+    val club = resolveActiveClub(connection, command.clubId)
     requireClubLineupCapability(module, command.actor, club)
-    module.tournamentRepository.findById(command.tournamentId).foreach { tournament =>
+    riichinexus.microservices.tournament.tables.tournament.TournamentTable.findById(connection, command.tournamentId).foreach { tournament =>
       ensureClubTracked(tournament, command)
-      module.tournamentRepository.save(tournament.removeClub(command.clubId))
+      riichinexus.microservices.tournament.tables.tournament.TournamentTable.save(connection, tournament.removeClub(command.clubId))
     }
 
-  private def resolveActiveClub(module: TournamentModuleContext, clubId: ClubId): Club =
-    module.clubRepository
-      .findById(clubId)
+  private def resolveActiveClub(connection: java.sql.Connection, clubId: ClubId): Club =
+    riichinexus.microservices.club.tables.club.ClubTable
+      .findById(connection, clubId)
       .map { club =>
-        ensureClubActive(club)
+        ClubAuthorization.ensureClubActive(club)
         club
       }
       .getOrElse(throw NoSuchElementException(s"Club ${clubId.value} was not found"))
@@ -76,29 +78,18 @@ final case class DeclineClubTournamentAPIMessage(
         s"Club ${command.clubId.value} is not participating in tournament ${command.tournamentId.value}"
       )
 
-  private def ensureClubActive(club: Club): Unit =
-    if club.dissolvedAt.nonEmpty then
-      throw IllegalArgumentException(s"Club ${club.id.value} has already been dissolved")
-
   private def requireClubLineupCapability(
       module: TournamentModuleContext,
       actor: AccessPrincipal,
       club: Club
   ): Unit =
-    val hasBasePermission =
-      module.authorizationService.can(
-        actor,
-        Permission.SubmitTournamentLineup,
-        clubId = Some(club.id)
-      )
-    val hasDelegatedPrivilege = actor.playerId.exists { playerId =>
-      club.members.contains(playerId) && club.hasPrivilege(playerId, ClubPrivilege.PriorityLineup)
-    }
-
-    if !hasBasePermission && !hasDelegatedPrivilege then
-      throw AuthorizationFailure(
-        s"${actor.displayName} is not allowed to perform ${Permission.SubmitTournamentLineup} for club ${club.id.value}"
-      )
+    ClubAuthorization.requireClubCapability(
+      authorizationService = module.authorizationService,
+      actor = actor,
+      club = club,
+      permission = Permission.SubmitTournamentLineup,
+      delegatedPrivileges = Set(ClubPrivilege.PriorityLineup)
+    )
 
   private final case class DeclineClubTournamentCommand(
       clubId: ClubId,

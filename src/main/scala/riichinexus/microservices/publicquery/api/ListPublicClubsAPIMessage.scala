@@ -2,7 +2,8 @@ package riichinexus.microservices.publicquery.api
 
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
-import riichinexus.domain.model.{AccessPrincipal, ClubRelationKind, Permission}
+import riichinexus.domain.model.{AccessPrincipal, Permission}
+import riichinexus.microservices.club.domain.model.ClubRelationKind
 import riichinexus.microservices.publicquery.objects.apiTypes.PublicClubDirectoryEntry
 import riichinexus.microservices.publicquery.domain.PublicDirectoryQueries
 import riichinexus.system.objects.PagedResponse

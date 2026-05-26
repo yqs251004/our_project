@@ -5,9 +5,9 @@ import java.util.NoSuchElementException
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
-import riichinexus.domain.service.AuthorizationFailure
+import riichinexus.microservices.club.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.domain.ClubApplicationViewAssembler
+import riichinexus.microservices.club.domain.{ClubApplicationViewAssembler, ClubAuthorization}
 import riichinexus.microservices.club.objects.ClubApplicationStatus
 import riichinexus.microservices.club.objects.ClubMembershipApplicationView
 import riichinexus.microservices.club.objects.apiTypes.ClubApplicationListQuery
@@ -55,7 +55,7 @@ final case class ListClubApplicationsAPIMessage(
       guestSessionId = None,
       operatorId = query.operatorId
     )
-    requireClubApplicationManager(actor, club)
+    ClubAuthorization.requireClubApplicationManager(actor, club)
 
     val applications = club.membershipApplications
       .filter(application => query.status.forall(_ == application.status))
@@ -81,10 +81,6 @@ final case class ListClubApplicationsAPIMessage(
       hasMore = query.offset + page.size < applications.size,
       appliedFilters = query.appliedFilters
     )
-
-  private def requireClubApplicationManager(actor: AccessPrincipal, club: Club): Unit =
-    if !ClubApplicationViewAssembler.canManageClubApplications(actor, club) then
-      throw AuthorizationFailure(s"${actor.displayName} cannot manage membership applications for club ${club.id.value}")
 
   private final case class ResolvedClubApplicationListQuery(
       clubId: ClubId,

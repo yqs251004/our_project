@@ -6,9 +6,10 @@ import java.util.NoSuchElementException
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubApplicationReviewer
-import riichinexus.microservices.club.objects.{Club as ClubResponse}
+import riichinexus.microservices.club.objects.ClubView
 import upickle.default.*
 
 final case class RejectClubApplicationAPIMessage(
@@ -16,9 +17,9 @@ final case class RejectClubApplicationAPIMessage(
     membershipId: String,
     operatorId: String,
     note: Option[String] = None
-) extends APIMessage[ClubResponse] derives ReadWriter:
+) extends APIMessage[ClubView] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[ClubResponse] =
+  override def plan(context: ApiPlanContext): IO[ClubView] =
     for
       actor <- IO(context.principal(PlayerId(operatorId)))
       rejectedAt <- IO.realTimeInstant
@@ -31,16 +32,18 @@ final case class RejectClubApplicationAPIMessage(
         rejectedAt = rejectedAt
       )
       club <- IO(
-        rejectApplication(module, command)
+        rejectApplication(context.connection, module, command)
           .getOrElse(throw NoSuchElementException("Resource not found"))
       )
-    yield ClubResponse.fromDomain(club)
+    yield ClubView.fromDomain(club)
 
   private def rejectApplication(
+      connection: java.sql.Connection,
       module: riichinexus.bootstrap.ClubModuleContext,
       command: RejectClubApplicationCommand
   ): Option[Club] =
     ClubApplicationReviewer.reject(
+      connection = connection,
       module = module,
       parsedClubId = command.clubId,
       parsedMembershipId = command.membershipId,

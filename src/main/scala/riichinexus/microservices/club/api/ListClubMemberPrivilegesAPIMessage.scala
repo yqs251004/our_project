@@ -3,8 +3,9 @@ package riichinexus.microservices.club.api
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.objects.{ClubMemberPrivilegeSnapshot as ClubMemberPrivilegeSnapshotResponse}
+import riichinexus.microservices.club.objects.ClubMemberPrivilegeSnapshotView
 import riichinexus.microservices.club.objects.apiTypes.ClubMemberPrivilegeListQuery
 import riichinexus.microservices.club.tables.club.ClubTable
 import riichinexus.system.objects.PagedResponse
@@ -13,9 +14,9 @@ import upickle.default.*
 final case class ListClubMemberPrivilegesAPIMessage(
     clubId: String,
     query: ClubMemberPrivilegeListQuery = ClubMemberPrivilegeListQuery()
-) extends APIMessage[PagedResponse[ClubMemberPrivilegeSnapshotResponse]] derives ReadWriter:
+) extends APIMessage[PagedResponse[ClubMemberPrivilegeSnapshotView]] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[PagedResponse[ClubMemberPrivilegeSnapshotResponse]] =
+  override def plan(context: ApiPlanContext): IO[PagedResponse[ClubMemberPrivilegeSnapshotView]] =
     for
       resolved <- IO(resolveQuery)
       snapshots <- IO(listSnapshots(context, resolved))
@@ -54,11 +55,11 @@ final case class ListClubMemberPrivilegesAPIMessage(
   private def pagedResponse(
       snapshots: Vector[ClubMemberPrivilegeSnapshot],
       query: ResolvedClubMemberPrivilegeQuery
-  ): PagedResponse[ClubMemberPrivilegeSnapshotResponse] =
+  ): PagedResponse[ClubMemberPrivilegeSnapshotView] =
     require(query.limit > 0, "Input field limit must be positive")
     require(query.offset >= 0, "Input field offset must be non-negative")
     val boundedLimit = math.min(query.limit, 100)
-    val page = snapshots.slice(query.offset, query.offset + boundedLimit).map(ClubMemberPrivilegeSnapshotResponse.fromDomain)
+    val page = snapshots.slice(query.offset, query.offset + boundedLimit).map(ClubMemberPrivilegeSnapshotView.fromDomain)
     PagedResponse(
       items = page,
       total = snapshots.size,

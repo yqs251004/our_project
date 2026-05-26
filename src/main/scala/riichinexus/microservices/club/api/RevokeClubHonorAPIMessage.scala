@@ -8,9 +8,11 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.application.changes.DomainChangeInterpreter
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.domain.model.*
 import riichinexus.domain.service.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.objects.{Club as ClubResponse}
+import riichinexus.microservices.club.domain.ClubAuthorization
+import riichinexus.microservices.club.objects.ClubView
 import upickle.default.*
 
 final case class RevokeClubHonorAPIMessage(
@@ -18,9 +20,9 @@ final case class RevokeClubHonorAPIMessage(
     operatorId: String,
     title: String,
     note: Option[String] = None
-) extends APIMessage[ClubResponse] derives ReadWriter:
+) extends APIMessage[ClubView] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[ClubResponse] =
+  override def plan(context: ApiPlanContext): IO[ClubView] =
     for
       actor <- IO(context.principal(PlayerId(operatorId)))
       occurredAt <- IO.realTimeInstant
@@ -34,24 +36,26 @@ final case class RevokeClubHonorAPIMessage(
       )
       club <- IO {
         module.transactionManager.inTransaction {
-          revokeHonor(module, command)
+          revokeHonor(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
-    yield ClubResponse.fromDomain(club)
+    yield ClubView.fromDomain(club)
 
   private def revokeHonor(
+      connection: java.sql.Connection,
       module: ClubModuleContext,
       command: RevokeClubHonorCommand
   ): Option[Club] =
-    module.clubRepository.findById(command.clubId).map { club =>
-      ensureClubActive(club)
-      module.authorizationService.requirePermission(
-        command.actor,
-        Permission.ManageClubOperations,
-        clubId = Some(command.clubId)
+    riichinexus.microservices.club.tables.club.ClubTable.findById(connection, command.clubId).map { club =>
+      ClubAuthorization.ensureClubActive(club)
+      ClubAuthorization.requireClubAdmin(
+        module = module,
+        actor = command.actor,
+        club = club,
+        permission = Permission.ManageClubOperations
       )
       ensureHonorExists(club, command)
-      commitHonorRevocation(module, club, command)
+      commitHonorRevocation(connection, module, club, command)
     }
 
   private def ensureHonorExists(club: Club, command: RevokeClubHonorCommand): Unit =
@@ -60,6 +64,7 @@ final case class RevokeClubHonorAPIMessage(
       throw NoSuchElementException(s"Club ${command.clubId.value} does not have honor '${command.title}'")
 
   private def commitHonorRevocation(
+      connection: java.sql.Connection,
       module: ClubModuleContext,
       club: Club,
       command: RevokeClubHonorCommand
@@ -68,7 +73,7 @@ final case class RevokeClubHonorAPIMessage(
       .auditOnly(module.transactionManager, module.auditEventRepository)
       .commitAudited(
         aggregate = club.removeHonor(command.title),
-        persist = module.clubRepository.save,
+        persist = updatedClub => riichinexus.microservices.club.tables.club.ClubTable.save(connection, updatedClub),
         aggregateType = "club",
         aggregateId = _.id.value,
         eventType = "ClubHonorRevoked",
@@ -77,10 +82,6 @@ final case class RevokeClubHonorAPIMessage(
         details = _ => Map("title" -> command.title),
         note = command.note
       )
-
-  private def ensureClubActive(club: Club): Unit =
-    if club.dissolvedAt.nonEmpty then
-      throw IllegalArgumentException(s"Club ${club.id.value} has already been dissolved")
 
   private final case class RevokeClubHonorCommand(
       clubId: ClubId,

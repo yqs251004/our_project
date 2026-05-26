@@ -7,6 +7,7 @@ import scala.util.Using
 
 import riichinexus.application.ports.OptimisticConcurrencyException
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.player.objects.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.opsanalytics.objects.{AdvancedStatsBoard, DashboardOwner}

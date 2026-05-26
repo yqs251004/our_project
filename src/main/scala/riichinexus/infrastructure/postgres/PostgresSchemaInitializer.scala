@@ -9,8 +9,6 @@ import riichinexus.microservices.auth.tables.authenticatedsession.AuthenticatedS
 import riichinexus.microservices.auth.tables.guestsession.GuestSessionTableInitializer
 import riichinexus.microservices.club.tables.clubaudit.ClubContributionAuditTableInitializer
 import riichinexus.microservices.club.tables.club.ClubTableInitializer
-import riichinexus.microservices.dictionary.tables.dictionarynamespace.DictionaryNamespaceTableInitializer
-import riichinexus.microservices.dictionary.tables.globaldictionary.GlobalDictionaryTableInitializer
 import riichinexus.microservices.opsanalytics.tables.advancedstatsboard.AdvancedStatsBoardTableInitializer
 import riichinexus.microservices.opsanalytics.tables.advancedstatsrecomputetask.AdvancedStatsRecomputeTaskTableInitializer
 import riichinexus.infrastructure.audit.tables.auditevent.AuditEventTableInitializer
@@ -37,8 +35,6 @@ final class PostgresSchemaInitializer(connectionFactory: JdbcConnectionFactory):
       AccountCredentialTableInitializer.initialize(connection)
       AuthenticatedSessionTableInitializer.initialize(connection)
       ClubTableInitializer.initialize(connection)
-      GlobalDictionaryTableInitializer.initialize(connection)
-      DictionaryNamespaceTableInitializer.initialize(connection)
       PlayerTableInitializer.initialize(connection)
       DashboardTableInitializer.initialize(connection)
       AdvancedStatsBoardTableInitializer.initialize(connection)

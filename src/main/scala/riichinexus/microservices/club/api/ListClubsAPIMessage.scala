@@ -3,8 +3,9 @@ package riichinexus.microservices.club.api
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.objects.{Club as ClubResponse}
+import riichinexus.microservices.club.objects.ClubView
 import riichinexus.microservices.club.objects.apiTypes.ClubListQuery
 import riichinexus.microservices.club.tables.club.ClubTable
 import riichinexus.system.objects.PagedResponse
@@ -12,9 +13,9 @@ import upickle.default.*
 
 final case class ListClubsAPIMessage(
     query: ClubListQuery = ClubListQuery()
-) extends APIMessage[PagedResponse[ClubResponse]] derives ReadWriter:
+) extends APIMessage[PagedResponse[ClubView]] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[PagedResponse[ClubResponse]] =
+  override def plan(context: ApiPlanContext): IO[PagedResponse[ClubView]] =
     for
       resolved <- IO(resolveQuery)
       clubs <- IO(listClubs(context, resolved))
@@ -56,11 +57,11 @@ final case class ListClubsAPIMessage(
   private def pagedResponse(
       clubs: Vector[Club],
       query: ResolvedClubListQuery
-  ): PagedResponse[ClubResponse] =
+  ): PagedResponse[ClubView] =
     require(query.limit > 0, "Input field limit must be positive")
     require(query.offset >= 0, "Input field offset must be non-negative")
     val boundedLimit = math.min(query.limit, 100)
-    val page = clubs.slice(query.offset, query.offset + boundedLimit).map(ClubResponse.fromDomain)
+    val page = clubs.slice(query.offset, query.offset + boundedLimit).map(ClubView.fromDomain)
     PagedResponse(
       items = page,
       total = clubs.size,

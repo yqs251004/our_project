@@ -7,10 +7,12 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.player.objects.*
 import riichinexus.domain.service.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.objects.{Club as ClubResponse}
+import riichinexus.microservices.club.domain.ClubAuthorization
+import riichinexus.microservices.club.objects.ClubView
 import riichinexus.microservices.player.tables.player.PlayerTable
 import upickle.default.*
 
@@ -18,9 +20,9 @@ final case class AssignClubAdminAPIMessage(
     clubId: String,
     playerId: String,
     operatorId: String
-) extends APIMessage[ClubResponse] derives ReadWriter:
+) extends APIMessage[ClubView] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[ClubResponse] =
+  override def plan(context: ApiPlanContext): IO[ClubView] =
     for
       actor <- IO(context.principal(PlayerId(operatorId)))
       grantedAt <- IO.realTimeInstant
@@ -36,7 +38,7 @@ final case class AssignClubAdminAPIMessage(
           assignAdmin(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
-    yield ClubResponse.fromDomain(club)
+    yield ClubView.fromDomain(club)
 
   private def assignAdmin(
       connection: java.sql.Connection,
@@ -44,7 +46,7 @@ final case class AssignClubAdminAPIMessage(
       command: AssignClubAdminCommand
   ): Option[Club] =
     for
-      club <- module.clubRepository.findById(command.clubId)
+      club <- riichinexus.microservices.club.tables.club.ClubTable.findById(connection, command.clubId)
       player <- PlayerTable.findById(connection, command.playerId)
     yield
       ensureAdminCanBeAssigned(module, club, player, command)
@@ -52,7 +54,7 @@ final case class AssignClubAdminAPIMessage(
         connection,
         player.grantRole(RoleGrant.clubAdmin(command.clubId, command.grantedAt, command.actor.playerId))
       )
-      module.clubRepository.save(club.grantAdmin(command.playerId))
+      riichinexus.microservices.club.tables.club.ClubTable.save(connection, club.grantAdmin(command.playerId))
 
   private def ensureAdminCanBeAssigned(
       module: ClubModuleContext,
@@ -60,28 +62,19 @@ final case class AssignClubAdminAPIMessage(
       player: Player,
       command: AssignClubAdminCommand
   ): Unit =
-    ensureClubActive(club)
+    ClubAuthorization.ensureClubActive(club)
     requireActivePlayer(player, s"Player ${command.playerId.value} cannot be granted club admin")
-    requireClubMember(club, command.playerId, "assign club admin")
-    module.authorizationService.requirePermission(
-      command.actor,
-      Permission.AssignClubAdmin,
-      clubId = Some(command.clubId)
+    ClubAuthorization.requireClubMember(club, command.playerId, "assign club admin")
+    ClubAuthorization.requireClubAdmin(
+      module = module,
+      actor = command.actor,
+      club = club,
+      permission = Permission.AssignClubAdmin
     )
-
-  private def ensureClubActive(club: Club): Unit =
-    if club.dissolvedAt.nonEmpty then
-      throw IllegalArgumentException(s"Club ${club.id.value} has already been dissolved")
 
   private def requireActivePlayer(player: Player, context: String): Unit =
     if player.status != PlayerStatus.Active then
       throw IllegalArgumentException(context)
-
-  private def requireClubMember(club: Club, playerId: PlayerId, action: String): Unit =
-    if !club.members.contains(playerId) then
-      throw IllegalArgumentException(
-        s"Player ${playerId.value} must be a club member to $action in club ${club.id.value}"
-      )
 
   private final case class AssignClubAdminCommand(
       clubId: ClubId,

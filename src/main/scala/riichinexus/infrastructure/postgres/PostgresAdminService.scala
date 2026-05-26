@@ -20,8 +20,6 @@ final class PostgresAdminService(connectionFactory: JdbcConnectionFactory):
       "dashboards",
       "advanced_stats_boards",
       "advanced_stats_recompute_tasks",
-      "global_dictionary",
-      "dictionary_namespaces",
       "tournament_settlements",
       "event_cascade_records",
       "domain_event_outbox",
@@ -63,8 +61,6 @@ final class PostgresAdminService(connectionFactory: JdbcConnectionFactory):
         executeAdmin(connection, "select setval('domain_event_outbox_sequence', 1, false)")
         executeAdmin(connection, "truncate table tournament_settlements restart identity")
         executeAdmin(connection, "truncate table event_cascade_records restart identity")
-        executeAdmin(connection, "truncate table global_dictionary restart identity")
-        executeAdmin(connection, "truncate table dictionary_namespaces restart identity")
         executeAdmin(connection, "truncate table advanced_stats_recompute_tasks restart identity")
         executeAdmin(connection, "truncate table dashboards restart identity")
         executeAdmin(connection, "truncate table advanced_stats_boards restart identity")

@@ -8,9 +8,11 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.application.changes.DomainChangeInterpreter
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.domain.model.*
 import riichinexus.domain.service.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.objects.{Club as ClubResponse}
+import riichinexus.microservices.club.domain.ClubAuthorization
+import riichinexus.microservices.club.objects.ClubView
 import upickle.default.*
 
 final case class AwardClubHonorAPIMessage(
@@ -19,9 +21,9 @@ final case class AwardClubHonorAPIMessage(
     title: String,
     note: Option[String] = None,
     achievedAt: Option[Instant] = None
-) extends APIMessage[ClubResponse] derives ReadWriter:
+) extends APIMessage[ClubView] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[ClubResponse] =
+  override def plan(context: ApiPlanContext): IO[ClubView] =
     for
       actor <- IO(context.principal(PlayerId(operatorId)))
       occurredAt <- IO.realTimeInstant
@@ -34,26 +36,29 @@ final case class AwardClubHonorAPIMessage(
       )
       club <- IO {
         module.transactionManager.inTransaction {
-          awardHonor(module, command)
+          awardHonor(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
-    yield ClubResponse.fromDomain(club)
+    yield ClubView.fromDomain(club)
 
   private def awardHonor(
+      connection: java.sql.Connection,
       module: ClubModuleContext,
       command: AwardClubHonorCommand
   ): Option[Club] =
-    module.clubRepository.findById(command.clubId).map { club =>
-      ensureClubActive(club)
-      module.authorizationService.requirePermission(
-        command.actor,
-        Permission.ManageClubOperations,
-        clubId = Some(command.clubId)
+    riichinexus.microservices.club.tables.club.ClubTable.findById(connection, command.clubId).map { club =>
+      ClubAuthorization.ensureClubActive(club)
+      ClubAuthorization.requireClubAdmin(
+        module = module,
+        actor = command.actor,
+        club = club,
+        permission = Permission.ManageClubOperations
       )
-      commitHonorAward(module, club, command)
+      commitHonorAward(connection, module, club, command)
     }
 
   private def commitHonorAward(
+      connection: java.sql.Connection,
       module: ClubModuleContext,
       club: Club,
       command: AwardClubHonorCommand
@@ -62,7 +67,7 @@ final case class AwardClubHonorAPIMessage(
       .auditOnly(module.transactionManager, module.auditEventRepository)
       .commitAudited(
         aggregate = club.addHonor(command.honor),
-        persist = module.clubRepository.save,
+        persist = updatedClub => riichinexus.microservices.club.tables.club.ClubTable.save(connection, updatedClub),
         aggregateType = "club",
         aggregateId = _.id.value,
         eventType = "ClubHonorAwarded",
@@ -71,10 +76,6 @@ final case class AwardClubHonorAPIMessage(
         details = _ => Map("title" -> command.honor.title),
         note = command.honor.note
       )
-
-  private def ensureClubActive(club: Club): Unit =
-    if club.dissolvedAt.nonEmpty then
-      throw IllegalArgumentException(s"Club ${club.id.value} has already been dissolved")
 
   private final case class AwardClubHonorCommand(
       clubId: ClubId,

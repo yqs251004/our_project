@@ -108,6 +108,20 @@ object MatchRecordTable:
       Using.resource(statement.executeQuery())(readMatchRecords)
     }
 
+  private val findByPlayerSql: String =
+    """
+      |select payload
+      |from match_records
+      |where ? = any(player_ids)
+      |order by generated_at desc, id desc
+      |""".stripMargin
+
+  private[riichinexus] def findByPlayer(connection: Connection, playerId: PlayerId): Vector[MatchRecord] =
+    Using.resource(connection.prepareStatement(findByPlayerSql)) { statement =>
+      statement.setString(1, playerId.value)
+      Using.resource(statement.executeQuery())(readMatchRecords)
+    }
+
   private val findAllSql: String =
     """
       |select payload

@@ -1,6 +1,6 @@
 package riichinexus.microservices.publicquery.objects.apiTypes
 
-import riichinexus.domain.model.ClubRelationKind
+import riichinexus.microservices.club.domain.model.ClubRelationKind
 import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.*
 

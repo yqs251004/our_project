@@ -5,6 +5,7 @@ import java.time.Instant
 import java.util.NoSuchElementException
 
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.player.objects.*
 import riichinexus.domain.service.TournamentRuleEngine
 import riichinexus.microservices.club.tables.club.ClubTable

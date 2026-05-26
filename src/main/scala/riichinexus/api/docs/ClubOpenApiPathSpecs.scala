@@ -165,7 +165,7 @@ object ClubOpenApiPathSpecs:
             "note" -> Obj("type" -> "string")
           )
         ),
-        responseRef = Some("Club")
+        responseRef = Some("ClubView")
       )
     )
   )

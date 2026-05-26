@@ -2,7 +2,8 @@ package riichinexus.microservices.club.objects.apiTypes
 
 import java.time.Instant
 
-import riichinexus.domain.model.{ClubId, ClubRelation, ClubRelationKind, PlayerId}
+import riichinexus.domain.model.{ClubId, PlayerId}
+import riichinexus.microservices.club.domain.model.{ClubRelation, ClubRelationKind}
 import upickle.default.*
 
 final case class UpdateClubRelationRequest(

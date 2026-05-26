@@ -2,21 +2,15 @@ package riichinexus.microservices.opsanalytics.projections
 
 import java.sql.Connection
 
-import riichinexus.application.ports.{
-  ClubRepository,
-  DomainEventSubscriber,
-  DomainEventSubscriberPartitionStrategy,
-  GlobalDictionaryRepository
-}
+import riichinexus.application.ports.{DomainEventSubscriber, DomainEventSubscriberPartitionStrategy}
 import riichinexus.domain.event.*
-import riichinexus.domain.model.{Club, PlayerId}
-import riichinexus.microservices.dictionary.domain.RuntimeDictionary
+import riichinexus.domain.model.PlayerId
+import riichinexus.microservices.club.domain.model.Club
+import riichinexus.microservices.club.domain.ClubPowerRatingService
+import riichinexus.microservices.club.tables.club.ClubTable
 import riichinexus.microservices.player.tables.player.PlayerTable
 
-final class ClubProjectionSubscriber(
-    clubRepository: ClubRepository,
-    globalDictionaryRepository: GlobalDictionaryRepository
-) extends DomainEventSubscriber:
+final class ClubProjectionSubscriber extends DomainEventSubscriber:
   override def partitionStrategy: DomainEventSubscriberPartitionStrategy =
     DomainEventSubscriberPartitionStrategy.AggregateRoot
 
@@ -28,19 +22,18 @@ final class ClubProjectionSubscriber(
           findPlayer(connection, result.playerId).toVector.flatMap(_.boundClubIds)
         }.distinct
         val impactedClubIds = (representedClubIds ++ memberClubIds).distinct
-        val dictionarySnapshot = RuntimeDictionary.snapshot(globalDictionaryRepository)
 
         matchRecord.seatResults.foreach { result =>
           result.clubId.foreach { clubId =>
-            clubRepository.findById(clubId).foreach { club =>
-              clubRepository.save(club.addPoints(result.scoreDelta))
+            ClubTable.findById(connection, clubId).foreach { club =>
+              ClubTable.save(connection, club.addPoints(result.scoreDelta))
             }
           }
         }
 
         impactedClubIds.foreach { clubId =>
-          clubRepository.findById(clubId).foreach { club =>
-            clubRepository.save(recalculateClubPowerRating(connection, club, dictionarySnapshot))
+          ClubTable.findById(connection, clubId).foreach { club =>
+            ClubTable.save(connection, recalculateClubPowerRating(connection, club))
           }
         }
 
@@ -49,11 +42,10 @@ final class ClubProjectionSubscriber(
 
   private def recalculateClubPowerRating(
       connection: Connection,
-      club: Club,
-      dictionarySnapshot: RuntimeDictionary.DictionarySnapshot
+      club: Club
   ): Club =
     club.updatePowerRating(
-      RuntimeDictionary.calculateClubPowerRating(club, findPlayer(connection, _), dictionarySnapshot)
+      ClubPowerRatingService.calculate(club, findPlayer(connection, _))
     )
 
   private def findPlayer(connection: Connection, playerId: PlayerId) =

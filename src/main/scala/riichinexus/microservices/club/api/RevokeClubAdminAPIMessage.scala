@@ -6,10 +6,12 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.player.objects.*
 import riichinexus.domain.service.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.objects.{Club as ClubResponse}
+import riichinexus.microservices.club.domain.ClubAuthorization
+import riichinexus.microservices.club.objects.ClubView
 import riichinexus.microservices.player.tables.player.PlayerTable
 import upickle.default.*
 
@@ -17,9 +19,9 @@ final case class RevokeClubAdminAPIMessage(
     clubId: String,
     playerId: String,
     operatorId: Option[String] = None
-) extends APIMessage[ClubResponse] derives ReadWriter:
+) extends APIMessage[ClubView] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[ClubResponse] =
+  override def plan(context: ApiPlanContext): IO[ClubView] =
     for
       actor <- IO(resolveOperatorActor(context))
       module = context.support.clubModule
@@ -33,7 +35,7 @@ final case class RevokeClubAdminAPIMessage(
           revokeAdmin(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
-    yield ClubResponse.fromDomain(club)
+    yield ClubView.fromDomain(club)
 
   private def resolveOperatorActor(context: ApiPlanContext): AccessPrincipal =
     operatorId.filter(_.nonEmpty)
@@ -46,24 +48,25 @@ final case class RevokeClubAdminAPIMessage(
       command: RevokeClubAdminCommand
   ): Option[Club] =
     for
-      club <- module.clubRepository.findById(command.clubId)
+      club <- riichinexus.microservices.club.tables.club.ClubTable.findById(connection, command.clubId)
       player <- PlayerTable.findById(connection, command.playerId)
     yield
       ensureAdminCanBeRevoked(module, club, command)
       PlayerTable.save(connection, player.revokeClubAdmin(command.clubId))
-      module.clubRepository.save(club.revokeAdmin(command.playerId))
+      riichinexus.microservices.club.tables.club.ClubTable.save(connection, club.revokeAdmin(command.playerId))
 
   private def ensureAdminCanBeRevoked(
       module: ClubModuleContext,
       club: Club,
       command: RevokeClubAdminCommand
   ): Unit =
-    ensureClubActive(club)
-    requireClubMember(club, command.playerId, "revoke club admin")
-    module.authorizationService.requirePermission(
-      command.actor,
-      Permission.AssignClubAdmin,
-      clubId = Some(command.clubId)
+    ClubAuthorization.ensureClubActive(club)
+    ClubAuthorization.requireClubMember(club, command.playerId, "revoke club admin")
+    ClubAuthorization.requireClubAdmin(
+      module = module,
+      actor = command.actor,
+      club = club,
+      permission = Permission.AssignClubAdmin
     )
     ensureTargetIsAdmin(club, command)
     ensureAnotherAdminRemains(club, command)
@@ -78,16 +81,6 @@ final case class RevokeClubAdminAPIMessage(
     if club.admins.size <= 1 then
       throw IllegalArgumentException(
         s"Club ${command.clubId.value} must retain at least one club admin"
-      )
-
-  private def ensureClubActive(club: Club): Unit =
-    if club.dissolvedAt.nonEmpty then
-      throw IllegalArgumentException(s"Club ${club.id.value} has already been dissolved")
-
-  private def requireClubMember(club: Club, playerId: PlayerId, action: String): Unit =
-    if !club.members.contains(playerId) then
-      throw IllegalArgumentException(
-        s"Player ${playerId.value} must be a club member to $action in club ${club.id.value}"
       )
 
   private final case class RevokeClubAdminCommand(

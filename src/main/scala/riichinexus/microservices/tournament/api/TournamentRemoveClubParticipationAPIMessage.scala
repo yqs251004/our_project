@@ -6,6 +6,7 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.tournament.domain.TournamentOperationViewAssembler
 import riichinexus.microservices.tournament.objects.apiTypes.*
@@ -23,7 +24,7 @@ final case class TournamentRemoveClubParticipationAPIMessage(tournamentId: Strin
       command = RemoveClubParticipationCommand(TournamentId(tournamentId), ClubId(clubId), actor)
       _ <- IO {
         module.transactionManager.inTransaction {
-          removeClubParticipation(module, command)
+          removeClubParticipation(context.connection, module, command)
         }
       }
       view <- IO {
@@ -38,6 +39,7 @@ final case class TournamentRemoveClubParticipationAPIMessage(tournamentId: Strin
       .getOrElse(AccessPrincipal.system)
 
   private def removeClubParticipation(
+      connection: java.sql.Connection,
       module: TournamentModuleContext,
       command: RemoveClubParticipationCommand
   ): Unit =
@@ -46,12 +48,12 @@ final case class TournamentRemoveClubParticipationAPIMessage(tournamentId: Strin
       Permission.ManageTournamentStages,
       tournamentId = Some(command.tournamentId)
     )
-    module.clubRepository
-      .findById(command.clubId)
+    riichinexus.microservices.club.tables.club.ClubTable
+      .findById(connection, command.clubId)
       .getOrElse(throw NoSuchElementException(s"Club ${command.clubId.value} was not found"))
-    module.tournamentRepository.findById(command.tournamentId).foreach { tournament =>
+    riichinexus.microservices.tournament.tables.tournament.TournamentTable.findById(connection, command.tournamentId).foreach { tournament =>
       ensureClubTracked(tournament, command)
-      module.tournamentRepository.save(tournament.removeClub(command.clubId))
+      riichinexus.microservices.tournament.tables.tournament.TournamentTable.save(connection, tournament.removeClub(command.clubId))
     }
 
   private def ensureClubTracked(

@@ -85,7 +85,7 @@ final class StrictRbacAuthorizationService extends AuthorizationService:
         principal.isSuperAdmin ||
           principal.playerId.exists(playerId => subjectPlayerId.forall(_ == playerId))
 
-      case Permission.ManageGlobalDictionary |
+      case Permission.ManagePlatformOperations |
           Permission.BanRegisteredPlayer |
           Permission.DissolveClub |
           Permission.AssignTournamentAdmin =>

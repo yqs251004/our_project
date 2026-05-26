@@ -7,11 +7,12 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.player.objects.*
 import riichinexus.domain.service.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.domain.ClubProjectionRefresher
-import riichinexus.microservices.club.objects.{Club as ClubResponse}
+import riichinexus.microservices.club.domain.{ClubAuthorization, ClubProjectionRefresher}
+import riichinexus.microservices.club.objects.ClubView
 import riichinexus.microservices.player.tables.player.PlayerTable
 import upickle.default.*
 
@@ -19,9 +20,9 @@ final case class RemoveClubMemberAPIMessage(
     clubId: String,
     playerId: String,
     operatorId: Option[String] = None
-) extends APIMessage[ClubResponse] derives ReadWriter:
+) extends APIMessage[ClubView] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[ClubResponse] =
+  override def plan(context: ApiPlanContext): IO[ClubView] =
     for
       actor <- IO(resolveOperatorActor(context))
       occurredAt <- IO.realTimeInstant
@@ -39,7 +40,7 @@ final case class RemoveClubMemberAPIMessage(
           }
           .getOrElse(throw NoSuchElementException("Resource not found"))
       }
-    yield ClubResponse.fromDomain(club)
+    yield ClubView.fromDomain(club)
 
   private def resolveOperatorActor(context: ApiPlanContext): AccessPrincipal =
     operatorId.filter(_.nonEmpty)
@@ -52,12 +53,12 @@ final case class RemoveClubMemberAPIMessage(
       command: RemoveClubMemberCommand
   ): Option[Club] =
     for
-      club <- module.clubRepository.findById(command.clubId)
+      club <- riichinexus.microservices.club.tables.club.ClubTable.findById(connection, command.clubId)
       player <- PlayerTable.findById(connection, command.playerId)
     yield
-      ensureClubActive(club)
-      requireClubMember(club, command.playerId, "remove member")
-      requireClubCapability(
+      ClubAuthorization.ensureClubActive(club)
+      ClubAuthorization.requireClubMember(club, command.playerId, "remove member")
+      ClubAuthorization.requireClubCapability(
         module = module,
         actor = command.actor,
         club = club,
@@ -72,37 +73,8 @@ final case class RemoveClubMemberAPIMessage(
           .leaveClub(command.clubId)
           .revokeClubAdmin(command.clubId)
       )
-      module.clubRepository.save(
+      riichinexus.microservices.club.tables.club.ClubTable.save(connection, 
         ClubProjectionRefresher.refreshClubProjection(connection, module, club.removeMember(command.playerId), command.occurredAt)
-      )
-
-  private def ensureClubActive(club: Club): Unit =
-    if club.dissolvedAt.nonEmpty then
-      throw IllegalArgumentException(s"Club ${club.id.value} has already been dissolved")
-
-  private def requireClubMember(club: Club, playerId: PlayerId, action: String): Unit =
-    if !club.members.contains(playerId) then
-      throw IllegalArgumentException(
-        s"Player ${playerId.value} must be a club member to $action in club ${club.id.value}"
-      )
-
-  private def requireClubCapability(
-      module: ClubModuleContext,
-      actor: AccessPrincipal,
-      club: Club,
-      permission: Permission,
-      delegatedPrivileges: Set[String]
-  ): Unit =
-    val authorizationService = module.authorizationService
-    val hasBasePermission = authorizationService.can(actor, permission, clubId = Some(club.id))
-    val hasDelegatedPrivilege = actor.playerId.exists { playerId =>
-      club.members.contains(playerId) &&
-        delegatedPrivileges.exists(privilege => club.hasPrivilege(playerId, privilege))
-    }
-
-    if !hasBasePermission && !hasDelegatedPrivilege then
-      throw AuthorizationFailure(
-        s"${actor.displayName} is not allowed to perform $permission in club ${club.id.value}"
       )
 
   private def ensureMemberCanBeRemoved(club: Club, clubId: ClubId, playerId: PlayerId): Unit =

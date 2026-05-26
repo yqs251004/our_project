@@ -24,7 +24,7 @@ final case class TournamentTableStartAPIMessage(tableId: String, operatorId: Opt
       command = StartTableCommand(TableId(tableId), actor, startedAt)
       table <- IO {
         module.transactionManager.inTransaction {
-          startTable(module, command)
+          startTable(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
     yield TournamentTableView.fromDomain(table)
@@ -34,14 +34,14 @@ final case class TournamentTableStartAPIMessage(tableId: String, operatorId: Opt
       .map(context.principal)
       .getOrElse(AccessPrincipal.system)
 
-  private def startTable(module: TournamentModuleContext, command: StartTableCommand): Option[Table] =
-    module.tableRepository.findById(command.tableId).map { table =>
+  private def startTable(connection: java.sql.Connection, module: TournamentModuleContext, command: StartTableCommand): Option[Table] =
+    riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.findById(connection, command.tableId).map { table =>
       module.authorizationService.requirePermission(
         command.actor,
         Permission.ManageTournamentStages,
         tournamentId = Some(table.tournamentId)
       )
-      module.tableRepository.save(table.start(command.startedAt))
+      riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.save(connection, table.start(command.startedAt))
     }
 
   private final case class StartTableCommand(

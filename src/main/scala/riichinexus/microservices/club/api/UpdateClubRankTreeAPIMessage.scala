@@ -8,9 +8,11 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.application.changes.DomainChangeInterpreter
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.domain.model.*
 import riichinexus.domain.service.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.objects.{Club as ClubResponse}
+import riichinexus.microservices.club.domain.ClubAuthorization
+import riichinexus.microservices.club.objects.ClubView
 import riichinexus.microservices.club.objects.apiTypes.ClubRankNodeRequest
 import upickle.default.*
 
@@ -19,9 +21,9 @@ final case class UpdateClubRankTreeAPIMessage(
     operatorId: String,
     ranks: Vector[ClubRankNodeRequest],
     note: Option[String] = None
-) extends APIMessage[ClubResponse] derives ReadWriter:
+) extends APIMessage[ClubView] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[ClubResponse] =
+  override def plan(context: ApiPlanContext): IO[ClubView] =
     for
       actor <- IO(context.principal(PlayerId(operatorId)))
       occurredAt <- IO.realTimeInstant
@@ -35,26 +37,29 @@ final case class UpdateClubRankTreeAPIMessage(
       )
       club <- IO {
         module.transactionManager.inTransaction {
-          updateRankTree(module, command)
+          updateRankTree(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
-    yield ClubResponse.fromDomain(club)
+    yield ClubView.fromDomain(club)
 
   private def updateRankTree(
+      connection: java.sql.Connection,
       module: ClubModuleContext,
       command: UpdateClubRankTreeCommand
   ): Option[Club] =
-    module.clubRepository.findById(command.clubId).map { club =>
-      ensureClubActive(club)
-      module.authorizationService.requirePermission(
-        command.actor,
-        Permission.ManageClubOperations,
-        clubId = Some(command.clubId)
+    riichinexus.microservices.club.tables.club.ClubTable.findById(connection, command.clubId).map { club =>
+      ClubAuthorization.ensureClubActive(club)
+      ClubAuthorization.requireClubAdmin(
+        module = module,
+        actor = command.actor,
+        club = club,
+        permission = Permission.ManageClubOperations
       )
-      commitRankTreeUpdate(module, club, command)
+      commitRankTreeUpdate(connection, module, club, command)
     }
 
   private def commitRankTreeUpdate(
+      connection: java.sql.Connection,
       module: ClubModuleContext,
       club: Club,
       command: UpdateClubRankTreeCommand
@@ -63,7 +68,7 @@ final case class UpdateClubRankTreeAPIMessage(
       .auditOnly(module.transactionManager, module.auditEventRepository)
       .commitAudited(
         aggregate = club.updateRankTree(command.ranks),
-        persist = module.clubRepository.save,
+        persist = updatedClub => riichinexus.microservices.club.tables.club.ClubTable.save(connection, updatedClub),
         aggregateType = "club",
         aggregateId = _.id.value,
         eventType = "ClubRankTreeUpdated",
@@ -72,10 +77,6 @@ final case class UpdateClubRankTreeAPIMessage(
         details = updatedClub => Map("rankCount" -> updatedClub.rankTree.size.toString),
         note = command.note
       )
-
-  private def ensureClubActive(club: Club): Unit =
-    if club.dissolvedAt.nonEmpty then
-      throw IllegalArgumentException(s"Club ${club.id.value} has already been dissolved")
 
   private final case class UpdateClubRankTreeCommand(
       clubId: ClubId,

@@ -6,13 +6,14 @@ import java.util.NoSuchElementException
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.application.changes.{DomainChange, DomainChangeInterpreter}
-import riichinexus.application.ports.ClubRepository
 import riichinexus.bootstrap.AuthModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.player.objects.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.auth.objects.apiTypes.GuestSessionResponse
 import riichinexus.microservices.auth.tables.guestsession.GuestSessionTable
+import riichinexus.microservices.club.tables.club.ClubTable
 import riichinexus.microservices.player.tables.player.PlayerTable
 import upickle.default.*
 
@@ -59,7 +60,7 @@ final case class UpgradeGuestSessionAuthAPIMessage(
           aggregate = session.upgrade(command.playerId, command.upgradedAt),
           persist = upgradedSession =>
             val savedSession = GuestSessionTable.save(connection, upgradedSession)
-            reconcileGuestApplications(module.clubRepository, command.sessionId, player)
+            reconcileGuestApplications(connection, command.sessionId, player)
             savedSession,
           auditEntries = savedSession =>
             Vector(
@@ -78,12 +79,12 @@ final case class UpgradeGuestSessionAuthAPIMessage(
       )
 
   private def reconcileGuestApplications(
-      clubRepository: ClubRepository,
+      connection: java.sql.Connection,
       sessionId: GuestSessionId,
       player: Player
   ): Unit =
     val guestApplicantId = s"guest:${sessionId.value}"
-    clubRepository.findAll().foreach { club =>
+    ClubTable.findAll(connection).foreach { club =>
       val updatedApplications = club.membershipApplications.map { application =>
         if application.isPending && application.applicantUserId.contains(guestApplicantId) then
           application.bindRegisteredApplicant(player.userId, player.nickname)
@@ -91,7 +92,7 @@ final case class UpgradeGuestSessionAuthAPIMessage(
       }
 
       if updatedApplications != club.membershipApplications then
-        clubRepository.save(club.copy(membershipApplications = updatedApplications))
+        ClubTable.save(connection, club.copy(membershipApplications = updatedApplications))
     }
 
   private final case class UpgradeGuestSessionCommand(

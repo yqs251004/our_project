@@ -5,31 +5,31 @@ import java.time.Instant
 
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.player.objects.*
-import riichinexus.microservices.dictionary.domain.RuntimeDictionary
 import riichinexus.microservices.opsanalytics.objects.{Dashboard, DashboardOwner}
+import riichinexus.microservices.opsanalytics.tables.dashboard.DashboardTable
 import riichinexus.microservices.player.tables.player.PlayerTable
 
 object ClubProjectionRefresher:
-  def ensurePlayerDashboard(module: ClubModuleContext, playerId: PlayerId, at: Instant): Unit =
+  def ensurePlayerDashboard(connection: Connection, playerId: PlayerId, at: Instant): Unit =
     val owner = DashboardOwner.Player(playerId)
-    val dashboardRepository = module.dashboardRepository
-    if dashboardRepository.findByOwner(owner).isEmpty then
-      dashboardRepository.save(Dashboard.empty(owner, at))
+    if DashboardTable.findByOwner(connection, owner).isEmpty then
+      DashboardTable.save(connection, Dashboard.empty(owner, at))
 
   def refreshClubProjection(connection: Connection, module: ClubModuleContext, club: Club, at: Instant): Club =
     val refreshedClub = club.updatePowerRating(
-      RuntimeDictionary.calculateClubPowerRating(club, findPlayer(connection), module.globalDictionaryRepository)
+      ClubPowerRatingService.calculate(club, findPlayer(connection))
     )
-    module.dashboardRepository.save(buildClubDashboard(connection, module, refreshedClub, at))
+    DashboardTable.save(connection, buildClubDashboard(connection, module, refreshedClub, at))
     refreshedClub
 
   private def buildClubDashboard(connection: Connection, module: ClubModuleContext, club: Club, at: Instant): Dashboard =
-    val existingVersion = module.dashboardRepository.findByOwner(DashboardOwner.Club(club.id)).map(_.version).getOrElse(0)
+    val existingVersion = DashboardTable.findByOwner(connection, DashboardOwner.Club(club.id)).map(_.version).getOrElse(0)
     val memberDashboards = club.members.flatMap { playerId =>
       findPlayer(connection)(playerId)
         .filter(_.status == PlayerStatus.Active)
-        .flatMap(_ => module.dashboardRepository.findByOwner(DashboardOwner.Player(playerId)))
+        .flatMap(_ => DashboardTable.findByOwner(connection, DashboardOwner.Player(playerId)))
     }
 
     if memberDashboards.isEmpty then Dashboard.empty(DashboardOwner.Club(club.id), at).copy(version = existingVersion)

@@ -23,19 +23,19 @@ final case class TournamentTableResetAPIMessage(tableId: String, request: ForceR
       command = ResetTableCommand(TableId(tableId), actor, request.note, resetAt)
       table <- IO {
         module.transactionManager.inTransaction {
-          resetTable(module, command)
+          resetTable(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
     yield TournamentTableView.fromDomain(table)
 
-  private def resetTable(module: TournamentModuleContext, command: ResetTableCommand): Option[Table] =
-    module.tableRepository.findById(command.tableId).map { table =>
+  private def resetTable(connection: java.sql.Connection, module: TournamentModuleContext, command: ResetTableCommand): Option[Table] =
+    riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.findById(connection, command.tableId).map { table =>
       module.authorizationService.requirePermission(
         command.actor,
         Permission.ResetTableState,
         tournamentId = Some(table.tournamentId)
       )
-      module.tableRepository.save(table.forceReset(command.note, command.resetAt))
+      riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.save(connection, table.forceReset(command.note, command.resetAt))
     }
 
   private final case class ResetTableCommand(

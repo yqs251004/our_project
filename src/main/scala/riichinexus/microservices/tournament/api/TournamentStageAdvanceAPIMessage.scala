@@ -38,8 +38,8 @@ final case class TournamentStageAdvanceAPIMessage(tournamentId: String, stageId:
       module: TournamentModuleContext,
       command: AdvanceKnockoutStageCommand
   ): Vector[Table] =
-    val tournament = module.tournamentRepository
-      .findById(command.tournamentId)
+    val tournament = riichinexus.microservices.tournament.tables.tournament.TournamentTable
+      .findById(connection, command.tournamentId)
       .getOrElse(throw NoSuchElementException(s"Tournament ${command.tournamentId.value} was not found"))
     val stage = tournament.stages
       .find(_.id == command.stageId)

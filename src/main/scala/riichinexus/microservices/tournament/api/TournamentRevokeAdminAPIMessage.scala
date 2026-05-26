@@ -48,7 +48,7 @@ final case class TournamentRevokeAdminAPIMessage(tournamentId: String, playerId:
       command: RevokeTournamentAdminCommand
   ): Option[Tournament] =
     for
-      tournament <- module.tournamentRepository.findById(command.tournamentId)
+      tournament <- riichinexus.microservices.tournament.tables.tournament.TournamentTable.findById(connection, command.tournamentId)
       player <- PlayerTable.findById(connection, command.playerId)
     yield
       ensureAdminCanBeRevoked(module, tournament, command)
@@ -86,7 +86,7 @@ final case class TournamentRevokeAdminAPIMessage(tournamentId: String, playerId:
         aggregate = tournament.copy(admins = tournament.admins.filterNot(_ == command.playerId)),
         persist = nextTournament =>
           PlayerTable.save(connection, player.revokeTournamentAdmin(command.tournamentId))
-          module.tournamentRepository.save(nextTournament),
+          riichinexus.microservices.tournament.tables.tournament.TournamentTable.save(connection, nextTournament),
         aggregateType = "tournament",
         aggregateId = _.id.value,
         eventType = "TournamentAdminRevoked",

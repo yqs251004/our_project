@@ -1,6 +1,7 @@
 package riichinexus.microservices.club.objects.apiTypes
 
-import riichinexus.domain.model.{ClubRecruitmentPolicy, PlayerId}
+import riichinexus.domain.model.PlayerId
+import riichinexus.microservices.club.domain.model.ClubRecruitmentPolicy
 import upickle.default.*
 
 final case class UpdateClubRecruitmentPolicyRequest(

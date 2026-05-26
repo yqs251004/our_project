@@ -7,7 +7,9 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.club.domain.ClubAuthorization
 import riichinexus.microservices.club.objects.{ClubTournamentParticipationStatus, ClubTournamentParticipationView}
 import riichinexus.microservices.club.objects.apiTypes.*
 import riichinexus.microservices.club.tables.club.ClubTable
@@ -105,7 +107,7 @@ final case class ListClubTournamentsAPIMessage(
   ): Option[ClubTournamentParticipationView] =
     val club = ClubTable.findById(connection, clubId)
     val clubVisibleToViewer =
-      club.exists(currentClub => canManageClubTournamentParticipation(module, viewer, currentClub))
+      club.exists(currentClub => ClubAuthorization.canManageClubTournamentParticipation(module, viewer, currentClub))
     val isWhitelisted = tournament.whitelist.exists(_.clubId.contains(clubId))
     val isParticipating = tournament.participatingClubs.contains(clubId)
     if !isWhitelisted && !isParticipating then None
@@ -140,17 +142,6 @@ final case class ListClubTournamentsAPIMessage(
               tournament.status != TournamentStatus.Cancelled &&
               tournament.status != TournamentStatus.Archived
         )
-      )
-
-  private def canManageClubTournamentParticipation(
-      module: ClubModuleContext,
-      actor: AccessPrincipal,
-      club: Club
-  ): Boolean =
-    actor.isSuperAdmin ||
-      module.authorizationService.can(actor, Permission.SubmitTournamentLineup, clubId = Some(club.id)) ||
-      actor.playerId.exists(playerId =>
-        club.members.contains(playerId) && club.hasPrivilege(playerId, ClubPrivilege.PriorityLineup)
       )
 
   private val activeStatuses = Set(

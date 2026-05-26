@@ -5,6 +5,7 @@ import java.util.NoSuchElementException
 
 import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.player.objects.*
 import riichinexus.domain.service.PlannedTable
 import riichinexus.microservices.player.tables.player.PlayerTable
@@ -17,8 +18,8 @@ object TournamentStageTableScheduler:
       tournamentId: TournamentId,
       stageId: TournamentStageId
   ): Vector[Table] =
-    val tournament = module.tournamentRepository
-      .findById(tournamentId)
+    val tournament = riichinexus.microservices.tournament.tables.tournament.TournamentTable
+      .findById(connection, tournamentId)
       .getOrElse(throw IllegalArgumentException(s"Tournament ${tournamentId.value} was not found"))
 
     val stage = tournament.stages
@@ -37,7 +38,7 @@ object TournamentStageTableScheduler:
 
     if isKnockoutStage then
       module.knockoutStageCoordinator.materializeUnlockedTables(connection, tournamentId, stageId)
-      module.tableRepository.findByTournamentAndStage(tournamentId, stageId).sortBy(table =>
+      riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.findByTournamentAndStage(connection, tournamentId, stageId).sortBy(table =>
         (table.stageRoundNumber, table.tableNo, table.id.value)
       )
     else
@@ -59,9 +60,10 @@ object TournamentStageTableScheduler:
         s"Stage ${stage.id.value} requires player counts divisible by four; got ${tournamentPlayers.size}"
       )
 
-    val existingTables = module.tableRepository.findByTournamentAndStage(tournament.id, stage.id)
+    val existingTables = riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.findByTournamentAndStage(connection, tournament.id, stage.id)
     val preparedTournament =
       prepareNonKnockoutRoundIfNeeded(
+        connection = connection,
         module = module,
         tournament = tournament,
         stage = stage,
@@ -69,7 +71,7 @@ object TournamentStageTableScheduler:
         existingTables = existingTables
       )
     val preparedStage = requireStage(preparedTournament, stage.id)
-    val refreshedTables = module.tableRepository.findByTournamentAndStage(tournament.id, stage.id)
+    val refreshedTables = riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.findByTournamentAndStage(connection, tournament.id, stage.id)
     val activePoolUsage = refreshedTables.count(_.status != TableStatus.Archived)
     val availablePoolSlots = math.max(0, preparedStage.schedulingPoolSize - activePoolUsage)
 
@@ -78,7 +80,7 @@ object TournamentStageTableScheduler:
       else
         val plansToMaterialize = preparedStage.pendingTablePlans.take(availablePoolSlots)
         val createdTables = plansToMaterialize.map { plan =>
-          module.tableRepository.save(
+          riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.save(connection, 
             Table(
               id = IdGenerator.tableId(),
               tableNo = plan.tableNo,
@@ -93,14 +95,14 @@ object TournamentStageTableScheduler:
         val updatedTournament = preparedTournament
           .activateStage(stage.id)
           .updateStage(stage.id, _.consumePendingPlans(plansToMaterialize, createdTables.map(_.id)))
-        module.tournamentRepository.save(
+        riichinexus.microservices.tournament.tables.tournament.TournamentTable.save(connection, 
           if updatedTournament.status == TournamentStatus.RegistrationOpen then updatedTournament.markScheduled
           else updatedTournament
         )
         createdTables
 
     if materializedTables.nonEmpty || existingTables.nonEmpty || preparedStage.pendingTablePlans.nonEmpty then
-      module.tableRepository.findByTournamentAndStage(tournament.id, stage.id).sortBy(table =>
+      riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.findByTournamentAndStage(connection, tournament.id, stage.id).sortBy(table =>
         (table.stageRoundNumber, table.tableNo, table.id.value)
       )
     else Vector.empty
@@ -111,7 +113,7 @@ object TournamentStageTableScheduler:
       tournament: Tournament,
       stage: TournamentStage
   ): Vector[Player] =
-    val clubsById = module.clubRepository.findByIds(
+    val clubsById = riichinexus.microservices.club.tables.club.ClubTable.findByIds(connection, 
       (tournament.participatingClubs ++ tournament.whitelist.flatMap(_.clubId)).distinct
     ).map(club => club.id -> club).toMap
 
@@ -140,6 +142,7 @@ object TournamentStageTableScheduler:
     }
 
   private def prepareNonKnockoutRoundIfNeeded(
+      connection: Connection,
       module: TournamentModuleContext,
       tournament: Tournament,
       stage: TournamentStage,
@@ -166,12 +169,13 @@ object TournamentStageTableScheduler:
         case None => tournament
         case Some(roundNumber) =>
           val tournamentHistory =
-            module.matchRecordRepository.findByTournamentAndStage(tournament.id, stage.id)
+            riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTable.findByTournamentAndStage(connection, tournament.id, stage.id)
           val planningStage =
             if roundNumber == stage.currentRound then stage
             else stage.advanceRound(roundNumber)
           val startingTableNo = existingTables.map(_.tableNo).foldLeft(0)(math.max)
           val plans = plannedTablesForStage(
+            connection = connection,
             module = module,
             tournament = tournament,
             stage = planningStage,
@@ -189,12 +193,13 @@ object TournamentStageTableScheduler:
             }
 
           val updatedTournament = tournament.updateStage(stage.id, _.queueRoundPlans(roundNumber, plans))
-          module.tournamentRepository.save(
+          riichinexus.microservices.tournament.tables.tournament.TournamentTable.save(connection, 
             if updatedTournament.status == TournamentStatus.RegistrationOpen then updatedTournament.markScheduled
             else updatedTournament
           )
 
   private def plannedTablesForStage(
+      connection: Connection,
       module: TournamentModuleContext,
       tournament: Tournament,
       stage: TournamentStage,
@@ -202,7 +207,7 @@ object TournamentStageTableScheduler:
       history: Vector[MatchRecord],
       roundNumber: Int
   ): Vector[PlannedTable] =
-    val clubRelations = buildClubRelationIndex(module.clubRepository.findActive())
+    val clubRelations = buildClubRelationIndex(riichinexus.microservices.club.tables.club.ClubTable.findActive(connection))
     stage.format match
       case StageFormat.RoundRobin =>
         buildRoundRobinTables(participants, stage, roundNumber)

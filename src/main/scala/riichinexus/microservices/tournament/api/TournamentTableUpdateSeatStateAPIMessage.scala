@@ -29,16 +29,16 @@ final case class TournamentTableUpdateSeatStateAPIMessage(tableId: String, seat:
       )
       table <- IO {
         module.transactionManager.inTransaction {
-          updateSeatState(module, command)
+          updateSeatState(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
     yield TournamentTableView.fromDomain(table)
 
-  private def updateSeatState(module: TournamentModuleContext, command: UpdateSeatStateCommand): Option[Table] =
-    module.tableRepository.findById(command.tableId).map { table =>
+  private def updateSeatState(connection: java.sql.Connection, module: TournamentModuleContext, command: UpdateSeatStateCommand): Option[Table] =
+    riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.findById(connection, command.tableId).map { table =>
       val targetSeat = table.seatFor(command.seat)
       requireSeatStatePermission(module, command.actor, table, targetSeat)
-      module.tableRepository.save(
+      riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.save(connection, 
         table.updateSeatState(
           targetSeat = command.seat,
           ready = command.ready,

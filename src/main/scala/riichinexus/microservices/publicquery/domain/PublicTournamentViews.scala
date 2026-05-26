@@ -4,6 +4,7 @@ import java.sql.Connection
 
 import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.club.tables.club.ClubTable
 import riichinexus.microservices.publicquery.objects.apiTypes.{PublicTournamentDetailView, PublicTournamentStageView, PublicTournamentSummaryView}
 import riichinexus.microservices.tournament.objects.{

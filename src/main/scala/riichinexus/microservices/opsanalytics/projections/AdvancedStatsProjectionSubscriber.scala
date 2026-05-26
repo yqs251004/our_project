@@ -8,17 +8,18 @@ import riichinexus.application.ports.{DomainEventSubscriber, DomainEventSubscrib
 import riichinexus.application.ports.*
 import riichinexus.domain.event.*
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.player.objects.*
 import riichinexus.domain.service.AdvancedStatsRoundAnalysis
 import riichinexus.microservices.opsanalytics.objects.{AdvancedStatsBoard, AdvancedStatsRecomputeTask, DashboardOwner}
+import riichinexus.microservices.club.tables.club.ClubTable
+import riichinexus.microservices.opsanalytics.tables.advancedstatsboard.AdvancedStatsBoardTable
+import riichinexus.microservices.opsanalytics.tables.advancedstatsrecomputetask.AdvancedStatsRecomputeTaskTable
 import riichinexus.microservices.player.tables.player.PlayerTable
+import riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTable
+import riichinexus.microservices.tournament.tables.paifu.PaifuTable
 
 final class AdvancedStatsProjectionSubscriber(
-    paifuRepository: PaifuRepository,
-    matchRecordRepository: MatchRecordRepository,
-    clubRepository: ClubRepository,
-    advancedStatsBoardRepository: AdvancedStatsBoardRepository,
-    advancedStatsRecomputeTaskRepository: AdvancedStatsRecomputeTaskRepository,
     transactionManager: TransactionManager
 ) extends DomainEventSubscriber:
   import AdvancedStatsRoundAnalysis.*
@@ -54,6 +55,7 @@ final class AdvancedStatsProjectionSubscriber(
       .distinct
       .map(owner =>
         enqueueOwnerRecompute(
+          connection = connection,
           owner = owner,
           reason = reason,
           requestedAt = requestedAt,
@@ -62,16 +64,18 @@ final class AdvancedStatsProjectionSubscriber(
       )
 
   private def enqueueOwnerRecompute(
+      connection: Connection,
       owner: DashboardOwner,
       reason: String,
       requestedAt: Instant,
       lastMatchRecordId: Option[MatchRecordId] = None
   ): AdvancedStatsRecomputeTask =
     transactionManager.inTransaction {
-      advancedStatsRecomputeTaskRepository
-        .findActiveByOwner(owner, AdvancedStatsBoard.CurrentCalculatorVersion)
+      AdvancedStatsRecomputeTaskTable
+        .findActiveByOwner(connection, owner, AdvancedStatsBoard.CurrentCalculatorVersion)
         .getOrElse(
-          advancedStatsRecomputeTaskRepository.save(
+          AdvancedStatsRecomputeTaskTable.save(
+            connection,
             AdvancedStatsRecomputeTask.create(
               owner = owner,
               reason = reason,
@@ -88,9 +92,9 @@ final class AdvancedStatsProjectionSubscriber(
       limit: Int,
       processedAt: Instant
   ): Vector[AdvancedStatsRecomputeTask] =
-    advancedStatsRecomputeTaskRepository.findPending(limit, processedAt).flatMap { task =>
+    AdvancedStatsRecomputeTaskTable.findPending(connection, limit, processedAt).flatMap { task =>
       val maybeProcessing =
-        try Some(advancedStatsRecomputeTaskRepository.save(task.markProcessing(processedAt)))
+        try Some(AdvancedStatsRecomputeTaskTable.save(connection, task.markProcessing(processedAt)))
         catch
           case _: OptimisticConcurrencyException =>
             None
@@ -99,40 +103,42 @@ final class AdvancedStatsProjectionSubscriber(
         try
           processing.owner match
             case DashboardOwner.Player(playerId) =>
-              advancedStatsBoardRepository.save(rebuildPlayerBoard(playerId, processedAt))
+              AdvancedStatsBoardTable.save(connection, rebuildPlayerBoard(connection, playerId, processedAt))
             case DashboardOwner.Club(clubId) =>
-              val club = clubRepository.findById(clubId).getOrElse(
+              val club = ClubTable.findById(connection, clubId).getOrElse(
                 throw NoSuchElementException(s"Club ${clubId.value} was not found")
               )
-              advancedStatsBoardRepository.save(rebuildClubBoard(connection, club, processedAt))
+              AdvancedStatsBoardTable.save(connection, rebuildClubBoard(connection, club, processedAt))
 
-          try advancedStatsRecomputeTaskRepository.save(processing.markCompleted(processedAt))
+          try AdvancedStatsRecomputeTaskTable.save(connection, processing.markCompleted(processedAt))
           catch
             case _: OptimisticConcurrencyException =>
-              advancedStatsRecomputeTaskRepository.findById(processing.id).getOrElse(processing)
+              AdvancedStatsRecomputeTaskTable.findById(connection, processing.id).getOrElse(processing)
         catch
           case _: OptimisticConcurrencyException =>
-            advancedStatsRecomputeTaskRepository.findById(processing.id).getOrElse(processing)
+            AdvancedStatsRecomputeTaskTable.findById(connection, processing.id).getOrElse(processing)
           case error: Throwable =>
             val errorMessage = Option(error.getMessage).getOrElse(error.getClass.getSimpleName)
             if processing.attempts >= maxAttempts then
-              advancedStatsRecomputeTaskRepository.save(processing.markDeadLetter(errorMessage, processedAt))
+              AdvancedStatsRecomputeTaskTable.save(connection, processing.markDeadLetter(errorMessage, processedAt))
             else
               val retryAt = processedAt.plus(retryDelay)
-              advancedStatsRecomputeTaskRepository.save(
+              AdvancedStatsRecomputeTaskTable.save(
+                connection,
                 processing.markRetryScheduled(errorMessage, processedAt, retryAt)
               )
       }
     }
 
   private def rebuildPlayerBoard(
+      connection: Connection,
       playerId: PlayerId,
       at: Instant
   ): AdvancedStatsBoard =
-    val records = matchRecordRepository.findByPlayer(playerId)
-    val paifus = paifuRepository.findByPlayer(playerId)
+    val records = MatchRecordTable.findByPlayer(connection, playerId)
+    val paifus = PaifuTable.findByPlayer(connection, playerId)
     val existingVersion =
-      advancedStatsBoardRepository.findByOwner(DashboardOwner.Player(playerId)).map(_.version).getOrElse(0)
+      AdvancedStatsBoardTable.findByOwner(connection, DashboardOwner.Player(playerId)).map(_.version).getOrElse(0)
     buildPlayerBoard(playerId, records, paifus, at).copy(version = existingVersion)
 
   private def rebuildClubBoard(
@@ -143,10 +149,10 @@ final class AdvancedStatsProjectionSubscriber(
     val memberBoards = club.members.flatMap { playerId =>
       findPlayer(connection, playerId)
         .filter(_.status == PlayerStatus.Active)
-        .map(_ => rebuildPlayerBoard(playerId, at))
+        .map(_ => rebuildPlayerBoard(connection, playerId, at))
     }
     val existingVersion =
-      advancedStatsBoardRepository.findByOwner(DashboardOwner.Club(club.id)).map(_.version).getOrElse(0)
+      AdvancedStatsBoardTable.findByOwner(connection, DashboardOwner.Club(club.id)).map(_.version).getOrElse(0)
     buildClubBoard(club, memberBoards, at).copy(version = existingVersion)
 
   private def findPlayer(connection: Connection, playerId: PlayerId): Option[Player] =

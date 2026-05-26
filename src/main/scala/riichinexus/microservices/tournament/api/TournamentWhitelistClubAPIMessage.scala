@@ -6,6 +6,7 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.tournament.objects.apiTypes.*
 import riichinexus.microservices.tournament.objects.apiTypes.*
@@ -22,7 +23,7 @@ final case class TournamentWhitelistClubAPIMessage(tournamentId: String, clubId:
       command = WhitelistClubCommand(TournamentId(tournamentId), ClubId(clubId), actor)
       tournament <- IO {
         module.transactionManager.inTransaction {
-          whitelistClub(module, command)
+          whitelistClub(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
     yield TournamentSummaryView.fromDomain(tournament)
@@ -33,6 +34,7 @@ final case class TournamentWhitelistClubAPIMessage(tournamentId: String, clubId:
       .getOrElse(AccessPrincipal.system)
 
   private def whitelistClub(
+      connection: java.sql.Connection,
       module: TournamentModuleContext,
       command: WhitelistClubCommand
   ): Option[Tournament] =
@@ -41,12 +43,12 @@ final case class TournamentWhitelistClubAPIMessage(tournamentId: String, clubId:
       Permission.ManageTournamentStages,
       tournamentId = Some(command.tournamentId)
     )
-    val club = module.clubRepository
-      .findById(command.clubId)
+    val club = riichinexus.microservices.club.tables.club.ClubTable
+      .findById(connection, command.clubId)
       .getOrElse(throw NoSuchElementException(s"Club ${command.clubId.value} was not found"))
     ensureClubActive(club)
-    module.tournamentRepository.findById(command.tournamentId).map { tournament =>
-      module.tournamentRepository.save(tournament.whitelistClub(command.clubId))
+    riichinexus.microservices.tournament.tables.tournament.TournamentTable.findById(connection, command.tournamentId).map { tournament =>
+      riichinexus.microservices.tournament.tables.tournament.TournamentTable.save(connection, tournament.whitelistClub(command.clubId))
     }
 
   private def ensureClubActive(club: Club): Unit =

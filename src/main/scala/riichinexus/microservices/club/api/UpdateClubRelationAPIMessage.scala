@@ -8,9 +8,11 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.application.changes.DomainChangeInterpreter
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.domain.model.*
 import riichinexus.domain.service.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.objects.{Club as ClubResponse}
+import riichinexus.microservices.club.domain.ClubAuthorization
+import riichinexus.microservices.club.objects.ClubView
 import upickle.default.*
 
 final case class UpdateClubRelationAPIMessage(
@@ -19,9 +21,9 @@ final case class UpdateClubRelationAPIMessage(
     targetClubId: String,
     relation: String,
     note: Option[String] = None
-) extends APIMessage[ClubResponse] derives ReadWriter:
+) extends APIMessage[ClubView] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[ClubResponse] =
+  override def plan(context: ApiPlanContext): IO[ClubView] =
     for
       actor <- IO(context.principal(PlayerId(operatorId)))
       relationUpdatedAt <- IO.realTimeInstant
@@ -40,19 +42,20 @@ final case class UpdateClubRelationAPIMessage(
       )
       club <- IO {
         module.transactionManager.inTransaction {
-          updateRelation(module, command)
+          updateRelation(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
-    yield ClubResponse.fromDomain(club)
+    yield ClubView.fromDomain(club)
 
   private def updateRelation(
+      connection: java.sql.Connection,
       module: ClubModuleContext,
       command: UpdateClubRelationCommand
   ): Option[Club] =
-    module.clubRepository.findById(command.clubId).map { club =>
+    riichinexus.microservices.club.tables.club.ClubTable.findById(connection, command.clubId).map { club =>
       ensureRelationCanBeUpdated(module, club, command)
-      val targetClub = resolveTargetClub(module, command)
-      commitRelationUpdate(module, club, targetClub, command)
+      val targetClub = resolveTargetClub(connection, command)
+      commitRelationUpdate(connection, module, club, targetClub, command)
     }
 
   private def ensureRelationCanBeUpdated(
@@ -60,23 +63,24 @@ final case class UpdateClubRelationAPIMessage(
       club: Club,
       command: UpdateClubRelationCommand
   ): Unit =
-    ensureClubActive(club)
-    module.authorizationService.requirePermission(
-      command.actor,
-      Permission.SetClubTitle,
-      clubId = Some(command.clubId)
+    ClubAuthorization.ensureClubActive(club)
+    ClubAuthorization.requireClubAdmin(
+      module = module,
+      actor = command.actor,
+      club = club,
+      permission = Permission.SetClubTitle
     )
     if command.relation.targetClubId == command.clubId then
       throw IllegalArgumentException("A club cannot define a relation to itself")
 
   private def resolveTargetClub(
-      module: ClubModuleContext,
+      connection: java.sql.Connection,
       command: UpdateClubRelationCommand
   ): Club =
-    module.clubRepository
-      .findById(command.relation.targetClubId)
+    riichinexus.microservices.club.tables.club.ClubTable
+      .findById(connection, command.relation.targetClubId)
       .map { club =>
-        ensureClubActive(club)
+        ClubAuthorization.ensureClubActive(club)
         club
       }
       .getOrElse(
@@ -84,6 +88,7 @@ final case class UpdateClubRelationAPIMessage(
       )
 
   private def commitRelationUpdate(
+      connection: java.sql.Connection,
       module: ClubModuleContext,
       club: Club,
       targetClub: Club,
@@ -99,11 +104,11 @@ final case class UpdateClubRelationAPIMessage(
       .commitAudited(
         aggregate = sourceClub,
         persist = source =>
-          val savedSource = module.clubRepository.save(source)
+          val savedSource = riichinexus.microservices.club.tables.club.ClubTable.save(connection, source)
           if command.relation.relation == ClubRelationKind.Neutral then
-            module.clubRepository.save(targetClub.removeRelation(command.clubId))
+            riichinexus.microservices.club.tables.club.ClubTable.save(connection, targetClub.removeRelation(command.clubId))
           else
-            module.clubRepository.save(
+            riichinexus.microservices.club.tables.club.ClubTable.save(connection, 
               targetClub.upsertRelation(
                 command.relation.copy(targetClubId = command.clubId)
               )
@@ -121,10 +126,6 @@ final case class UpdateClubRelationAPIMessage(
           ),
         note = command.relation.note
       )
-
-  private def ensureClubActive(club: Club): Unit =
-    if club.dissolvedAt.nonEmpty then
-      throw IllegalArgumentException(s"Club ${club.id.value} has already been dissolved")
 
   private final case class UpdateClubRelationCommand(
       clubId: ClubId,

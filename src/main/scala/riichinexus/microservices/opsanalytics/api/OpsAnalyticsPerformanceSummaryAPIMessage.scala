@@ -21,7 +21,7 @@ final case class OpsAnalyticsPerformanceSummaryAPIMessage(
     yield snapshot
 
   private def requireOpsAdmin(context: ApiPlanContext, operator: AccessPrincipal): Unit =
-    context.support.requirePermission(operator, Permission.ManageGlobalDictionary)
+    context.support.requirePermission(operator, Permission.ManagePlatformOperations)
 
   private def resolveLimit: Int =
     val resolvedLimit = limit.getOrElse(15)

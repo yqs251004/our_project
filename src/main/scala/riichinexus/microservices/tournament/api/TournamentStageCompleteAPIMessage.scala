@@ -7,6 +7,7 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.player.objects.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.player.tables.player.PlayerTable
@@ -42,7 +43,7 @@ final case class TournamentStageCompleteAPIMessage(tournamentId: String, stageId
       module: TournamentModuleContext,
       command: CompleteStageCommand
   ): Option[StageAdvancementSnapshot] =
-    module.tournamentRepository.findById(command.tournamentId).map { tournament =>
+    riichinexus.microservices.tournament.tables.tournament.TournamentTable.findById(connection, command.tournamentId).map { tournament =>
       module.authorizationService.requirePermission(
         command.actor,
         Permission.ManageTournamentStages,
@@ -50,13 +51,13 @@ final case class TournamentStageCompleteAPIMessage(tournamentId: String, stageId
       )
 
       val stage = requireStage(tournament, command.stageId)
-      val stageTables = module.tableRepository.findByTournamentAndStage(command.tournamentId, command.stageId)
+      val stageTables = riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.findByTournamentAndStage(connection, command.tournamentId, command.stageId)
       ensureStageCanComplete(connection, module, tournament, stage, stageTables, command.completedAt)
 
       val advancement =
         module.stageQueries.stageAdvancementPreview(connection, command.tournamentId, command.stageId, command.completedAt)
 
-      module.tournamentRepository.save(tournament.updateStage(command.stageId, _.complete))
+      riichinexus.microservices.tournament.tables.tournament.TournamentTable.save(connection, tournament.updateStage(command.stageId, _.complete))
       advancement
     }
 
@@ -99,7 +100,7 @@ final case class TournamentStageCompleteAPIMessage(tournamentId: String, stageId
       completedAt: Instant
   ): Unit =
     val participants = resolveParticipants(connection, module, tournament, stage)
-    val records = module.matchRecordRepository.findByTournamentAndStage(tournament.id, stage.id)
+    val records = riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTable.findByTournamentAndStage(connection, tournament.id, stage.id)
     val effectiveRoundLimit = StageLineupSupport.effectiveRoundLimit(stage)
     val requiredTablesPerRound =
       expectedTablesPerRound(
@@ -131,7 +132,7 @@ final case class TournamentStageCompleteAPIMessage(tournamentId: String, stageId
       tournament: Tournament,
       stage: TournamentStage
   ): Vector[Player] =
-    val clubsById = module.clubRepository.findByIds(
+    val clubsById = riichinexus.microservices.club.tables.club.ClubTable.findByIds(connection, 
       (tournament.participatingClubs ++ tournament.whitelist.flatMap(_.clubId)).distinct
     ).map(club => club.id -> club).toMap
 

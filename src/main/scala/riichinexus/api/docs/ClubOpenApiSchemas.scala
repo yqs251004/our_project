@@ -45,7 +45,7 @@ object ClubOpenApiSchemas:
       "canSubmitLineup" -> Obj("type" -> "boolean"),
       "canDecline" -> Obj("type" -> "boolean")
     ),
-    "Club" -> objectSchema(
+    "ClubView" -> objectSchema(
       "id" -> Obj("type" -> "string"),
       "name" -> Obj("type" -> "string"),
       "members" -> Obj("type" -> "array", "items" -> Obj("type" -> "string")),
@@ -54,5 +54,5 @@ object ClubOpenApiSchemas:
     ),
     "ClubMembershipApplicationPage" -> pageSchema("#/components/schemas/ClubMembershipApplicationView"),
     "ClubTournamentParticipationPage" -> pageSchema("#/components/schemas/ClubTournamentParticipationView"),
-    "ClubPage" -> pageSchema("#/components/schemas/Club")
+    "ClubPage" -> pageSchema("#/components/schemas/ClubView")
   )

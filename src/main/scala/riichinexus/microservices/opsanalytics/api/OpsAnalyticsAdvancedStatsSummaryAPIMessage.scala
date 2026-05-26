@@ -11,6 +11,7 @@ import riichinexus.microservices.opsanalytics.objects.{
   AdvancedStatsRecomputeTaskStatus,
   AdvancedStatsTaskQueueSummary
 }
+import riichinexus.microservices.opsanalytics.tables.advancedstatsrecomputetask.AdvancedStatsRecomputeTaskTable
 import upickle.default.*
 
 final case class OpsAnalyticsAdvancedStatsSummaryAPIMessage(
@@ -23,7 +24,7 @@ final case class OpsAnalyticsAdvancedStatsSummaryAPIMessage(
       operator <- IO(context.principal(operatorId))
       _ <- IO(requireOpsAdmin(context, operator))
       resolvedAsOf <- resolveAsOf
-      tasks <- IO(context.support.opsAnalyticsModule.advancedStatsRecomputeTaskRepository.findAll())
+      tasks <- IO(AdvancedStatsRecomputeTaskTable.findAll(context.connection))
       summary = buildSummary(tasks, resolvedAsOf)
     yield summary
 
@@ -33,7 +34,7 @@ final case class OpsAnalyticsAdvancedStatsSummaryAPIMessage(
       case None        => IO.realTimeInstant
 
   private def requireOpsAdmin(context: ApiPlanContext, operator: AccessPrincipal): Unit =
-    context.support.requirePermission(operator, Permission.ManageGlobalDictionary)
+    context.support.requirePermission(operator, Permission.ManagePlatformOperations)
 
   private def buildSummary(
       tasks: Vector[AdvancedStatsRecomputeTask],

@@ -48,8 +48,8 @@ final case class TournamentWhitelistPlayerAPIMessage(tournamentId: String, playe
       .findById(connection, command.playerId)
       .getOrElse(throw NoSuchElementException(s"Player ${command.playerId.value} was not found"))
     ensurePlayerCanBeWhitelisted(player, command.playerId)
-    module.tournamentRepository.findById(command.tournamentId).map { tournament =>
-      module.tournamentRepository.save(tournament.whitelistPlayer(command.playerId))
+    riichinexus.microservices.tournament.tables.tournament.TournamentTable.findById(connection, command.tournamentId).map { tournament =>
+      riichinexus.microservices.tournament.tables.tournament.TournamentTable.save(connection, tournament.whitelistPlayer(command.playerId))
     }
 
   private def ensurePlayerCanBeWhitelisted(player: Player, playerId: PlayerId): Unit =

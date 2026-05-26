@@ -4,15 +4,14 @@ import java.sql.Connection
 
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.club.objects.{ClubMembershipApplicantView, ClubMembershipApplicationView}
 import riichinexus.microservices.player.tables.player.PlayerTable
 import riichinexus.microservices.tournament.objects.RankSnapshotView
 
 object ClubApplicationViewAssembler:
   def canManageClubApplications(actor: AccessPrincipal, club: Club): Boolean =
-    actor.isSuperAdmin || actor.playerId.exists(playerId =>
-      club.admins.contains(playerId) || club.hasPrivilege(playerId, ClubPrivilege.ApproveRoster)
-    )
+    ClubAuthorization.canManageClubApplications(actor, club)
 
   def ownsClubApplication(
       connection: Connection,

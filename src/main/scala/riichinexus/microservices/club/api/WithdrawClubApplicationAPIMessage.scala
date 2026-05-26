@@ -7,9 +7,11 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.domain.model.*
 import riichinexus.domain.service.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.objects.apiTypes.{ClubMembershipApplication as ClubMembershipApplicationResponse}
+import riichinexus.microservices.club.domain.ClubAuthorization
+import riichinexus.microservices.club.objects.apiTypes.ClubMembershipApplicationResponse
 import riichinexus.microservices.player.tables.player.PlayerTable
 import upickle.default.*
 
@@ -52,13 +54,13 @@ final case class WithdrawClubApplicationAPIMessage(
       command: WithdrawClubApplicationCommand
   ): Option[ClubMembershipApplication] =
     module.authorizationService.requirePermission(command.actor, Permission.WithdrawClubApplication)
-    module.clubRepository.findById(command.clubId).map { club =>
-      ensureClubActive(club)
+    riichinexus.microservices.club.tables.club.ClubTable.findById(connection, command.clubId).map { club =>
+      ClubAuthorization.ensureClubActive(club)
       val application = resolveApplication(club, command)
       ensureApplicationPending(application, command.membershipId)
       requireApplicationOwnership(connection, application, command.actor)
       val updatedApplication = application.withdraw(command.actor.principalId, command.withdrawnAt, command.note)
-      module.clubRepository.save(club.reviewApplication(command.membershipId, _ => updatedApplication))
+      riichinexus.microservices.club.tables.club.ClubTable.save(connection, club.reviewApplication(command.membershipId, _ => updatedApplication))
       updatedApplication
     }
 
@@ -82,10 +84,6 @@ final case class WithdrawClubApplicationAPIMessage(
       throw IllegalArgumentException(
         s"Membership application ${membershipId.value} has already been reviewed"
       )
-
-  private def ensureClubActive(club: Club): Unit =
-    if club.dissolvedAt.nonEmpty then
-      throw IllegalArgumentException(s"Club ${club.id.value} has already been dissolved")
 
   private def requireApplicationOwnership(
       connection: java.sql.Connection,

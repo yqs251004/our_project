@@ -1,6 +1,7 @@
 package riichinexus.domain.service
 
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.player.objects.Player
 import riichinexus.microservices.tournament.objects.SeatWind
 

@@ -40,25 +40,26 @@ final case class TournamentTableUploadPaifuAPIMessage(tableId: String, request: 
       module: TournamentModuleContext,
       command: UploadPaifuCommand
   ): Option[Table] =
-    module.tableRepository.findById(command.tableId).map { table =>
+    riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.findById(connection, command.tableId).map { table =>
       module.authorizationService.requirePermission(
         command.actor,
         Permission.ManageTournamentStages,
         tournamentId = Some(table.tournamentId)
       )
       validatePaifu(table, command.paifu)
-      ensureNotArchived(module, command.tableId)
+      ensureNotArchived(connection, command.tableId)
 
-      val archived = commitArchivedPaifu(module, table, command.paifu, command.actor)
+      val archived = commitArchivedPaifu(connection, module, table, command.paifu, command.actor)
       materializeUnlockedTables(connection, module, table, command.paifu)
       archived.table
     }
 
-  private def ensureNotArchived(module: TournamentModuleContext, id: TableId): Unit =
-    if module.matchRecordRepository.findByTable(id).nonEmpty then
+  private def ensureNotArchived(connection: java.sql.Connection, id: TableId): Unit =
+    if riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTable.findByTable(connection, id).nonEmpty then
       throw IllegalArgumentException(s"Table ${id.value} has already been archived")
 
   private def commitArchivedPaifu(
+      connection: java.sql.Connection,
       module: TournamentModuleContext,
       table: Table,
       paifu: Paifu,
@@ -82,10 +83,10 @@ final case class TournamentTableUploadPaifuAPIMessage(tableId: String, request: 
             paifu = linkedPaifu
           ),
           persist = change =>
-            val storedPaifu = module.paifuRepository.save(change.paifu)
+            val storedPaifu = riichinexus.microservices.tournament.tables.paifu.PaifuTable.save(connection, change.paifu)
             val storedRecord =
-              module.matchRecordRepository.save(change.matchRecord.copy(paifuId = Some(storedPaifu.id)))
-            val archivedTable = module.tableRepository.save(
+              riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTable.save(connection, change.matchRecord.copy(paifuId = Some(storedPaifu.id)))
+            val archivedTable = riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.save(connection, 
               table
                 .enterScoring(paifu.metadata.recordedAt)
                 .archive(storedRecord.id, storedPaifu.id, paifu.metadata.recordedAt)

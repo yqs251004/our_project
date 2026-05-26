@@ -1,6 +1,6 @@
 package riichinexus.microservices.club.objects
 
-import riichinexus.domain.model.{ClubPrivilegeDefinition as DomainClubPrivilegeDefinition}
+import riichinexus.microservices.club.domain.model.{ClubPrivilegeDefinition as DomainClubPrivilegeDefinition}
 import upickle.default.*
 
 final case class ClubPrivilegeDefinition(

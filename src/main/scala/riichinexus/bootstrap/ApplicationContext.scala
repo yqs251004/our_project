@@ -8,7 +8,6 @@ final class ApplicationContext private[bootstrap] (
     val authModule: AuthModuleContext,
     val playerModule: PlayerModuleContext,
     val clubModule: ClubModuleContext,
-    val dictionaryModule: DictionaryModuleContext,
     val publicQueryModule: PublicQueryModuleContext,
     val opsAnalyticsModule: OpsAnalyticsModuleContext,
     val tournamentModule: TournamentModuleContext,

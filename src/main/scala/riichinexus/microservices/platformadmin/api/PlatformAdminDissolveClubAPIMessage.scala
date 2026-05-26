@@ -10,6 +10,7 @@ import riichinexus.application.changes.{DomainChange, DomainChangeInterpreter}
 import riichinexus.bootstrap.PlatformAdminModuleContext
 import riichinexus.domain.event.ClubDissolved
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.tables.club.ClubTable
 import riichinexus.microservices.player.tables.player.PlayerTable
@@ -51,8 +52,8 @@ final case class PlatformAdminDissolveClubAPIMessage(
     ClubTable.findById(connection, command.clubId).map { club =>
       ensureClubCanDissolve(club, command.clubId)
       removeMembersFromClub(connection, club, command.clubId)
-      removeRelationsToClub(module, command.clubId)
-      commitDissolvedClub(module, club, command)
+      removeRelationsToClub(connection, command.clubId)
+      commitDissolvedClub(connection, module, club, command)
     }
 
   private def ensureClubCanDissolve(club: Club, clubId: ClubId): Unit =
@@ -71,15 +72,16 @@ final case class PlatformAdminDissolveClubAPIMessage(
       }
     }
 
-  private def removeRelationsToClub(module: PlatformAdminModuleContext, clubId: ClubId): Unit =
-    module.clubRepository.findActive()
+  private def removeRelationsToClub(connection: java.sql.Connection, clubId: ClubId): Unit =
+    riichinexus.microservices.club.tables.club.ClubTable.findActive(connection)
       .filterNot(_.id == clubId)
       .filter(_.relations.exists(_.targetClubId == clubId))
       .foreach { relatedClub =>
-        module.clubRepository.save(relatedClub.removeRelation(clubId))
+        riichinexus.microservices.club.tables.club.ClubTable.save(connection, relatedClub.removeRelation(clubId))
       }
 
   private def commitDissolvedClub(
+      connection: java.sql.Connection,
       module: PlatformAdminModuleContext,
       club: Club,
       command: DissolveClubCommand
@@ -89,7 +91,7 @@ final case class PlatformAdminDissolveClubAPIMessage(
       .commitWithinTransaction(
         DomainChange(
           aggregate = club.dissolve(command.actor.playerId.getOrElse(club.creator), command.dissolvedAt),
-          persist = module.clubRepository.save,
+          persist = updatedClub => ClubTable.save(connection, updatedClub),
           auditEntries = _ =>
             Vector(
               AuditEventEntry(

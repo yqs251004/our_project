@@ -20,7 +20,6 @@ final class ApiPlanSupport(
   val authModule: AuthModuleContext = executionContext.authModule
   val playerModule: PlayerModuleContext = executionContext.playerModule
   val clubModule: ClubModuleContext = executionContext.clubModule
-  val dictionaryModule: DictionaryModuleContext = executionContext.dictionaryModule
   val publicQueryModule: PublicQueryModuleContext = executionContext.publicQueryModule
   val opsAnalyticsModule: OpsAnalyticsModuleContext = executionContext.opsAnalyticsModule
   val tournamentModule: TournamentModuleContext = executionContext.tournamentModule

@@ -1,6 +1,6 @@
 package riichinexus.microservices.club.objects
 
-import riichinexus.domain.model.{ClubRankNode as DomainClubRankNode}
+import riichinexus.microservices.club.domain.model.{ClubRankNode as DomainClubRankNode}
 import upickle.default.*
 
 final case class ClubRankNodeView(

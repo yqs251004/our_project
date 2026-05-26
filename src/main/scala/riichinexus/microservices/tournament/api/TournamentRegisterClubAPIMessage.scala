@@ -6,6 +6,7 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.tournament.domain.TournamentOperationViewAssembler
 import riichinexus.microservices.tournament.objects.apiTypes.*
@@ -27,7 +28,7 @@ final case class TournamentRegisterClubAPIMessage(tournamentId: String, clubId: 
       )
       _ <- IO {
         module.transactionManager.inTransaction {
-          registerClub(module, command)
+          registerClub(context.connection, module, command)
         }
       }
       view <- IO {
@@ -42,6 +43,7 @@ final case class TournamentRegisterClubAPIMessage(tournamentId: String, clubId: 
       .getOrElse(AccessPrincipal.system)
 
   private def registerClub(
+      connection: java.sql.Connection,
       module: TournamentModuleContext,
       command: RegisterTournamentClubCommand
   ): Unit =
@@ -50,12 +52,12 @@ final case class TournamentRegisterClubAPIMessage(tournamentId: String, clubId: 
       Permission.ManageTournamentStages,
       tournamentId = Some(command.tournamentId)
     )
-    val club = module.clubRepository
-      .findById(command.clubId)
+    val club = riichinexus.microservices.club.tables.club.ClubTable
+      .findById(connection, command.clubId)
       .getOrElse(throw NoSuchElementException(s"Club ${command.clubId.value} was not found"))
     ensureClubActive(club)
-    module.tournamentRepository.findById(command.tournamentId).foreach { tournament =>
-      module.tournamentRepository.save(tournament.whitelistClub(command.clubId))
+    riichinexus.microservices.tournament.tables.tournament.TournamentTable.findById(connection, command.tournamentId).foreach { tournament =>
+      riichinexus.microservices.tournament.tables.tournament.TournamentTable.save(connection, tournament.whitelistClub(command.clubId))
     }
 
   private def ensureClubActive(club: Club): Unit =

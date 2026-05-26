@@ -10,6 +10,7 @@ import scala.annotation.tailrec
 import riichinexus.application.ports.*
 import riichinexus.domain.event.*
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.infrastructure.postgres.JdbcConnectionFactory
 import upickle.default.*
@@ -43,8 +44,6 @@ private object DomainEventRoutingSupport:
         Route("appeal-ticket", ticket.id.value)
       case TournamentSettlementRecorded(settlement, _) =>
         Route("tournament-settlement", settlement.id.value)
-      case GlobalDictionaryUpdated(entry, _) =>
-        Route("global-dictionary", entry.key)
       case PlayerBanned(playerId, _, _) =>
         Route("player", playerId.value)
       case ClubDissolved(clubId, _) =>

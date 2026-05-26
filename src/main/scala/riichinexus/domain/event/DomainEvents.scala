@@ -3,7 +3,6 @@ package riichinexus.domain.event
 import java.time.Instant
 
 import riichinexus.domain.model.*
-import riichinexus.microservices.dictionary.objects.GlobalDictionaryEntry
 
 sealed trait DomainEvent:
   def occurredAt: Instant
@@ -46,11 +45,6 @@ final case class AppealTicketAdjudicated(
 
 final case class TournamentSettlementRecorded(
     settlement: TournamentSettlementSnapshot,
-    occurredAt: Instant
-) extends DomainEvent
-
-final case class GlobalDictionaryUpdated(
-    entry: GlobalDictionaryEntry,
     occurredAt: Instant
 ) extends DomainEvent
 

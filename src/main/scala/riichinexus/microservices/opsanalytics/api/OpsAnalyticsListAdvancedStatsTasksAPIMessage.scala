@@ -39,7 +39,7 @@ final case class OpsAnalyticsListAdvancedStatsTasksAPIMessage(
 
   private def requireOpsAdmin(context: ApiPlanContext, operatorId: PlayerId): AccessPrincipal =
     val operator = context.principal(operatorId)
-    context.support.requirePermission(operator, Permission.ManageGlobalDictionary)
+    context.support.requirePermission(operator, Permission.ManagePlatformOperations)
     operator
 
   private def paged(

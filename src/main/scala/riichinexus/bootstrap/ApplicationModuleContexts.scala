@@ -10,7 +10,6 @@ import riichinexus.domain.service.*
 
 final case class AuthModuleContext(
     playerRegistration: PlayerRegistrationOperations,
-    clubRepository: ClubRepository,
     auditEventRepository: AuditEventRepository,
     transactionManager: TransactionManager,
 )
@@ -20,35 +19,15 @@ final case class PlayerModuleContext(
 )
 
 final case class ClubModuleContext(
-    clubRepository: ClubRepository,
-    globalDictionaryRepository: GlobalDictionaryRepository,
-    dashboardRepository: DashboardRepository,
     auditEventRepository: AuditEventRepository,
     transactionManager: TransactionManager,
     authorizationService: AuthorizationService,
     tournamentModule: TournamentModuleContext
 )
 
-final case class DictionaryModuleContext(
-    clubRepository: ClubRepository,
-    globalDictionaryRepository: GlobalDictionaryRepository,
-    dictionaryNamespaceRepository: DictionaryNamespaceRepository,
-    auditEventRepository: AuditEventRepository,
-    eventBus: DomainEventBus,
-    transactionManager: TransactionManager,
-    authorizationService: AuthorizationService
-)
-
 final case class PublicQueryModuleContext()
 
 final case class TournamentModuleContext(
-    tournamentRepository: TournamentRepository,
-    clubRepository: ClubRepository,
-    globalDictionaryRepository: GlobalDictionaryRepository,
-    tableRepository: TableRepository,
-    matchRecordRepository: MatchRecordRepository,
-    paifuRepository: PaifuRepository,
-    tournamentSettlementRepository: TournamentSettlementRepository,
     auditEventRepository: AuditEventRepository,
     seatingPolicy: SeatingPolicy,
     tournamentRuleEngine: TournamentRuleEngine,
@@ -60,11 +39,6 @@ final case class TournamentModuleContext(
 )
 
 final case class OpsAnalyticsModuleContext(
-    paifuRepository: PaifuRepository,
-    matchRecordRepository: MatchRecordRepository,
-    clubRepository: ClubRepository,
-    advancedStatsBoardRepository: AdvancedStatsBoardRepository,
-    advancedStatsRecomputeTaskRepository: AdvancedStatsRecomputeTaskRepository,
     domainEventOutboxRepository: DomainEventOutboxRepository,
     domainEventDeliveryReceiptRepository: DomainEventDeliveryReceiptRepository,
     domainEventSubscriberCursorRepository: DomainEventSubscriberCursorRepository,
@@ -76,7 +50,6 @@ final case class OpsAnalyticsModuleContext(
 )
 
 final case class PlatformAdminModuleContext(
-    clubRepository: ClubRepository,
     auditEventRepository: AuditEventRepository,
     eventBus: DomainEventBus,
     transactionManager: TransactionManager,

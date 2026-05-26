@@ -7,6 +7,7 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.player.objects.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.{ClubApplicationReviewer, ClubApplicationViewAssembler}
@@ -80,6 +81,7 @@ final case class ReviewClubApplicationAPIMessage(
         )
       case ApplicationReviewDecision.Reject =>
         ClubApplicationReviewer.reject(
+          connection = connection,
           module = module,
           parsedClubId = command.clubId,
           parsedMembershipId = command.membershipId,

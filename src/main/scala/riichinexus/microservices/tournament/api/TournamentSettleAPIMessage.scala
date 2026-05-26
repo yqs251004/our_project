@@ -9,9 +9,10 @@ import riichinexus.application.changes.{DomainChange, DomainChangeInterpreter}
 import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.event.*
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.dictionary.domain.RuntimeDictionary
 import riichinexus.microservices.player.tables.player.PlayerTable
+import riichinexus.microservices.tournament.domain.TournamentRuntimeDefaults
 import riichinexus.microservices.tournament.objects.apiTypes.*
 import riichinexus.microservices.tournament.objects.apiTypes.*
 import riichinexus.microservices.tournament.objects.apiTypes.ManagementRequests.given
@@ -44,7 +45,7 @@ final case class TournamentSettleAPIMessage(tournamentId: String, request: Settl
   ): TournamentSettlementSnapshot =
     validateSettlementRequest(command.request)
 
-    val tournament = requireTournament(module, command.tournamentId)
+    val tournament = requireTournament(connection, command.tournamentId)
     val finalStage = requireStage(tournament, command.request.stageId)
     module.authorizationService.requirePermission(
       command.actor,
@@ -61,10 +62,10 @@ final case class TournamentSettleAPIMessage(tournamentId: String, request: Settl
     val resolvedPlayers =
       resolveSettlementPlayers(connection, module, command, finalStage, ranking)
     val previousSnapshot =
-      module.tournamentSettlementRepository.findByTournamentAndStage(command.tournamentId, command.request.stageId)
+      riichinexus.microservices.tournament.tables.settlement.TournamentSettlementTable.findByTournamentAndStage(connection, command.tournamentId, command.request.stageId)
 
-    supersedePreviousSnapshot(module, previousSnapshot, command.settledAt)
-    completeTournamentIfReady(module, tournament)
+    supersedePreviousSnapshot(connection, previousSnapshot, command.settledAt)
+    completeTournamentIfReady(connection, tournament)
 
     val snapshot = buildSettlementSnapshot(
       module = module,
@@ -74,7 +75,7 @@ final case class TournamentSettleAPIMessage(tournamentId: String, request: Settl
       resolvedPlayers = resolvedPlayers,
       previousSnapshot = previousSnapshot
     )
-    commitSettlement(module, command, snapshot)
+    commitSettlement(connection, module, command, snapshot)
 
   private def validateSettlementRequest(request: SettleTournamentRequest): Unit =
     require(request.prizePool >= 0L, "Prize pool must be non-negative")
@@ -86,11 +87,11 @@ final case class TournamentSettleAPIMessage(tournamentId: String, request: Settl
     )
 
   private def requireTournament(
-      module: TournamentModuleContext,
+      connection: java.sql.Connection,
       tournamentId: TournamentId
   ): Tournament =
-    module.tournamentRepository
-      .findById(tournamentId)
+    riichinexus.microservices.tournament.tables.tournament.TournamentTable
+      .findById(connection, tournamentId)
       .getOrElse(throw NoSuchElementException(s"Tournament ${tournamentId.value} was not found"))
 
   private def requireStage(tournament: Tournament, stageId: TournamentStageId): TournamentStage =
@@ -160,17 +161,17 @@ final case class TournamentSettleAPIMessage(tournamentId: String, request: Settl
     bracketPlayers ++ ranking.entries.map(_.playerId).filterNot(bracketPlayers.contains)
 
   private def supersedePreviousSnapshot(
-      module: TournamentModuleContext,
+      connection: java.sql.Connection,
       previousSnapshot: Option[TournamentSettlementSnapshot],
       settledAt: Instant
   ): Unit =
     previousSnapshot
       .filter(_.status != TournamentSettlementStatus.Superseded)
-      .foreach(existing => module.tournamentSettlementRepository.save(existing.supersede(settledAt)))
+      .foreach(existing => riichinexus.microservices.tournament.tables.settlement.TournamentSettlementTable.save(connection, existing.supersede(settledAt)))
 
-  private def completeTournamentIfReady(module: TournamentModuleContext, tournament: Tournament): Unit =
+  private def completeTournamentIfReady(connection: java.sql.Connection, tournament: Tournament): Unit =
     if tournament.stages.forall(_.status == StageStatus.Completed) && tournament.status != TournamentStatus.Completed then
-      module.tournamentRepository.save(tournament.complete)
+      riichinexus.microservices.tournament.tables.tournament.TournamentTable.save(connection, tournament.complete)
 
   private def buildSettlementSnapshot(
       module: TournamentModuleContext,
@@ -183,7 +184,7 @@ final case class TournamentSettleAPIMessage(tournamentId: String, request: Settl
     val request = command.request
     val effectivePayoutRatios =
       if request.payoutRatios.nonEmpty then request.payoutRatios
-      else RuntimeDictionary.currentSettlementPayoutRatios(module.globalDictionaryRepository)
+      else TournamentRuntimeDefaults.settlementPayoutRatios
     val netPrizePool = request.prizePool - request.houseFeeAmount
     val baseAwards = allocatePrizePool(netPrizePool, effectivePayoutRatios, resolvedPlayers.size)
     val rankingByPlayer = ranking.entries.map(entry => entry.playerId -> entry).toMap
@@ -265,6 +266,7 @@ final case class TournamentSettleAPIMessage(tournamentId: String, request: Settl
     }
 
   private def commitSettlement(
+      connection: java.sql.Connection,
       module: TournamentModuleContext,
       command: SettleTournamentCommand,
       snapshot: TournamentSettlementSnapshot
@@ -274,7 +276,7 @@ final case class TournamentSettleAPIMessage(tournamentId: String, request: Settl
       .commitWithinTransaction(
         DomainChange(
           aggregate = snapshot,
-          persist = module.tournamentSettlementRepository.save,
+          persist = savedSnapshot => riichinexus.microservices.tournament.tables.settlement.TournamentSettlementTable.save(connection, savedSnapshot),
           auditEntries = savedSnapshot =>
             Vector(
               AuditEventEntry(

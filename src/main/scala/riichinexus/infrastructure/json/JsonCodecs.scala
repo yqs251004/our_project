@@ -5,19 +5,10 @@ import scala.annotation.targetName
 
 import riichinexus.domain.event.*
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.player.objects.*
 import riichinexus.microservices.auth.objects.{AccountCredential, AuthenticatedSession, SessionPrincipalKind}
 import riichinexus.microservices.club.objects.ClubApplicationStatus
-import riichinexus.microservices.dictionary.objects.{
-  DictionaryNamespaceRegistration,
-  DictionaryNamespaceReminderAction,
-  DictionaryNamespaceReminderKind,
-  DictionaryNamespaceReviewStatus,
-  GlobalDictionaryEntry,
-  GlobalDictionarySchema,
-  GlobalDictionarySchemaEntry,
-  GlobalDictionaryValueType
-}
 import riichinexus.microservices.opsanalytics.objects.*
 import riichinexus.microservices.player.objects.{Player, PlayerStatus, RankPlatform, RankSnapshot}
 import riichinexus.microservices.tournament.objects.{SeatWind, TournamentFormat}
@@ -147,26 +138,6 @@ object JsonCodecs:
   given ReadWriter[ClubRelation] = macroRW
   given ReadWriter[ClubRecruitmentPolicy] = macroRW
   given ReadWriter[ClubHonor] = macroRW
-  given ReadWriter[GlobalDictionaryEntry] = macroRW
-  given ReadWriter[GlobalDictionaryValueType] =
-    eitherStringEnumReadWriter(
-      GlobalDictionaryValueType.fromString,
-      GlobalDictionaryValueType.toString
-    )
-  given ReadWriter[GlobalDictionarySchemaEntry] = macroRW
-  given ReadWriter[GlobalDictionarySchema] = macroRW
-  given ReadWriter[DictionaryNamespaceReviewStatus] =
-    eitherStringEnumReadWriter(
-      DictionaryNamespaceReviewStatus.fromString,
-      DictionaryNamespaceReviewStatus.toString
-    )
-  given ReadWriter[DictionaryNamespaceRegistration] = macroRW
-  given ReadWriter[DictionaryNamespaceReminderKind] =
-    eitherStringEnumReadWriter(
-      DictionaryNamespaceReminderKind.fromString,
-      DictionaryNamespaceReminderKind.toString
-    )
-  given ReadWriter[DictionaryNamespaceReminderAction] = macroRW
   given ReadWriter[AuditEventEntry] = macroRW
   given ReadWriter[Club] = macroRW
 
@@ -397,7 +368,6 @@ object JsonCodecs:
   given ReadWriter[AppealTicketReopened] = macroRW
   given ReadWriter[AppealTicketAdjudicated] = macroRW
   given ReadWriter[TournamentSettlementRecorded] = macroRW
-  given ReadWriter[GlobalDictionaryUpdated] = macroRW
   given ReadWriter[PlayerBanned] = macroRW
   given ReadWriter[ClubDissolved] = macroRW
   given ReadWriter[DomainEvent] = macroRW

@@ -1,6 +1,6 @@
 package riichinexus.microservices.publicquery.objects.apiTypes
 
-import riichinexus.domain.model.ClubHonor
+import riichinexus.microservices.club.domain.model.ClubHonor
 import upickle.default.*
 
 final case class PublicClubHonorView(

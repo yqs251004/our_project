@@ -22,7 +22,7 @@ final case class TournamentStartAPIMessage(tournamentId: String, operatorId: Opt
       command = StartTournamentCommand(TournamentId(tournamentId), actor)
       tournament <- IO {
         module.transactionManager.inTransaction {
-          startTournament(module, command)
+          startTournament(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
     yield TournamentSummaryView.fromDomain(tournament)
@@ -33,17 +33,18 @@ final case class TournamentStartAPIMessage(tournamentId: String, operatorId: Opt
       .getOrElse(AccessPrincipal.system)
 
   private def startTournament(
+      connection: java.sql.Connection,
       module: TournamentModuleContext,
       command: StartTournamentCommand
   ): Option[Tournament] =
-    module.tournamentRepository.findById(command.tournamentId).map { tournament =>
+    riichinexus.microservices.tournament.tables.tournament.TournamentTable.findById(connection, command.tournamentId).map { tournament =>
       module.authorizationService.requirePermission(
         command.actor,
         Permission.ManageTournamentStages,
         tournamentId = Some(command.tournamentId)
       )
       ensureTournamentHasParticipants(tournament, command.tournamentId)
-      module.tournamentRepository.save(tournament.start)
+      riichinexus.microservices.tournament.tables.tournament.TournamentTable.save(connection, tournament.start)
     }
 
   private def ensureTournamentHasParticipants(tournament: Tournament, tournamentId: TournamentId): Unit =
