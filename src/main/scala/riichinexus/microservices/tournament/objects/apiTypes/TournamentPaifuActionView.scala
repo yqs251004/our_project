@@ -1,6 +1,8 @@
 package riichinexus.microservices.tournament.objects.apiTypes
 
-import riichinexus.domain.model.PaifuAction
+import upickle.default.*
+
+import riichinexus.microservices.tournament.domain.model.PaifuAction
 
 final case class TournamentPaifuActionView(
     sequenceNo: Int,
@@ -14,6 +16,8 @@ final case class TournamentPaifuActionView(
 ) derives CanEqual
 
 object TournamentPaifuActionView:
+  given ReadWriter[TournamentPaifuActionView] = macroRW
+
   def fromDomain(action: PaifuAction): TournamentPaifuActionView =
     TournamentPaifuActionView(
       sequenceNo = action.sequenceNo,

@@ -8,9 +8,11 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.application.ports.OptimisticConcurrencyException
 import riichinexus.bootstrap.OpsAnalyticsModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.auth.domain.model.*
+import riichinexus.microservices.tournament.domain.model.*
 import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.player.objects.*
-import riichinexus.domain.service.AdvancedStatsRoundAnalysis.*
+import riichinexus.microservices.opsanalytics.domain.AdvancedStatsRoundAnalysis.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.opsanalytics.objects.*
 import riichinexus.microservices.player.tables.player.PlayerTable

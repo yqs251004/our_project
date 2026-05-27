@@ -1,6 +1,8 @@
 package riichinexus.microservices.tournament.objects.apiTypes
 
-import riichinexus.domain.model.TournamentWhitelistEntry
+import upickle.default.*
+
+import riichinexus.microservices.tournament.domain.model.TournamentWhitelistEntry
 
 final case class TournamentWhitelistEntryView(
     participantKind: String,
@@ -9,6 +11,8 @@ final case class TournamentWhitelistEntryView(
 ) derives CanEqual
 
 object TournamentWhitelistEntryView:
+  given ReadWriter[TournamentWhitelistEntryView] = macroRW
+
   def fromDomain(entry: TournamentWhitelistEntry): TournamentWhitelistEntryView =
     TournamentWhitelistEntryView(
       entry.participantKind.toString,

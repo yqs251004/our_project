@@ -5,7 +5,7 @@ import java.util.NoSuchElementException
 
 import riichinexus.application.ports.*
 import riichinexus.domain.model.*
-import riichinexus.domain.service.*
+import riichinexus.microservices.auth.domain.*
 
 final class ClubTestRoster(
     clubRepository: ClubRepository,
@@ -14,7 +14,7 @@ final class ClubTestRoster(
     dashboardRepository: DashboardRepository,
     auditEventRepository: AuditEventRepository,
     transactionManager: TransactionManager = NoOpTransactionManager,
-    authorizationService: AuthorizationService = NoOpAuthorizationService
+    authorizationService: AuthorizationPolicy = AuthorizationPolicy.permitAll
 ):
   def createClub(
       name: String,
@@ -332,7 +332,7 @@ final class ClubTestRoster(
       )
 
   private def requireClubCapability(
-      authorizationService: AuthorizationService,
+      authorizationService: AuthorizationPolicy,
       actor: AccessPrincipal,
       club: Club,
       permission: Permission,

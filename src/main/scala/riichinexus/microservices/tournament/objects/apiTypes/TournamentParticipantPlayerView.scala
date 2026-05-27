@@ -1,5 +1,7 @@
 package riichinexus.microservices.tournament.objects.apiTypes
 
+import upickle.default.*
+
 import riichinexus.domain.model.{ClubId, PlayerId}
 import riichinexus.microservices.player.objects.{PlayerStatus, RankSnapshot}
 import riichinexus.microservices.tournament.objects.RankSnapshotView
@@ -14,6 +16,8 @@ final case class TournamentParticipantPlayerView(
 ) derives CanEqual
 
 object TournamentParticipantPlayerView:
+  given ReadWriter[TournamentParticipantPlayerView] = macroRW
+
   def apply(
       playerId: PlayerId,
       nickname: String,

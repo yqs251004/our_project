@@ -5,11 +5,12 @@ import java.util.NoSuchElementException
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
+import riichinexus.microservices.tournament.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.tournament.domain.TournamentOperationViewAssembler
 import riichinexus.microservices.tournament.objects.apiTypes.*
 import riichinexus.microservices.tournament.objects.apiTypes.*
-import riichinexus.microservices.tournament.objects.apiTypes.ManagementRequests.given
+import riichinexus.microservices.tournament.objects.apiTypes.AssignTournamentAdminRequest.given
 import upickle.default.*
 
 final case class TournamentGetAPIMessage(tournamentId: String) extends APIMessage[TournamentDetailView] derives ReadWriter:

@@ -6,6 +6,8 @@ import cats.effect.IO
 
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
+import riichinexus.microservices.tournament.appeal.domain.model.*
+import riichinexus.microservices.tournament.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.tournament.appeal.objects.apiTypes.*
 import riichinexus.microservices.tournament.appeal.tables.appealticket.AppealTicketTable

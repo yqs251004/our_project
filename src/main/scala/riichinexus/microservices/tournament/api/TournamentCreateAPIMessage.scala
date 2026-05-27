@@ -7,13 +7,15 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.auth.domain.model.*
+import riichinexus.microservices.tournament.domain.model.*
 import riichinexus.microservices.player.objects.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.player.tables.player.PlayerTable
 import riichinexus.microservices.tournament.domain.TournamentRuntimeDefaults
 import riichinexus.microservices.tournament.objects.apiTypes.*
 import riichinexus.microservices.tournament.objects.apiTypes.*
-import riichinexus.microservices.tournament.objects.apiTypes.ManagementRequests.given
+import riichinexus.microservices.tournament.objects.apiTypes.AssignTournamentAdminRequest.given
 import upickle.default.*
 
 final case class TournamentCreateAPIMessage(

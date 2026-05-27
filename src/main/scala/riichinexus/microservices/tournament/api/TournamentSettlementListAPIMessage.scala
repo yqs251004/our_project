@@ -3,10 +3,11 @@ package riichinexus.microservices.tournament.api
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
+import riichinexus.microservices.tournament.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.tournament.objects.apiTypes.*
 import riichinexus.microservices.tournament.objects.apiTypes.*
-import riichinexus.microservices.tournament.objects.apiTypes.ManagementRequests.given
+import riichinexus.microservices.tournament.objects.apiTypes.AssignTournamentAdminRequest.given
 import riichinexus.microservices.tournament.tables.settlement.TournamentSettlementTable
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*

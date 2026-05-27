@@ -2,6 +2,7 @@ package riichinexus.microservices.player.api
 
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
+import riichinexus.microservices.player.domain.PlayerRegistration
 import riichinexus.microservices.player.objects.PlayerProfileView
 import riichinexus.microservices.player.objects.apiTypes.CreatePlayerRequest
 import upickle.default.*
@@ -14,7 +15,7 @@ final case class CreatePlayerAPIMessage(
     for
       registeredAt <- IO.realTimeInstant
       player <- IO {
-        context.support.playerModule.registration.registerPlayer(
+        PlayerRegistration.register(
           connection = context.connection,
           userId = request.userId,
           nickname = request.nickname,

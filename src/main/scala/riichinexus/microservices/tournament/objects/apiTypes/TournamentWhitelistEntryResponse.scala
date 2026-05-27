@@ -1,3 +1,0 @@
-package riichinexus.microservices.tournament.objects.apiTypes
-
-type TournamentWhitelistEntryResponse = TournamentWhitelistEntryView

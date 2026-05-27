@@ -8,6 +8,9 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.TournamentAppealModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.auth.domain.model.*
+import riichinexus.microservices.tournament.appeal.domain.model.*
+import riichinexus.microservices.tournament.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.tournament.appeal.objects.apiTypes.*
 import upickle.default.*

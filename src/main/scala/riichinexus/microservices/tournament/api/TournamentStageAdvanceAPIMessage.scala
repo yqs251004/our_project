@@ -7,10 +7,13 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.auth.domain.model.*
+import riichinexus.microservices.tournament.domain.KnockoutStageCoordinator
+import riichinexus.microservices.tournament.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.tournament.objects.apiTypes.*
 import riichinexus.microservices.tournament.objects.apiTypes.*
-import riichinexus.microservices.tournament.objects.apiTypes.ManagementRequests.given
+import riichinexus.microservices.tournament.objects.apiTypes.AssignTournamentAdminRequest.given
 import upickle.default.*
 
 final case class TournamentStageAdvanceAPIMessage(tournamentId: String, stageId: String, request: AdvanceKnockoutStageRequest) extends APIMessage[Vector[riichinexus.microservices.tournament.objects.Table]] derives ReadWriter:
@@ -50,7 +53,13 @@ final case class TournamentStageAdvanceAPIMessage(tournamentId: String, stageId:
       tournamentId = Some(command.tournamentId)
     )
     ensureKnockoutStage(stage, command.stageId)
-    module.knockoutStageCoordinator.materializeUnlockedTables(connection, command.tournamentId, command.stageId, command.at)
+    KnockoutStageCoordinator.materializeUnlockedTables(
+      connection,
+      module.transactionManager,
+      command.tournamentId,
+      command.stageId,
+      command.at
+    )
 
   private def ensureKnockoutStage(stage: TournamentStage, stageId: TournamentStageId): Unit =
     val isKnockoutStage =

@@ -1,6 +1,7 @@
 package riichinexus.microservices.tournament.domain
 
 import riichinexus.domain.model.*
+import riichinexus.microservices.tournament.domain.model.*
 
 object TournamentRuntimeDefaults:
   val settlementPayoutRatios: Vector[Double] =

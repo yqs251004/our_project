@@ -6,12 +6,13 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.auth.domain.model.*
+import riichinexus.microservices.tournament.domain.model.*
 import riichinexus.microservices.club.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubAuthorization
 import riichinexus.microservices.tournament.domain.TournamentOperationViewAssembler
 import riichinexus.microservices.tournament.objects.apiTypes.*
-import riichinexus.microservices.tournament.objects.apiTypes.TournamentOperationResponses.given
 import upickle.default.*
 
 final case class DeclineClubTournamentAPIMessage(

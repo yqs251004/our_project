@@ -9,7 +9,6 @@ import riichinexus.microservices.player.objects.PlayerProfileView
 import riichinexus.microservices.player.objects.apiTypes.*
 import riichinexus.system.objects.PagedResponse
 import riichinexus.microservices.tournament.objects.apiTypes.*
-import riichinexus.microservices.tournament.objects.apiTypes.TournamentOperationResponses.given
 
 object ClubAPIMessageRegistry:
 

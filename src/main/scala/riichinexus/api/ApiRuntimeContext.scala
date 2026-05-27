@@ -1,8 +1,8 @@
 package riichinexus.api
 
 import riichinexus.bootstrap.ApplicationContext
-import riichinexus.bootstrap.instrumentation.PerformanceDiagnosticsService
 import riichinexus.api.runtime.ApiExecutionContext
+import riichinexus.system.instrumentation.PerformanceDiagnosticsService
 
 final case class ApiRuntimeContext(
     executionContext: ApiExecutionContext,
@@ -41,5 +41,5 @@ object ApiRuntimeContext:
         storageLabel = storageLabel
       ),
       corsAllowOrigin = corsAllowOrigin,
-      performanceDiagnosticsService = app.opsAnalyticsModule.performanceDiagnosticsService
+      performanceDiagnosticsService = app.performanceDiagnosticsService
     )

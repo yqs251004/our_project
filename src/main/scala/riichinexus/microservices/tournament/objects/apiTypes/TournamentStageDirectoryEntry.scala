@@ -1,6 +1,10 @@
 package riichinexus.microservices.tournament.objects.apiTypes
 
-import riichinexus.domain.model.{StageFormat, StageStatus, TournamentStageId}
+import upickle.default.*
+
+import riichinexus.domain.model.TournamentStageId
+import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.tournament.domain.model.{StageFormat, StageStatus}
 import riichinexus.microservices.tournament.objects.TournamentFormat
 
 final case class TournamentStageDirectoryEntry(
@@ -17,6 +21,8 @@ final case class TournamentStageDirectoryEntry(
 ) derives CanEqual
 
 object TournamentStageDirectoryEntry:
+  given ReadWriter[TournamentStageDirectoryEntry] = macroRW
+
   def apply(
       stageId: TournamentStageId,
       name: String,

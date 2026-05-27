@@ -1,6 +1,5 @@
 package riichinexus.bootstrap
 
-import riichinexus.bootstrap.instrumentation.PerformanceDiagnosticsService
 import riichinexus.infrastructure.postgres.{
   DatabaseConfig as PostgresRuntimeConfig,
   JdbcConnectionFactory,
@@ -13,7 +12,7 @@ import riichinexus.infrastructure.postgres.{
   PostgresSchemaInitializer
 }
 import riichinexus.application.ports.*
-import riichinexus.domain.service.*
+import riichinexus.microservices.auth.domain.*
 import riichinexus.infrastructure.events.OutboxBackedDomainEventBus
 import riichinexus.infrastructure.events.projections.SystemEventCascadeSubscriber
 import riichinexus.microservices.opsanalytics.projections.{
@@ -22,16 +21,14 @@ import riichinexus.microservices.opsanalytics.projections.{
   DashboardProjectionSubscriber,
   RatingProjectionSubscriber
 }
-import riichinexus.microservices.player.domain.PlayerRegistrationOperations
 import riichinexus.microservices.tournament.appeal.domain.AppealApplicationService
-import riichinexus.microservices.tournament.domain.KnockoutStageCoordinator
-import riichinexus.microservices.tournament.domain.TournamentStageQueryService
+import riichinexus.system.instrumentation.PerformanceDiagnosticsService
 
 object ApplicationAssembly:
 
   private final case class WiringBundle(
       transactionManager: TransactionManager,
-      authorizationService: AuthorizationService,
+      authorizationService: AuthorizationPolicy,
       repositories: ApplicationRepositoryContext,
       connectionFactory: JdbcConnectionFactory
   )
@@ -63,7 +60,7 @@ object ApplicationAssembly:
     buildContext(
       WiringBundle(
         transactionManager = JdbcTransactionManager(connectionFactory),
-        authorizationService = StrictRbacAuthorizationService(),
+        authorizationService = AuthorizationPolicy.strict,
         connectionFactory = connectionFactory,
         repositories = ApplicationRepositoryContext(
           eventCascadeRecordRepository = PostgresEventCascadeRecordRepository(connectionFactory),
@@ -89,30 +86,13 @@ object ApplicationAssembly:
       eagerDrainOnPublish = wiring.transactionManager == NoOpTransactionManager
     )
 
-    val playerRegistration = PlayerRegistrationOperations()
-    val playerModule = PlayerModuleContext(
-      registration = playerRegistration
-    )
+    val playerModule = PlayerModuleContext()
     val authModule = AuthModuleContext(
-      playerRegistration = playerRegistration,
       auditEventRepository = repositories.auditEventRepository,
       transactionManager = wiring.transactionManager
     )
-    val tournamentRuleEngine = DefaultTournamentRuleEngine()
-    val knockoutStageCoordinator = KnockoutStageCoordinator(
-      tournamentRuleEngine,
-      wiring.transactionManager
-    )
-    val tournamentStageQueries = TournamentStageQueryService(
-      tournamentRuleEngine,
-      knockoutStageCoordinator
-    )
     val tournamentModule = TournamentModuleContext(
       auditEventRepository = repositories.auditEventRepository,
-      seatingPolicy = BalancedEloSeatingPolicy(),
-      tournamentRuleEngine = tournamentRuleEngine,
-      knockoutStageCoordinator = knockoutStageCoordinator,
-      stageQueries = tournamentStageQueries,
       eventBus = eventBus,
       transactionManager = wiring.transactionManager,
       authorizationService = wiring.authorizationService
@@ -125,7 +105,6 @@ object ApplicationAssembly:
     )
     val tournamentAppealModule = TournamentAppealModuleContext(
       service = AppealApplicationService(
-        knockoutStageCoordinator,
         repositories.auditEventRepository,
         eventBus,
         wiring.transactionManager,
@@ -140,9 +119,7 @@ object ApplicationAssembly:
       authorizationService = wiring.authorizationService
     )
     val domainEventSubscribers = Vector[DomainEventSubscriber](
-      RatingProjectionSubscriber(
-        PairwiseEloRatingService()
-      ),
+      RatingProjectionSubscriber(),
       ClubProjectionSubscriber(),
       DashboardProjectionSubscriber(),
       AdvancedStatsProjectionSubscriber(
@@ -160,8 +137,7 @@ object ApplicationAssembly:
       domainEventSubscribers = domainEventSubscribers,
       auditEventRepository = repositories.auditEventRepository,
       transactionManager = wiring.transactionManager,
-      authorizationService = wiring.authorizationService,
-      performanceDiagnosticsService = diagnostics
+      authorizationService = wiring.authorizationService
     )
 
     new ApplicationContext(
@@ -175,5 +151,6 @@ object ApplicationAssembly:
       platformAdminModule = platformAdminModule,
       tournamentAppealModule = tournamentAppealModule,
       repositories = repositories,
-      authorizationService = wiring.authorizationService
+      authorizationService = wiring.authorizationService,
+      performanceDiagnosticsService = diagnostics
     )

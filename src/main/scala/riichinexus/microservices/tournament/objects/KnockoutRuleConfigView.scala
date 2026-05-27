@@ -1,6 +1,6 @@
 package riichinexus.microservices.tournament.objects
 
-import riichinexus.domain.model.{KnockoutRuleConfig as DomainKnockoutRuleConfig}
+import riichinexus.microservices.tournament.domain.model.{KnockoutRuleConfig as DomainKnockoutRuleConfig}
 import upickle.default.*
 
 final case class KnockoutRuleConfigView(

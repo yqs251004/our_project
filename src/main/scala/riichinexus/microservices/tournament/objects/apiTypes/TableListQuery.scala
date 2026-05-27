@@ -1,6 +1,7 @@
 package riichinexus.microservices.tournament.objects.apiTypes
 
-import riichinexus.domain.model.{PlayerId, TableStatus, TournamentId, TournamentStageId}
+import riichinexus.domain.model.{PlayerId, TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.domain.model.TableStatus
 import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.*
 

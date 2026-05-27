@@ -5,7 +5,7 @@ import java.util.NoSuchElementException
 
 import riichinexus.application.ports.*
 import riichinexus.domain.model.*
-import riichinexus.domain.service.*
+import riichinexus.microservices.auth.domain.*
 
 final class ClubTestMembershipApplications(
     clubRepository: ClubRepository,
@@ -13,7 +13,7 @@ final class ClubTestMembershipApplications(
     globalDictionaryRepository: GlobalDictionaryRepository,
     dashboardRepository: DashboardRepository,
     transactionManager: TransactionManager = NoOpTransactionManager,
-    authorizationService: AuthorizationService = NoOpAuthorizationService
+    authorizationService: AuthorizationPolicy = AuthorizationPolicy.permitAll
 ):
   def applyForMembership(
       clubId: ClubId,
@@ -242,7 +242,7 @@ final class ClubTestMembershipApplications(
       throw IllegalArgumentException(context)
 
   private def requireClubCapability(
-      authorizationService: AuthorizationService,
+      authorizationService: AuthorizationPolicy,
       actor: AccessPrincipal,
       club: Club,
       permission: Permission,

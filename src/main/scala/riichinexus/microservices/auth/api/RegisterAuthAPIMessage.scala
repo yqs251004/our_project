@@ -6,6 +6,7 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.AuthModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.player.domain.PlayerRegistration
 import riichinexus.microservices.player.objects.*
 import riichinexus.microservices.auth.objects.{AccountCredential, AuthenticatedSession}
 import riichinexus.microservices.auth.objects.apiTypes.AuthSuccessResponse
@@ -79,7 +80,7 @@ final case class RegisterAuthAPIMessage(
       case Some(existing) =>
         PlayerTable.save(connection, existing.copy(nickname = command.displayName))
       case None =>
-        module.playerRegistration.registerPlayer(
+        PlayerRegistration.register(
           connection,
           command.username,
           command.displayName,

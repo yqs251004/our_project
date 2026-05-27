@@ -1,6 +1,6 @@
 package riichinexus.microservices.tournament.objects
 
-import riichinexus.domain.model.{AdvancementRule as DomainAdvancementRule}
+import riichinexus.microservices.tournament.domain.model.{AdvancementRule as DomainAdvancementRule}
 import upickle.default.*
 
 final case class AdvancementRuleView(

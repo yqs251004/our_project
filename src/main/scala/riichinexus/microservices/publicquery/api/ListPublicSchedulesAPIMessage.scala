@@ -3,6 +3,8 @@ package riichinexus.microservices.publicquery.api
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
+import riichinexus.microservices.auth.domain.model.*
+import riichinexus.microservices.tournament.domain.model.*
 import riichinexus.microservices.publicquery.objects.apiTypes.PublicScheduleView
 import riichinexus.microservices.publicquery.domain.PublicDirectoryQueries
 import riichinexus.system.objects.PagedResponse

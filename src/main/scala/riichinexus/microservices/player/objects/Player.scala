@@ -2,14 +2,8 @@ package riichinexus.microservices.player.objects
 
 import java.time.Instant
 
-import riichinexus.domain.model.{
-  AccessPrincipal,
-  ClubId,
-  PlayerId,
-  RoleGrant,
-  RoleKind,
-  TournamentId
-}
+import riichinexus.domain.model.{ClubId, PlayerId, TournamentId}
+import riichinexus.microservices.auth.domain.model.{AccessPrincipal, RoleGrant, RoleKind}
 
 final case class Player(
     id: PlayerId,

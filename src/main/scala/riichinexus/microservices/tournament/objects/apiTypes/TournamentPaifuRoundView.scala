@@ -1,6 +1,8 @@
 package riichinexus.microservices.tournament.objects.apiTypes
 
-import riichinexus.domain.model.KyokuRecord
+import upickle.default.*
+
+import riichinexus.microservices.tournament.domain.model.KyokuRecord
 
 final case class TournamentPaifuRoundView(
     descriptor: TournamentPaifuRoundDescriptorView,
@@ -10,6 +12,8 @@ final case class TournamentPaifuRoundView(
 ) derives CanEqual
 
 object TournamentPaifuRoundView:
+  given ReadWriter[TournamentPaifuRoundView] = macroRW
+
   def fromDomain(round: KyokuRecord): TournamentPaifuRoundView =
     TournamentPaifuRoundView(
       descriptor = TournamentPaifuRoundDescriptorView.fromDomain(round.descriptor),

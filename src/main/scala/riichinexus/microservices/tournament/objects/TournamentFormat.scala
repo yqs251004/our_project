@@ -1,6 +1,6 @@
 package riichinexus.microservices.tournament.objects
 
-import riichinexus.domain.model.StageFormat
+import riichinexus.microservices.tournament.domain.model.StageFormat
 
 enum TournamentFormat:
   case Swiss

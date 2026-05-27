@@ -4,7 +4,7 @@ import java.time.Instant
 
 import riichinexus.application.ports.*
 import riichinexus.domain.model.*
-import riichinexus.domain.service.*
+import riichinexus.microservices.auth.domain.*
 
 final class ClubTestManagement(
     clubRepository: ClubRepository,
@@ -13,7 +13,7 @@ final class ClubTestManagement(
     dashboardRepository: DashboardRepository,
     auditEventRepository: AuditEventRepository,
     transactionManager: TransactionManager = NoOpTransactionManager,
-    authorizationService: AuthorizationService = NoOpAuthorizationService
+    authorizationService: AuthorizationPolicy = AuthorizationPolicy.permitAll
 ):
   private val roster = ClubTestRoster(
     clubRepository = clubRepository,

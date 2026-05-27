@@ -1,6 +1,6 @@
 package riichinexus.microservices.tournament.objects
 
-import riichinexus.domain.model.{KnockoutBracketResult as DomainKnockoutBracketResult}
+import riichinexus.microservices.tournament.domain.model.{KnockoutBracketResult as DomainKnockoutBracketResult}
 import upickle.default.*
 
 final case class KnockoutBracketResult(

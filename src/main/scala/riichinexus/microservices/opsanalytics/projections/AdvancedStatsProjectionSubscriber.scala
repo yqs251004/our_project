@@ -8,9 +8,10 @@ import riichinexus.application.ports.{DomainEventSubscriber, DomainEventSubscrib
 import riichinexus.application.ports.*
 import riichinexus.domain.event.*
 import riichinexus.domain.model.*
+import riichinexus.microservices.tournament.domain.model.*
 import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.player.objects.*
-import riichinexus.domain.service.AdvancedStatsRoundAnalysis
+import riichinexus.microservices.opsanalytics.domain.AdvancedStatsRoundAnalysis
 import riichinexus.microservices.opsanalytics.objects.{AdvancedStatsBoard, AdvancedStatsRecomputeTask, DashboardOwner}
 import riichinexus.microservices.club.tables.club.ClubTable
 import riichinexus.microservices.opsanalytics.tables.advancedstatsboard.AdvancedStatsBoardTable

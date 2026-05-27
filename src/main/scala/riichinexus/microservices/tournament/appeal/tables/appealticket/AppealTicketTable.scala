@@ -7,6 +7,8 @@ import scala.util.Using
 
 import riichinexus.application.ports.OptimisticConcurrencyException
 import riichinexus.domain.model.*
+import riichinexus.microservices.tournament.appeal.domain.model.*
+import riichinexus.microservices.tournament.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.{read, write}
 

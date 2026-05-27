@@ -1,6 +1,6 @@
 package riichinexus.microservices.auth.objects
 
-import riichinexus.domain.model.GuestAccessSession
+import riichinexus.microservices.auth.domain.model.GuestAccessSession
 import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.*
 

@@ -5,9 +5,9 @@ import java.util.NoSuchElementException
 
 import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.tournament.domain.model.*
 import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.player.objects.*
-import riichinexus.domain.service.PlannedTable
 import riichinexus.microservices.player.tables.player.PlayerTable
 import riichinexus.microservices.tournament.objects.SeatWind
 
@@ -37,7 +37,7 @@ object TournamentStageTableScheduler:
         stage.advancementRule.ruleType == AdvancementRuleType.KnockoutElimination
 
     if isKnockoutStage then
-      module.knockoutStageCoordinator.materializeUnlockedTables(connection, tournamentId, stageId)
+      KnockoutStageCoordinator.materializeUnlockedTables(connection, module.transactionManager, tournamentId, stageId)
       riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.findByTournamentAndStage(connection, tournamentId, stageId).sortBy(table =>
         (table.stageRoundNumber, table.tableNo, table.id.value)
       )
@@ -132,10 +132,10 @@ object TournamentStageTableScheduler:
       .findByIds(connection, (stage.lineupSubmissions.flatMap(_.seats.map(_.playerId)) ++ fallbackPlayerIds).distinct)
       .map(player => player.id -> player)
       .toMap
-    val stagePlayerIds = StageLineupSupport.resolveEligiblePlayers(stage, playersById.get)
+    val stagePlayerIds = StageLineupResolver.resolveEligiblePlayers(stage, playersById.get)
 
     val targetPlayerIds =
-      StageLineupSupport.resolveTargetPlayerIds(tournament, stagePlayerIds, fallbackPlayerIds)
+      StageLineupResolver.resolveTargetPlayerIds(tournament, stagePlayerIds, fallbackPlayerIds)
 
     targetPlayerIds.flatMap { playerId =>
       playersById.get(playerId).filter(_.status == PlayerStatus.Active)
@@ -151,7 +151,7 @@ object TournamentStageTableScheduler:
   ): Tournament =
     if stage.pendingTablePlans.nonEmpty then tournament
     else
-      val effectiveRoundLimit = StageLineupSupport.effectiveRoundLimit(stage)
+      val effectiveRoundLimit = StageLineupResolver.effectiveRoundLimit(stage)
       val tablesPerRound = participants.size / 4
       val currentRoundTables = existingTables.filter(_.stageRoundNumber == stage.currentRound)
       val initialRound = existingTables.isEmpty && stage.currentRound == 1
@@ -213,9 +213,9 @@ object TournamentStageTableScheduler:
         buildRoundRobinTables(participants, stage, roundNumber)
       case StageFormat.Custom =>
         val selectedPlayers = selectCustomStageParticipants(module, tournament, stage, participants, history, roundNumber)
-        module.seatingPolicy.assignTables(selectedPlayers, stage, history, clubRelations)
+        SeatingPolicy.planTables(selectedPlayers, stage, history, clubRelations)
       case _ =>
-        module.seatingPolicy.assignTables(participants, stage, history, clubRelations)
+        SeatingPolicy.planTables(participants, stage, history, clubRelations)
 
   private def buildClubRelationIndex(
       clubs: Vector[Club]
@@ -250,7 +250,7 @@ object TournamentStageTableScheduler:
     val targetParticipants = maxTables * 4
     val rankingOrder =
       if history.nonEmpty then
-        val ranking = module.tournamentRuleEngine.buildStageRanking(
+        val ranking = TournamentRuleEngine.buildStageRanking(
           tournament,
           stage,
           participants.map(_.id),
@@ -317,7 +317,7 @@ object TournamentStageTableScheduler:
     }
 
   private def representedClubMap(stage: TournamentStage): Map[PlayerId, ClubId] =
-    val pairings = StageLineupSupport.submittedPlayersWithClub(stage)
+    val pairings = StageLineupResolver.submittedPlayersWithClub(stage)
     val duplicatedAssignments = pairings
       .groupBy(_._1)
       .collect {

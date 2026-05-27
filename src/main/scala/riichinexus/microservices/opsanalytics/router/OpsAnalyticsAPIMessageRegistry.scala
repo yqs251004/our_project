@@ -17,6 +17,5 @@ object OpsAnalyticsAPIMessageRegistry:
       RegisteredAPIMessage.api[OpsAnalyticsListAdvancedStatsTasksAPIMessage, PagedResponse[AdvancedStatsRecomputeTask]],
       RegisteredAPIMessage.api[OpsAnalyticsAdvancedStatsSummaryAPIMessage, AdvancedStatsTaskQueueSummary],
       RegisteredAPIMessage.accepted[OpsAnalyticsRecomputeAdvancedStatsAPIMessage, Vector[AdvancedStatsRecomputeTask]],
-      RegisteredAPIMessage.api[OpsAnalyticsProcessAdvancedStatsAPIMessage, Vector[AdvancedStatsRecomputeTask]],
-      RegisteredAPIMessage.api[OpsAnalyticsPerformanceSummaryAPIMessage, PerformanceDiagnosticsSnapshot]
+      RegisteredAPIMessage.api[OpsAnalyticsProcessAdvancedStatsAPIMessage, Vector[AdvancedStatsRecomputeTask]]
     )

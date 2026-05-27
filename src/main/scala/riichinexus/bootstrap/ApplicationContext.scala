@@ -1,7 +1,8 @@
 package riichinexus.bootstrap
 
-import riichinexus.domain.service.AuthorizationService
+import riichinexus.microservices.auth.domain.AuthorizationPolicy
 import riichinexus.infrastructure.postgres.{DatabaseConfig, JdbcConnectionFactory}
+import riichinexus.system.instrumentation.PerformanceDiagnosticsService
 
 final class ApplicationContext private[bootstrap] (
     val connectionFactory: JdbcConnectionFactory,
@@ -14,7 +15,8 @@ final class ApplicationContext private[bootstrap] (
     val platformAdminModule: PlatformAdminModuleContext,
     val tournamentAppealModule: TournamentAppealModuleContext,
     private[bootstrap] val repositories: ApplicationRepositoryContext,
-    val authorizationService: AuthorizationService
+    val authorizationService: AuthorizationPolicy,
+    val performanceDiagnosticsService: PerformanceDiagnosticsService
 )
 
 object ApplicationContext:

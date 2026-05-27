@@ -1,7 +1,7 @@
 package riichinexus.api.runtime
 
 import riichinexus.bootstrap.*
-import riichinexus.domain.service.AuthorizationService
+import riichinexus.microservices.auth.domain.AuthorizationPolicy
 import riichinexus.infrastructure.postgres.JdbcConnectionFactory
 
 final case class ApiExecutionContext(
@@ -14,6 +14,6 @@ final case class ApiExecutionContext(
     tournamentModule: TournamentModuleContext,
     platformAdminModule: PlatformAdminModuleContext,
     tournamentAppealModule: TournamentAppealModuleContext,
-    authorizationService: AuthorizationService,
+    authorizationService: AuthorizationPolicy,
     storageLabel: String
 )

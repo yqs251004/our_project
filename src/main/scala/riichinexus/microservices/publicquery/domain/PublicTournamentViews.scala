@@ -4,6 +4,8 @@ import java.sql.Connection
 
 import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.tournament.domain.TournamentStageQueries
+import riichinexus.microservices.tournament.domain.model.*
 import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.club.tables.club.ClubTable
 import riichinexus.microservices.publicquery.objects.apiTypes.{PublicTournamentDetailView, PublicTournamentStageView, PublicTournamentSummaryView}
@@ -86,7 +88,7 @@ object PublicTournamentViews:
   ): PublicTournamentStageView =
     val bracket =
       if stage.format == StageFormat.Knockout || stage.format == StageFormat.Finals then
-        Some(KnockoutBracketSnapshotResponse.fromDomain(module.stageQueries.stageKnockoutBracket(connection, tournament.id, stage.id)))
+        Some(KnockoutBracketSnapshotResponse.fromDomain(TournamentStageQueries.stageKnockoutBracket(connection, tournament.id, stage.id)))
       else None
 
     PublicTournamentStageView(
@@ -101,7 +103,7 @@ object PublicTournamentViews:
       tableCount = tables.size,
       archivedTableCount = tables.count(_.status == TableStatus.Archived),
       pendingTablePlanCount = stage.pendingTablePlans.size,
-      standings = Some(StageRankingSnapshotResponse.fromDomain(module.stageQueries.stageStandings(connection, tournament.id, stage.id))),
+      standings = Some(StageRankingSnapshotResponse.fromDomain(TournamentStageQueries.stageStandings(connection, tournament.id, stage.id))),
       bracket = bracket,
       advancementRule = AdvancementRuleView.fromDomain(stage.advancementRule),
       swissRule = stage.swissRule.map(SwissRuleConfigView.fromDomain),

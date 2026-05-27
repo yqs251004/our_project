@@ -7,7 +7,7 @@ import org.http4s.Request
 import org.typelevel.ci.CIString
 import upickle.default.*
 
-trait HttpRequestSupport:
+object HttpRequestSupport:
   final case class PageQuery(limit: Int, offset: Int)
 
   def queryParam(request: Request[IO], key: String): Option[String] =

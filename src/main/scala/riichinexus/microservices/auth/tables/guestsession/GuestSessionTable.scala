@@ -7,7 +7,8 @@ import scala.annotation.tailrec
 import scala.util.Using
 
 import riichinexus.application.ports.OptimisticConcurrencyException
-import riichinexus.domain.model.{GuestAccessSession, GuestSessionId}
+import riichinexus.domain.model.GuestSessionId
+import riichinexus.microservices.auth.domain.model.GuestAccessSession
 import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.{read, write}
 

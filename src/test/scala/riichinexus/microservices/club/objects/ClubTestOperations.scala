@@ -5,14 +5,14 @@ import java.util.NoSuchElementException
 
 import riichinexus.application.ports.*
 import riichinexus.domain.model.*
-import riichinexus.domain.service.*
+import riichinexus.microservices.auth.domain.*
 
 final class ClubTestOperations(
     clubRepository: ClubRepository,
     playerRepository: PlayerRepository,
     auditEventRepository: AuditEventRepository,
     transactionManager: TransactionManager = NoOpTransactionManager,
-    authorizationService: AuthorizationService = NoOpAuthorizationService
+    authorizationService: AuthorizationPolicy = AuthorizationPolicy.permitAll
 ):
   def adjustTreasury(
       clubId: ClubId,
@@ -364,7 +364,7 @@ final class ClubTestOperations(
       )
 
   private def requireClubCapability(
-      authorizationService: AuthorizationService,
+      authorizationService: AuthorizationPolicy,
       actor: AccessPrincipal,
       club: Club,
       permission: Permission,

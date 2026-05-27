@@ -2,7 +2,7 @@ package riichinexus.microservices.publicquery.api
 
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
-import riichinexus.domain.model.TournamentStatus
+import riichinexus.microservices.tournament.domain.model.TournamentStatus
 import riichinexus.microservices.publicquery.objects.apiTypes.PublicTournamentSummaryView
 import riichinexus.microservices.publicquery.domain.PublicDirectoryQueries
 import riichinexus.microservices.publicquery.domain.PublicTournamentViews

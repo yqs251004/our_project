@@ -1,6 +1,8 @@
 package riichinexus.microservices.tournament.objects.apiTypes
 
-import riichinexus.domain.model.FinalStanding
+import upickle.default.*
+
+import riichinexus.microservices.tournament.domain.model.FinalStanding
 
 final case class TournamentPaifuFinalStandingView(
     playerId: String,
@@ -12,6 +14,8 @@ final case class TournamentPaifuFinalStandingView(
 ) derives CanEqual
 
 object TournamentPaifuFinalStandingView:
+  given ReadWriter[TournamentPaifuFinalStandingView] = macroRW
+
   def fromDomain(standing: FinalStanding): TournamentPaifuFinalStandingView =
     TournamentPaifuFinalStandingView(
       playerId = standing.playerId.value,

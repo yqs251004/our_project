@@ -8,10 +8,13 @@ import riichinexus.application.changes.{DomainChange, DomainChangeInterpreter}
 import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.event.*
 import riichinexus.domain.model.*
+import riichinexus.microservices.auth.domain.model.*
+import riichinexus.microservices.tournament.domain.KnockoutStageCoordinator
+import riichinexus.microservices.tournament.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.tournament.objects.apiTypes.*
 import riichinexus.microservices.tournament.objects.apiTypes.*
-import riichinexus.microservices.tournament.objects.apiTypes.ManagementRequests.given
+import riichinexus.microservices.tournament.objects.apiTypes.AssignTournamentAdminRequest.given
 import upickle.default.*
 
 final case class TournamentTableUploadPaifuAPIMessage(tableId: String, request: UploadPaifuRequest) extends APIMessage[TournamentTableView] derives ReadWriter:
@@ -113,8 +116,9 @@ final case class TournamentTableUploadPaifuAPIMessage(tableId: String, request: 
       paifu: Paifu
   ): Unit =
     if table.bracketMatchId.nonEmpty then
-      module.knockoutStageCoordinator.materializeUnlockedTables(
+      KnockoutStageCoordinator.materializeUnlockedTables(
         connection,
+        module.transactionManager,
         table.tournamentId,
         table.stageId,
         paifu.metadata.recordedAt

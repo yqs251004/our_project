@@ -1,6 +1,8 @@
 package riichinexus.microservices.tournament.objects.apiTypes
 
-import riichinexus.domain.model.AgariResult
+import upickle.default.*
+
+import riichinexus.microservices.tournament.domain.model.AgariResult
 
 final case class TournamentPaifuRoundResultView(
     outcome: String,
@@ -19,6 +21,8 @@ final case class TournamentPaifuRoundResultView(
 ) derives CanEqual
 
 object TournamentPaifuRoundResultView:
+  given ReadWriter[TournamentPaifuRoundResultView] = macroRW
+
   def fromDomain(result: AgariResult): TournamentPaifuRoundResultView =
     TournamentPaifuRoundResultView(
       outcome = result.outcome.toString,

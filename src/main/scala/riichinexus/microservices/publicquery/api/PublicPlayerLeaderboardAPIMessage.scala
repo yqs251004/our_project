@@ -2,7 +2,9 @@ package riichinexus.microservices.publicquery.api
 
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
-import riichinexus.domain.model.{AccessPrincipal, ClubId, Permission}
+import riichinexus.domain.model.ClubId
+import riichinexus.domain.model.Permission
+import riichinexus.microservices.auth.domain.model.AccessPrincipal
 import riichinexus.microservices.player.objects.PlayerStatus
 import riichinexus.microservices.publicquery.objects.apiTypes.PlayerLeaderboardEntry
 import riichinexus.microservices.publicquery.domain.PublicDirectoryQueries

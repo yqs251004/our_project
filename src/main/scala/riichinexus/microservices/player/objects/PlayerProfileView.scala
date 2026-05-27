@@ -1,6 +1,8 @@
 package riichinexus.microservices.player.objects
 
 import riichinexus.domain.model.*
+import riichinexus.microservices.auth.domain.model.*
+import riichinexus.microservices.tournament.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.player.objects.Player
 import riichinexus.microservices.tournament.objects.RankSnapshotView

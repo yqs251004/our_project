@@ -2,8 +2,9 @@ package riichinexus.microservices.club.domain
 
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.club.domain.model.*
-import riichinexus.domain.service.{AuthorizationFailure, AuthorizationService}
+import riichinexus.microservices.auth.domain.{AuthorizationFailure, AuthorizationPolicy}
 
 object ClubAuthorization:
   def ensureClubActive(club: Club): Unit =
@@ -25,7 +26,7 @@ object ClubAuthorization:
     requireClubAdmin(module.authorizationService, actor, club, permission)
 
   def requireClubAdmin(
-      authorizationService: AuthorizationService,
+      authorizationService: AuthorizationPolicy,
       actor: AccessPrincipal,
       club: Club,
       permission: Permission
@@ -48,7 +49,7 @@ object ClubAuthorization:
     requireClubCapability(module.authorizationService, actor, club, permission, delegatedPrivileges)
 
   def requireClubCapability(
-      authorizationService: AuthorizationService,
+      authorizationService: AuthorizationPolicy,
       actor: AccessPrincipal,
       club: Club,
       permission: Permission,
@@ -86,7 +87,7 @@ object ClubAuthorization:
     canManageClubTournamentParticipation(module.authorizationService, actor, club)
 
   def canManageClubTournamentParticipation(
-      authorizationService: AuthorizationService,
+      authorizationService: AuthorizationPolicy,
       actor: AccessPrincipal,
       club: Club
   ): Boolean =

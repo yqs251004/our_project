@@ -1,6 +1,7 @@
 package riichinexus.microservices.tournament.objects.apiTypes
 
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.tournament.domain.model.Table
 import upickle.default.*
 
 final case class TournamentTableView(
@@ -23,7 +24,7 @@ final case class TournamentTableView(
 ) derives CanEqual
 
 object TournamentTableView:
-  def fromDomain(table: riichinexus.domain.model.Table): TournamentTableView =
+  def fromDomain(table: Table): TournamentTableView =
     TournamentTableView(
       tableId = table.id.value,
       tableNo = table.tableNo,
@@ -44,4 +45,3 @@ object TournamentTableView:
     )
 
   given ReadWriter[TournamentTableView] = macroRW
-

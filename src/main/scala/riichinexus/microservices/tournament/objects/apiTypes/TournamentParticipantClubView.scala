@@ -1,5 +1,7 @@
 package riichinexus.microservices.tournament.objects.apiTypes
 
+import upickle.default.*
+
 import riichinexus.domain.model.ClubId
 
 final case class TournamentParticipantClubView(
@@ -8,5 +10,7 @@ final case class TournamentParticipantClubView(
 ) derives CanEqual
 
 object TournamentParticipantClubView:
+  given ReadWriter[TournamentParticipantClubView] = macroRW
+
   def apply(clubId: ClubId, memberCount: Int): TournamentParticipantClubView =
     TournamentParticipantClubView(clubId.value, memberCount)

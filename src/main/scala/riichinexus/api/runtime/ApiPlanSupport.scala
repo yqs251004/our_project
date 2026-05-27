@@ -8,7 +8,8 @@ import scala.util.Try
 
 import riichinexus.bootstrap.*
 import riichinexus.domain.model.*
-import riichinexus.domain.service.AuthorizationService
+import riichinexus.microservices.auth.domain.model.*
+import riichinexus.microservices.auth.domain.AuthorizationPolicy
 import riichinexus.microservices.auth.objects.*
 import riichinexus.microservices.auth.tables.guestsession.GuestSessionTable
 import riichinexus.microservices.player.objects.Player
@@ -25,7 +26,7 @@ final class ApiPlanSupport(
   val tournamentModule: TournamentModuleContext = executionContext.tournamentModule
   val platformAdminModule: PlatformAdminModuleContext = executionContext.platformAdminModule
   val tournamentAppealModule: TournamentAppealModuleContext = executionContext.tournamentAppealModule
-  val authorizationService: AuthorizationService = executionContext.authorizationService
+  val authorizationService: AuthorizationPolicy = executionContext.authorizationService
   val storageLabel: String = executionContext.storageLabel
 
   def principal(connection: Connection, playerId: PlayerId): AccessPrincipal =

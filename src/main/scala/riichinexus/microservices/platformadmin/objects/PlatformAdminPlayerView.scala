@@ -1,6 +1,7 @@
 package riichinexus.microservices.platformadmin.objects
 
 import riichinexus.domain.model.*
+import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.player.objects.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.*

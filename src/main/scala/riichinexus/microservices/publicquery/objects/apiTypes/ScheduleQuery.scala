@@ -1,6 +1,6 @@
 package riichinexus.microservices.publicquery.objects.apiTypes
 
-import riichinexus.domain.model.{StageStatus, TournamentStatus}
+import riichinexus.microservices.tournament.domain.model.{StageStatus, TournamentStatus}
 import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.*
 

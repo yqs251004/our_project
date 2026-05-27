@@ -1,6 +1,10 @@
 package riichinexus.microservices.tournament.objects.apiTypes
 
+import upickle.default.*
+
 import riichinexus.domain.model.*
+import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.tournament.domain.model.*
 import riichinexus.microservices.tournament.objects.{
   AdvancementRuleView,
   KnockoutRuleConfigView,
@@ -25,6 +29,8 @@ final case class TournamentStageSummaryView(
 ) derives CanEqual
 
 object TournamentStageSummaryView:
+  given ReadWriter[TournamentStageSummaryView] = macroRW
+
   def apply(
       stageId: TournamentStageId,
       name: String,

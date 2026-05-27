@@ -1,6 +1,6 @@
 package riichinexus.microservices.tournament.objects
 
-import riichinexus.domain.model.{StageStandingEntry as DomainStageStandingEntry}
+import riichinexus.microservices.tournament.domain.model.{StageStandingEntry as DomainStageStandingEntry}
 import upickle.default.*
 
 final case class StageStandingEntry(

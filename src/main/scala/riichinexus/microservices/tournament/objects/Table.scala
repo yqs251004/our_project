@@ -1,6 +1,6 @@
 package riichinexus.microservices.tournament.objects
 
-import riichinexus.domain.model.{Table as DomainTable}
+import riichinexus.microservices.tournament.domain.model.{Table as DomainTable}
 import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.*
 

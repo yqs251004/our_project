@@ -2,7 +2,8 @@ package riichinexus.microservices.publicquery.objects.apiTypes
 
 import java.time.Instant
 
-import riichinexus.domain.model.{TournamentId, TournamentStatus}
+import riichinexus.domain.model.TournamentId
+import riichinexus.microservices.tournament.domain.model.TournamentStatus
 import upickle.default.*
 
 final case class PublicTournamentSummaryView(

@@ -1,3 +1,0 @@
-package riichinexus.microservices.tournament.objects.apiTypes
-
-type TournamentSettlementResponse = TournamentSettlementView

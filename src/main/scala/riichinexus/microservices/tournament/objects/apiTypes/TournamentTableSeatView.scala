@@ -1,6 +1,7 @@
 package riichinexus.microservices.tournament.objects.apiTypes
 
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.tournament.domain.model.TableSeat
 import upickle.default.*
 
 final case class TournamentTableSeatView(
@@ -13,7 +14,7 @@ final case class TournamentTableSeatView(
 ) derives CanEqual
 
 object TournamentTableSeatView:
-  def fromDomain(seat: riichinexus.domain.model.TableSeat): TournamentTableSeatView =
+  def fromDomain(seat: TableSeat): TournamentTableSeatView =
     TournamentTableSeatView(
       seat = seat.seat.toString,
       playerId = seat.playerId.value,
@@ -24,4 +25,3 @@ object TournamentTableSeatView:
     )
 
   given ReadWriter[TournamentTableSeatView] = macroRW
-

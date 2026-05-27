@@ -1,6 +1,8 @@
 package riichinexus.microservices.tournament.objects.apiTypes
 
-import riichinexus.domain.model.Yaku
+import upickle.default.*
+
+import riichinexus.microservices.tournament.domain.model.Yaku
 
 final case class TournamentPaifuYakuView(
     name: String,
@@ -8,6 +10,8 @@ final case class TournamentPaifuYakuView(
 ) derives CanEqual
 
 object TournamentPaifuYakuView:
+  given ReadWriter[TournamentPaifuYakuView] = macroRW
+
   def fromDomain(yaku: Yaku): TournamentPaifuYakuView =
     TournamentPaifuYakuView(
       name = yaku.name,

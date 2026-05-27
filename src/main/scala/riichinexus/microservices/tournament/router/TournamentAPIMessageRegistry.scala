@@ -5,8 +5,7 @@ import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.tournament.api.*
 import riichinexus.microservices.tournament.objects.{KnockoutBracketSnapshot, StageAdvancementSnapshot, StageRankingSnapshot, Table}
 import riichinexus.microservices.tournament.objects.apiTypes.*
-import riichinexus.microservices.tournament.objects.apiTypes.ManagementRequests.given
-import riichinexus.microservices.tournament.objects.apiTypes.TournamentOperationResponses.given
+import riichinexus.microservices.tournament.objects.apiTypes.AssignTournamentAdminRequest.given
 import riichinexus.system.objects.PagedResponse
 
 object TournamentAPIMessageRegistry:

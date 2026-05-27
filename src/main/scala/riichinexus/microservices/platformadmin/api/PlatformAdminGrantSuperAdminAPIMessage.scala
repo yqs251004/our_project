@@ -9,8 +9,9 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.application.changes.{DomainChange, DomainChangeInterpreter}
 import riichinexus.bootstrap.PlatformAdminModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.player.objects.*
-import riichinexus.domain.service.AuthorizationFailure
+import riichinexus.microservices.auth.domain.AuthorizationFailure
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.player.tables.player.PlayerTable
 import riichinexus.microservices.platformadmin.objects.PlatformAdminPlayerView

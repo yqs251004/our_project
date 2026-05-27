@@ -5,7 +5,7 @@ import org.http4s.Request
 import org.http4s.headers
 import riichinexus.api.docs.OpenApiSupport
 
-trait HttpOpenApiSupport:
+object HttpOpenApiSupport:
 
   def baseUrl(request: Request[IO]): String =
     request.headers.get[headers.Host] match

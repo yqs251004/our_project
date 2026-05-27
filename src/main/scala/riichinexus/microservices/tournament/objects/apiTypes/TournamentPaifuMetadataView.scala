@@ -1,6 +1,8 @@
 package riichinexus.microservices.tournament.objects.apiTypes
 
-import riichinexus.domain.model.PaifuMetadata
+import upickle.default.*
+
+import riichinexus.microservices.tournament.domain.model.PaifuMetadata
 import riichinexus.microservices.tournament.objects.TableSeat
 
 final case class TournamentPaifuMetadataView(
@@ -14,6 +16,8 @@ final case class TournamentPaifuMetadataView(
 ) derives CanEqual
 
 object TournamentPaifuMetadataView:
+  given ReadWriter[TournamentPaifuMetadataView] = macroRW
+
   def fromDomain(metadata: PaifuMetadata): TournamentPaifuMetadataView =
     TournamentPaifuMetadataView(
       recordedAt = metadata.recordedAt.toString,

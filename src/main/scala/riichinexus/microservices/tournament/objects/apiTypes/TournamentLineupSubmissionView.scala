@@ -1,5 +1,7 @@
 package riichinexus.microservices.tournament.objects.apiTypes
 
+import upickle.default.*
+
 import java.time.Instant
 
 import riichinexus.domain.model.{ClubId, LineupSubmissionId, PlayerId}
@@ -15,6 +17,8 @@ final case class TournamentLineupSubmissionView(
 ) derives CanEqual
 
 object TournamentLineupSubmissionView:
+  given ReadWriter[TournamentLineupSubmissionView] = macroRW
+
   def apply(
       submissionId: LineupSubmissionId,
       clubId: ClubId,

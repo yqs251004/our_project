@@ -1,6 +1,8 @@
 package riichinexus.microservices.tournament.objects.apiTypes
 
-import riichinexus.domain.model.RoundSettlement
+import upickle.default.*
+
+import riichinexus.microservices.tournament.domain.model.RoundSettlement
 
 final case class TournamentPaifuRoundSettlementView(
     riichiSticksDelta: Int,
@@ -9,6 +11,8 @@ final case class TournamentPaifuRoundSettlementView(
 ) derives CanEqual
 
 object TournamentPaifuRoundSettlementView:
+  given ReadWriter[TournamentPaifuRoundSettlementView] = macroRW
+
   def fromDomain(settlement: RoundSettlement): TournamentPaifuRoundSettlementView =
     TournamentPaifuRoundSettlementView(
       riichiSticksDelta = settlement.riichiSticksDelta,

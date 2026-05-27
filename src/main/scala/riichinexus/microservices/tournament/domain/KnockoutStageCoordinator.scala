@@ -5,10 +5,10 @@ import java.time.Instant
 import java.util.NoSuchElementException
 
 import riichinexus.domain.model.*
+import riichinexus.microservices.tournament.domain.model.*
 import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.player.objects.*
-import riichinexus.domain.service.TournamentRuleEngine
-import riichinexus.application.ports.{NoOpTransactionManager, TransactionManager}
+import riichinexus.application.ports.TransactionManager
 import riichinexus.microservices.club.tables.club.ClubTable
 import riichinexus.microservices.player.tables.player.PlayerTable
 import riichinexus.microservices.tournament.objects.SeatWind
@@ -16,10 +16,7 @@ import riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTable
 import riichinexus.microservices.tournament.tables.tournament.TournamentTable
 import riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable
 
-final class KnockoutStageCoordinator(
-    tournamentRuleEngine: TournamentRuleEngine,
-    transactionManager: TransactionManager = NoOpTransactionManager
-):
+object KnockoutStageCoordinator:
   def buildProgression(
       connection: Connection,
       tournamentId: TournamentId,
@@ -49,20 +46,20 @@ final class KnockoutStageCoordinator(
       tables: Vector[Table],
       at: Instant
   ): KnockoutBracketSnapshot =
-    val ranking = tournamentRuleEngine.buildStageRanking(
+    val ranking = TournamentRuleEngine.buildStageRanking(
       tournament,
       stage,
       participants.map(_.id),
       records,
       at
     )
-    val advancement = tournamentRuleEngine.projectAdvancement(
+    val advancement = TournamentRuleEngine.projectAdvancement(
       tournament,
       stage,
       ranking,
       at
     )
-    tournamentRuleEngine.buildKnockoutProgression(
+    TournamentRuleEngine.buildKnockoutProgression(
       tournament = tournament,
       stage = stage,
       advancement = advancement,
@@ -74,6 +71,7 @@ final class KnockoutStageCoordinator(
 
   def materializeUnlockedTables(
       connection: Connection,
+      transactionManager: TransactionManager,
       tournamentId: TournamentId,
       stageId: TournamentStageId,
       at: Instant = Instant.now()
@@ -146,6 +144,7 @@ final class KnockoutStageCoordinator(
 
   def reconcileAfterMatchMutation(
       connection: Connection,
+      transactionManager: TransactionManager,
       tournamentId: TournamentId,
       stageId: TournamentStageId,
       mutatedMatchId: String,
@@ -153,7 +152,7 @@ final class KnockoutStageCoordinator(
   ): Vector[Table] =
     transactionManager.inTransaction {
       pruneDependentTables(connection, tournamentId, stageId, mutatedMatchId)
-      materializeUnlockedTables(connection, tournamentId, stageId, at)
+      materializeUnlockedTables(connection, transactionManager, tournamentId, stageId, at)
     }
 
   private def requireStage(
@@ -196,10 +195,10 @@ final class KnockoutStageCoordinator(
       .findByIds(connection, (stage.lineupSubmissions.flatMap(_.seats.map(_.playerId)) ++ fallbackPlayerIds).distinct)
       .map(player => player.id -> player)
       .toMap
-    val stagePlayerIds = StageLineupSupport.resolveEligiblePlayers(stage, playersById.get)
+    val stagePlayerIds = StageLineupResolver.resolveEligiblePlayers(stage, playersById.get)
 
     val targetPlayerIds =
-      StageLineupSupport.resolveTargetPlayerIds(tournament, stagePlayerIds, fallbackPlayerIds)
+      StageLineupResolver.resolveTargetPlayerIds(tournament, stagePlayerIds, fallbackPlayerIds)
 
     targetPlayerIds.flatMap { playerId =>
       playersById.get(playerId).filter(_.status == PlayerStatus.Active)
@@ -228,7 +227,7 @@ final class KnockoutStageCoordinator(
     }
 
   private def representativeClubMap(stage: TournamentStage): Map[PlayerId, ClubId] =
-    val pairings = StageLineupSupport.submittedPlayersWithClub(stage)
+    val pairings = StageLineupResolver.submittedPlayersWithClub(stage)
     val duplicatedAssignments = pairings
       .groupBy(_._1)
       .collect {

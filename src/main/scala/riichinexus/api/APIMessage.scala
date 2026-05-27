@@ -6,6 +6,7 @@ import cats.effect.IO
 import riichinexus.api.runtime.ApiPlanSupport
 import riichinexus.domain.service.AuthenticationFailure
 import riichinexus.domain.model.*
+import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.auth.objects.CurrentSessionView
 import upickle.default.*
 

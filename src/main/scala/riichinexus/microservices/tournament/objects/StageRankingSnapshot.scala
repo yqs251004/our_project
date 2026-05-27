@@ -1,6 +1,6 @@
 package riichinexus.microservices.tournament.objects
 
-import riichinexus.domain.model.{StageRankingSnapshot as DomainStageRankingSnapshot}
+import riichinexus.microservices.tournament.domain.model.{StageRankingSnapshot as DomainStageRankingSnapshot}
 import upickle.default.*
 
 final case class StageRankingSnapshot(

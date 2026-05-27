@@ -1,8 +1,11 @@
 package riichinexus.microservices.tournament.objects.apiTypes
 
+import upickle.default.*
+
 import java.time.Instant
 
-import riichinexus.domain.model.{ClubId, PlayerId, Tournament, TournamentId, TournamentStatus}
+import riichinexus.domain.model.{ClubId, PlayerId, TournamentId}
+import riichinexus.microservices.tournament.domain.model.{Tournament, TournamentStatus}
 
 final case class TournamentSummaryView(
     tournamentId: String,
@@ -19,6 +22,8 @@ final case class TournamentSummaryView(
 ) derives CanEqual
 
 object TournamentSummaryView:
+  given ReadWriter[TournamentSummaryView] = macroRW
+
   def apply(
       tournamentId: TournamentId,
       name: String,

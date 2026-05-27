@@ -9,13 +9,15 @@ import riichinexus.application.changes.{DomainChange, DomainChangeInterpreter}
 import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.event.*
 import riichinexus.domain.model.*
+import riichinexus.microservices.auth.domain.model.*
+import riichinexus.microservices.tournament.domain.model.*
 import riichinexus.microservices.club.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.player.tables.player.PlayerTable
-import riichinexus.microservices.tournament.domain.TournamentRuntimeDefaults
+import riichinexus.microservices.tournament.domain.{TournamentRuntimeDefaults, TournamentStageQueries}
 import riichinexus.microservices.tournament.objects.apiTypes.*
 import riichinexus.microservices.tournament.objects.apiTypes.*
-import riichinexus.microservices.tournament.objects.apiTypes.ManagementRequests.given
+import riichinexus.microservices.tournament.objects.apiTypes.AssignTournamentAdminRequest.given
 import upickle.default.*
 
 final case class TournamentSettleAPIMessage(tournamentId: String, request: SettleTournamentRequest) extends APIMessage[TournamentSettlementView] derives ReadWriter:
@@ -53,7 +55,7 @@ final case class TournamentSettleAPIMessage(tournamentId: String, request: Settl
       tournamentId = Some(command.tournamentId)
     )
 
-    val ranking = module.stageQueries.stageStandings(
+    val ranking = TournamentStageQueries.stageStandings(
       connection,
       command.tournamentId,
       command.request.stageId,
@@ -118,7 +120,7 @@ final case class TournamentSettleAPIMessage(tournamentId: String, request: Settl
       ranking: StageRankingSnapshot
   ): Vector[PlayerId] =
     val bracket =
-      module.stageQueries.stageKnockoutBracket(connection, command.tournamentId, command.request.stageId, command.settledAt)
+      TournamentStageQueries.stageKnockoutBracket(connection, command.tournamentId, command.request.stageId, command.settledAt)
     val championshipFinal = bracket.rounds
       .flatMap(_.matches)
       .find(matchNode => matchNode.lane == KnockoutLane.Championship && matchNode.nextMatchId.isEmpty)

@@ -5,6 +5,9 @@ import scala.annotation.targetName
 
 import riichinexus.domain.event.*
 import riichinexus.domain.model.*
+import riichinexus.microservices.auth.domain.model.*
+import riichinexus.microservices.tournament.domain.model.*
+import riichinexus.microservices.tournament.appeal.domain.model.*
 import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.player.objects.*
 import riichinexus.microservices.auth.objects.{AccountCredential, AuthenticatedSession, SessionPrincipalKind}

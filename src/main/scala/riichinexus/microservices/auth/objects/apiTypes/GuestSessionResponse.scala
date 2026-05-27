@@ -1,6 +1,6 @@
 package riichinexus.microservices.auth.objects.apiTypes
 
-import riichinexus.domain.model.GuestAccessSession
+import riichinexus.microservices.auth.domain.model.GuestAccessSession
 import upickle.default.*
 
 final case class GuestSessionResponse(

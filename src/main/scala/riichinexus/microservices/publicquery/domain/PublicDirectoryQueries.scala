@@ -3,13 +3,14 @@ package riichinexus.microservices.publicquery.domain
 import java.sql.Connection
 
 import riichinexus.domain.model.*
+import riichinexus.microservices.tournament.domain.model.*
 import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.player.objects.*
 import riichinexus.microservices.club.tables.club.ClubTable
 import riichinexus.microservices.player.domain.PlayerRankNormalizationService
 import riichinexus.microservices.player.tables.player.PlayerTable
 import riichinexus.microservices.publicquery.objects.apiTypes.*
-import riichinexus.microservices.tournament.domain.StageLineupSupport
+import riichinexus.microservices.tournament.domain.StageLineupResolver
 import riichinexus.microservices.tournament.objects.RankSnapshotView
 import riichinexus.microservices.tournament.tables.tournament.TournamentTable
 import riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable
@@ -34,7 +35,7 @@ object PublicDirectoryQueries:
         val activeTableCount = stageTables.count(table =>
           table.status != TableStatus.Archived
         )
-        val lineupPlayers = StageLineupSupport.resolveEligiblePlayers(stage, lineupPlayersById.get)
+        val lineupPlayers = StageLineupResolver.resolveEligiblePlayers(stage, lineupPlayersById.get)
         val fallbackClubMembers = tournament.participatingClubs.flatMap { clubId =>
           clubsById.get(clubId).toVector.flatMap(_.members)
         }
