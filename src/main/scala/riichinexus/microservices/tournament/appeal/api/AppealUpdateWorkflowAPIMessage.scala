@@ -9,7 +9,10 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.TournamentAppealModuleContext
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.tournament.appeal.domain.model.*
+import riichinexus.microservices.tournament.appeal.domain.model.{
+  AppealPriority as DomainAppealPriority,
+  AppealTicket
+}
 import riichinexus.microservices.tournament.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.tournament.appeal.objects.apiTypes.*
@@ -65,7 +68,7 @@ final case class AppealUpdateWorkflowAPIMessage(
       actor: AccessPrincipal,
       assigneeId: Option[PlayerId],
       clearAssignee: Boolean,
-      priority: Option[AppealPriority],
+      priority: Option[DomainAppealPriority],
       dueAt: Option[Instant],
       clearDueAt: Boolean,
       note: Option[String],

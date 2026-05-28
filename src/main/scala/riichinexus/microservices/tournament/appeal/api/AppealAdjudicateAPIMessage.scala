@@ -9,7 +9,11 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.TournamentAppealModuleContext
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.tournament.appeal.domain.model.*
+import riichinexus.microservices.tournament.appeal.domain.model.{
+  AppealDecisionType as DomainAppealDecisionType,
+  AppealTableResolution as DomainAppealTableResolution,
+  AppealTicket
+}
 import riichinexus.microservices.tournament.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.tournament.appeal.objects.apiTypes.*
@@ -58,10 +62,10 @@ final case class AppealAdjudicateAPIMessage(
 
   private final case class AdjudicateAppealCommand(
       ticketId: AppealTicketId,
-      decision: AppealDecisionType,
+      decision: DomainAppealDecisionType,
       verdict: String,
       actor: AccessPrincipal,
-      tableResolution: Option[AppealTableResolution],
+      tableResolution: Option[DomainAppealTableResolution],
       note: Option[String],
       adjudicatedAt: Instant
   )

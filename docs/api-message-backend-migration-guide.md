@@ -210,7 +210,7 @@ router 统一处理错误：
 
 1. `auth`
 2. `player`
-3. `publicquery`
+3. `club` / `player` / `tournament` public APIs
 4. `club`
 5. `opsanalytics`
 6. `platformadmin`

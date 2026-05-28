@@ -22,6 +22,11 @@ import riichinexus.microservices.opsanalytics.projections.{
   RatingProjectionSubscriber
 }
 import riichinexus.microservices.tournament.appeal.domain.AppealApplicationService
+import riichinexus.microservices.tournament.domain.{
+  TournamentPaifuArchiveService,
+  TournamentSettlementCoordinator,
+  TournamentStageCompletionCoordinator
+}
 import riichinexus.system.instrumentation.PerformanceDiagnosticsService
 
 object ApplicationAssembly:
@@ -91,11 +96,29 @@ object ApplicationAssembly:
       auditEventRepository = repositories.auditEventRepository,
       transactionManager = wiring.transactionManager
     )
+    val tournamentPaifuArchiveService = new TournamentPaifuArchiveService(
+      repositories.auditEventRepository,
+      eventBus,
+      wiring.transactionManager,
+      wiring.authorizationService
+    )
+    val tournamentSettlementCoordinator = new TournamentSettlementCoordinator(
+      repositories.auditEventRepository,
+      eventBus,
+      wiring.transactionManager,
+      wiring.authorizationService
+    )
+    val tournamentStageCompletionCoordinator = new TournamentStageCompletionCoordinator(
+      wiring.authorizationService
+    )
     val tournamentModule = TournamentModuleContext(
       auditEventRepository = repositories.auditEventRepository,
       eventBus = eventBus,
       transactionManager = wiring.transactionManager,
-      authorizationService = wiring.authorizationService
+      authorizationService = wiring.authorizationService,
+      paifuArchiveService = tournamentPaifuArchiveService,
+      settlementCoordinator = tournamentSettlementCoordinator,
+      stageCompletionCoordinator = tournamentStageCompletionCoordinator
     )
     val clubModule = ClubModuleContext(
       auditEventRepository = repositories.auditEventRepository,
@@ -111,7 +134,6 @@ object ApplicationAssembly:
         wiring.authorizationService
       )
     )
-    val publicQueryModule = PublicQueryModuleContext()
     val platformAdminModule = PlatformAdminModuleContext(
       auditEventRepository = repositories.auditEventRepository,
       eventBus = eventBus,
@@ -145,7 +167,6 @@ object ApplicationAssembly:
       authModule = authModule,
       playerModule = playerModule,
       clubModule = clubModule,
-      publicQueryModule = publicQueryModule,
       opsAnalyticsModule = opsAnalyticsModule,
       tournamentModule = tournamentModule,
       platformAdminModule = platformAdminModule,

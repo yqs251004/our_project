@@ -1,8 +1,7 @@
 package riichinexus.microservices.tournament.appeal.objects.apiTypes
 
 import riichinexus.domain.model.*
-import riichinexus.microservices.tournament.appeal.domain.model.*
-import riichinexus.microservices.tournament.domain.model.*
+import riichinexus.microservices.tournament.appeal.domain.model.AppealTicket
 import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.*
 
@@ -14,10 +13,10 @@ final case class AppealTicketView(
     openedBy: String,
     description: String,
     attachments: Vector[AppealAttachmentView],
-    priority: String,
+    priority: AppealPriority,
     assigneeId: Option[String],
     dueAt: Option[String],
-    status: String,
+    status: AppealStatus,
     logs: Vector[AppealDecisionLogView],
     reopenCount: Int,
     createdAt: String,
@@ -35,10 +34,10 @@ object AppealTicketView:
       openedBy = ticket.openedBy.value,
       description = ticket.description,
       attachments = ticket.attachments.map(AppealAttachmentView.fromDomain),
-      priority = ticket.priority.toString,
+      priority = AppealPriority.fromDomain(ticket.priority),
       assigneeId = ticket.assigneeId.map(_.value),
       dueAt = ticket.dueAt.map(_.toString),
-      status = ticket.status.toString,
+      status = AppealStatus.fromDomain(ticket.status),
       logs = ticket.logs.map(AppealDecisionLogView.fromDomain),
       reopenCount = ticket.reopenCount,
       createdAt = ticket.createdAt.toString,
@@ -47,4 +46,3 @@ object AppealTicketView:
     )
 
   given ReadWriter[AppealTicketView] = macroRW
-

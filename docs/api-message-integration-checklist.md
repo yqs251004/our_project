@@ -67,13 +67,13 @@ CreatePlayerAPI | CreatePlayerAPIMessage | /api/createplayerapi | userId,nicknam
 GetCurrentPlayerAPI | GetCurrentPlayerAPIMessage | /api/getcurrentplayerapi | operatorId | PlayerResponse | player | GET /players/me | done
 GetPlayerAPI | GetPlayerAPIMessage | /api/getplayerapi | playerId | PlayerResponse | player | GET /players/{playerId} | done
 ListPlayersAPI | ListPlayersAPIMessage | /api/listplayersapi | clubId,status,nickname,limit,offset | PagedResponse[PlayerResponse] | player | GET /players | done
-ListPublicSchedulesAPI | ListPublicSchedulesAPIMessage | /api/listpublicschedulesapi | tournamentStatus,stageStatus,limit,offset | PagedResponse[PublicScheduleView] | publicquery | GET /public/schedules | done
-ListPublicTournamentsAPI | ListPublicTournamentsAPIMessage | /api/listpublictournamentsapi | status,organizer,limit,offset | PagedResponse[PublicTournamentSummaryView] | publicquery | GET /public/tournaments | done
-GetPublicTournamentAPI | GetPublicTournamentAPIMessage | /api/getpublictournamentapi | tournamentId | PublicTournamentDetailView | publicquery | GET /public/tournaments/{tournamentId} | done
-ListPublicClubsAPI | ListPublicClubsAPIMessage | /api/listpublicclubsapi | name,relation,limit,offset | PagedResponse[PublicClubDirectoryEntry] | publicquery | GET /public/clubs | done
-GetPublicClubAPI | GetPublicClubAPIMessage | /api/getpublicclubapi | clubId | PublicClubDetailView | publicquery | GET /public/clubs/{clubId} | done
-PublicPlayerLeaderboardAPI | PublicPlayerLeaderboardAPIMessage | /api/publicplayerleaderboardapi | clubId,status,limit,offset | PagedResponse[PlayerLeaderboardEntry] | publicquery | GET /public/leaderboards/players | done
-PublicClubLeaderboardAPI | PublicClubLeaderboardAPIMessage | /api/publicclubleaderboardapi | name,limit,offset | PagedResponse[ClubLeaderboardEntry] | publicquery | GET /public/leaderboards/clubs | done
+ListPublicSchedulesAPI | ListPublicSchedulesAPIMessage | /api/listpublicschedulesapi | tournamentStatus,stageStatus,limit,offset | PagedResponse[PublicScheduleView] | tournament | GET /public/schedules | done
+ListPublicTournamentsAPI | ListPublicTournamentsAPIMessage | /api/listpublictournamentsapi | status,organizer,limit,offset | PagedResponse[PublicTournamentSummaryView] | tournament | GET /public/tournaments | done
+GetPublicTournamentAPI | GetPublicTournamentAPIMessage | /api/getpublictournamentapi | tournamentId | PublicTournamentDetailView | tournament | GET /public/tournaments/{tournamentId} | done
+ListPublicClubsAPI | ListPublicClubsAPIMessage | /api/listpublicclubsapi | name,relation,limit,offset | PagedResponse[PublicClubDirectoryEntry] | club | GET /public/clubs | done
+GetPublicClubAPI | GetPublicClubAPIMessage | /api/getpublicclubapi | clubId | PublicClubDetailView | club | GET /public/clubs/{clubId} | done
+PublicPlayerLeaderboardAPI | PublicPlayerLeaderboardAPIMessage | /api/publicplayerleaderboardapi | clubId,status,limit,offset | PagedResponse[PlayerLeaderboardEntry] | player | GET /public/leaderboards/players | done
+PublicClubLeaderboardAPI | PublicClubLeaderboardAPIMessage | /api/publicclubleaderboardapi | name,limit,offset | PagedResponse[ClubLeaderboardEntry] | club | GET /public/leaderboards/clubs | done
 ```
 
 ## 字段对齐规则

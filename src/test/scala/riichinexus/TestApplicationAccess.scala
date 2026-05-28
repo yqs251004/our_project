@@ -13,8 +13,8 @@ import riichinexus.microservices.club.tables.ClubTables
 import riichinexus.microservices.club.objects.ClubTestClient
 import riichinexus.microservices.dictionary.objects.DictionaryTestClient
 import riichinexus.microservices.player.domain.PlayerRegistrationOperations
-import riichinexus.microservices.publicquery.api.PublicPlayerLeaderboardAPIMessage
-import riichinexus.microservices.publicquery.objects.apiTypes.PlayerLeaderboardEntry
+import riichinexus.microservices.player.api.PublicPlayerLeaderboardAPIMessage
+import riichinexus.microservices.player.objects.apiTypes.PlayerLeaderboardEntry
 import riichinexus.microservices.tournament.appeal.domain.AppealApplicationService
 import riichinexus.microservices.tournament.domain.TournamentStageQueryService
 import riichinexus.microservices.tournament.objects.TournamentAPIMessageTestClient
@@ -71,7 +71,6 @@ trait TestApplicationAccess:
           playerModule = app.playerModule,
           clubModule = app.clubModule,
           dictionaryModule = app.dictionaryModule,
-          publicQueryModule = app.publicQueryModule,
           opsAnalyticsModule = app.opsAnalyticsModule,
           tournamentModule = app.tournamentModule,
           platformAdminModule = app.platformAdminModule,

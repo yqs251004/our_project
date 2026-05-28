@@ -10,7 +10,13 @@ import riichinexus.bootstrap.*
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.auth.domain.AuthorizationPolicy
-import riichinexus.microservices.auth.objects.*
+import riichinexus.microservices.auth.objects.{
+  CurrentSessionGuestSessionView,
+  CurrentSessionPlayerView,
+  CurrentSessionRoleFlags,
+  CurrentSessionView,
+  SessionPrincipalKind
+}
 import riichinexus.microservices.auth.tables.guestsession.GuestSessionTable
 import riichinexus.microservices.player.objects.Player
 import riichinexus.microservices.player.tables.player.PlayerTable
@@ -21,7 +27,6 @@ final class ApiPlanSupport(
   val authModule: AuthModuleContext = executionContext.authModule
   val playerModule: PlayerModuleContext = executionContext.playerModule
   val clubModule: ClubModuleContext = executionContext.clubModule
-  val publicQueryModule: PublicQueryModuleContext = executionContext.publicQueryModule
   val opsAnalyticsModule: OpsAnalyticsModuleContext = executionContext.opsAnalyticsModule
   val tournamentModule: TournamentModuleContext = executionContext.tournamentModule
   val platformAdminModule: PlatformAdminModuleContext = executionContext.platformAdminModule

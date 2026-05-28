@@ -5,7 +5,6 @@ import riichinexus.microservices.club.router.ClubAPIMessageRegistry
 import riichinexus.microservices.opsanalytics.router.OpsAnalyticsAPIMessageRegistry
 import riichinexus.microservices.player.router.PlayerAPIMessageRegistry
 import riichinexus.microservices.platformadmin.router.PlatformAdminAPIMessageRegistry
-import riichinexus.microservices.publicquery.router.PublicQueryAPIMessageRegistry
 import riichinexus.microservices.tournament.router.TournamentAPIMessageRegistry
 import riichinexus.microservices.tournament.appeal.router.TournamentAppealAPIMessageRegistry
 
@@ -14,7 +13,6 @@ object APIMessageRegistry:
   val apiMessages: Vector[RegisteredAPIMessage] =
     AuthAPIMessageRegistry.apiMessages ++
       PlayerAPIMessageRegistry.apiMessages ++
-      PublicQueryAPIMessageRegistry.apiMessages ++
       ClubAPIMessageRegistry.apiMessages ++
       PlatformAdminAPIMessageRegistry.apiMessages ++
       OpsAnalyticsAPIMessageRegistry.apiMessages ++

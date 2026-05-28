@@ -32,11 +32,11 @@ final case class TournamentStageDirectoryAPIMessage(tournamentId: String) extend
 
   private def buildTournamentStageDirectoryEntry(stage: TournamentStage): TournamentStageDirectoryEntry =
     TournamentStageDirectoryEntry(
-      stageId = stage.id.value,
+      stageId = stage.id,
       name = stage.name,
-      format = TournamentFormat.fromStageFormat(stage.format),
+      format = stage.format,
       order = stage.order,
-      status = stage.status.toString,
+      status = stage.status,
       currentRound = stage.currentRound,
       roundCount = stage.roundCount,
       schedulingPoolSize = stage.schedulingPoolSize,

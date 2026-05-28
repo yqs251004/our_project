@@ -4,6 +4,7 @@ import java.time.Instant
 import java.util.NoSuchElementException
 
 import riichinexus.domain.model.*
+import riichinexus.microservices.tournament.appeal.domain.model.AppealTableResolution
 import riichinexus.microservices.tournament.objects.SeatWind
 
 final case class Table(

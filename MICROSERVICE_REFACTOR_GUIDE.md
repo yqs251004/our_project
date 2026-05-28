@@ -18,7 +18,6 @@
 
 - `auth`
 - `player`
-- `publicquery`
 - `club`
 - `dictionary`
 - `platformadmin`

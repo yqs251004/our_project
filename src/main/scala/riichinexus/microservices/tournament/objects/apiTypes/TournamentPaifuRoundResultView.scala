@@ -5,7 +5,7 @@ import upickle.default.*
 import riichinexus.microservices.tournament.domain.model.AgariResult
 
 final case class TournamentPaifuRoundResultView(
-    outcome: String,
+    outcome: TournamentPaifuHandOutcome,
     winner: Option[String],
     target: Option[String],
     han: Option[Int],
@@ -25,7 +25,7 @@ object TournamentPaifuRoundResultView:
 
   def fromDomain(result: AgariResult): TournamentPaifuRoundResultView =
     TournamentPaifuRoundResultView(
-      outcome = result.outcome.toString,
+      outcome = TournamentPaifuHandOutcome.fromDomain(result.outcome),
       winner = result.winner.map(_.value),
       target = result.target.map(_.value),
       han = result.han,

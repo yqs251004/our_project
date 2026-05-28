@@ -3,8 +3,11 @@ package riichinexus.microservices.tournament.appeal.objects.apiTypes
 import java.time.Instant
 
 import riichinexus.domain.model.*
-import riichinexus.microservices.tournament.appeal.domain.model.*
-import riichinexus.microservices.tournament.domain.model.*
+import riichinexus.microservices.tournament.appeal.domain.model.{
+  AppealAttachment,
+  AppealAttachmentMediaKind as DomainAppealAttachmentMediaKind,
+  AppealAttachmentStorageKind as DomainAppealAttachmentStorageKind
+}
 import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.*
 
@@ -12,8 +15,8 @@ final case class AppealAttachmentRequest(
     name: String,
     uri: String,
     contentType: Option[String] = None,
-    storageKind: Option[String] = None,
-    mediaKind: Option[String] = None,
+    storageKind: Option[AppealAttachmentStorageKind] = None,
+    mediaKind: Option[AppealAttachmentMediaKind] = None,
     checksum: Option[String] = None,
     checksumAlgorithm: Option[String] = None,
     sizeBytes: Option[Long] = None,
@@ -25,8 +28,8 @@ final case class AppealAttachmentRequest(
       name = name,
       uri = uri,
       contentType = contentType,
-      storageKind = storageKind.map(AppealAttachmentStorageKind.valueOf).getOrElse(AppealAttachmentStorageKind.ExternalUrl),
-      mediaKind = mediaKind.map(AppealAttachmentMediaKind.valueOf).getOrElse(AppealAttachmentMediaKind.Other),
+      storageKind = storageKind.map(_.toDomain).getOrElse(DomainAppealAttachmentStorageKind.ExternalUrl),
+      mediaKind = mediaKind.map(_.toDomain).getOrElse(DomainAppealAttachmentMediaKind.Other),
       checksum = checksum,
       checksumAlgorithm = checksumAlgorithm,
       sizeBytes = sizeBytes,
@@ -36,4 +39,3 @@ final case class AppealAttachmentRequest(
 
 object AppealAttachmentRequest:
   given ReadWriter[AppealAttachmentRequest] = macroRW
-

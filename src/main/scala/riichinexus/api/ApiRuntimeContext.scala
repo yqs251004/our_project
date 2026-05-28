@@ -32,7 +32,6 @@ object ApiRuntimeContext:
         authModule = app.authModule,
         playerModule = app.playerModule,
         clubModule = app.clubModule,
-        publicQueryModule = app.publicQueryModule,
         opsAnalyticsModule = app.opsAnalyticsModule,
         tournamentModule = app.tournamentModule,
         platformAdminModule = app.platformAdminModule,

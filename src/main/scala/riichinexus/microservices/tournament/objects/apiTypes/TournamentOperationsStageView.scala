@@ -8,6 +8,7 @@ import riichinexus.microservices.tournament.domain.model.*
 import riichinexus.microservices.tournament.objects.{
   AdvancementRuleView,
   KnockoutRuleConfigView,
+  StageStatus as ApiStageStatus,
   SwissRuleConfigView,
   TournamentFormat
 }
@@ -17,7 +18,7 @@ final case class TournamentOperationsStageView(
     name: String,
     format: TournamentFormat,
     order: Int,
-    status: String,
+    status: ApiStageStatus,
     currentRound: Int,
     roundCount: Int,
     schedulingPoolSize: Int,
@@ -53,7 +54,7 @@ object TournamentOperationsStageView:
       name = name,
       format = TournamentFormat.fromStageFormat(format),
       order = order,
-      status = status.toString,
+      status = ApiStageStatus.fromDomain(status),
       currentRound = currentRound,
       roundCount = roundCount,
       schedulingPoolSize = schedulingPoolSize,

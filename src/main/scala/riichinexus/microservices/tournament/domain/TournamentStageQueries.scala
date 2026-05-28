@@ -128,7 +128,7 @@ object TournamentStageQueries:
       query: StageTableQuery
   ): Vector[Table] =
     TournamentGameTable.findByTournamentAndStage(connection, tournamentId, stageId)
-      .filter(table => query.status.forall(_ == table.status))
+      .filter(table => query.status.forall(_.toDomain == table.status))
       .filter(table => query.roundNumber.forall(_ == table.stageRoundNumber))
       .filter(table => query.playerId.forall(playerId => table.seats.exists(_.playerId == playerId)))
       .sortBy(table => (table.stageRoundNumber, table.tableNo, table.id.value))

@@ -5,7 +5,6 @@ import java.util.NoSuchElementException
 
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
-import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.tournament.domain.model.*
@@ -13,7 +12,6 @@ import riichinexus.microservices.player.objects.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.player.tables.player.PlayerTable
 import riichinexus.microservices.tournament.domain.TournamentRuntimeDefaults
-import riichinexus.microservices.tournament.objects.apiTypes.*
 import riichinexus.microservices.tournament.objects.apiTypes.*
 import riichinexus.microservices.tournament.objects.apiTypes.AssignTournamentAdminRequest.given
 import upickle.default.*
@@ -28,7 +26,7 @@ final case class TournamentCreateAPIMessage(
       module = context.support.tournamentModule
       tournament <- IO {
         module.transactionManager.inTransaction {
-          createTournament(context.connection, module, input)
+          createTournament(context.connection, input)
         }
       }
     yield TournamentSummaryView.fromDomain(tournament)
@@ -45,77 +43,90 @@ final case class TournamentCreateAPIMessage(
 
   private def createTournament(
       connection: java.sql.Connection,
-      module: TournamentModuleContext,
       input: CreateTournamentInput
   ): Tournament =
     validateRequest(input)
-    val normalizedStages = resolveNormalizedStages(module, input.stages)
-    validateAdmin(connection, input.admin)
-    val tournament = resolveTournament(connection, input, normalizedStages)
-    grantAdminRole(connection, tournament, input)
-    riichinexus.microservices.tournament.tables.tournament.TournamentTable.save(connection, input.admin.fold(tournament)(tournament.assignAdmin))
+    val normalizedStages = resolveNormalizedStages(input.stages)
+    val adminPlayer = resolveAdminPlayer(connection, input.admin)
+    ensureTournamentDoesNotExist(connection, input)
+    val baseTournament = buildTournament(input, normalizedStages)
+    val tournament = assignAdmin(baseTournament, input.admin)
+    grantAdminRole(connection, tournament, input, adminPlayer)
+    saveTournament(connection, tournament)
 
   private def validateRequest(input: CreateTournamentInput): Unit =
     require(input.name.trim.nonEmpty, "Tournament name cannot be empty")
     require(input.organizer.trim.nonEmpty, "Tournament organizer cannot be empty")
     require(input.startsAt.isBefore(input.endsAt), "Tournament start time must be earlier than end time")
 
-  private def resolveNormalizedStages(
-      module: TournamentModuleContext,
-      stages: Vector[TournamentStage]
-  ): Vector[TournamentStage] =
+  private def resolveNormalizedStages(stages: Vector[TournamentStage]): Vector[TournamentStage] =
     val normalizedStages = TournamentDefaults.initialStages(stages)
       .map(TournamentRuntimeDefaults.normalizeStage)
       .sortBy(_.order)
     requireUniqueStageConfiguration(normalizedStages)
     normalizedStages
 
-  private def validateAdmin(connection: java.sql.Connection, admin: Option[PlayerId]): Unit =
-    admin.foreach { targetAdminId =>
-      val adminPlayer = PlayerTable
+  private def resolveAdminPlayer(
+      connection: java.sql.Connection,
+      admin: Option[PlayerId]
+  ): Option[Player] =
+    admin.map { targetAdminId =>
+      val player = PlayerTable
         .findById(connection, targetAdminId)
         .getOrElse(throw NoSuchElementException(s"Player ${targetAdminId.value} was not found"))
-      requireActivePlayer(adminPlayer, s"Player ${targetAdminId.value} cannot administer tournaments")
+      requireActivePlayer(player, s"Player ${targetAdminId.value} cannot administer tournaments")
+      player
     }
 
-  private def resolveTournament(
+  private def ensureTournamentDoesNotExist(
       connection: java.sql.Connection,
+      input: CreateTournamentInput
+  ): Unit =
+    riichinexus.microservices.tournament.tables.tournament.TournamentTable
+      .findByNameAndOrganizer(connection, input.name, input.organizer)
+      .foreach { existing =>
+        throw IllegalArgumentException(
+          s"Tournament ${existing.id.value} already exists for ${input.name} by ${input.organizer}"
+        )
+      }
+
+  private def buildTournament(
       input: CreateTournamentInput,
       normalizedStages: Vector[TournamentStage]
   ): Tournament =
-    riichinexus.microservices.tournament.tables.tournament.TournamentTable.findByNameAndOrganizer(connection, input.name, input.organizer) match
-      case Some(existing) =>
-        existing.copy(
-          startsAt = input.startsAt,
-          endsAt = input.endsAt,
-          stages = normalizedStages
-        )
-      case None =>
-        Tournament(
-          id = IdGenerator.tournamentId(),
-          name = input.name,
-          organizer = input.organizer,
-          startsAt = input.startsAt,
-          endsAt = input.endsAt,
-          admins = input.admin.toVector,
-          stages = normalizedStages
-        )
+    Tournament(
+      id = IdGenerator.tournamentId(),
+      name = input.name,
+      organizer = input.organizer,
+      startsAt = input.startsAt,
+      endsAt = input.endsAt,
+      admins = Vector.empty,
+      stages = normalizedStages
+    )
+
+  private def assignAdmin(tournament: Tournament, admin: Option[PlayerId]): Tournament =
+    admin.fold(tournament)(tournament.assignAdmin)
 
   private def grantAdminRole(
       connection: java.sql.Connection,
       tournament: Tournament,
-      input: CreateTournamentInput
+      input: CreateTournamentInput,
+      adminPlayer: Option[Player]
   ): Unit =
-    input.admin.foreach { targetAdminId =>
-      PlayerTable.findById(connection, targetAdminId).foreach { adminPlayer =>
-        PlayerTable.save(
-          connection,
-          adminPlayer.grantRole(
-            RoleGrant.tournamentAdmin(tournament.id, input.startsAt, AccessPrincipal.system.playerId)
-          )
+    adminPlayer.foreach { player =>
+      PlayerTable.save(
+        connection,
+        player.grantRole(
+          RoleGrant.tournamentAdmin(tournament.id, input.startsAt, AccessPrincipal.system.playerId)
         )
-      }
+      )
     }
+
+  private def saveTournament(
+      connection: java.sql.Connection,
+      tournament: Tournament
+  ): Tournament =
+    riichinexus.microservices.tournament.tables.tournament.TournamentTable.save(connection, tournament)
 
   private def requireUniqueStageConfiguration(stages: Vector[TournamentStage]): Unit =
     if stages.map(_.id).distinct.size != stages.size then

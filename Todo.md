@@ -154,7 +154,7 @@ Recently completed features such as guest sessions, club applications, club hono
   - Current state: public schedule view is shallow and only exposes tournament window plus current table count; club directory is also summary-only.
   - Evidence:
     - `src/main/scala/riichinexus/domain/model/Dashboard.scala` `PublicScheduleView` / `PublicClubDirectoryEntry`
-    - `src/main/scala/riichinexus/application/service/Services.scala` `PublicQueryService`
+    - `src/main/scala/riichinexus/microservices/club/api/GetPublicClubAPIMessage.scala` and `src/main/scala/riichinexus/microservices/tournament/api/ListPublicSchedulesAPIMessage.scala`
   - Suggested completion:
     - Include round number, stage-specific timing, active-table details, whitelist/registration status, and public-safe club metadata
 

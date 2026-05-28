@@ -1,7 +1,7 @@
 package riichinexus.microservices.tournament.objects.apiTypes
 
 import riichinexus.domain.model.PlayerId
-import riichinexus.microservices.tournament.domain.model.TournamentStatus
+import riichinexus.microservices.tournament.objects.TournamentStatus
 import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.*
 

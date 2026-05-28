@@ -2,6 +2,11 @@ package riichinexus.bootstrap
 
 import riichinexus.application.ports.*
 import riichinexus.microservices.tournament.appeal.domain.AppealApplicationService
+import riichinexus.microservices.tournament.domain.{
+  TournamentPaifuArchiveService,
+  TournamentSettlementCoordinator,
+  TournamentStageCompletionCoordinator
+}
 import riichinexus.microservices.auth.domain.*
 
 final case class AuthModuleContext(
@@ -18,13 +23,14 @@ final case class ClubModuleContext(
     tournamentModule: TournamentModuleContext
 )
 
-final case class PublicQueryModuleContext()
-
 final case class TournamentModuleContext(
     auditEventRepository: AuditEventRepository,
     eventBus: DomainEventBus,
     transactionManager: TransactionManager,
-    authorizationService: AuthorizationPolicy
+    authorizationService: AuthorizationPolicy,
+    paifuArchiveService: TournamentPaifuArchiveService,
+    settlementCoordinator: TournamentSettlementCoordinator,
+    stageCompletionCoordinator: TournamentStageCompletionCoordinator
 )
 
 final case class OpsAnalyticsModuleContext(

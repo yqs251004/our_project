@@ -44,8 +44,8 @@ final case class AppealListAPIMessage(
   private def listAppeals(context: ApiPlanContext, resolved: ResolvedAppealListQuery): Vector[AppealTicket] =
     val asOf = resolved.query.asOf.getOrElse(java.time.Instant.now())
     AppealTicketTable.findAll(context.connection)
-      .filter(ticket => resolved.query.status.forall(_ == ticket.status))
-      .filter(ticket => resolved.query.priority.forall(_ == ticket.priority))
+      .filter(ticket => resolved.query.status.forall(_.toDomain == ticket.status))
+      .filter(ticket => resolved.query.priority.forall(_.toDomain == ticket.priority))
       .filter(ticket => resolved.query.tournamentId.forall(_ == ticket.tournamentId))
       .filter(ticket => resolved.query.stageId.forall(_ == ticket.stageId))
       .filter(ticket => resolved.query.tableId.forall(_ == ticket.tableId))

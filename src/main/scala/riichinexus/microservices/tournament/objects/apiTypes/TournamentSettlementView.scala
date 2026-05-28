@@ -1,7 +1,7 @@
 package riichinexus.microservices.tournament.objects.apiTypes
 
 import riichinexus.domain.model.*
-import riichinexus.microservices.tournament.domain.model.*
+import riichinexus.microservices.tournament.domain.model.TournamentSettlementSnapshot
 import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.*
 
@@ -10,7 +10,7 @@ final case class TournamentSettlementView(
     tournamentId: String,
     stageId: String,
     revision: Int,
-    status: String,
+    status: TournamentSettlementStatus,
     generatedAt: String,
     finalizedAt: Option[String],
     supersededAt: Option[String],
@@ -32,7 +32,7 @@ object TournamentSettlementView:
       tournamentId = snapshot.tournamentId.value,
       stageId = snapshot.stageId.value,
       revision = snapshot.revision,
-      status = snapshot.status.toString,
+      status = TournamentSettlementStatus.fromDomain(snapshot.status),
       generatedAt = snapshot.generatedAt.toString,
       finalizedAt = snapshot.finalizedAt.map(_.toString),
       supersededAt = snapshot.supersededAt.map(_.toString),
@@ -48,4 +48,3 @@ object TournamentSettlementView:
     )
 
   given ReadWriter[TournamentSettlementView] = macroRW
-

@@ -7,7 +7,7 @@ import riichinexus.microservices.tournament.domain.model.PaifuAction
 final case class TournamentPaifuActionView(
     sequenceNo: Int,
     actor: Option[String],
-    actionType: String,
+    actionType: TournamentPaifuActionType,
     tile: Option[String],
     shantenAfterAction: Option[Int],
     handTilesAfterAction: Option[Vector[String]],
@@ -22,7 +22,7 @@ object TournamentPaifuActionView:
     TournamentPaifuActionView(
       sequenceNo = action.sequenceNo,
       actor = action.actor.map(_.value),
-      actionType = action.actionType.toString,
+      actionType = TournamentPaifuActionType.fromDomain(action.actionType),
       tile = action.tile,
       shantenAfterAction = action.shantenAfterAction,
       handTilesAfterAction = action.handTilesAfterAction,

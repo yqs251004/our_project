@@ -4,6 +4,7 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
+import riichinexus.microservices.auth.objects.{Permission as ApiPermission}
 import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.*
 
@@ -11,7 +12,7 @@ import scala.util.Try
 
 final case class AuthCheckPermissionAPIMessage(
     operatorId: String,
-    permission: Permission,
+    permission: ApiPermission,
     clubId: Option[String] = None,
     tournamentId: Option[String] = None,
     subjectPlayerId: Option[String] = None
@@ -27,7 +28,7 @@ final case class AuthCheckPermissionAPIMessage(
   private def resolveInput: ResolvedCheckPermissionInput =
     ResolvedCheckPermissionInput(
       operatorId = PlayerId(operatorId),
-      permission = permission,
+      permission = permission.toDomain,
       clubId = parseOptionalId(clubId)(ClubId(_)),
       tournamentId = parseOptionalId(tournamentId)(TournamentId(_)),
       subjectPlayerId = parseOptionalId(subjectPlayerId)(PlayerId(_))

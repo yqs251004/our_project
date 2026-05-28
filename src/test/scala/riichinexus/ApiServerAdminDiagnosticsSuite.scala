@@ -12,7 +12,8 @@ import riichinexus.bootstrap.ApplicationContext
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.player.api.ListPlayersAPIMessage
-import riichinexus.microservices.publicquery.api.{GetPublicClubAPIMessage, PublicPlayerLeaderboardAPIMessage}
+import riichinexus.microservices.club.api.GetPublicClubAPIMessage
+import riichinexus.microservices.player.api.PublicPlayerLeaderboardAPIMessage
 import riichinexus.microservices.club.objects.apiTypes.*
 import riichinexus.microservices.club.objects.apiTypes.*
 import riichinexus.microservices.club.objects.apiTypes.ClubTournamentResponses.given

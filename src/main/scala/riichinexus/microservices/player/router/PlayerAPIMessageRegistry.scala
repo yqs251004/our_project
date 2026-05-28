@@ -14,5 +14,6 @@ object PlayerAPIMessageRegistry:
       RegisteredAPIMessage.created[CreatePlayerAPIMessage, PlayerProfileView],
       RegisteredAPIMessage.api[GetCurrentPlayerAPIMessage, PlayerProfileView],
       RegisteredAPIMessage.api[GetPlayerAPIMessage, PlayerProfileView],
-      RegisteredAPIMessage.api[ListPlayersAPIMessage, PagedResponse[PlayerProfileView]]
+      RegisteredAPIMessage.api[ListPlayersAPIMessage, PagedResponse[PlayerProfileView]],
+      RegisteredAPIMessage.api[PublicPlayerLeaderboardAPIMessage, PagedResponse[PlayerLeaderboardEntry]]
     )

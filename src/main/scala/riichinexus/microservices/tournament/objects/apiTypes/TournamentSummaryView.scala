@@ -5,7 +5,8 @@ import upickle.default.*
 import java.time.Instant
 
 import riichinexus.domain.model.{ClubId, PlayerId, TournamentId}
-import riichinexus.microservices.tournament.domain.model.{Tournament, TournamentStatus}
+import riichinexus.microservices.tournament.domain.model.{Tournament, TournamentStatus as DomainTournamentStatus}
+import riichinexus.microservices.tournament.objects.TournamentStatus
 
 final case class TournamentSummaryView(
     tournamentId: String,
@@ -13,7 +14,7 @@ final case class TournamentSummaryView(
     organizer: String,
     startsAt: String,
     endsAt: String,
-    status: String,
+    status: TournamentStatus,
     participatingClubIds: Vector[String],
     participatingPlayerIds: Vector[String],
     adminIds: Vector[String],
@@ -30,7 +31,7 @@ object TournamentSummaryView:
       organizer: String,
       startsAt: Instant,
       endsAt: Instant,
-      status: TournamentStatus,
+      status: DomainTournamentStatus,
       participatingClubIds: Vector[ClubId],
       participatingPlayerIds: Vector[PlayerId],
       adminIds: Vector[PlayerId],
@@ -43,7 +44,7 @@ object TournamentSummaryView:
       organizer = organizer,
       startsAt = startsAt.toString,
       endsAt = endsAt.toString,
-      status = status.toString,
+      status = TournamentStatus.fromDomain(status),
       participatingClubIds = participatingClubIds.map(_.value),
       participatingPlayerIds = participatingPlayerIds.map(_.value),
       adminIds = adminIds.map(_.value),
@@ -58,7 +59,7 @@ object TournamentSummaryView:
       organizer = tournament.organizer,
       startsAt = tournament.startsAt.toString,
       endsAt = tournament.endsAt.toString,
-      status = tournament.status.toString,
+      status = TournamentStatus.fromDomain(tournament.status),
       participatingClubIds = tournament.participatingClubs.map(_.value),
       participatingPlayerIds = tournament.participatingPlayers.map(_.value),
       adminIds = tournament.admins.map(_.value),

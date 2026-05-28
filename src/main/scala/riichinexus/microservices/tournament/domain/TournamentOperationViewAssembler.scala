@@ -109,19 +109,19 @@ object TournamentOperationViewAssembler:
       playersById: Map[PlayerId, Player]
   ): TournamentOperationsStageView =
     TournamentOperationsStageView(
-      stageId = stage.id.value,
+      stageId = stage.id,
       name = stage.name,
-      format = TournamentFormat.fromStageFormat(stage.format),
+      format = stage.format,
       order = stage.order,
-      status = stage.status.toString,
+      status = stage.status,
       currentRound = stage.currentRound,
       roundCount = stage.roundCount,
       schedulingPoolSize = stage.schedulingPoolSize,
       pendingTablePlanCount = stage.pendingTablePlans.size,
       scheduledTableCount = stage.scheduledTableIds.size,
-      advancementRule = AdvancementRuleView.fromDomain(stage.advancementRule),
-      swissRule = stage.swissRule.map(SwissRuleConfigView.fromDomain),
-      knockoutRule = stage.knockoutRule.map(KnockoutRuleConfigView.fromDomain),
+      advancementRule = stage.advancementRule,
+      swissRule = stage.swissRule,
+      knockoutRule = stage.knockoutRule,
       lineupSubmissions = stage.lineupSubmissions
         .sortBy(_.submittedAt)
         .map(submission => lineupSubmissionView(submission, clubsById, playersById))

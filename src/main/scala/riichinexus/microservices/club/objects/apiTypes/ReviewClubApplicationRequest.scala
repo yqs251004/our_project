@@ -5,7 +5,7 @@ import upickle.default.*
 
 final case class ReviewClubApplicationRequest(
     operatorId: String,
-    decision: String,
+    decision: ClubApplicationReviewDecision,
     playerId: Option[String] = None,
     note: Option[String] = None
 ):
@@ -14,6 +14,9 @@ final case class ReviewClubApplicationRequest(
 
   def player: Option[PlayerId] =
     playerId.map(PlayerId(_))
+
+  def decisionValue: String =
+    decision.value
 
 object ReviewClubApplicationRequest:
   given ReadWriter[ReviewClubApplicationRequest] = macroRW

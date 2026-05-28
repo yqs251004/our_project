@@ -9,7 +9,11 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.TournamentAppealModuleContext
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.tournament.appeal.domain.model.*
+import riichinexus.microservices.tournament.appeal.domain.model.{
+  AppealAttachment,
+  AppealPriority as DomainAppealPriority,
+  AppealTicket
+}
 import riichinexus.microservices.tournament.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.tournament.appeal.objects.apiTypes.*
@@ -63,7 +67,7 @@ final case class AppealFileAPIMessage(
       openedBy: PlayerId,
       description: String,
       attachments: Vector[AppealAttachment],
-      priority: AppealPriority,
+      priority: DomainAppealPriority,
       dueAt: Option[Instant],
       actor: AccessPrincipal,
       createdAt: Instant

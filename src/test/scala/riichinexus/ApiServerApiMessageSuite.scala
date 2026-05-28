@@ -15,7 +15,9 @@ import riichinexus.microservices.dictionary.api.*
 import riichinexus.microservices.tournament.appeal.api.*
 import riichinexus.microservices.player.api.*
 import riichinexus.microservices.platformadmin.api.*
-import riichinexus.microservices.publicquery.api.*
+import riichinexus.microservices.club.api.{GetPublicClubAPIMessage, ListPublicClubsAPIMessage, PublicClubLeaderboardAPIMessage}
+import riichinexus.microservices.player.api.PublicPlayerLeaderboardAPIMessage
+import riichinexus.microservices.tournament.api.{GetPublicTournamentAPIMessage, ListPublicSchedulesAPIMessage, ListPublicTournamentsAPIMessage}
 import riichinexus.microservices.auth.objects.apiTypes.*
 import riichinexus.microservices.club.objects.apiTypes.*
 import riichinexus.microservices.club.objects.apiTypes.ClubTournamentResponses.given
@@ -25,8 +27,10 @@ import riichinexus.microservices.tournament.appeal.objects.apiTypes.*
 import riichinexus.microservices.tournament.appeal.objects.apiTypes.TournamentAppealResponses.given
 import riichinexus.microservices.player.objects.apiTypes.*
 import riichinexus.microservices.platformadmin.objects.apiTypes.*
-import riichinexus.microservices.publicquery.objects.apiTypes.*
-import riichinexus.microservices.publicquery.objects.apiTypes.PublicQueryResponses.given
+import riichinexus.microservices.club.objects.apiTypes.*
+import riichinexus.microservices.player.objects.apiTypes.*
+import riichinexus.microservices.tournament.objects.apiTypes.*
+
 import riichinexus.system.objects.{ErrorResponse, PagedResponse}
 
 class ApiServerApiMessageSuite extends FunSuite with ApiServerSuiteSupport:
@@ -176,7 +180,7 @@ class ApiServerApiMessageSuite extends FunSuite with ApiServerSuiteSupport:
     }
   }
 
-  test("publicquery API classes expose public club directory and detail") {
+  test("public API classes expose public club directory and detail") {
     val app = ApplicationContext.inMemory()
     val now = Instant.parse("2026-03-15T08:30:00Z")
     val owner = playerService(app).registerPlayer("public-message-owner", "PublicMessageOwner", RankSnapshot(RankPlatform.Tenhou, "5-dan"), now, 1800)

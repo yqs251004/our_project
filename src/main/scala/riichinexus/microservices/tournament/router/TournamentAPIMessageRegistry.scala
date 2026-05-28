@@ -14,6 +14,9 @@ object TournamentAPIMessageRegistry:
     Vector(
       RegisteredAPIMessage.api[TournamentListAPIMessage, PagedResponse[TournamentSummaryView]],
       RegisteredAPIMessage.api[TournamentGetAPIMessage, TournamentDetailView],
+      RegisteredAPIMessage.api[ListPublicSchedulesAPIMessage, PagedResponse[PublicScheduleView]],
+      RegisteredAPIMessage.api[ListPublicTournamentsAPIMessage, PagedResponse[PublicTournamentSummaryView]],
+      RegisteredAPIMessage.api[GetPublicTournamentAPIMessage, PublicTournamentDetailView],
       RegisteredAPIMessage.api[TournamentStageDirectoryAPIMessage, Vector[TournamentStageDirectoryEntry]],
       RegisteredAPIMessage.api[TournamentWhitelistListAPIMessage, PagedResponse[TournamentWhitelistEntryView]],
       RegisteredAPIMessage.api[TournamentSettlementListAPIMessage, PagedResponse[TournamentSettlementView]],

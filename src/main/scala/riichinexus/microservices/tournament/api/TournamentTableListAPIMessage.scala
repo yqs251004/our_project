@@ -40,7 +40,7 @@ final case class TournamentTableListAPIMessage(
   ): Vector[Table] =
     TournamentGameTable
       .findAll(context.connection)
-      .filter(table => resolved.query.status.forall(_ == table.status))
+      .filter(table => resolved.query.status.forall(_.toDomain == table.status))
       .filter(table => resolved.query.tournamentId.forall(_ == table.tournamentId))
       .filter(table => resolved.query.stageId.forall(_ == table.stageId))
       .filter(table => resolved.query.roundNumber.forall(_ == table.stageRoundNumber))

@@ -21,8 +21,10 @@ import riichinexus.microservices.dictionary.api.*
 import riichinexus.microservices.opsanalytics.objects.PerformanceDiagnosticsSnapshot
 import riichinexus.microservices.tournament.objects.apiTypes.OperatorRequest
 import riichinexus.microservices.tournament.objects.apiTypes.OperatorRequest.given
-import riichinexus.microservices.publicquery.objects.apiTypes.*
-import riichinexus.microservices.publicquery.objects.apiTypes.PublicQueryResponses.given
+import riichinexus.microservices.club.objects.apiTypes.*
+import riichinexus.microservices.player.objects.apiTypes.*
+import riichinexus.microservices.tournament.objects.apiTypes.*
+
 import riichinexus.microservices.tournament.api.*
 import riichinexus.microservices.tournament.objects.apiTypes.*
 import riichinexus.microservices.tournament.objects.apiTypes.TournamentOperationResponses.given

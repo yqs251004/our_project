@@ -29,7 +29,7 @@ final case class TournamentListAPIMessage(
   private def resolveQuery: ResolvedTournamentListQuery =
     ResolvedTournamentListQuery(
       query = TournamentListQuery(
-        status = status.filter(_.nonEmpty).map(TournamentStatus.valueOf),
+        status = status.filter(_.nonEmpty).map(riichinexus.microservices.tournament.objects.TournamentStatus.valueOf),
         adminId = adminId.filter(_.nonEmpty).map(PlayerId(_)),
         organizer = organizer.filter(_.nonEmpty)
       ),
@@ -49,7 +49,7 @@ final case class TournamentListAPIMessage(
     TournamentTable
       .findFiltered(
         context.connection,
-        status = resolved.query.status,
+        status = resolved.query.status.map(_.toDomain),
         adminId = resolved.query.adminId,
         organizer = resolved.query.organizer
       )

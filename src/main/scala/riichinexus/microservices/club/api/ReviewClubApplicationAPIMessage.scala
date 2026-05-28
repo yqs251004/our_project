@@ -13,7 +13,7 @@ import riichinexus.microservices.player.objects.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.{ClubApplicationReviewer, ClubApplicationViewAssembler}
 import riichinexus.microservices.club.objects.ClubMembershipApplicationView
-import riichinexus.microservices.club.objects.apiTypes.ReviewClubApplicationRequest
+import riichinexus.microservices.club.objects.apiTypes.{ClubApplicationReviewDecision, ReviewClubApplicationRequest}
 import riichinexus.microservices.club.tables.club.ClubTable
 import riichinexus.microservices.player.tables.player.PlayerTable
 import upickle.default.*
@@ -117,14 +117,10 @@ final case class ReviewClubApplicationAPIMessage(
         )
       )
 
-  private def resolveDecision(rawDecision: String): ApplicationReviewDecision =
-    rawDecision.trim.toLowerCase match
-      case "approve" | "approved" => ApplicationReviewDecision.Approve
-      case "reject" | "rejected" => ApplicationReviewDecision.Reject
-      case other =>
-        throw IllegalArgumentException(
-          s"Unsupported review decision '$other'. Supported decisions: approve, reject"
-        )
+  private def resolveDecision(decision: ClubApplicationReviewDecision): ApplicationReviewDecision =
+    decision match
+      case ClubApplicationReviewDecision.Approve => ApplicationReviewDecision.Approve
+      case ClubApplicationReviewDecision.Reject  => ApplicationReviewDecision.Reject
 
   private enum ApplicationReviewDecision:
     case Approve, Reject
