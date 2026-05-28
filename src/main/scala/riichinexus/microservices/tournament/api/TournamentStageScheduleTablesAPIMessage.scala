@@ -22,19 +22,19 @@ final case class TournamentStageScheduleTablesAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[TournamentMutationView] =
     for
-      actor <- IO(resolveOperatorActor(context))
+      actor <- IO.blocking(resolveOperatorActor(context))
       module = context.support.tournamentModule
       command = ScheduleStageTablesCommand(
         tournamentId = TournamentId(tournamentId),
         stageId = TournamentStageId(stageId),
         actor = actor
       )
-      scheduledTables <- IO {
+      scheduledTables <- IO.blocking {
         module.transactionManager.inTransaction {
           scheduleTables(context.connection, module, command)
         }
       }
-      view <- IO {
+      view <- IO.blocking {
         TournamentOperationViewAssembler
         .mutationView(context.connection, module, command.tournamentId, scheduledTables)
         .getOrElse(throw NoSuchElementException("Resource not found"))

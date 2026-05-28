@@ -16,14 +16,14 @@ final case class TournamentTableUploadPaifuAPIMessage(tableId: String, request: 
 
   override def plan(context: ApiPlanContext): IO[TournamentTableView] =
     for
-      actor <- IO(resolveActor(context))
+      actor <- IO.blocking(resolveActor(context))
       module = context.support.tournamentModule
       command = UploadPaifuCommand(
         tableId = TableId(tableId),
         actor = actor,
         paifu = request.paifu
       )
-      archivedTable <- IO {
+      archivedTable <- IO.blocking {
         module.transactionManager.inTransaction {
           module.paifuArchiveService.archivePaifu(context.connection, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))

@@ -22,7 +22,7 @@ final case class RejectClubApplicationAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
-      actor <- IO(context.principal(PlayerId(operatorId)))
+      actor <- IO.blocking(context.principal(PlayerId(operatorId)))
       rejectedAt <- IO.realTimeInstant
       module = context.support.clubModule
       command = RejectClubApplicationCommand(
@@ -32,7 +32,7 @@ final case class RejectClubApplicationAPIMessage(
         note = note,
         rejectedAt = rejectedAt
       )
-      club <- IO(
+      club <- IO.blocking(
         rejectApplication(context.connection, module, command)
           .getOrElse(throw NoSuchElementException("Resource not found"))
       )

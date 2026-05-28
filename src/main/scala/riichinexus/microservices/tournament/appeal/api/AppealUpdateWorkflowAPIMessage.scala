@@ -25,11 +25,11 @@ final case class AppealUpdateWorkflowAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[AppealTicketView] =
     for
-      actor <- IO(context.principal(request.operator))
+      actor <- IO.blocking(context.principal(request.operator))
       updatedAt <- IO.realTimeInstant
       module = context.support.tournamentAppealModule
-      command <- IO(resolveCommand(actor, updatedAt))
-      ticket <- IO(updateWorkflow(context.connection, module, command))
+      command <- IO.blocking(resolveCommand(actor, updatedAt))
+      ticket <- IO.blocking(updateWorkflow(context.connection, module, command))
     yield AppealTicketView.fromDomain(ticket)
 
   private def resolveCommand(actor: AccessPrincipal, updatedAt: Instant): UpdateAppealWorkflowCommand =

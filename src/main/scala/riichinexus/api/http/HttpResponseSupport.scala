@@ -70,7 +70,8 @@ object HttpResponseSupport:
     )
 
   def jsonResponse[T: Writer](routeContext: RouteContext, status: Status, payload: T): IO[Response[IO]] =
-    textResponse(routeContext, status, write(payload, indent = 2), "application/json; charset=utf-8")
+    IO.blocking(write(payload, indent = 2))
+      .flatMap(textResponse(routeContext, status, _, "application/json; charset=utf-8"))
 
   def optionJsonResponse[T: Writer](routeContext: RouteContext, value: Option[T], statusIfSome: Status = Status.Ok): IO[Response[IO]] =
     value match

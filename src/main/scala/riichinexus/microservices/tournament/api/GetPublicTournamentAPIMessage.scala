@@ -28,10 +28,10 @@ final case class GetPublicTournamentAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[PublicTournamentDetailView] =
     for
-      id <- IO(TournamentId(tournamentId))
-      tournament <- IO(publicTournament(context, id))
-      clubsById <- IO(publicRelatedClubsById(context, tournament))
-      tablesByStage <- IO(tablesByStageId(context, tournament))
+      id <- IO.blocking(TournamentId(tournamentId))
+      tournament <- IO.blocking(publicTournament(context, id))
+      clubsById <- IO.blocking(publicRelatedClubsById(context, tournament))
+      tablesByStage <- IO.blocking(tablesByStageId(context, tournament))
     yield publicTournamentView(context, tournament, clubsById, tablesByStage)
 
   private def publicTournament(

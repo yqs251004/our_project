@@ -11,10 +11,16 @@ object DocsRouter:
 
   def routes(support: RouteSupport): HttpRoutes[IO] = HttpRoutes.of[IO] {
     case req @ GET -> Root / "openapi.json" =>
-      support.handled(support.textResponse(Status.Ok, support.openApiJson(req), "application/json; charset=utf-8"))
+      support.handled(
+        IO.blocking(support.openApiJson(req))
+          .flatMap(support.textResponse(Status.Ok, _, "application/json; charset=utf-8"))
+      )
 
     case GET -> Root / "swagger" =>
-      support.handled(support.textResponse(Status.Ok, OpenApiSupport.swaggerHtml(), "text/html; charset=utf-8"))
+      support.handled(
+        IO.blocking(OpenApiSupport.swaggerHtml())
+          .flatMap(support.textResponse(Status.Ok, _, "text/html; charset=utf-8"))
+      )
 
     case GET -> Root =>
       support.handled(

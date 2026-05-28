@@ -21,12 +21,12 @@ final case class ListPublicClubsAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[PublicClubDirectoryEntry]] =
     for
-      query <- IO(resolveQuery(context))
-      clubs <- IO(publicClubs(context))
-      playersById <- IO(publicClubPlayersById(context, clubs))
-      relatedClubsById <- IO(publicRelatedClubsById(context, clubs))
-      entries <- IO(publicClubDirectoryEntries(clubs, playersById, relatedClubsById))
-      filteredEntries <- IO(filterPublicClubDirectoryEntries(context, entries, query))
+      query <- IO.blocking(resolveQuery(context))
+      clubs <- IO.blocking(publicClubs(context))
+      playersById <- IO.blocking(publicClubPlayersById(context, clubs))
+      relatedClubsById <- IO.blocking(publicRelatedClubsById(context, clubs))
+      entries <- IO.blocking(publicClubDirectoryEntries(clubs, playersById, relatedClubsById))
+      filteredEntries <- IO.blocking(filterPublicClubDirectoryEntries(context, entries, query))
     yield PagedResponse.fromItems(filteredEntries, limit, offset, query.appliedFilters)(identity)
 
   private def resolveQuery(context: ApiPlanContext): ResolvedClubDirectoryQuery =

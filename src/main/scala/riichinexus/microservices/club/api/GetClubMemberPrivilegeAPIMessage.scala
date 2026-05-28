@@ -18,8 +18,8 @@ final case class GetClubMemberPrivilegeAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubMemberPrivilegeSnapshotView] =
     for
-      input <- IO(GetClubMemberPrivilegeInput(ClubId(clubId), PlayerId(playerId)))
-      snapshot <- IO(resolveSnapshot(context, input))
+      input <- IO.blocking(GetClubMemberPrivilegeInput(ClubId(clubId), PlayerId(playerId)))
+      snapshot <- IO.blocking(resolveSnapshot(context, input))
     yield ClubMemberPrivilegeSnapshotView.fromDomain(snapshot)
 
   private def resolveSnapshot(

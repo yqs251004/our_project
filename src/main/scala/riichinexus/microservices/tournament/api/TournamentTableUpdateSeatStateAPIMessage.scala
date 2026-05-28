@@ -19,7 +19,7 @@ final case class TournamentTableUpdateSeatStateAPIMessage(tableId: String, seat:
 
   override def plan(context: ApiPlanContext): IO[TournamentTableView] =
     for
-      actor <- IO(context.principal(request.operator))
+      actor <- IO.blocking(context.principal(request.operator))
       module = context.support.tournamentModule
       command = UpdateSeatStateCommand(
         tableId = TableId(tableId),
@@ -29,7 +29,7 @@ final case class TournamentTableUpdateSeatStateAPIMessage(tableId: String, seat:
         disconnected = request.disconnected,
         note = request.note
       )
-      table <- IO {
+      table <- IO.blocking {
         module.transactionManager.inTransaction {
           updateSeatState(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))

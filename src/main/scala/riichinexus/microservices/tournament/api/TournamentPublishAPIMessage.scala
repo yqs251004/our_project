@@ -20,15 +20,15 @@ final case class TournamentPublishAPIMessage(tournamentId: String, operatorId: O
 
   override def plan(context: ApiPlanContext): IO[TournamentMutationView] =
     for
-      actor <- IO(resolveOperatorActor(context))
+      actor <- IO.blocking(resolveOperatorActor(context))
       module = context.support.tournamentModule
       command = PublishTournamentCommand(TournamentId(tournamentId), actor)
-      _ <- IO {
+      _ <- IO.blocking {
         module.transactionManager.inTransaction {
           publishTournament(context.connection, module, command)
         }
       }
-      view <- IO {
+      view <- IO.blocking {
         TournamentOperationViewAssembler.mutationView(context.connection, module, command.tournamentId, Vector.empty)
         .getOrElse(throw NoSuchElementException("Resource not found"))
       }

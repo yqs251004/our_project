@@ -18,8 +18,8 @@ final case class TournamentRecordListAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[TournamentMatchRecordView]] =
     for
-      resolved <- IO(resolveQuery)
-      records <- IO(listRecords(context, resolved))
+      resolved <- IO.blocking(resolveQuery)
+      records <- IO.blocking(listRecords(context, resolved))
     yield pagedResponse(records, resolved)
 
   private def resolveQuery: ResolvedMatchRecordListQuery =

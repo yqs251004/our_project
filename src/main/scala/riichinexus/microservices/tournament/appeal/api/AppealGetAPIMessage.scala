@@ -17,8 +17,8 @@ final case class AppealGetAPIMessage(appealId: String) extends APIMessage[Appeal
 
   override def plan(context: ApiPlanContext): IO[AppealTicketView] =
     for
-      ticketId <- IO(AppealTicketId(appealId))
-      ticket <- IO(findAppeal(context, ticketId))
+      ticketId <- IO.blocking(AppealTicketId(appealId))
+      ticket <- IO.blocking(findAppeal(context, ticketId))
     yield AppealTicketView.fromDomain(ticket)
 
   private def findAppeal(context: ApiPlanContext, ticketId: AppealTicketId): AppealTicket =

@@ -19,7 +19,7 @@ final case class TournamentStageConfigureRulesAPIMessage(tournamentId: String, s
 
   override def plan(context: ApiPlanContext): IO[TournamentSummaryView] =
     for
-      actor <- IO(context.principal(request.operator))
+      actor <- IO.blocking(context.principal(request.operator))
       module = context.support.tournamentModule
       command = ConfigureStageRulesCommand(
         tournamentId = TournamentId(tournamentId),
@@ -27,7 +27,7 @@ final case class TournamentStageConfigureRulesAPIMessage(tournamentId: String, s
         actor = actor,
         request = request
       )
-      tournament <- IO {
+      tournament <- IO.blocking {
         module.transactionManager.inTransaction {
           configureStageRules(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))

@@ -28,7 +28,7 @@ final case class LoginAuthAPIMessage(
       loginAt <- IO.realTimeInstant
       module = context.support.authModule
       command = LoginCommand(AccountCredential.normalizeUsername(username), password, loginAt)
-      result <- IO {
+      result <- IO.blocking {
         module.transactionManager.inTransaction {
           login(context.connection, module, command)
         }

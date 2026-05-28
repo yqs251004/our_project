@@ -29,7 +29,7 @@ final case class CreateGuestSessionAuthAPIMessage(
         input = input,
         createdAt = createdAt
       )
-      session <- IO {
+      session <- IO.blocking {
         module.transactionManager.inTransaction {
           createGuestSession(context.connection, module, command)
         }

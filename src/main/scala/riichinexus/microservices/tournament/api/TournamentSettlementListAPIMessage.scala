@@ -19,8 +19,8 @@ final case class TournamentSettlementListAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[TournamentSettlementView]] =
     for
-      resolved <- IO(resolveQuery)
-      settlements <- IO(listSettlements(context, resolved))
+      resolved <- IO.blocking(resolveQuery)
+      settlements <- IO.blocking(listSettlements(context, resolved))
     yield page(settlements.map(TournamentSettlementView.fromDomain), resolved)
 
   private def resolveQuery: ResolvedSettlementListQuery =

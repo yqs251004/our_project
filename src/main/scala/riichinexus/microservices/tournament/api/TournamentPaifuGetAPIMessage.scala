@@ -17,8 +17,8 @@ final case class TournamentPaifuGetAPIMessage(paifuId: String) extends APIMessag
 
   override def plan(context: ApiPlanContext): IO[TournamentPaifuSummaryView] =
     for
-      id <- IO(PaifuId(paifuId))
-      paifu <- IO(resolvePaifu(context, id))
+      id <- IO.blocking(PaifuId(paifuId))
+      paifu <- IO.blocking(resolvePaifu(context, id))
     yield TournamentPaifuSummaryView.fromDomain(paifu)
 
   private def resolvePaifu(context: ApiPlanContext, paifuId: PaifuId): Paifu =

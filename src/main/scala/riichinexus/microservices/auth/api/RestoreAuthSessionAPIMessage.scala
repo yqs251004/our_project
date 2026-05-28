@@ -17,11 +17,11 @@ final case class RestoreAuthSessionAPIMessage() extends APIWithTokenMessage[Auth
 
   override def plan(context: ApiPlanContext): IO[AuthSessionResponse] =
     for
-      token <- IO(context.requireBearerToken)
+      token <- IO.blocking(context.requireBearerToken)
       module = context.support.authModule
       asOf <- IO.realTimeInstant
       command = RestoreSessionCommand(token, asOf)
-      result <- IO {
+      result <- IO.blocking {
         module.transactionManager.inTransaction {
           restoreSession(context.connection, module, command)
         }

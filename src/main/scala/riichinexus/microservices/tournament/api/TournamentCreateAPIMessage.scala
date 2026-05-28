@@ -22,9 +22,9 @@ final case class TournamentCreateAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[TournamentSummaryView] =
     for
-      input <- IO(resolveInput)
+      input <- IO.blocking(resolveInput)
       module = context.support.tournamentModule
-      tournament <- IO {
+      tournament <- IO.blocking {
         module.transactionManager.inTransaction {
           createTournament(context.connection, input)
         }

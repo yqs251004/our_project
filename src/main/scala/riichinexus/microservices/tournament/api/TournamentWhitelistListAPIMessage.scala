@@ -21,8 +21,8 @@ final case class TournamentWhitelistListAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[TournamentWhitelistEntryView]] =
     for
-      resolved <- IO(resolveQuery)
-      whitelist <- IO(listWhitelist(context, resolved))
+      resolved <- IO.blocking(resolveQuery)
+      whitelist <- IO.blocking(listWhitelist(context, resolved))
     yield pagedResponse(whitelist, resolved)
 
   private def resolveQuery: ResolvedWhitelistQuery =

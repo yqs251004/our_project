@@ -26,7 +26,7 @@ final case class PlatformAdminDissolveClubAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[PlatformAdminClubView] =
     for
-      actor <- IO(context.principal(operatorId))
+      actor <- IO.blocking(context.principal(operatorId))
       module = context.support.platformAdminModule
       request = DissolveClubRequest(operatorId = operatorId)
       dissolvedAt <- IO.realTimeInstant
@@ -35,7 +35,7 @@ final case class PlatformAdminDissolveClubAPIMessage(
         actor = actor,
         dissolvedAt = dissolvedAt
       )
-      club <- IO {
+      club <- IO.blocking {
         module.transactionManager
           .inTransaction {
             dissolveClub(context.connection, module, command)

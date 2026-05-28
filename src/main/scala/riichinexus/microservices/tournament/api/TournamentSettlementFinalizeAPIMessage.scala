@@ -20,7 +20,7 @@ final case class TournamentSettlementFinalizeAPIMessage(tournamentId: String, se
 
   override def plan(context: ApiPlanContext): IO[TournamentSettlementView] =
     for
-      actor <- IO(context.principal(request.operator))
+      actor <- IO.blocking(context.principal(request.operator))
       finalizedAt <- IO.realTimeInstant
       module = context.support.tournamentModule
       command = FinalizeSettlementCommand(
@@ -30,7 +30,7 @@ final case class TournamentSettlementFinalizeAPIMessage(tournamentId: String, se
         note = request.note,
         finalizedAt = finalizedAt
       )
-      settlement <- IO {
+      settlement <- IO.blocking {
         module.transactionManager.inTransaction {
           finalizeSettlement(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))

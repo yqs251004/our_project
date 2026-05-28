@@ -20,10 +20,10 @@ final case class TournamentWhitelistClubAPIMessage(tournamentId: String, clubId:
 
   override def plan(context: ApiPlanContext): IO[TournamentSummaryView] =
     for
-      actor <- IO(resolveOperatorActor(context))
+      actor <- IO.blocking(resolveOperatorActor(context))
       module = context.support.tournamentModule
       command = WhitelistClubCommand(TournamentId(tournamentId), ClubId(clubId), actor)
-      tournament <- IO {
+      tournament <- IO.blocking {
         module.transactionManager.inTransaction {
           whitelistClub(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))

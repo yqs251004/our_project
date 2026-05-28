@@ -20,7 +20,7 @@ final case class TournamentStageAdvanceAPIMessage(tournamentId: String, stageId:
 
   override def plan(context: ApiPlanContext): IO[Vector[riichinexus.microservices.tournament.objects.Table]] =
     for
-      actor <- IO(request.operator.map(context.principal).getOrElse(AccessPrincipal.system))
+      actor <- IO.blocking(request.operator.map(context.principal).getOrElse(AccessPrincipal.system))
       at <- IO.realTimeInstant
       module = context.support.tournamentModule
       command = AdvanceKnockoutStageCommand(
@@ -29,7 +29,7 @@ final case class TournamentStageAdvanceAPIMessage(tournamentId: String, stageId:
         actor = actor,
         at = at
       )
-      tables <- IO {
+      tables <- IO.blocking {
         module.transactionManager.inTransaction {
           advanceStage(context.connection, module, command)
         }

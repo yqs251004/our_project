@@ -24,11 +24,11 @@ final case class SubmitClubApplicationAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubMembershipApplicationResponse] =
     for
-      actor <- IO(context.requestActor(request.session, request.operator))
+      actor <- IO.blocking(context.requestActor(request.session, request.operator))
       module = context.support.clubModule
       parsedClubId = ClubId(clubId)
       submittedAt <- IO.realTimeInstant
-      resolvedInput <- IO(resolveApplicantInput(context.connection, module, actor, request))
+      resolvedInput <- IO.blocking(resolveApplicantInput(context.connection, module, actor, request))
       command = SubmitClubApplicationCommand(
         actor = actor,
         clubId = parsedClubId,
@@ -36,7 +36,7 @@ final case class SubmitClubApplicationAPIMessage(
         input = resolvedInput,
         message = request.message
       )
-      application <- IO {
+      application <- IO.blocking {
         module.transactionManager.inTransaction {
           submitApplication(context.connection, module, command)
         }

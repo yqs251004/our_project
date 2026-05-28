@@ -28,7 +28,7 @@ final case class RevokeGuestSessionAuthAPIMessage(
         input = input,
         revokedAt = revokedAt
       )
-      session <- IO {
+      session <- IO.blocking {
         module.transactionManager.inTransaction {
           revokeGuestSession(context.connection, module, command)
         }

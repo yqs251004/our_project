@@ -14,8 +14,8 @@ final case class TournamentStageAdvancementPreviewAPIMessage(tournamentId: Strin
 
   override def plan(context: ApiPlanContext): IO[StageAdvancementSnapshotResponse] =
     for
-      input <- IO(resolveInput)
-      snapshot <- IO(TournamentStageQueries.stageAdvancementPreview(context.connection, input.tournamentId, input.stageId))
+      input <- IO.blocking(resolveInput)
+      snapshot <- IO.blocking(TournamentStageQueries.stageAdvancementPreview(context.connection, input.tournamentId, input.stageId))
     yield StageAdvancementSnapshotResponse.fromDomain(snapshot)
 
   private def resolveInput: StageQueryInput =

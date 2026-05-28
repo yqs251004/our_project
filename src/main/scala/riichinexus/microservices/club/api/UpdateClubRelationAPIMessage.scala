@@ -26,7 +26,7 @@ final case class UpdateClubRelationAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
-      actor <- IO(context.principal(PlayerId(operatorId)))
+      actor <- IO.blocking(context.principal(PlayerId(operatorId)))
       relationUpdatedAt <- IO.realTimeInstant
       occurredAt <- IO.realTimeInstant
       module = context.support.clubModule
@@ -41,7 +41,7 @@ final case class UpdateClubRelationAPIMessage(
         ),
         occurredAt = occurredAt
       )
-      club <- IO {
+      club <- IO.blocking {
         module.transactionManager.inTransaction {
           updateRelation(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))

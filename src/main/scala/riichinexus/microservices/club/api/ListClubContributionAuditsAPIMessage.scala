@@ -21,11 +21,11 @@ final case class ListClubContributionAuditsAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[ClubContributionAuditEntry]] =
     for
-      operator <- IO(context.principal(query.operatorId))
-      _ <- IO(requireContributionAuditPermission(context, operator))
+      operator <- IO.blocking(context.principal(query.operatorId))
+      _ <- IO.blocking(requireContributionAuditPermission(context, operator))
       parsedClubId = ClubId(clubId)
       resolved = resolveQuery(parsedClubId, query)
-      audits <- IO(listContributionAudits(context, resolved))
+      audits <- IO.blocking(listContributionAudits(context, resolved))
     yield PagedResponse.fromItems(
       audits,
       query.limit,

@@ -25,7 +25,7 @@ final case class AdjustClubTreasuryAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
-      actor <- IO(context.principal(PlayerId(operatorId)))
+      actor <- IO.blocking(context.principal(PlayerId(operatorId)))
       occurredAt <- IO.realTimeInstant
       module = context.support.clubModule
       command = AdjustClubTreasuryCommand(
@@ -35,7 +35,7 @@ final case class AdjustClubTreasuryAPIMessage(
         note = note,
         occurredAt = occurredAt
       )
-      club <- IO {
+      club <- IO.blocking {
         module.transactionManager.inTransaction {
           adjustTreasury(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))

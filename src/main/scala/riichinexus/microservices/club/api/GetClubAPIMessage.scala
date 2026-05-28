@@ -15,8 +15,8 @@ final case class GetClubAPIMessage(clubId: String) extends APIMessage[ClubView] 
 
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
-      id <- IO(ClubId(clubId))
-      club <- IO(resolveClub(context, id))
+      id <- IO.blocking(ClubId(clubId))
+      club <- IO.blocking(resolveClub(context, id))
     yield ClubView.fromDomain(club)
 
   private def resolveClub(context: ApiPlanContext, clubId: ClubId): Club =

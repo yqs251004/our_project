@@ -26,7 +26,7 @@ final case class PlatformAdminBanPlayerAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[PlatformAdminPlayerView] =
     for
-      actor <- IO(context.principal(operatorId))
+      actor <- IO.blocking(context.principal(operatorId))
       module = context.support.platformAdminModule
       request = BanPlayerRequest(operatorId = operatorId, reason = reason)
       bannedAt <- IO.realTimeInstant
@@ -36,7 +36,7 @@ final case class PlatformAdminBanPlayerAPIMessage(
         reason = request.reason,
         bannedAt = bannedAt
       )
-      player <- IO {
+      player <- IO.blocking {
         module.transactionManager
           .inTransaction {
             banPlayer(context.connection, module, command)

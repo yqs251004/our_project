@@ -17,8 +17,8 @@ final case class TournamentSettlementGetAPIMessage(tournamentId: String, stageId
 
   override def plan(context: ApiPlanContext): IO[TournamentSettlementView] =
     for
-      resolved <- IO(resolveQuery)
-      settlement <- IO(findSettlement(context, resolved))
+      resolved <- IO.blocking(resolveQuery)
+      settlement <- IO.blocking(findSettlement(context, resolved))
     yield TournamentSettlementView.fromDomain(settlement)
 
   private def resolveQuery: SettlementGetQuery =

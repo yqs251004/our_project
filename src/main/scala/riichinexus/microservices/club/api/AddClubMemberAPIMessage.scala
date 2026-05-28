@@ -25,7 +25,7 @@ final case class AddClubMemberAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
-      actor <- IO(resolveOperatorActor(context))
+      actor <- IO.blocking(resolveOperatorActor(context))
       occurredAt <- IO.realTimeInstant
       module = context.support.clubModule
       command = AddClubMemberCommand(
@@ -34,7 +34,7 @@ final case class AddClubMemberAPIMessage(
         actor = actor,
         occurredAt = occurredAt
       )
-      club <- IO {
+      club <- IO.blocking {
         module.transactionManager
           .inTransaction {
             addClubMember(context.connection, module, command)

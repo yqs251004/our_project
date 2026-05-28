@@ -18,10 +18,10 @@ final case class PublicClubLeaderboardAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[ClubLeaderboardEntry]] =
     for
-      query <- IO(resolveQuery(context))
-      clubs <- IO(publicClubs(context))
-      entries <- IO(publicClubLeaderboardEntries(clubs))
-      filteredEntries <- IO(filterPublicClubLeaderboardEntries(context, entries, query))
+      query <- IO.blocking(resolveQuery(context))
+      clubs <- IO.blocking(publicClubs(context))
+      entries <- IO.blocking(publicClubLeaderboardEntries(clubs))
+      filteredEntries <- IO.blocking(filterPublicClubLeaderboardEntries(context, entries, query))
     yield PagedResponse.fromItems(filteredEntries, limit, offset, query.appliedFilters)(identity)
 
   private def resolveQuery(context: ApiPlanContext): ResolvedClubLeaderboardQuery =

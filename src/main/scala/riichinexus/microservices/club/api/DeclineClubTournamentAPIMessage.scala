@@ -23,19 +23,19 @@ final case class DeclineClubTournamentAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[TournamentMutationView] =
     for
-      actor <- IO(resolveOperatorActor(context))
+      actor <- IO.blocking(resolveOperatorActor(context))
       module = context.support.clubModule.tournamentModule
       command = DeclineClubTournamentCommand(
         clubId = ClubId(clubId),
         tournamentId = TournamentId(tournamentId),
         actor = actor
       )
-      _ <- IO {
+      _ <- IO.blocking {
         module.transactionManager.inTransaction {
           declineTournament(context.connection, module, command)
         }
       }
-      view <- IO {
+      view <- IO.blocking {
         TournamentOperationViewAssembler.mutationView(context.connection, module, command.tournamentId, Vector.empty)
         .getOrElse(throw NoSuchElementException("Resource not found"))
       }

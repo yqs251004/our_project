@@ -24,12 +24,12 @@ final case class GetPublicClubAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[PublicClubDetailView] =
     for
-      id <- IO(ClubId(clubId))
-      club <- IO(publicClub(context, id))
-      recentRecords <- IO(recentMatchRecords(context, club))
-      lineupPlayerIds <- IO(currentLineupPlayerIds(context, club))
-      tournamentsById <- IO(recentTournamentsById(context, recentRecords))
-      playersById <- IO(publicClubPlayersById(context, club, lineupPlayerIds, recentRecords))
+      id <- IO.blocking(ClubId(clubId))
+      club <- IO.blocking(publicClub(context, id))
+      recentRecords <- IO.blocking(recentMatchRecords(context, club))
+      lineupPlayerIds <- IO.blocking(currentLineupPlayerIds(context, club))
+      tournamentsById <- IO.blocking(recentTournamentsById(context, recentRecords))
+      playersById <- IO.blocking(publicClubPlayersById(context, club, lineupPlayerIds, recentRecords))
     yield publicClubDetailView(club, lineupPlayerIds, recentRecords, tournamentsById, playersById)
 
   private def publicClub(context: ApiPlanContext, clubId: ClubId): Club =

@@ -20,7 +20,7 @@ final case class ListGuestSessionsAuthAPIMessage(
     for
       asOf <- IO.realTimeInstant
       query = resolveQuery(asOf)
-      sessions <- IO {
+      sessions <- IO.blocking {
         GuestSessionTable.list(
           context.connection,
           activeOnly = query.activeOnly,

@@ -17,8 +17,8 @@ final case class TournamentGetAPIMessage(tournamentId: String) extends APIMessag
 
   override def plan(context: ApiPlanContext): IO[TournamentDetailView] =
     for
-      id <- IO(TournamentId(tournamentId))
-      view <- IO(resolveDetailView(context, id))
+      id <- IO.blocking(TournamentId(tournamentId))
+      view <- IO.blocking(resolveDetailView(context, id))
     yield view
 
   private def resolveDetailView(context: ApiPlanContext, tournamentId: TournamentId): TournamentDetailView =

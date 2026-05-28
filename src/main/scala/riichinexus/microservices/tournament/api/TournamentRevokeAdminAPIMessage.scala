@@ -23,7 +23,7 @@ final case class TournamentRevokeAdminAPIMessage(tournamentId: String, playerId:
 
   override def plan(context: ApiPlanContext): IO[TournamentSummaryView] =
     for
-      actor <- IO(resolveOperatorActor(context))
+      actor <- IO.blocking(resolveOperatorActor(context))
       revokedAt <- IO.realTimeInstant
       module = context.support.tournamentModule
       command = RevokeTournamentAdminCommand(
@@ -32,7 +32,7 @@ final case class TournamentRevokeAdminAPIMessage(tournamentId: String, playerId:
         actor = actor,
         revokedAt = revokedAt
       )
-      tournament <- IO {
+      tournament <- IO.blocking {
         module.transactionManager.inTransaction {
           revokeAdmin(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))

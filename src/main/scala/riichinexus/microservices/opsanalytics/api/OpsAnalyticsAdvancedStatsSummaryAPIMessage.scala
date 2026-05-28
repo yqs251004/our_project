@@ -22,16 +22,16 @@ final case class OpsAnalyticsAdvancedStatsSummaryAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[AdvancedStatsTaskQueueSummary] =
     for
-      operator <- IO(context.principal(operatorId))
-      _ <- IO(requireOpsAdmin(context, operator))
+      operator <- IO.blocking(context.principal(operatorId))
+      _ <- IO.blocking(requireOpsAdmin(context, operator))
       resolvedAsOf <- resolveAsOf
-      tasks <- IO(AdvancedStatsRecomputeTaskTable.findAll(context.connection))
+      tasks <- IO.blocking(AdvancedStatsRecomputeTaskTable.findAll(context.connection))
       summary = buildSummary(tasks, resolvedAsOf)
     yield summary
 
   private def resolveAsOf: IO[Instant] =
     asOf match
-      case Some(value) => IO(value)
+      case Some(value) => IO.blocking(value)
       case None        => IO.realTimeInstant
 
   private def requireOpsAdmin(context: ApiPlanContext, operator: AccessPrincipal): Unit =

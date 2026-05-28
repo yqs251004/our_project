@@ -27,12 +27,12 @@ final case class OpsAnalyticsProcessAdvancedStatsAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[Vector[AdvancedStatsRecomputeTask]] =
     for
-      operator <- IO(context.principal(operatorId))
+      operator <- IO.blocking(context.principal(operatorId))
       processedAt <- IO.realTimeInstant
       module = context.support.opsAnalyticsModule
       command = ProcessAdvancedStatsCommand(operator, limit, processedAt)
-      _ <- IO(requireOpsAdmin(context, command.operator))
-      tasks <- IO(processPending(context.connection, module, command))
+      _ <- IO.blocking(requireOpsAdmin(context, command.operator))
+      tasks <- IO.blocking(processPending(context.connection, module, command))
     yield tasks
 
   private def requireOpsAdmin(context: ApiPlanContext, operator: AccessPrincipal): Unit =

@@ -20,10 +20,10 @@ final case class ListPublicTournamentsAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[PublicTournamentSummaryView]] =
     for
-      query <- IO(resolveQuery(context))
-      tournaments <- IO(publicTournaments(context, query))
-      clubsById <- IO(publicRelatedClubsById(context, tournaments))
-      summaries <- IO(publicTournamentSummaryViews(tournaments, clubsById))
+      query <- IO.blocking(resolveQuery(context))
+      tournaments <- IO.blocking(publicTournaments(context, query))
+      clubsById <- IO.blocking(publicRelatedClubsById(context, tournaments))
+      summaries <- IO.blocking(publicTournamentSummaryViews(tournaments, clubsById))
     yield PagedResponse.fromItems(summaries, limit, offset, query.appliedFilters)(identity)
 
   private def resolveQuery(context: ApiPlanContext): ResolvedPublicTournamentsQuery =

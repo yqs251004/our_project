@@ -15,11 +15,11 @@ final case class TournamentSettleAPIMessage(tournamentId: String, request: Settl
 
   override def plan(context: ApiPlanContext): IO[TournamentSettlementView] =
     for
-      actor <- IO(context.principal(request.operator))
+      actor <- IO.blocking(context.principal(request.operator))
       settledAt <- IO.realTimeInstant
       module = context.support.tournamentModule
       command = settleTournamentCommand(actor, settledAt)
-      snapshot <- IO {
+      snapshot <- IO.blocking {
         module.transactionManager.inTransaction {
           module.settlementCoordinator.settleTournament(context.connection, command)
         }

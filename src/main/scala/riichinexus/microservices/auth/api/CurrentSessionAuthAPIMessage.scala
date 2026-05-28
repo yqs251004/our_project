@@ -13,8 +13,8 @@ final case class CurrentSessionAuthAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[CurrentSessionResponse] =
     for
-      input <- IO(resolveInput)
-      session <- IO(
+      input <- IO.blocking(resolveInput)
+      session <- IO.blocking(
         context.resolveCurrentSessionView(
         operatorId = input.operatorId,
         guestSessionId = input.guestSessionId

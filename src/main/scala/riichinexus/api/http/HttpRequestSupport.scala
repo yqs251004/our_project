@@ -47,10 +47,12 @@ object HttpRequestSupport:
     PageQuery(limit = math.min(limit, maxLimit), offset = offset)
 
   def readJsonBody[T: Reader](request: Request[IO]): IO[T] =
-    request.bodyText.compile.string.map { body =>
+    request.bodyText.compile.string.flatMap { body =>
       if body.trim.isEmpty then throw IllegalArgumentException("Request body is required")
-      else read[T](body)
+      else IO.blocking(read[T](body))
     }
 
   def readOptionalJsonBody[T: Reader](request: Request[IO]): IO[Option[T]] =
-    request.bodyText.compile.string.map(body => Option(body.trim).filter(_.nonEmpty).map(read[T](_)))
+    request.bodyText.compile.string.flatMap { body =>
+      IO.blocking(Option(body.trim).filter(_.nonEmpty).map(read[T](_)))
+    }

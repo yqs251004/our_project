@@ -26,7 +26,7 @@ final case class AwardClubHonorAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
-      actor <- IO(context.principal(PlayerId(operatorId)))
+      actor <- IO.blocking(context.principal(PlayerId(operatorId)))
       occurredAt <- IO.realTimeInstant
       module = context.support.clubModule
       command = AwardClubHonorCommand(
@@ -35,7 +35,7 @@ final case class AwardClubHonorAPIMessage(
         honor = ClubHonor(title = title, achievedAt = achievedAt.getOrElse(occurredAt), note = note),
         occurredAt = occurredAt
       )
-      club <- IO {
+      club <- IO.blocking {
         module.transactionManager.inTransaction {
           awardHonor(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))

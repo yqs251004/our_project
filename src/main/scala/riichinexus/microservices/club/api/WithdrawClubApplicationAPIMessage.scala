@@ -26,7 +26,7 @@ final case class WithdrawClubApplicationAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubMembershipApplicationResponse] =
     for
-      actor <- IO(resolveActor(context))
+      actor <- IO.blocking(resolveActor(context))
       withdrawnAt <- IO.realTimeInstant
       module = context.support.clubModule
       command = WithdrawClubApplicationCommand(
@@ -36,7 +36,7 @@ final case class WithdrawClubApplicationAPIMessage(
         note = note,
         withdrawnAt = withdrawnAt
       )
-      application <- IO {
+      application <- IO.blocking {
         module.transactionManager.inTransaction {
           withdrawApplication(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))

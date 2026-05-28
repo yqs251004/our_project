@@ -23,7 +23,7 @@ final case class TournamentStageSubmitLineupAPIMessage(tournamentId: String, sta
 
   override def plan(context: ApiPlanContext): IO[TournamentMutationView] =
     for
-      actor <- IO(context.principal(request.operator))
+      actor <- IO.blocking(context.principal(request.operator))
       module = context.support.tournamentModule
       command = SubmitStageLineupCommand(
         tournamentId = TournamentId(tournamentId),
@@ -31,12 +31,12 @@ final case class TournamentStageSubmitLineupAPIMessage(tournamentId: String, sta
         submission = request.toSubmission,
         actor = actor
       )
-      _ <- IO {
+      _ <- IO.blocking {
         module.transactionManager.inTransaction {
           submitLineup(context.connection, module, command)
         }
       }
-      view <- IO {
+      view <- IO.blocking {
         TournamentOperationViewAssembler.mutationView(context.connection, module, command.tournamentId, Vector.empty)
         .getOrElse(throw NoSuchElementException("Resource not found"))
       }

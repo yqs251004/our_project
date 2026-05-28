@@ -19,9 +19,9 @@ final case class OpsAnalyticsListAdvancedStatsTasksAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[AdvancedStatsRecomputeTask]] =
     for
-      _ <- IO(requireOpsAdmin(context, operatorId))
+      _ <- IO.blocking(requireOpsAdmin(context, operatorId))
       query = resolveQuery
-      tasks <- IO(listTasks(context, query))
+      tasks <- IO.blocking(listTasks(context, query))
     yield paged(tasks, query)
 
   private def resolveQuery: AdvancedStatsTasksQuery =

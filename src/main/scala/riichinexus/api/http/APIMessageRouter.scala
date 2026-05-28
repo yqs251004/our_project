@@ -51,12 +51,13 @@ object APIMessageRouter:
         )
         for
           _ <-
-            if apiMessage.requiresBearerToken then IO(context.requireBearerToken).void
+            if apiMessage.requiresBearerToken then IO.blocking(context.requireBearerToken).void
             else IO.unit
           responseJson <- apiMessage.planJson(bodyForDecode(body), context)
         yield responseJson
       }
-      response <- support.textResponse(httpStatus(apiMessage.successStatus), ujson.write(responseJson, indent = 2), "application/json; charset=utf-8")
+      responseBody <- IO.blocking(ujson.write(responseJson, indent = 2))
+      response <- support.textResponse(httpStatus(apiMessage.successStatus), responseBody, "application/json; charset=utf-8")
     yield response
 
   private def httpStatus(status: ApiSuccessStatus): Status =

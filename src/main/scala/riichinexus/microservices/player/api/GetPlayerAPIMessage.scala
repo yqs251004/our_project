@@ -15,8 +15,8 @@ final case class GetPlayerAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[PlayerProfileView] =
     for
-      id <- IO(PlayerId(playerId))
-      player <- IO(findPlayer(context.connection, id))
+      id <- IO.blocking(PlayerId(playerId))
+      player <- IO.blocking(findPlayer(context.connection, id))
     yield PlayerProfileView.fromDomain(player)
 
   private def findPlayer(connection: java.sql.Connection, playerId: PlayerId) =

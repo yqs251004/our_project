@@ -19,11 +19,11 @@ final case class TournamentTableResetAPIMessage(tableId: String, request: ForceR
 
   override def plan(context: ApiPlanContext): IO[TournamentTableView] =
     for
-      actor <- IO(context.principal(request.operator))
+      actor <- IO.blocking(context.principal(request.operator))
       resetAt <- IO.realTimeInstant
       module = context.support.tournamentModule
       command = ResetTableCommand(TableId(tableId), actor, request.note, resetAt)
-      table <- IO {
+      table <- IO.blocking {
         module.transactionManager.inTransaction {
           resetTable(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))

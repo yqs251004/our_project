@@ -20,8 +20,8 @@ final case class TournamentStageTablesAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[TournamentTableView]] =
     for
-      resolved <- IO(resolveQuery)
-      tables <- IO(listStageTables(context, resolved))
+      resolved <- IO.blocking(resolveQuery)
+      tables <- IO.blocking(listStageTables(context, resolved))
     yield PagedResponse.fromItems(tables, resolved.query.limit, resolved.query.offset, resolved.appliedFilters)(TournamentTableView.fromDomain)
 
   private def resolveQuery: ResolvedStageTablesQuery =

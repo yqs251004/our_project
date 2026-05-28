@@ -18,8 +18,8 @@ final case class TournamentPaifuListAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[TournamentPaifuSummaryView]] =
     for
-      resolved <- IO(resolveQuery)
-      paifus <- IO(listPaifus(context, resolved))
+      resolved <- IO.blocking(resolveQuery)
+      paifus <- IO.blocking(listPaifus(context, resolved))
     yield pagedResponse(paifus, resolved)
 
   private def resolveQuery: ResolvedPaifuListQuery =

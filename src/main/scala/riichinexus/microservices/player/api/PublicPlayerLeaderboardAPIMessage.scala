@@ -22,10 +22,10 @@ final case class PublicPlayerLeaderboardAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[PlayerLeaderboardEntry]] =
     for
-      query <- IO(resolveQuery(context))
-      players <- IO(publicPlayers(context))
-      entries <- IO(publicPlayerLeaderboardEntries(players))
-      filteredEntries <- IO(filterPublicPlayerLeaderboardEntries(entries, query))
+      query <- IO.blocking(resolveQuery(context))
+      players <- IO.blocking(publicPlayers(context))
+      entries <- IO.blocking(publicPlayerLeaderboardEntries(players))
+      filteredEntries <- IO.blocking(filterPublicPlayerLeaderboardEntries(entries, query))
     yield PagedResponse.fromItems(filteredEntries, limit, offset, query.appliedFilters)(identity)
 
   private def resolveQuery(context: ApiPlanContext): ResolvedPlayerLeaderboardQuery =

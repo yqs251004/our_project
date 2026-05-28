@@ -23,7 +23,7 @@ final case class ApproveClubApplicationAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
-      actor <- IO(context.principal(PlayerId(operatorId)))
+      actor <- IO.blocking(context.principal(PlayerId(operatorId)))
       approvedAt <- IO.realTimeInstant
       module = context.support.clubModule
       command = ApproveClubApplicationCommand(
@@ -34,7 +34,7 @@ final case class ApproveClubApplicationAPIMessage(
         note = note,
         approvedAt = approvedAt
       )
-      club <- IO(
+      club <- IO.blocking(
         approveApplication(context.connection, module, command)
           .getOrElse(throw NoSuchElementException("Resource not found"))
       )

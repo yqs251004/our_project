@@ -27,7 +27,7 @@ final case class ClearClubTitleAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
-      actor <- IO(context.principal(PlayerId(operatorId)))
+      actor <- IO.blocking(context.principal(PlayerId(operatorId)))
       clearedAt <- IO.realTimeInstant
       module = context.support.clubModule
       command = ClearClubTitleCommand(
@@ -37,7 +37,7 @@ final case class ClearClubTitleAPIMessage(
         note = note,
         clearedAt = clearedAt
       )
-      club <- IO {
+      club <- IO.blocking {
         module.transactionManager.inTransaction {
           clearTitle(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))

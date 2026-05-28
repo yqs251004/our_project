@@ -25,7 +25,7 @@ final case class PlatformAdminGrantSuperAdminAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[PlatformAdminPlayerView] =
     for
-      actor <- IO(context.principal(operatorId))
+      actor <- IO.blocking(context.principal(operatorId))
       module = context.support.platformAdminModule
       request = GrantSuperAdminRequest(operatorId = operatorId)
       grantedAt <- IO.realTimeInstant
@@ -34,7 +34,7 @@ final case class PlatformAdminGrantSuperAdminAPIMessage(
         actor = actor,
         grantedAt = grantedAt
       )
-      player <- IO {
+      player <- IO.blocking {
         module.transactionManager
           .inTransaction {
             grantSuperAdmin(context.connection, module, command)

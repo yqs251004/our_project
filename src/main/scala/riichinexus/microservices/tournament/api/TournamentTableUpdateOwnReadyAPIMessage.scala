@@ -19,10 +19,10 @@ final case class TournamentTableUpdateOwnReadyAPIMessage(tableId: String, reques
 
   override def plan(context: ApiPlanContext): IO[TournamentTableView] =
     for
-      actor <- IO(context.principal(request.operator))
+      actor <- IO.blocking(context.principal(request.operator))
       module = context.support.tournamentModule
       command = UpdateOwnReadyCommand(TableId(tableId), actor, request.ready, request.note)
-      table <- IO {
+      table <- IO.blocking {
         module.transactionManager.inTransaction {
           updateOwnReady(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))

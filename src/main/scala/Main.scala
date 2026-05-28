@@ -10,9 +10,9 @@ object Main extends IOApp.Simple:
 
   private val serverResource: Resource[IO, Server] =
     for
-      normalizedEnv <- Resource.eval(IO(DatabaseSession.normalizedEnvironment(sys.env)))
+      normalizedEnv <- Resource.eval(IO.blocking(DatabaseSession.normalizedEnvironment(sys.env)))
       _ <- Resource.eval(DatabaseSession.initialize(normalizedEnv))
-      app <- Resource.eval(IO(DatabaseSession.applicationContext(normalizedEnv)))
+      app <- Resource.eval(IO.blocking(DatabaseSession.applicationContext(normalizedEnv)))
       config = ApiServerConfig.fromEnv(normalizedEnv).copy(
         storageLabel = DatabaseSession.storageLabel(normalizedEnv)
       )

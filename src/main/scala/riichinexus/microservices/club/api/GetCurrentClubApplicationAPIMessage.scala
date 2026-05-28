@@ -22,9 +22,9 @@ final case class GetCurrentClubApplicationAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubMembershipApplicationView] =
     for
-      input <- IO(resolveInput)
-      actor <- IO(resolveActor(context, input))
-      view <- IO(getCurrentApplicationView(context, input, actor))
+      input <- IO.blocking(resolveInput)
+      actor <- IO.blocking(resolveActor(context, input))
+      view <- IO.blocking(getCurrentApplicationView(context, input, actor))
     yield view
 
   private def resolveInput: CurrentClubApplicationInput =

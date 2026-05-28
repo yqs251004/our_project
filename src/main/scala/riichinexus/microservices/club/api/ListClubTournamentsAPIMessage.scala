@@ -32,8 +32,8 @@ final case class ListClubTournamentsAPIMessage(
     for
       now <- IO.realTimeInstant
       module = context.support.clubModule
-      query <- IO(resolveQuery(context, now))
-      items <- IO(listTournaments(context.connection, module, query))
+      query <- IO.blocking(resolveQuery(context, now))
+      items <- IO.blocking(listTournaments(context.connection, module, query))
     yield pagedResponse(items, query)
 
   private def resolveQuery(context: ApiPlanContext, now: Instant): ClubTournamentQuery =

@@ -20,11 +20,11 @@ final case class TournamentTableStartAPIMessage(tableId: String, operatorId: Opt
 
   override def plan(context: ApiPlanContext): IO[TournamentTableView] =
     for
-      actor <- IO(resolveOperatorActor(context))
+      actor <- IO.blocking(resolveOperatorActor(context))
       startedAt <- IO.realTimeInstant
       module = context.support.tournamentModule
       command = StartTableCommand(TableId(tableId), actor, startedAt)
-      table <- IO {
+      table <- IO.blocking {
         module.transactionManager.inTransaction {
           startTable(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))

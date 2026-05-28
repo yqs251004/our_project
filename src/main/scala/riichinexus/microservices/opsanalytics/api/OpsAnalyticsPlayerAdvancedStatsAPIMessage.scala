@@ -19,9 +19,9 @@ final case class OpsAnalyticsPlayerAdvancedStatsAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[AdvancedStatsBoard] =
     for
-      operator <- IO(context.principal(operatorId))
-      _ <- IO(requireDashboardPermission(context, operator))
-      board <- IO(findAdvancedStatsBoard(context))
+      operator <- IO.blocking(context.principal(operatorId))
+      _ <- IO.blocking(requireDashboardPermission(context, operator))
+      board <- IO.blocking(findAdvancedStatsBoard(context))
     yield board
 
   private def requireDashboardPermission(context: ApiPlanContext, operator: AccessPrincipal): Unit =

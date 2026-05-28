@@ -14,7 +14,7 @@ final case class CreatePlayerAPIMessage(
   override def plan(context: ApiPlanContext): IO[PlayerProfileView] =
     for
       registeredAt <- IO.realTimeInstant
-      player <- IO {
+      player <- IO.blocking {
         PlayerRegistration.register(
           connection = context.connection,
           userId = request.userId,

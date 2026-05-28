@@ -22,7 +22,7 @@ final case class TournamentAssignAdminAPIMessage(tournamentId: String, request: 
 
   override def plan(context: ApiPlanContext): IO[TournamentSummaryView] =
     for
-      actor <- IO(context.principal(request.operator))
+      actor <- IO.blocking(context.principal(request.operator))
       grantedAt <- IO.realTimeInstant
       module = context.support.tournamentModule
       command = AssignTournamentAdminCommand(
@@ -31,7 +31,7 @@ final case class TournamentAssignAdminAPIMessage(tournamentId: String, request: 
         actor = actor,
         grantedAt = grantedAt
       )
-      tournament <- IO {
+      tournament <- IO.blocking {
         module.transactionManager.inTransaction {
           assignAdmin(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))

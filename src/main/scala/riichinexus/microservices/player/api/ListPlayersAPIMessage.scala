@@ -19,8 +19,8 @@ final case class ListPlayersAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[PlayerProfileView]] =
     for
-      query <- IO(resolveQuery(context))
-      players <- IO(listPlayers(context, query))
+      query <- IO.blocking(resolveQuery(context))
+      players <- IO.blocking(listPlayers(context, query))
     yield PagedResponse.fromItems(players, limit, offset, query.appliedFilters)(
       PlayerProfileView.fromDomain
     )

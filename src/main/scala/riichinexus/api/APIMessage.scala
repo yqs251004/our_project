@@ -100,7 +100,11 @@ object RegisteredAPIMessage:
       apiName = nameOf[Message],
       requiresBearerToken = false,
       successStatus = ApiSuccessStatus.Ok,
-      planJson = (_, context) => message.plan(context).map(writeJs(_))
+      planJson = (_, context) =>
+        for
+          response <- message.plan(context)
+          json <- IO.blocking(writeJs(response))
+        yield json
     )
 
   private def build[Message <: APIMessage[Response], Response](
@@ -117,9 +121,10 @@ object RegisteredAPIMessage:
       successStatus = successStatus,
       planJson = (body, context) =>
         for
-          message <- IO(read[Message](body)(using reader))
+          message <- IO.blocking(read[Message](body)(using reader))
           response <- message.plan(context)
-        yield writeJs(response)(using writer)
+          json <- IO.blocking(writeJs(response)(using writer))
+        yield json
     )
 
   private def nameOf[Message](using classTag: ClassTag[Message]): String =

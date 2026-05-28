@@ -14,8 +14,8 @@ final case class TournamentStageKnockoutBracketAPIMessage(tournamentId: String, 
 
   override def plan(context: ApiPlanContext): IO[KnockoutBracketSnapshotResponse] =
     for
-      input <- IO(resolveInput)
-      snapshot <- IO(TournamentStageQueries.stageKnockoutBracket(context.connection, input.tournamentId, input.stageId))
+      input <- IO.blocking(resolveInput)
+      snapshot <- IO.blocking(TournamentStageQueries.stageKnockoutBracket(context.connection, input.tournamentId, input.stageId))
     yield KnockoutBracketSnapshotResponse.fromDomain(snapshot)
 
   private def resolveInput: StageQueryInput =

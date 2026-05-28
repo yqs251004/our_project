@@ -26,11 +26,11 @@ final case class AppealFileAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[AppealTicketView] =
     for
-      actor <- IO(context.principal(request.player))
+      actor <- IO.blocking(context.principal(request.player))
       createdAt <- IO.realTimeInstant
       module = context.support.tournamentAppealModule
-      command <- IO(resolveCommand(actor, createdAt))
-      ticket <- IO(fileAppeal(context.connection, module, command))
+      command <- IO.blocking(resolveCommand(actor, createdAt))
+      ticket <- IO.blocking(fileAppeal(context.connection, module, command))
     yield AppealTicketView.fromDomain(ticket)
 
   private def resolveCommand(actor: AccessPrincipal, createdAt: Instant): FileAppealCommand =

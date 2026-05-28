@@ -35,7 +35,7 @@ final case class RegisterAuthAPIMessage(
         displayName = normalizeDisplayName(displayName),
         registeredAt = registeredAt
       )
-      result <- IO {
+      result <- IO.blocking {
         module.transactionManager.inTransaction {
           register(context.connection, module, command)
         }

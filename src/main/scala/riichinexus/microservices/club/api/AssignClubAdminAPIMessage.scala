@@ -25,7 +25,7 @@ final case class AssignClubAdminAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
-      actor <- IO(context.principal(PlayerId(operatorId)))
+      actor <- IO.blocking(context.principal(PlayerId(operatorId)))
       grantedAt <- IO.realTimeInstant
       module = context.support.clubModule
       command = AssignClubAdminCommand(
@@ -34,7 +34,7 @@ final case class AssignClubAdminAPIMessage(
         actor = actor,
         grantedAt = grantedAt
       )
-      club <- IO {
+      club <- IO.blocking {
         module.transactionManager.inTransaction {
           assignAdmin(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))

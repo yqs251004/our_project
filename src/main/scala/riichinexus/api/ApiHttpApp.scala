@@ -49,7 +49,7 @@ object ApiHttpApp:
         httpApp(request).attempt.flatMap {
           case Right(response) =>
             IO.monotonic.flatMap { finishedAt =>
-              IO(runtime.performanceDiagnosticsService.recordRequest(
+              IO.blocking(runtime.performanceDiagnosticsService.recordRequest(
                 method = request.method.name,
                 path = normalizePath(request.uri.path.renderString),
                 statusCode = response.status.code,
@@ -58,7 +58,7 @@ object ApiHttpApp:
             }
           case Left(error) =>
             IO.monotonic.flatMap { finishedAt =>
-              IO(runtime.performanceDiagnosticsService.recordRequest(
+              IO.blocking(runtime.performanceDiagnosticsService.recordRequest(
                 method = request.method.name,
                 path = normalizePath(request.uri.path.renderString),
                 statusCode = 500,

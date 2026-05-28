@@ -16,8 +16,8 @@ final case class GetGuestSessionAuthAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[GuestSessionResponse] =
     for
-      id <- IO(GuestSessionId(sessionId))
-      session <- IO(findGuestSession(context, id))
+      id <- IO.blocking(GuestSessionId(sessionId))
+      session <- IO.blocking(findGuestSession(context, id))
     yield GuestSessionResponse.fromDomain(session)
 
   private def findGuestSession(context: ApiPlanContext, sessionId: GuestSessionId) =

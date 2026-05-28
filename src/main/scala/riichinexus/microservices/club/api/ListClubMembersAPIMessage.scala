@@ -20,8 +20,8 @@ final case class ListClubMembersAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[PlayerProfileView]] =
     for
-      query <- IO(resolveQuery(context))
-      members <- IO(listMembers(context, query))
+      query <- IO.blocking(resolveQuery(context))
+      members <- IO.blocking(listMembers(context, query))
     yield pagedResponse(members, query)
 
   private def resolveQuery(context: ApiPlanContext): ResolvedClubMembersQuery =

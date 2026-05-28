@@ -32,7 +32,7 @@ final case class UpgradeGuestSessionAuthAPIMessage(
         playerId = PlayerId(playerId),
         upgradedAt = upgradedAt
       )
-      session <- IO {
+      session <- IO.blocking {
         module.transactionManager.inTransaction {
           upgradeGuestSession(context.connection, module, command)
         }

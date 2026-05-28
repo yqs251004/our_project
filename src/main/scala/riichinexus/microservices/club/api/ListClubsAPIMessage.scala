@@ -17,8 +17,8 @@ final case class ListClubsAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[ClubView]] =
     for
-      resolved <- IO(resolveQuery)
-      clubs <- IO(listClubs(context, resolved))
+      resolved <- IO.blocking(resolveQuery)
+      clubs <- IO.blocking(listClubs(context, resolved))
     yield pagedResponse(clubs, resolved)
 
   private def resolveQuery: ResolvedClubListQuery =

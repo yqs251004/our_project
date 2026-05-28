@@ -19,9 +19,9 @@ final case class OpsAnalyticsClubDashboardAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[Dashboard] =
     for
-      operator <- IO(context.principal(operatorId))
-      _ <- IO(requireDashboardPermission(context, operator))
-      dashboard <- IO(findDashboard(context))
+      operator <- IO.blocking(context.principal(operatorId))
+      _ <- IO.blocking(requireDashboardPermission(context, operator))
+      dashboard <- IO.blocking(findDashboard(context))
     yield dashboard
 
   private def requireDashboardPermission(context: ApiPlanContext, operator: AccessPrincipal): Unit =

@@ -24,7 +24,7 @@ final case class UpdateClubRecruitmentPolicyAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
-      actor <- IO(context.principal(request.operator))
+      actor <- IO.blocking(context.principal(request.operator))
       occurredAt <- IO.realTimeInstant
       module = context.support.clubModule
       command = UpdateClubRecruitmentPolicyCommand(
@@ -34,7 +34,7 @@ final case class UpdateClubRecruitmentPolicyAPIMessage(
         note = request.note,
         occurredAt = occurredAt
       )
-      club <- IO {
+      club <- IO.blocking {
         module.transactionManager.inTransaction {
           updateRecruitmentPolicy(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))

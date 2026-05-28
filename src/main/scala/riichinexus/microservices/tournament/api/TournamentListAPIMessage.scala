@@ -22,8 +22,8 @@ final case class TournamentListAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[TournamentSummaryView]] =
     for
-      query <- IO(resolveQuery)
-      tournaments <- IO(listTournaments(context, query))
+      query <- IO.blocking(resolveQuery)
+      tournaments <- IO.blocking(listTournaments(context, query))
     yield pagedResponse(tournaments, query)
 
   private def resolveQuery: ResolvedTournamentListQuery =

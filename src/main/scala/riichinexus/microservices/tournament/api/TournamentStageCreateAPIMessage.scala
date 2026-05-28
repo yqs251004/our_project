@@ -19,14 +19,14 @@ final case class TournamentStageCreateAPIMessage(tournamentId: String, request: 
 
   override def plan(context: ApiPlanContext): IO[TournamentSummaryView] =
     for
-      actor <- IO(request.operator.map(context.principal).getOrElse(AccessPrincipal.system))
+      actor <- IO.blocking(request.operator.map(context.principal).getOrElse(AccessPrincipal.system))
       module = context.support.tournamentModule
       command = CreateStageCommand(
         tournamentId = TournamentId(tournamentId),
         actor = actor,
         stage = request.toStage
       )
-      tournament <- IO {
+      tournament <- IO.blocking {
         module.transactionManager.inTransaction {
           createStage(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))

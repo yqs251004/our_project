@@ -12,10 +12,10 @@ final case class LogoutAuthAPIMessage() extends APIWithTokenMessage[ApiMessage] 
 
   override def plan(context: ApiPlanContext): IO[ApiMessage] =
     for
-      token <- IO(context.requireBearerToken)
+      token <- IO.blocking(context.requireBearerToken)
       module = context.support.authModule
       loggedOutAt <- IO.realTimeInstant
-      _ <- IO {
+      _ <- IO.blocking {
         module.transactionManager.inTransaction {
           logout(context, token, loggedOutAt)
         }

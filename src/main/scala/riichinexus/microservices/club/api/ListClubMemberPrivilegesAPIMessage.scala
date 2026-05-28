@@ -18,8 +18,8 @@ final case class ListClubMemberPrivilegesAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[ClubMemberPrivilegeSnapshotView]] =
     for
-      resolved <- IO(resolveQuery)
-      snapshots <- IO(listSnapshots(context, resolved))
+      resolved <- IO.blocking(resolveQuery)
+      snapshots <- IO.blocking(listSnapshots(context, resolved))
     yield pagedResponse(snapshots, resolved)
 
   private def resolveQuery: ResolvedClubMemberPrivilegeQuery =

@@ -19,10 +19,10 @@ final case class TournamentStartAPIMessage(tournamentId: String, operatorId: Opt
 
   override def plan(context: ApiPlanContext): IO[TournamentSummaryView] =
     for
-      actor <- IO(resolveOperatorActor(context))
+      actor <- IO.blocking(resolveOperatorActor(context))
       module = context.support.tournamentModule
       command = StartTournamentCommand(TournamentId(tournamentId), actor)
-      tournament <- IO {
+      tournament <- IO.blocking {
         module.transactionManager.inTransaction {
           startTournament(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))

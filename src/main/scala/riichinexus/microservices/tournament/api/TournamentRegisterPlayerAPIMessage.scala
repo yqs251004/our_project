@@ -21,14 +21,14 @@ final case class TournamentRegisterPlayerAPIMessage(tournamentId: String, player
 
   override def plan(context: ApiPlanContext): IO[TournamentSummaryView] =
     for
-      actor <- IO(resolveOperatorActor(context))
+      actor <- IO.blocking(resolveOperatorActor(context))
       module = context.support.tournamentModule
       command = RegisterTournamentPlayerCommand(
         tournamentId = TournamentId(tournamentId),
         playerId = PlayerId(playerId),
         actor = actor
       )
-      tournament <- IO {
+      tournament <- IO.blocking {
         module.transactionManager.inTransaction {
           registerPlayer(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))

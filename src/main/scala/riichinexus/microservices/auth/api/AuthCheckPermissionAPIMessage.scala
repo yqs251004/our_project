@@ -20,9 +20,9 @@ final case class AuthCheckPermissionAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[Boolean] =
     for
-      input <- IO(resolveInput)
-      operator <- IO(context.principal(input.operatorId))
-      allowed <- IO(checkPermission(context, CheckPermissionCommand(operator, input)))
+      input <- IO.blocking(resolveInput)
+      operator <- IO.blocking(context.principal(input.operatorId))
+      allowed <- IO.blocking(checkPermission(context, CheckPermissionCommand(operator, input)))
     yield allowed
 
   private def resolveInput: ResolvedCheckPermissionInput =

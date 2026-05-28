@@ -26,8 +26,8 @@ final case class ReviewClubApplicationAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubMembershipApplicationView] =
     for
-      decision <- IO(resolveDecision(request.decision))
-      actor <- IO(context.principal(request.operator))
+      decision <- IO.blocking(resolveDecision(request.decision))
+      actor <- IO.blocking(context.principal(request.operator))
       reviewedAt <- IO.realTimeInstant
       module = context.support.clubModule
       command = ReviewClubApplicationCommand(
@@ -39,7 +39,7 @@ final case class ReviewClubApplicationAPIMessage(
         note = request.note,
         reviewedAt = reviewedAt
       )
-      result <- IO(reviewApplication(context.connection, module, command))
+      result <- IO.blocking(reviewApplication(context.connection, module, command))
     yield ClubApplicationViewAssembler.applicationView(
       context.connection,
       module,

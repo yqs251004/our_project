@@ -11,4 +11,4 @@ import upickle.default.*
 final case class ClubPrivilegeDefinitionsAPIMessage() extends APIMessage[Vector[ClubPrivilegeDefinitionResponse]] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[Vector[ClubPrivilegeDefinitionResponse]] =
-    IO(ClubPrivilegeRegistry.definitions.map(ClubPrivilegeDefinitionResponse.fromDomain))
+    IO.blocking(ClubPrivilegeRegistry.definitions.map(ClubPrivilegeDefinitionResponse.fromDomain))

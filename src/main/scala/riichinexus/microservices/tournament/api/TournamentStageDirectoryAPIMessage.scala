@@ -18,8 +18,8 @@ final case class TournamentStageDirectoryAPIMessage(tournamentId: String) extend
 
   override def plan(context: ApiPlanContext): IO[Vector[TournamentStageDirectoryEntry]] =
     for
-      id <- IO(TournamentId(tournamentId))
-      stages <- IO(resolveStages(context, id))
+      id <- IO.blocking(TournamentId(tournamentId))
+      stages <- IO.blocking(resolveStages(context, id))
     yield stages
       .sortBy(_.order)
       .map(buildTournamentStageDirectoryEntry)

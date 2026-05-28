@@ -24,14 +24,14 @@ final case class RevokeClubAdminAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
-      actor <- IO(resolveOperatorActor(context))
+      actor <- IO.blocking(resolveOperatorActor(context))
       module = context.support.clubModule
       command = RevokeClubAdminCommand(
         clubId = ClubId(clubId),
         playerId = PlayerId(playerId),
         actor = actor
       )
-      club <- IO {
+      club <- IO.blocking {
         module.transactionManager.inTransaction {
           revokeAdmin(context.connection, module, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))

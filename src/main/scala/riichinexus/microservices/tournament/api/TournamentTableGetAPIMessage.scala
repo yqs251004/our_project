@@ -17,8 +17,8 @@ final case class TournamentTableGetAPIMessage(tableId: String) extends APIMessag
 
   override def plan(context: ApiPlanContext): IO[TournamentTableView] =
     for
-      id <- IO(TableId(tableId))
-      table <- IO(resolveTable(context, id))
+      id <- IO.blocking(TableId(tableId))
+      table <- IO.blocking(resolveTable(context, id))
     yield TournamentTableView.fromDomain(table)
 
   private def resolveTable(context: ApiPlanContext, tableId: TableId): Table =

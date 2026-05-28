@@ -27,7 +27,7 @@ final case class TournamentStageCompleteAPIMessage(
         actor = request.operator.map(context.principal).getOrElse(AccessPrincipal.system),
         completedAt = completedAt
       )
-      advancement <- IO {
+      advancement <- IO.blocking {
         module.transactionManager
           .inTransaction {
             module.stageCompletionCoordinator.completeStage(context.connection, command)

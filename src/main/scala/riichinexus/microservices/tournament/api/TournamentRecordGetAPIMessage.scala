@@ -17,8 +17,8 @@ final case class TournamentRecordGetAPIMessage(recordId: String) extends APIMess
 
   override def plan(context: ApiPlanContext): IO[TournamentMatchRecordView] =
     for
-      id <- IO(MatchRecordId(recordId))
-      record <- IO(resolveRecord(context, id))
+      id <- IO.blocking(MatchRecordId(recordId))
+      record <- IO.blocking(resolveRecord(context, id))
     yield TournamentMatchRecordView.fromDomain(record)
 
   private def resolveRecord(context: ApiPlanContext, recordId: MatchRecordId): MatchRecord =

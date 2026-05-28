@@ -19,8 +19,8 @@ final case class AppealListAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[AppealTicketView]] =
     for
-      resolved <- IO(resolveQuery)
-      appeals <- IO(listAppeals(context, resolved))
+      resolved <- IO.blocking(resolveQuery)
+      appeals <- IO.blocking(listAppeals(context, resolved))
     yield page(appeals.map(AppealTicketView.fromDomain), resolved)
 
   private def resolveQuery: ResolvedAppealListQuery =

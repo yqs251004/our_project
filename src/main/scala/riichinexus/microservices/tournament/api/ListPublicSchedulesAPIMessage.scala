@@ -25,13 +25,13 @@ final case class ListPublicSchedulesAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[PublicScheduleView]] =
     for
-      query <- IO(resolveQuery(context))
-      tournaments <- IO(publicTournaments(context))
-      lineupPlayersById <- IO(lineupPlayersById(context, tournaments))
-      tablesByStage <- IO(tablesByStageKey(context, tournaments))
-      clubsById <- IO(participatingClubsById(context, tournaments))
-      schedules <- IO(publicScheduleViews(tournaments, lineupPlayersById, tablesByStage, clubsById))
-      filteredSchedules <- IO(filterPublicScheduleViews(schedules, query))
+      query <- IO.blocking(resolveQuery(context))
+      tournaments <- IO.blocking(publicTournaments(context))
+      lineupPlayersById <- IO.blocking(lineupPlayersById(context, tournaments))
+      tablesByStage <- IO.blocking(tablesByStageKey(context, tournaments))
+      clubsById <- IO.blocking(participatingClubsById(context, tournaments))
+      schedules <- IO.blocking(publicScheduleViews(tournaments, lineupPlayersById, tablesByStage, clubsById))
+      filteredSchedules <- IO.blocking(filterPublicScheduleViews(schedules, query))
     yield PagedResponse.fromItems(filteredSchedules, limit, offset, query.appliedFilters)(identity)
 
   private def resolveQuery(context: ApiPlanContext): ResolvedScheduleQuery =

@@ -24,8 +24,8 @@ final case class CreateClubAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
-      parsedCreatorId <- IO(PlayerId(creatorId))
-      actor <- IO(context.principal(parsedCreatorId))
+      parsedCreatorId <- IO.blocking(PlayerId(creatorId))
+      actor <- IO.blocking(context.principal(parsedCreatorId))
       createdAt <- IO.realTimeInstant
       module = context.support.clubModule
       command = CreateClubCommand(
@@ -34,7 +34,7 @@ final case class CreateClubAPIMessage(
         actor = actor,
         createdAt = createdAt
       )
-      club <- IO {
+      club <- IO.blocking {
         module.transactionManager.inTransaction {
           createClub(context.connection, module, command)
         }
