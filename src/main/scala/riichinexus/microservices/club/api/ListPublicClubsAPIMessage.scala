@@ -44,7 +44,7 @@ final case class ListPublicClubsAPIMessage(
     )
 
   private def publicClubs(context: ApiPlanContext): Vector[Club] =
-    ClubTable.findActive(context.connection).sortBy(_.name)
+    ClubTable.findFiltered(context.connection, activeOnly = true).sortBy(_.name)
 
   private def publicClubPlayersById(
       context: ApiPlanContext,

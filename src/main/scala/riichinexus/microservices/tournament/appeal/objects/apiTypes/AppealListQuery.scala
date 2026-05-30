@@ -3,6 +3,7 @@ package riichinexus.microservices.tournament.appeal.objects.apiTypes
 import java.time.Instant
 
 import riichinexus.domain.model.*
+import riichinexus.microservices.tournament.appeal.objects.{AppealPriority, AppealStatus}
 import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.*
 

@@ -2,6 +2,7 @@ package riichinexus.microservices.tournament.appeal.objects.apiTypes
 
 import riichinexus.domain.model.*
 import riichinexus.microservices.tournament.appeal.domain.model.AppealAttachment
+import riichinexus.microservices.tournament.appeal.objects.{AppealAttachmentMediaKind, AppealAttachmentStorageKind}
 import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.*
 

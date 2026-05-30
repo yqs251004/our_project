@@ -207,7 +207,9 @@ object TournamentStageTableScheduler:
       history: Vector[MatchRecord],
       roundNumber: Int
   ): Vector[PlannedTable] =
-    val clubRelations = buildClubRelationIndex(riichinexus.microservices.club.tables.club.ClubTable.findActive(connection))
+    val clubRelations = buildClubRelationIndex(
+      riichinexus.microservices.club.tables.club.ClubTable.findFiltered(connection, activeOnly = true)
+    )
     stage.format match
       case StageFormat.RoundRobin =>
         buildRoundRobinTables(participants, stage, roundNumber)

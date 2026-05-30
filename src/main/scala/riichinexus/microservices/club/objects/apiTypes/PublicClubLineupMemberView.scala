@@ -2,7 +2,7 @@ package riichinexus.microservices.club.objects.apiTypes
 
 import riichinexus.domain.model.PlayerId
 import riichinexus.microservices.player.objects.PlayerStatus
-import riichinexus.microservices.tournament.objects.RankSnapshotView
+import riichinexus.microservices.tournament.objects.apiTypes.RankSnapshotView
 import upickle.default.*
 
 final case class PublicClubLineupMemberView(

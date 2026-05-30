@@ -5,6 +5,7 @@ import riichinexus.microservices.tournament.appeal.domain.model.{
   AppealDecisionType as DomainAppealDecisionType,
   AppealTableResolution as DomainAppealTableResolution
 }
+import riichinexus.microservices.tournament.appeal.objects.{AppealDecisionType, AppealTableResolution}
 import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.*
 

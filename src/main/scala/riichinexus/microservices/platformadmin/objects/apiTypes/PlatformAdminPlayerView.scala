@@ -1,4 +1,4 @@
-package riichinexus.microservices.platformadmin.objects
+package riichinexus.microservices.platformadmin.objects.apiTypes
 
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*

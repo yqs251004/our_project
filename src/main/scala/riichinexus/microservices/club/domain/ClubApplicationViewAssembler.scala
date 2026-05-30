@@ -7,9 +7,9 @@ import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.tournament.domain.model.*
 import riichinexus.microservices.club.domain.model.*
-import riichinexus.microservices.club.objects.{ClubMembershipApplicantView, ClubMembershipApplicationView}
+import riichinexus.microservices.club.objects.apiTypes.{ClubMembershipApplicantView, ClubMembershipApplicationView}
 import riichinexus.microservices.player.tables.player.PlayerTable
-import riichinexus.microservices.tournament.objects.RankSnapshotView
+import riichinexus.microservices.tournament.objects.apiTypes.RankSnapshotView
 
 object ClubApplicationViewAssembler:
   def canManageClubApplications(actor: AccessPrincipal, club: Club): Boolean =

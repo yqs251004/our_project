@@ -5,7 +5,6 @@ import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.api.*
 import riichinexus.microservices.club.objects.*
 import riichinexus.microservices.club.objects.apiTypes.*
-import riichinexus.microservices.player.objects.PlayerProfileView
 import riichinexus.microservices.player.objects.apiTypes.*
 import riichinexus.system.objects.PagedResponse
 import riichinexus.microservices.tournament.objects.apiTypes.*

@@ -3,7 +3,7 @@ package riichinexus.microservices.player.api
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.player.domain.PlayerRegistration
-import riichinexus.microservices.player.objects.PlayerProfileView
+import riichinexus.microservices.player.objects.apiTypes.PlayerProfileView
 import riichinexus.microservices.player.objects.apiTypes.CreatePlayerRequest
 import upickle.default.*
 

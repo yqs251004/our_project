@@ -1,4 +1,4 @@
-package riichinexus.microservices.club.objects
+package riichinexus.microservices.club.objects.apiTypes
 
 import riichinexus.microservices.club.domain.model.{ClubMemberPrivilegeSnapshot as DomainClubMemberPrivilegeSnapshot}
 import upickle.default.*

@@ -3,7 +3,6 @@ package riichinexus.microservices.player.router
 import riichinexus.api.RegisteredAPIMessage
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.player.api.*
-import riichinexus.microservices.player.objects.PlayerProfileView
 import riichinexus.microservices.player.objects.apiTypes.*
 import riichinexus.system.objects.PagedResponse
 

@@ -1,4 +1,4 @@
-package riichinexus.microservices.tournament.objects
+package riichinexus.microservices.tournament.objects.apiTypes
 
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.player.objects.{RankPlatform, RankSnapshot as DomainRankSnapshot}

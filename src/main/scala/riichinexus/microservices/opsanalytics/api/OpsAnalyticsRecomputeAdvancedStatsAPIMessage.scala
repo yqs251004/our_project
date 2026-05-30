@@ -90,7 +90,7 @@ final case class OpsAnalyticsRecomputeAdvancedStatsAPIMessage(
   ): Vector[AdvancedStatsRecomputeTask] =
     val owners =
       PlayerTable.findAll(connection).map(player => DashboardOwner.Player(player.id)) ++
-        riichinexus.microservices.club.tables.club.ClubTable.findActive(connection).map(club => DashboardOwner.Club(club.id))
+        riichinexus.microservices.club.tables.club.ClubTable.findFiltered(connection, activeOnly = true).map(club => DashboardOwner.Club(club.id))
 
     owners.distinct.map(owner => enqueueOwnerRecompute(connection, module, owner, reason, requestedAt))
 
@@ -104,7 +104,7 @@ final case class OpsAnalyticsRecomputeAdvancedStatsAPIMessage(
   ): Vector[AdvancedStatsRecomputeTask] =
     val owners =
       PlayerTable.findAll(connection).map(player => DashboardOwner.Player(player.id)) ++
-        riichinexus.microservices.club.tables.club.ClubTable.findActive(connection).map(club => DashboardOwner.Club(club.id))
+        riichinexus.microservices.club.tables.club.ClubTable.findFiltered(connection, activeOnly = true).map(club => DashboardOwner.Club(club.id))
 
     owners.distinct
       .filter(owner => shouldBackfillOwner(connection, module, owner, mode))

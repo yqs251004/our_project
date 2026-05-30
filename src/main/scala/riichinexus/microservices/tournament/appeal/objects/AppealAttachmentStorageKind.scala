@@ -1,4 +1,4 @@
-package riichinexus.microservices.tournament.appeal.objects.apiTypes
+package riichinexus.microservices.tournament.appeal.objects
 
 import riichinexus.microservices.tournament.appeal.domain.model.{AppealAttachmentStorageKind as DomainAppealAttachmentStorageKind}
 import upickle.default.*

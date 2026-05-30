@@ -1,6 +1,6 @@
-package riichinexus.microservices.club.objects
+package riichinexus.microservices.club.objects.apiTypes
 
-import riichinexus.microservices.tournament.objects.RankSnapshotView
+import riichinexus.microservices.tournament.objects.apiTypes.RankSnapshotView
 import upickle.default.*
 
 final case class ClubMembershipApplicantView(

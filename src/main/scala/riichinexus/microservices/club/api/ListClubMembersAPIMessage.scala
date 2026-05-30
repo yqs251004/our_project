@@ -5,7 +5,8 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.microservices.club.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.player.objects.{PlayerProfileView, PlayerStatus}
+import riichinexus.microservices.player.objects.PlayerStatus
+import riichinexus.microservices.player.objects.apiTypes.PlayerProfileView
 import riichinexus.microservices.player.tables.player.PlayerTable
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*

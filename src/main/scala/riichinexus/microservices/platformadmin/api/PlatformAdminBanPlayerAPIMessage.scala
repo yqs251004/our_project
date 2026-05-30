@@ -14,7 +14,7 @@ import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.player.objects.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.player.tables.player.PlayerTable
-import riichinexus.microservices.platformadmin.objects.PlatformAdminPlayerView
+import riichinexus.microservices.platformadmin.objects.apiTypes.PlatformAdminPlayerView
 import riichinexus.microservices.platformadmin.objects.apiTypes.*
 import upickle.default.*
 

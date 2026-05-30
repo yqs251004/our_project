@@ -15,7 +15,7 @@ import riichinexus.microservices.club.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.tables.club.ClubTable
 import riichinexus.microservices.player.tables.player.PlayerTable
-import riichinexus.microservices.platformadmin.objects.PlatformAdminClubView
+import riichinexus.microservices.platformadmin.objects.apiTypes.PlatformAdminClubView
 import riichinexus.microservices.platformadmin.objects.apiTypes.*
 import upickle.default.*
 
@@ -74,7 +74,7 @@ final case class PlatformAdminDissolveClubAPIMessage(
     }
 
   private def removeRelationsToClub(connection: java.sql.Connection, clubId: ClubId): Unit =
-    riichinexus.microservices.club.tables.club.ClubTable.findActive(connection)
+    riichinexus.microservices.club.tables.club.ClubTable.findFiltered(connection, activeOnly = true)
       .filterNot(_.id == clubId)
       .filter(_.relations.exists(_.targetClubId == clubId))
       .foreach { relatedClub =>

@@ -12,7 +12,8 @@ import riichinexus.microservices.tournament.domain.model.*
 import riichinexus.microservices.club.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubAuthorization
-import riichinexus.microservices.club.objects.{ClubTournamentParticipationStatus, ClubTournamentParticipationView}
+import riichinexus.microservices.club.objects.ClubTournamentParticipationStatus
+import riichinexus.microservices.club.objects.apiTypes.ClubTournamentParticipationView
 import riichinexus.microservices.club.objects.apiTypes.*
 import riichinexus.microservices.club.tables.club.ClubTable
 import riichinexus.microservices.tournament.tables.tournament.TournamentTable

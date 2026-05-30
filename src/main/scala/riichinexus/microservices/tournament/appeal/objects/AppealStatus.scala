@@ -1,4 +1,4 @@
-package riichinexus.microservices.tournament.appeal.objects.apiTypes
+package riichinexus.microservices.tournament.appeal.objects
 
 import riichinexus.microservices.tournament.appeal.domain.model.{AppealStatus as DomainAppealStatus}
 import upickle.default.*

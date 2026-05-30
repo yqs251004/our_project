@@ -9,7 +9,7 @@ import riichinexus.microservices.club.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.{ClubApplicationViewAssembler, ClubAuthorization}
 import riichinexus.microservices.club.objects.ClubApplicationStatus
-import riichinexus.microservices.club.objects.ClubMembershipApplicationView
+import riichinexus.microservices.club.objects.apiTypes.ClubMembershipApplicationView
 import riichinexus.microservices.club.objects.apiTypes.ClubApplicationListQuery
 import riichinexus.microservices.club.tables.club.ClubTable
 import riichinexus.system.objects.PagedResponse

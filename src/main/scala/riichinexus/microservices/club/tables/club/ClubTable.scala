@@ -1,11 +1,10 @@
 package riichinexus.microservices.club.tables.club
 
-import java.sql.{Connection, PreparedStatement, ResultSet, SQLException, Types}
+import java.sql.{Connection, PreparedStatement, ResultSet, Types}
 
 import scala.annotation.tailrec
 import scala.util.Using
 
-import org.postgresql.util.PSQLException
 import riichinexus.application.ports.OptimisticConcurrencyException
 import riichinexus.domain.model.*
 import riichinexus.microservices.club.domain.model.*
@@ -27,20 +26,7 @@ object ClubTable:
       |""".stripMargin
 
   private[riichinexus] def save(connection: Connection, club: Club): Club =
-    try persist(connection, club)
-    catch
-      case error: SQLException if isUniqueViolation(error, "idx_clubs_name") =>
-        val normalized = findByName(connection, club.name)
-          .map(existing =>
-            club.copy(
-              id = existing.id,
-              creator = existing.creator,
-              createdAt = existing.createdAt,
-              version = existing.version
-            )
-          )
-          .getOrElse(throw error)
-        persist(connection, normalized)
+    persist(connection, club)
 
   private def persist(connection: Connection, club: Club): Club =
     val persisted = club.copy(version = club.version + 1)
@@ -160,9 +146,6 @@ object ClubTable:
       Using.resource(statement.executeQuery())(readClubs)
     }
 
-  private[riichinexus] def findActive(connection: Connection): Vector[Club] =
-    findFiltered(connection, activeOnly = true)
-
   private def setNullableString(
       statement: PreparedStatement,
       index: Int,
@@ -182,9 +165,3 @@ object ClubTable:
 
   private def readClub(resultSet: ResultSet): Club =
     read[Club](resultSet.getString("payload"))
-
-  private def isUniqueViolation(error: SQLException, constraintName: String): Boolean =
-    error match
-      case postgresError: PSQLException =>
-        Option(postgresError.getServerErrorMessage).exists(_.getConstraint == constraintName)
-      case _ => false

@@ -5,7 +5,7 @@ import java.util.NoSuchElementException
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.PlayerId
-import riichinexus.microservices.player.objects.PlayerProfileView
+import riichinexus.microservices.player.objects.apiTypes.PlayerProfileView
 import riichinexus.microservices.player.tables.player.PlayerTable
 import upickle.default.*
 

@@ -13,7 +13,7 @@ import riichinexus.microservices.club.objects.apiTypes.*
 import riichinexus.microservices.player.objects.apiTypes.*
 import riichinexus.microservices.tournament.objects.apiTypes.*
 import riichinexus.microservices.tournament.domain.model.*
-import riichinexus.microservices.tournament.objects.RankSnapshotView
+import riichinexus.microservices.tournament.objects.apiTypes.RankSnapshotView
 import riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTable
 import riichinexus.microservices.tournament.tables.tournament.TournamentTable
 import upickle.default.*

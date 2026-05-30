@@ -5,7 +5,7 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.microservices.club.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.objects.ClubMemberPrivilegeSnapshotView
+import riichinexus.microservices.club.objects.apiTypes.ClubMemberPrivilegeSnapshotView
 import riichinexus.microservices.club.objects.apiTypes.ClubMemberPrivilegeListQuery
 import riichinexus.microservices.club.tables.club.ClubTable
 import riichinexus.system.objects.PagedResponse

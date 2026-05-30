@@ -9,7 +9,7 @@ import riichinexus.microservices.player.domain.PlayerRankNormalizationService
 import riichinexus.microservices.player.objects.{Player, PlayerStatus}
 import riichinexus.microservices.player.tables.player.PlayerTable
 import riichinexus.microservices.player.objects.apiTypes.PlayerLeaderboardEntry
-import riichinexus.microservices.tournament.objects.RankSnapshotView
+import riichinexus.microservices.tournament.objects.apiTypes.RankSnapshotView
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 

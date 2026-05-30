@@ -7,15 +7,18 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.club.tables.club.ClubTable
-import riichinexus.microservices.tournament.objects.apiTypes.{PublicTournamentDetailView, PublicTournamentStageView}
+import riichinexus.microservices.tournament.objects.apiTypes.{
+  AdvancementRuleView,
+  KnockoutRuleConfigView,
+  PublicTournamentDetailView,
+  PublicTournamentStageView,
+  SwissRuleConfigView
+}
 import riichinexus.microservices.tournament.domain.TournamentStageQueries
 import riichinexus.microservices.tournament.domain.model.*
 import riichinexus.microservices.tournament.objects.{
-  AdvancementRuleView,
   KnockoutBracketSnapshot as KnockoutBracketSnapshotResponse,
-  KnockoutRuleConfigView,
   StageRankingSnapshot as StageRankingSnapshotResponse,
-  SwissRuleConfigView,
   TournamentFormat
 }
 import riichinexus.microservices.tournament.tables.tournament.TournamentTable

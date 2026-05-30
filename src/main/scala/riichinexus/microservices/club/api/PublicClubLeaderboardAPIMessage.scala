@@ -34,7 +34,7 @@ final case class PublicClubLeaderboardAPIMessage(
 
   private def publicClubs(context: ApiPlanContext): Vector[Club] =
     ClubTable
-      .findActive(context.connection)
+      .findFiltered(context.connection, activeOnly = true)
       .sortBy(club => (-club.powerRating, -club.totalPoints, club.name))
 
   private def publicClubLeaderboardEntries(clubs: Vector[Club]): Vector[ClubLeaderboardEntry] =

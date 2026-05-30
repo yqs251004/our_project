@@ -1,4 +1,4 @@
-package riichinexus.microservices.tournament.appeal.objects.apiTypes
+package riichinexus.microservices.tournament.appeal.objects
 
 import riichinexus.microservices.tournament.appeal.domain.model.{AppealTableResolution as DomainAppealTableResolution}
 import upickle.default.*

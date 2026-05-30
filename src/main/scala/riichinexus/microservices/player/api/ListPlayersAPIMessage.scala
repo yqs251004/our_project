@@ -3,7 +3,8 @@ package riichinexus.microservices.player.api
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
-import riichinexus.microservices.player.objects.{Player, PlayerProfileView, PlayerStatus}
+import riichinexus.microservices.player.objects.{Player, PlayerStatus}
+import riichinexus.microservices.player.objects.apiTypes.PlayerProfileView
 import riichinexus.microservices.player.objects.apiTypes.PlayerListQuery
 import riichinexus.microservices.player.tables.player.PlayerTable
 import riichinexus.system.objects.PagedResponse

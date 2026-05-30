@@ -9,7 +9,8 @@ import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.player.objects.*
 import riichinexus.microservices.club.tables.club.ClubTable
 import riichinexus.microservices.player.tables.player.PlayerTable
-import riichinexus.microservices.tournament.objects.{AdvancementRuleView, KnockoutRuleConfigView, SwissRuleConfigView, TournamentFormat}
+import riichinexus.microservices.tournament.objects.TournamentFormat
+import riichinexus.microservices.tournament.objects.apiTypes.{AdvancementRuleView, KnockoutRuleConfigView, SwissRuleConfigView}
 import riichinexus.microservices.tournament.objects.apiTypes.*
 import riichinexus.microservices.tournament.tables.tournament.TournamentTable
 

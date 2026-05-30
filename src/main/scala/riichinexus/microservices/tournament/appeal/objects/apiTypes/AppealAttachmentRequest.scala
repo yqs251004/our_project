@@ -8,6 +8,7 @@ import riichinexus.microservices.tournament.appeal.domain.model.{
   AppealAttachmentMediaKind as DomainAppealAttachmentMediaKind,
   AppealAttachmentStorageKind as DomainAppealAttachmentStorageKind
 }
+import riichinexus.microservices.tournament.appeal.objects.{AppealAttachmentMediaKind, AppealAttachmentStorageKind}
 import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.*
 

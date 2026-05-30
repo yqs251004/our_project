@@ -1,4 +1,4 @@
-package riichinexus.microservices.club.objects
+package riichinexus.microservices.club.objects.apiTypes
 
 import upickle.default.*
 

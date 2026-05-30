@@ -4,7 +4,7 @@ import upickle.default.*
 
 import riichinexus.domain.model.{ClubId, PlayerId}
 import riichinexus.microservices.player.objects.{PlayerStatus, RankSnapshot}
-import riichinexus.microservices.tournament.objects.RankSnapshotView
+import riichinexus.microservices.tournament.objects.apiTypes.RankSnapshotView
 
 final case class TournamentParticipantPlayerView(
     playerId: String,

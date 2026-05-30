@@ -1,4 +1,4 @@
-package riichinexus.microservices.tournament.objects
+package riichinexus.microservices.tournament.objects.apiTypes
 
 import riichinexus.microservices.tournament.domain.model.{SwissRuleConfig as DomainSwissRuleConfig}
 import upickle.default.*

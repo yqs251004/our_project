@@ -4,6 +4,7 @@ import java.time.Instant
 
 import riichinexus.domain.model.*
 import riichinexus.microservices.tournament.appeal.domain.model.{AppealPriority as DomainAppealPriority}
+import riichinexus.microservices.tournament.appeal.objects.AppealPriority
 import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.*
 

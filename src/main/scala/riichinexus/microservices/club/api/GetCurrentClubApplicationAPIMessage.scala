@@ -10,7 +10,7 @@ import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.club.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubApplicationViewAssembler
-import riichinexus.microservices.club.objects.ClubMembershipApplicationView
+import riichinexus.microservices.club.objects.apiTypes.ClubMembershipApplicationView
 import riichinexus.microservices.club.tables.club.ClubTable
 import upickle.default.*
 

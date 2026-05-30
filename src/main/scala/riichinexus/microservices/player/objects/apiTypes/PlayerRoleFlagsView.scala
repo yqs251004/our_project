@@ -1,4 +1,4 @@
-package riichinexus.microservices.player.objects
+package riichinexus.microservices.player.objects.apiTypes
 
 import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.*
