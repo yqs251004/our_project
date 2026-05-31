@@ -5,8 +5,8 @@ import java.sql.Connection
 import riichinexus.application.ports.{DomainEventSubscriber, DomainEventSubscriberPartitionStrategy}
 import riichinexus.application.ports.DomainEvent
 import riichinexus.microservices.opsanalytics.domain.RatingService
-import riichinexus.microservices.player.tables.player.PlayerTable
-import riichinexus.microservices.tournament.domain.MatchRecordArchived
+import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
+import riichinexus.microservices.tournament.domain.events.MatchRecordArchived
 
 final class RatingProjectionSubscriber extends DomainEventSubscriber:
   override def partitionStrategy: DomainEventSubscriberPartitionStrategy =
@@ -16,14 +16,14 @@ final class RatingProjectionSubscriber extends DomainEventSubscriber:
     event match
       case MatchRecordArchived(_, _, _, matchRecord, _, _) =>
         val players = matchRecord.seatResults.flatMap { result =>
-          PlayerTable.findById(connection, result.playerId)
+          GetPlayerAPIMessage.findPlayer(connection, result.playerId)
         }
 
         val deltas = RatingService.calculateDeltas(players, matchRecord.seatResults)
 
         deltas.foreach { delta =>
-          PlayerTable.findById(connection, delta.playerId).foreach { player =>
-            PlayerTable.save(connection, player.applyElo(delta.delta))
+          GetPlayerAPIMessage.findPlayer(connection, delta.playerId).foreach { player =>
+            CreatePlayerAPIMessage.persistPlayer(connection, player.applyElo(delta.delta))
           }
         }
 

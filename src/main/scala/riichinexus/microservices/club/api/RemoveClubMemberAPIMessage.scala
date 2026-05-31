@@ -14,7 +14,7 @@ import riichinexus.microservices.auth.domain.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.{ClubAuthorization, ClubProjectionRefresher}
 import riichinexus.microservices.club.objects.ClubView
-import riichinexus.microservices.player.tables.player.PlayerTable
+import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import upickle.default.*
 
 final case class RemoveClubMemberAPIMessage(
@@ -54,8 +54,8 @@ final case class RemoveClubMemberAPIMessage(
       command: RemoveClubMemberCommand
   ): Option[Club] =
     for
-      club <- riichinexus.microservices.club.tables.club.ClubTable.findById(connection, command.clubId)
-      player <- PlayerTable.findById(connection, command.playerId)
+      club <- riichinexus.microservices.club.tables.clubs.ClubTable.findById(connection, command.clubId)
+      player <- GetPlayerAPIMessage.findPlayer(connection, command.playerId)
     yield
       ClubAuthorization.ensureClubActive(club)
       ClubAuthorization.requireClubMember(club, command.playerId, "remove member")
@@ -68,13 +68,13 @@ final case class RemoveClubMemberAPIMessage(
       )
       ensureMemberCanBeRemoved(club, command.clubId, command.playerId)
 
-      PlayerTable.save(
+      CreatePlayerAPIMessage.persistPlayer(
         connection,
         player
           .leaveClub(command.clubId)
           .revokeClubAdmin(command.clubId)
       )
-      riichinexus.microservices.club.tables.club.ClubTable.save(connection, 
+      riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, 
         ClubProjectionRefresher.refreshClubProjection(connection, module, club.removeMember(command.playerId), command.occurredAt)
       )
 

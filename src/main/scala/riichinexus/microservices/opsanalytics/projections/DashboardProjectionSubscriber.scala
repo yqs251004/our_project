@@ -1,22 +1,31 @@
 package riichinexus.microservices.opsanalytics.projections
 
+import cats.effect.unsafe.implicits.global
+import riichinexus.api.ApiPlanContext
 import java.sql.Connection
 import java.time.Instant
 
 import riichinexus.application.ports.{DomainEventSubscriber, DomainEventSubscriberPartitionStrategy}
 import riichinexus.application.ports.DomainEvent
 import riichinexus.domain.model.*
-import riichinexus.microservices.tournament.domain.model.*
+import riichinexus.microservices.tournament.domain.recordmanagement.functions.MatchRecordFunctions
+import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
+import riichinexus.microservices.tournament.domain.recordmanagement.model.*
+import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
+import riichinexus.microservices.tournament.domain.tablemanagement.model.*
+import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.microservices.club.domain.model.*
+import riichinexus.microservices.club.api.`private`.{ListClubsPrivateAPIMessage, ResolveClubPrivateAPIMessage, ResolveClubsPrivateAPIMessage, SaveClubPrivateAPIMessage}
 import riichinexus.microservices.player.objects.*
 import riichinexus.microservices.opsanalytics.domain.AdvancedStatsRoundAnalysis
 import riichinexus.microservices.opsanalytics.objects.{Dashboard, DashboardOwner}
-import riichinexus.microservices.club.tables.club.ClubTable
 import riichinexus.microservices.opsanalytics.tables.dashboard.DashboardTable
-import riichinexus.microservices.player.tables.player.PlayerTable
-import riichinexus.microservices.tournament.domain.MatchRecordArchived
-import riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTable
-import riichinexus.microservices.tournament.tables.paifu.PaifuTable
+import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
+import riichinexus.microservices.tournament.domain.events.MatchRecordArchived
+import riichinexus.microservices.tournament.api.`private`.{
+  ListPlayerMatchRecordsPrivateAPIMessage,
+  ListPlayerPaifusPrivateAPIMessage
+}
 
 final class DashboardProjectionSubscriber extends DomainEventSubscriber:
   import AdvancedStatsRoundAnalysis.*
@@ -27,7 +36,7 @@ final class DashboardProjectionSubscriber extends DomainEventSubscriber:
   override def handle(connection: Connection, event: DomainEvent): Unit =
     event match
       case MatchRecordArchived(_, _, _, matchRecord, _, occurredAt) =>
-        val impactedPlayers = matchRecord.playerIds.distinct
+        val impactedPlayers = MatchRecordFunctions.playerIds(matchRecord).distinct
 
         impactedPlayers.foreach { playerId =>
           DashboardTable.save(connection, buildPlayerDashboard(connection, playerId, occurredAt))
@@ -37,7 +46,7 @@ final class DashboardProjectionSubscriber extends DomainEventSubscriber:
           .flatMap(playerId => findPlayer(connection, playerId).toVector.flatMap(_.boundClubIds))
           .distinct
           .foreach { clubId =>
-            ClubTable.findById(connection, clubId).foreach { club =>
+            ResolveClubPrivateAPIMessage(clubId).plan(ApiPlanContext(support = null, bearerToken = None, connection = connection)).unsafeRunSync().foreach { club =>
               DashboardTable.save(connection, buildClubDashboard(connection, club, occurredAt))
             }
           }
@@ -47,8 +56,13 @@ final class DashboardProjectionSubscriber extends DomainEventSubscriber:
 
   private def buildPlayerDashboard(connection: Connection, playerId: PlayerId, at: Instant): Dashboard =
     val existingVersion = DashboardTable.findByOwner(connection, DashboardOwner.Player(playerId)).map(_.version).getOrElse(0)
-    val records = MatchRecordTable.findByPlayer(connection, playerId)
-    val rounds = PaifuTable.findByPlayer(connection, playerId).flatMap(_.rounds)
+    val records = ListPlayerMatchRecordsPrivateAPIMessage(playerId)
+      .plan(ApiPlanContext(support = null, bearerToken = None, connection = connection))
+      .unsafeRunSync()
+    val rounds = ListPlayerPaifusPrivateAPIMessage(playerId)
+      .plan(ApiPlanContext(support = null, bearerToken = None, connection = connection))
+      .unsafeRunSync()
+      .flatMap(_.rounds)
     val playerResults = records.flatMap(_.seatResults.find(_.playerId == playerId))
     val roundStats = rounds.map(round => buildRoundStats(round, playerId))
     val placements = playerResults.map(_.placement.toDouble)
@@ -91,7 +105,7 @@ final class DashboardProjectionSubscriber extends DomainEventSubscriber:
       )
 
   private def findPlayer(connection: Connection, playerId: PlayerId): Option[Player] =
-    PlayerTable.findById(connection, playerId)
+    GetPlayerAPIMessage.findPlayer(connection, playerId)
 
   private def weightedAverage(
       dashboards: Vector[Dashboard],

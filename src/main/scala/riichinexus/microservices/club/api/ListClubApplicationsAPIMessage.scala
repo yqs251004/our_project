@@ -7,11 +7,12 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.microservices.club.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.domain.{ClubApplicationViewAssembler, ClubAuthorization}
+import riichinexus.microservices.club.api.`private`.ClubApplicationViewAssembler
+import riichinexus.microservices.club.domain.ClubAuthorization
 import riichinexus.microservices.club.objects.ClubApplicationStatus
 import riichinexus.microservices.club.objects.apiTypes.ClubMembershipApplicationView
 import riichinexus.microservices.club.objects.apiTypes.ClubApplicationListQuery
-import riichinexus.microservices.club.tables.club.ClubTable
+import riichinexus.microservices.club.tables.clubs.ClubTable
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 

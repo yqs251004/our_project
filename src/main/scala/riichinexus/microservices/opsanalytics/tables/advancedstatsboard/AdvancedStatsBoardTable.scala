@@ -25,7 +25,7 @@ object AdvancedStatsBoardTable:
       |where cast(advanced_stats_boards.payload ->> 'version' as integer) = ?
       |""".stripMargin
 
-  private[riichinexus] def save(connection: Connection, board: AdvancedStatsBoard): AdvancedStatsBoard =
+  private[opsanalytics] def save(connection: Connection, board: AdvancedStatsBoard): AdvancedStatsBoard =
     val persisted = board.copy(version = board.version + 1)
     val rowsUpdated = Using.resource(connection.prepareStatement(upsertSql)) { statement =>
       statement.setString(1, ownerKey(persisted.owner))
@@ -50,7 +50,7 @@ object AdvancedStatsBoardTable:
       |where owner_key = ?
       |""".stripMargin
 
-  private[riichinexus] def findByOwner(connection: Connection, owner: DashboardOwner): Option[AdvancedStatsBoard] =
+  private[opsanalytics] def findByOwner(connection: Connection, owner: DashboardOwner): Option[AdvancedStatsBoard] =
     Using.resource(connection.prepareStatement(findByOwnerSql)) { statement =>
       statement.setString(1, ownerKey(owner))
       Using.resource(statement.executeQuery()) { resultSet =>
@@ -66,7 +66,7 @@ object AdvancedStatsBoardTable:
       |order by owner_key
       |""".stripMargin
 
-  private[riichinexus] def findAll(connection: Connection): Vector[AdvancedStatsBoard] =
+  private[opsanalytics] def findAll(connection: Connection): Vector[AdvancedStatsBoard] =
     Using.resource(connection.prepareStatement(findAllSql)) { statement =>
       Using.resource(statement.executeQuery())(readBoards)
     }

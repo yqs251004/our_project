@@ -6,7 +6,12 @@ import scala.annotation.tailrec
 import scala.util.Using
 
 import riichinexus.domain.model.*
-import riichinexus.microservices.tournament.domain.model.*
+import riichinexus.microservices.tournament.domain.recordmanagement.functions.MatchRecordFunctions
+import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
+import riichinexus.microservices.tournament.domain.recordmanagement.model.*
+import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
+import riichinexus.microservices.tournament.domain.tablemanagement.model.*
+import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.{read, write}
 
@@ -25,14 +30,14 @@ object MatchRecordTable:
       |  updated_at = now()
       |""".stripMargin
 
-  private[riichinexus] def save(connection: Connection, record: MatchRecord): MatchRecord =
+  private[tournament] def save(connection: Connection, record: MatchRecord): MatchRecord =
     Using.resource(connection.prepareStatement(upsertSql)) { statement =>
       statement.setString(1, record.id.value)
       statement.setString(2, record.tableId.value)
       statement.setString(3, record.tournamentId.value)
       statement.setString(4, record.stageId.value)
       statement.setTimestamp(5, Timestamp.from(record.generatedAt))
-      statement.setArray(6, connection.createArrayOf("text", record.playerIds.map(_.value).toArray))
+      statement.setArray(6, connection.createArrayOf("text", MatchRecordFunctions.playerIds(record).map(_.value).toArray))
       statement.setString(7, write[MatchRecord](record))
       statement.executeUpdate()
     }
@@ -45,7 +50,7 @@ object MatchRecordTable:
       |where id = ?
       |""".stripMargin
 
-  private[riichinexus] def findById(connection: Connection, id: MatchRecordId): Option[MatchRecord] =
+  private[tournament] def findById(connection: Connection, id: MatchRecordId): Option[MatchRecord] =
     Using.resource(connection.prepareStatement(findByIdSql)) { statement =>
       statement.setString(1, id.value)
       Using.resource(statement.executeQuery()) { resultSet =>
@@ -61,7 +66,7 @@ object MatchRecordTable:
       |where table_id = ?
       |""".stripMargin
 
-  private[riichinexus] def findByTable(connection: Connection, tableId: TableId): Option[MatchRecord] =
+  private[tournament] def findByTable(connection: Connection, tableId: TableId): Option[MatchRecord] =
     Using.resource(connection.prepareStatement(findByTableSql)) { statement =>
       statement.setString(1, tableId.value)
       Using.resource(statement.executeQuery()) { resultSet =>
@@ -78,7 +83,7 @@ object MatchRecordTable:
       |order by generated_at desc, id desc
       |""".stripMargin
 
-  private[riichinexus] def findByTournamentAndStage(
+  private[tournament] def findByTournamentAndStage(
       connection: Connection,
       tournamentId: TournamentId,
       stageId: TournamentStageId
@@ -102,7 +107,7 @@ object MatchRecordTable:
       |limit ?
       |""".stripMargin
 
-  private[riichinexus] def findRecentByClub(connection: Connection, clubId: ClubId, limit: Int): Vector[MatchRecord] =
+  private[tournament] def findRecentByClub(connection: Connection, clubId: ClubId, limit: Int): Vector[MatchRecord] =
     Using.resource(connection.prepareStatement(findRecentByClubSql)) { statement =>
       statement.setString(1, clubId.value)
       statement.setInt(2, limit)
@@ -117,7 +122,7 @@ object MatchRecordTable:
       |order by generated_at desc, id desc
       |""".stripMargin
 
-  private[riichinexus] def findByPlayer(connection: Connection, playerId: PlayerId): Vector[MatchRecord] =
+  private[tournament] def findByPlayer(connection: Connection, playerId: PlayerId): Vector[MatchRecord] =
     Using.resource(connection.prepareStatement(findByPlayerSql)) { statement =>
       statement.setString(1, playerId.value)
       Using.resource(statement.executeQuery())(readMatchRecords)
@@ -130,7 +135,7 @@ object MatchRecordTable:
       |order by generated_at desc
       |""".stripMargin
 
-  private[riichinexus] def findAll(connection: Connection): Vector[MatchRecord] =
+  private[tournament] def findAll(connection: Connection): Vector[MatchRecord] =
     Using.resource(connection.prepareStatement(findAllSql)) { statement =>
       Using.resource(statement.executeQuery())(readMatchRecords)
     }

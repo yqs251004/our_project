@@ -7,12 +7,30 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.tournament.domain.model.*
+import riichinexus.microservices.tournament.domain.tournamentmanagement.functions.TournamentFunctions
+import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
+import riichinexus.microservices.tournament.domain.recordmanagement.model.*
+import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
+import riichinexus.microservices.tournament.domain.tablemanagement.model.*
+import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.tournament.objects.apiTypes.*
-import riichinexus.microservices.tournament.objects.apiTypes.*
-import riichinexus.microservices.tournament.objects.apiTypes.AssignTournamentAdminRequest.given
-import riichinexus.microservices.tournament.objects.apiTypes.OperatorRequest
+import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.*
+import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.*
+import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.AssignTournamentAdminRequest.given
 import upickle.default.*
 
 final case class TournamentStartAPIMessage(tournamentId: String, operatorId: Option[String] = None) extends APIMessage[TournamentSummaryView] derives ReadWriter:
@@ -30,7 +48,7 @@ final case class TournamentStartAPIMessage(tournamentId: String, operatorId: Opt
     yield TournamentSummaryView.fromDomain(tournament)
 
   private def resolveOperatorActor(context: ApiPlanContext): AccessPrincipal =
-    OperatorRequest(operatorId.filter(_.nonEmpty)).operator
+    operatorId.filter(_.nonEmpty).map(PlayerId(_))
       .map(context.principal)
       .getOrElse(AccessPrincipal.system)
 
@@ -39,14 +57,14 @@ final case class TournamentStartAPIMessage(tournamentId: String, operatorId: Opt
       module: TournamentModuleContext,
       command: StartTournamentCommand
   ): Option[Tournament] =
-    riichinexus.microservices.tournament.tables.tournament.TournamentTable.findById(connection, command.tournamentId).map { tournament =>
+    riichinexus.microservices.tournament.tables.tournaments.TournamentTable.findById(connection, command.tournamentId).map { tournament =>
       module.authorizationService.requirePermission(
         command.actor,
         Permission.ManageTournamentStages,
         tournamentId = Some(command.tournamentId)
       )
       ensureTournamentHasParticipants(tournament, command.tournamentId)
-      riichinexus.microservices.tournament.tables.tournament.TournamentTable.save(connection, tournament.start)
+      riichinexus.microservices.tournament.tables.tournaments.TournamentTable.save(connection, TournamentFunctions.start(tournament))
     }
 
   private def ensureTournamentHasParticipants(tournament: Tournament, tournamentId: TournamentId): Unit =

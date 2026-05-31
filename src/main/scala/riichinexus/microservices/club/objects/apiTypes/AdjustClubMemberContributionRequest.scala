@@ -8,12 +8,7 @@ final case class AdjustClubMemberContributionRequest(
     playerId: String,
     delta: Int,
     note: Option[String] = None
-):
-  def operator: PlayerId =
-    PlayerId(operatorId)
-
-  def player: PlayerId =
-    PlayerId(playerId)
+)
 
 object AdjustClubMemberContributionRequest:
   given ReadWriter[AdjustClubMemberContributionRequest] = macroRW

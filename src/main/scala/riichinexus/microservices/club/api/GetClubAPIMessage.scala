@@ -8,7 +8,7 @@ import riichinexus.domain.model.*
 import riichinexus.microservices.club.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.objects.ClubView
-import riichinexus.microservices.club.tables.club.ClubTable
+import riichinexus.microservices.club.tables.clubs.ClubTable
 import upickle.default.*
 
 final case class GetClubAPIMessage(clubId: String) extends APIMessage[ClubView] derives ReadWriter:

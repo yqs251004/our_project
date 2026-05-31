@@ -1,6 +1,7 @@
 package riichinexus.microservices.tournament.api
 
-import riichinexus.microservices.tournament.objects.{AdvancementRuleType, TournamentFormat}
+import riichinexus.microservices.tournament.objects.rulesmanagement.stageprogression.AdvancementRuleType
+import riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentFormat
 
 import java.util.NoSuchElementException
 import java.time.Instant
@@ -10,19 +11,30 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.tournament.domain.KnockoutStageCoordinator
-import riichinexus.microservices.tournament.domain.model.*
+import riichinexus.microservices.tournament.domain.rulesmanagement.functions.knockout.KnockoutStageCoordinator
+import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
+import riichinexus.microservices.tournament.domain.recordmanagement.model.*
+import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
+import riichinexus.microservices.tournament.domain.tablemanagement.model.*
+import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.tournament.objects.apiTypes.*
-import riichinexus.microservices.tournament.objects.apiTypes.*
-import riichinexus.microservices.tournament.objects.apiTypes.AssignTournamentAdminRequest.given
+import riichinexus.microservices.tournament.domain.tablemanagement.model.Table
+import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.*
+import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.AssignTournamentAdminRequest.given
 import upickle.default.*
 
-final case class TournamentStageAdvanceAPIMessage(tournamentId: String, stageId: String, request: AdvanceKnockoutStageRequest) extends APIMessage[Vector[riichinexus.microservices.tournament.objects.Table]] derives ReadWriter:
+final case class TournamentStageAdvanceAPIMessage(tournamentId: String, stageId: String, operatorId: Option[String] = None) extends APIMessage[Vector[TournamentTableView]] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[Vector[riichinexus.microservices.tournament.objects.Table]] =
+  override def plan(context: ApiPlanContext): IO[Vector[TournamentTableView]] =
     for
-      actor <- IO.blocking(request.operator.map(context.principal).getOrElse(AccessPrincipal.system))
+      actor <- IO.blocking(operatorId.filter(_.nonEmpty).map(PlayerId(_)).map(context.principal).getOrElse(AccessPrincipal.system))
       at <- IO.realTimeInstant
       module = context.support.tournamentModule
       command = AdvanceKnockoutStageCommand(
@@ -36,14 +48,14 @@ final case class TournamentStageAdvanceAPIMessage(tournamentId: String, stageId:
           advanceStage(context.connection, module, command)
         }
       }
-    yield tables.map(riichinexus.microservices.tournament.objects.Table.fromDomain)
+    yield tables.map(TournamentTableView.fromDomain)
 
   private def advanceStage(
       connection: java.sql.Connection,
       module: TournamentModuleContext,
       command: AdvanceKnockoutStageCommand
   ): Vector[Table] =
-    val tournament = riichinexus.microservices.tournament.tables.tournament.TournamentTable
+    val tournament = riichinexus.microservices.tournament.tables.tournaments.TournamentTable
       .findById(connection, command.tournamentId)
       .getOrElse(throw NoSuchElementException(s"Tournament ${command.tournamentId.value} was not found"))
     val stage = tournament.stages

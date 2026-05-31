@@ -8,12 +8,7 @@ final case class AssignClubTitleRequest(
     operatorId: String,
     title: String,
     note: Option[String] = None
-):
-  def player: PlayerId =
-    PlayerId(playerId)
-
-  def operator: PlayerId =
-    PlayerId(operatorId)
+)
 
 object AssignClubTitleRequest:
   given ReadWriter[AssignClubTitleRequest] = macroRW

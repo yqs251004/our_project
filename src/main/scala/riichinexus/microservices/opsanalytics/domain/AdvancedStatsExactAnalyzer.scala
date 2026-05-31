@@ -1,9 +1,14 @@
 package riichinexus.microservices.opsanalytics.domain
 
-import riichinexus.microservices.tournament.objects.{PaifuActionType}
+import riichinexus.microservices.tournament.objects.paifumanagement.{PaifuAction, PaifuActionType, PaifuRound, PaifuTile}
 
 import riichinexus.domain.model.*
-import riichinexus.microservices.tournament.domain.model.*
+import riichinexus.microservices.tournament.domain.paifumanagement.functions.PaifuTileFunctions
+import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
+import riichinexus.microservices.tournament.domain.recordmanagement.model.*
+import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
+import riichinexus.microservices.tournament.domain.tablemanagement.model.*
+import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 
 private[domain] object AdvancedStatsExactAnalyzer:
   private val TerminalAndHonorIndices =
@@ -20,7 +25,7 @@ private[domain] object AdvancedStatsExactAnalyzer:
       foldDiscardCount: Int
   )
 
-  def analyzeRound(round: KyokuRecord, playerId: PlayerId): AdvancedStatsExactAnalyzer.ExactRoundStats =
+  def analyzeRound(round: PaifuRound, playerId: PlayerId): AdvancedStatsExactAnalyzer.ExactRoundStats =
     val ukeireSamples = analyzeExactUkeire(round, playerId)
     val defenseStats = analyzeExactDefense(round, playerId)
 
@@ -32,7 +37,7 @@ private[domain] object AdvancedStatsExactAnalyzer:
       foldDiscardCount = defenseStats.foldDiscardCount
     )
 
-  private def analyzeExactUkeire(round: KyokuRecord, playerId: PlayerId): Vector[Int] =
+  private def analyzeExactUkeire(round: PaifuRound, playerId: PlayerId): Vector[Int] =
     final case class UkeireState(
         hand: Vector[Int],
         visibleKnown: Vector[Int],
@@ -40,7 +45,7 @@ private[domain] object AdvancedStatsExactAnalyzer:
         trackable: Boolean
     )
 
-    round.initialHands.get(playerId).flatMap(parseHandCounts) match
+    round.players.find(_.playerId == playerId).map(_.initialHand.tiles).flatMap(parseHandCounts) match
       case None => Vector.empty
       case Some(initialCounts) if initialCounts.sum != 13 =>
         Vector.empty
@@ -52,7 +57,7 @@ private[domain] object AdvancedStatsExactAnalyzer:
           trackable = true
         )
 
-        val finalState = round.actions.foldLeft(initialState) { (state, action) =>
+        val finalState = round.timeline.events.foldLeft(initialState) { (state, action) =>
           if !state.trackable then state
           else
             action.actor match
@@ -99,7 +104,7 @@ private[domain] object AdvancedStatsExactAnalyzer:
 
         if finalState.trackable then finalState.samples else Vector.empty
 
-  private def analyzeExactDefense(round: KyokuRecord, playerId: PlayerId): AdvancedStatsExactAnalyzer.ExactRoundStats =
+  private def analyzeExactDefense(round: PaifuRound, playerId: PlayerId): AdvancedStatsExactAnalyzer.ExactRoundStats =
     final case class DefenseState(
         riichiDiscards: Map[PlayerId, Set[Int]],
         playerDeclaredRiichi: Boolean,
@@ -118,7 +123,7 @@ private[domain] object AdvancedStatsExactAnalyzer:
       publicVisible = EmptyCounts
     )
 
-    val finalState = round.actions.foldLeft(initialState) { (state, action) =>
+    val finalState = round.timeline.events.foldLeft(initialState) { (state, action) =>
       action.actor match
         case Some(actor) if action.actionType == PaifuActionType.Riichi && actor != playerId =>
           val revealedTiles = publiclyRevealedTiles(action)
@@ -257,32 +262,13 @@ private[domain] object AdvancedStatsExactAnalyzer:
     val pairExists = TerminalAndHonorIndices.exists(index => counts(index) >= 2)
     13 - uniqueCount - (if pairExists then 1 else 0)
 
-  private def parseHandCounts(tiles: Vector[String]): Option[Vector[Int]] =
+  private def parseHandCounts(tiles: Vector[PaifuTile]): Option[Vector[Int]] =
     val parsed = tiles.map(parseTile)
     if parsed.exists(_.isEmpty) then None
     else Some(parsed.flatten.foldLeft(EmptyCounts)(incrementCount))
 
-  private def parseTile(tile: String): Option[Int] =
-    Option(tile).filter(_.length == 2).flatMap { value =>
-      val numberChar = value.charAt(0)
-      val suitChar = value.charAt(1)
-      val normalizedNumber =
-        if numberChar == '0' then 5
-        else if numberChar.isDigit then numberChar.asDigit
-        else -1
-
-      suitChar match
-        case 'm' if normalizedNumber >= 1 && normalizedNumber <= 9 =>
-          Some(normalizedNumber - 1)
-        case 'p' if normalizedNumber >= 1 && normalizedNumber <= 9 =>
-          Some(9 + normalizedNumber - 1)
-        case 's' if normalizedNumber >= 1 && normalizedNumber <= 9 =>
-          Some(18 + normalizedNumber - 1)
-        case 'z' if normalizedNumber >= 1 && normalizedNumber <= 7 =>
-          Some(27 + normalizedNumber - 1)
-        case _ =>
-          None
-    }
+  private def parseTile(tile: PaifuTile): Option[Int] =
+    PaifuTileFunctions.toTileIndex(tile)
 
   private def isSuitTile(index: Int): Boolean =
     index < 27

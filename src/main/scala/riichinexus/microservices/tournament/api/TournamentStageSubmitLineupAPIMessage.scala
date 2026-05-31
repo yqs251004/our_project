@@ -3,32 +3,54 @@ package riichinexus.microservices.tournament.api
 import java.util.NoSuchElementException
 
 import cats.effect.IO
+import cats.effect.unsafe.implicits.global
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.tournament.domain.model.*
+import riichinexus.microservices.tournament.domain.tournamentmanagement.functions.{TournamentFunctions, TournamentStageFunctions}
+import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
+import riichinexus.microservices.tournament.domain.recordmanagement.model.*
+import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
+import riichinexus.microservices.tournament.domain.tablemanagement.model.*
+import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
+import riichinexus.microservices.club.api.`private`.ResolveClubPrivateAPIMessage
 import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.player.objects.*
 import riichinexus.microservices.auth.domain.AuthorizationFailure
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.player.tables.player.PlayerTable
-import riichinexus.microservices.tournament.domain.TournamentOperationViewAssembler
-import riichinexus.microservices.tournament.objects.apiTypes.*
-import riichinexus.microservices.tournament.objects.apiTypes.*
-import riichinexus.microservices.tournament.objects.apiTypes.AssignTournamentAdminRequest.given
+import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
+import riichinexus.microservices.tournament.api.`private`.TournamentOperationViewAssembler
+import riichinexus.microservices.tournament.objects.tablemanagement.SeatWind
+import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.*
+import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.*
+import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.AssignTournamentAdminRequest.given
 import upickle.default.*
 
 final case class TournamentStageSubmitLineupAPIMessage(tournamentId: String, stageId: String, request: SubmitStageLineupRequest) extends APIMessage[TournamentMutationView] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[TournamentMutationView] =
     for
-      actor <- IO.blocking(context.principal(request.operator))
+      actor <- IO.blocking(context.principal(PlayerId(request.operatorId)))
       module = context.support.tournamentModule
       command = SubmitStageLineupCommand(
         tournamentId = TournamentId(tournamentId),
         stageId = TournamentStageId(stageId),
-        submission = request.toSubmission,
+        submission = stageLineupSubmission(request),
         actor = actor
       )
       _ <- IO.blocking {
@@ -47,7 +69,7 @@ final case class TournamentStageSubmitLineupAPIMessage(tournamentId: String, sta
       module: TournamentModuleContext,
       command: SubmitStageLineupCommand
   ): Option[Tournament] =
-    riichinexus.microservices.tournament.tables.tournament.TournamentTable.findById(connection, command.tournamentId).map { tournament =>
+    riichinexus.microservices.tournament.tables.tournaments.TournamentTable.findById(connection, command.tournamentId).map { tournament =>
       val stage = requireStage(tournament, command.stageId)
       ensureNoLineupConflict(stage, command)
       val club = resolveActiveClub(connection, command.submission.clubId)
@@ -55,8 +77,12 @@ final case class TournamentStageSubmitLineupAPIMessage(tournamentId: String, sta
       ensureSubmitterMatchesActor(command.actor, command.submission)
       ensureClubRegistered(tournament, command)
       ensureLineupPlayersActiveMembers(connection, club, command.submission)
-      riichinexus.microservices.tournament.tables.tournament.TournamentTable.save(connection, 
-        tournament.updateStage(command.stageId, _.submitLineup(command.submission))
+      riichinexus.microservices.tournament.tables.tournaments.TournamentTable.save(connection, 
+        TournamentFunctions.updateStage(
+          tournament,
+          command.stageId,
+          stage => TournamentStageFunctions.submitLineup(stage, command.submission)
+        )
       )
     }
 
@@ -85,8 +111,9 @@ final case class TournamentStageSubmitLineupAPIMessage(tournamentId: String, sta
       )
 
   private def resolveActiveClub(connection: java.sql.Connection, clubId: ClubId): Club =
-    val club = riichinexus.microservices.club.tables.club.ClubTable
-      .findById(connection, clubId)
+    val club = ResolveClubPrivateAPIMessage(clubId)
+      .plan(ApiPlanContext(support = null, bearerToken = None, connection = connection))
+      .unsafeRunSync()
       .getOrElse(throw NoSuchElementException(s"Club ${clubId.value} was not found"))
     ensureClubActive(club)
     club
@@ -115,8 +142,7 @@ final case class TournamentStageSubmitLineupAPIMessage(tournamentId: String, sta
           s"Player ${playerId.value} is not a member of club ${submission.clubId.value}"
         )
 
-      val player = PlayerTable
-        .findById(connection, playerId)
+      val player = GetPlayerAPIMessage.findPlayer(connection, playerId)
         .getOrElse(throw NoSuchElementException(s"Player ${playerId.value} was not found"))
       if player.status != PlayerStatus.Active then
         throw IllegalArgumentException(s"Player ${playerId.value} cannot be submitted to tournament lineups")
@@ -152,3 +178,20 @@ final case class TournamentStageSubmitLineupAPIMessage(tournamentId: String, sta
       submission: StageLineupSubmission,
       actor: AccessPrincipal
   )
+
+  private def stageLineupSubmission(request: SubmitStageLineupRequest): StageLineupSubmission =
+    StageLineupSubmission(
+      id = IdGenerator.lineupSubmissionId(),
+      clubId = ClubId(request.clubId),
+      submittedBy = PlayerId(request.operatorId),
+      submittedAt = java.time.Instant.now(),
+      seats = request.seats.map(stageLineupSeat),
+      note = request.note
+    )
+
+  private def stageLineupSeat(request: StageLineupSeatRequest): StageLineupSeat =
+    StageLineupSeat(
+      playerId = PlayerId(request.playerId),
+      preferredWind = request.preferredWind.map(SeatWind.valueOf),
+      reserve = request.reserve
+    )

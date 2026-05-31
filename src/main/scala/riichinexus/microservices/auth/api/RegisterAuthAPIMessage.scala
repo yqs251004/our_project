@@ -3,17 +3,17 @@ package riichinexus.microservices.auth.api
 import java.time.Instant
 
 import cats.effect.IO
+import cats.effect.unsafe.implicits.global
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.AuthModuleContext
 import riichinexus.domain.model.*
-import riichinexus.microservices.player.domain.PlayerRegistration
 import riichinexus.microservices.player.objects.*
 import riichinexus.microservices.auth.objects.{AccountCredential, AuthenticatedSession}
 import riichinexus.microservices.auth.objects.apiTypes.AuthSuccessResponse
 import riichinexus.microservices.auth.security.AuthPasswordHasher
 import riichinexus.microservices.auth.tables.accountcredential.AccountCredentialTable
 import riichinexus.microservices.auth.tables.authenticatedsession.AuthenticatedSessionTable
-import riichinexus.microservices.player.tables.player.PlayerTable
+import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import upickle.default.*
 
 final case class RegisterAuthAPIMessage(
@@ -37,25 +37,24 @@ final case class RegisterAuthAPIMessage(
       )
       result <- IO.blocking {
         module.transactionManager.inTransaction {
-          register(context.connection, module, command)
+          register(context, module, command)
         }
       }
-    yield AuthSuccessResponse.fromView(
-      riichinexus.microservices.auth.objects.apiTypes.AuthSuccessView(
-        userId = result.player.id.value,
-        username = result.username,
-        displayName = result.player.nickname,
-        token = result.session.token,
-        roles = context.support.registeredRoleFlags(result.player)
-      )
+    yield AuthSuccessResponse(
+      userId = result.player.id.value,
+      username = result.username,
+      displayName = result.player.nickname,
+      token = result.session.token,
+      roles = context.support.registeredRoleFlags(result.player)
     )
 
-  private def register(connection: java.sql.Connection, module: AuthModuleContext, command: RegisterAuthCommand): RegisterAuthResult =
+  private def register(context: ApiPlanContext, module: AuthModuleContext, command: RegisterAuthCommand): RegisterAuthResult =
+    val connection = context.connection
     validatePassword(command.password)
     if AccountCredentialTable.findByUsername(connection, command.username).nonEmpty then
       throw IllegalArgumentException(s"Username ${command.username} is already registered")
 
-    val player = resolveRegisteredPlayer(connection, module, command)
+    val player = resolveRegisteredPlayer(context, command)
     ensureActivePlayer(player)
     saveCredential(connection, command, player)
     val session = AuthenticatedSessionTable.save(
@@ -70,22 +69,21 @@ final case class RegisterAuthAPIMessage(
     RegisterAuthResult(command.username, player, session)
 
   private def resolveRegisteredPlayer(
-      connection: java.sql.Connection,
-      module: AuthModuleContext,
+      context: ApiPlanContext,
       command: RegisterAuthCommand
   ): Player =
-    PlayerTable.findAll(connection).find(_.userId.equalsIgnoreCase(command.username)) match
+    ListPlayersAPIMessage.findAllPlayers(context.connection).find(_.userId.equalsIgnoreCase(command.username)) match
       case Some(existing) if existing.nickname == command.displayName =>
         existing
       case Some(existing) =>
-        PlayerTable.save(connection, existing.copy(nickname = command.displayName))
+        CreatePlayerAPIMessage.persistPlayer(context.connection, existing.copy(nickname = command.displayName))
       case None =>
-        PlayerRegistration.register(
-          connection,
-          command.username,
-          command.displayName,
-          DefaultRank,
-          command.registeredAt,
+        CreatePlayerAPIMessage.createPlayer(
+          connection = context.connection,
+          userId = command.username,
+          nickname = command.displayName,
+          rank = DefaultRank,
+          registeredAt = command.registeredAt,
           initialElo = 1500
         )
 

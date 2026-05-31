@@ -1,5 +1,6 @@
 package riichinexus.microservices.platformadmin.api
 
+import cats.effect.unsafe.implicits.global
 import cats.effect.IO
 
 import java.time.Instant
@@ -12,9 +13,9 @@ import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.club.domain.ClubDissolved
 import riichinexus.microservices.club.domain.model.*
+import riichinexus.microservices.club.api.`private`.{ListClubsPrivateAPIMessage, ResolveClubPrivateAPIMessage, ResolveClubsPrivateAPIMessage, SaveClubPrivateAPIMessage}
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.tables.club.ClubTable
-import riichinexus.microservices.player.tables.player.PlayerTable
+import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import riichinexus.microservices.platformadmin.objects.apiTypes.PlatformAdminClubView
 import riichinexus.microservices.platformadmin.objects.apiTypes.*
 import upickle.default.*
@@ -42,7 +43,7 @@ final case class PlatformAdminDissolveClubAPIMessage(
           }
           .getOrElse(throw NoSuchElementException(s"Club ${command.clubId.value} was not found"))
       }
-    yield PlatformAdminClubView.fromDomain(club)
+    yield platformAdminClubView(club)
 
   private def dissolveClub(
       connection: java.sql.Connection,
@@ -50,7 +51,7 @@ final case class PlatformAdminDissolveClubAPIMessage(
       command: DissolveClubCommand
   ): Option[Club] =
     module.authorizationService.requirePermission(command.actor, Permission.DissolveClub)
-    ClubTable.findById(connection, command.clubId).map { club =>
+    ResolveClubPrivateAPIMessage(command.clubId).plan(ApiPlanContext(support = null, bearerToken = None, connection = connection)).unsafeRunSync().map { club =>
       ensureClubCanDissolve(club, command.clubId)
       removeMembersFromClub(connection, club, command.clubId)
       removeRelationsToClub(connection, command.clubId)
@@ -63,8 +64,8 @@ final case class PlatformAdminDissolveClubAPIMessage(
 
   private def removeMembersFromClub(connection: java.sql.Connection, club: Club, clubId: ClubId): Unit =
     club.members.foreach { memberId =>
-      PlayerTable.findById(connection, memberId).foreach { player =>
-        PlayerTable.save(
+      GetPlayerAPIMessage.findPlayer(connection, memberId).foreach { player =>
+        CreatePlayerAPIMessage.persistPlayer(
           connection,
           player
             .leaveClub(clubId)
@@ -74,11 +75,13 @@ final case class PlatformAdminDissolveClubAPIMessage(
     }
 
   private def removeRelationsToClub(connection: java.sql.Connection, clubId: ClubId): Unit =
-    riichinexus.microservices.club.tables.club.ClubTable.findFiltered(connection, activeOnly = true)
+    ListClubsPrivateAPIMessage(activeOnly = true).plan(ApiPlanContext(support = null, bearerToken = None, connection = connection)).unsafeRunSync()
       .filterNot(_.id == clubId)
       .filter(_.relations.exists(_.targetClubId == clubId))
       .foreach { relatedClub =>
-        riichinexus.microservices.club.tables.club.ClubTable.save(connection, relatedClub.removeRelation(clubId))
+        SaveClubPrivateAPIMessage(relatedClub.removeRelation(clubId))
+          .plan(ApiPlanContext(support = null, bearerToken = None, connection = connection))
+          .unsafeRunSync()
       }
 
   private def commitDissolvedClub(
@@ -92,7 +95,7 @@ final case class PlatformAdminDissolveClubAPIMessage(
       .commitWithinTransaction(
         DomainChange(
           aggregate = club.dissolve(command.actor.playerId.getOrElse(club.creator), command.dissolvedAt),
-          persist = updatedClub => ClubTable.save(connection, updatedClub),
+          persist = updatedClub => SaveClubPrivateAPIMessage(updatedClub).plan(ApiPlanContext(support = null, bearerToken = None, connection = connection)).unsafeRunSync(),
           auditEntries = _ =>
             Vector(
               AuditEventEntry(
@@ -109,6 +112,20 @@ final case class PlatformAdminDissolveClubAPIMessage(
           domainEvents = _ => Vector(ClubDissolved(command.clubId, command.dissolvedAt))
         )
       )
+
+  private def platformAdminClubView(club: Club): PlatformAdminClubView =
+    PlatformAdminClubView(
+      clubId = club.id.value,
+      name = club.name,
+      creator = club.creator.value,
+      createdAt = club.createdAt.toString,
+      memberCount = club.members.size,
+      adminCount = club.admins.size,
+      totalPoints = club.totalPoints,
+      powerRating = club.powerRating,
+      dissolvedAt = club.dissolvedAt.map(_.toString),
+      dissolvedBy = club.dissolvedBy.map(_.value)
+    )
 
   private final case class DissolveClubCommand(
       clubId: ClubId,

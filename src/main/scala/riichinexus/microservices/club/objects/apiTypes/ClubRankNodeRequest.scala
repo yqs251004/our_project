@@ -9,14 +9,7 @@ final case class ClubRankNodeRequest(
     label: String,
     minimumContribution: Int,
     privileges: Vector[ClubPrivilegeCode] = Vector.empty
-):
-  def toNode: ClubRankNode =
-    ClubRankNode(
-      code = code,
-      label = label,
-      minimumContribution = minimumContribution,
-      privileges = privileges
-    )
+)
 
 object ClubRankNodeRequest:
   given ReadWriter[ClubRankNodeRequest] = macroRW

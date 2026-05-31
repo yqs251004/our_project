@@ -1,9 +1,9 @@
 package riichinexus.api.runtime
 
 import java.sql.Connection
-import java.time.Instant
 import java.util.NoSuchElementException
 
+import cats.effect.unsafe.implicits.global
 import scala.util.Try
 
 import riichinexus.bootstrap.*
@@ -18,9 +18,10 @@ import riichinexus.microservices.auth.objects.apiTypes.{
   CurrentSessionRoleFlags,
   CurrentSessionView
 }
-import riichinexus.microservices.auth.tables.guestsession.GuestSessionTable
+import riichinexus.api.ApiPlanContext
+import riichinexus.microservices.auth.api.`private`.ResolveGuestSessionAuthPrivateAPIMessage
+import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import riichinexus.microservices.player.objects.Player
-import riichinexus.microservices.player.tables.player.PlayerTable
 
 final class ApiPlanSupport(
     val executionContext: ApiExecutionContext
@@ -36,15 +37,12 @@ final class ApiPlanSupport(
   val storageLabel: String = executionContext.storageLabel
 
   def principal(connection: Connection, playerId: PlayerId): AccessPrincipal =
-    PlayerTable
-      .findById(connection, playerId)
+    findPlayer(connection, playerId)
       .map(_.asPrincipal)
       .getOrElse(throw NoSuchElementException(s"Player ${playerId.value} was not found"))
 
   def guestPrincipal(connection: Connection, sessionId: GuestSessionId): AccessPrincipal =
-    touchActiveGuestSession(connection, sessionId)
-      .map(AccessPrincipal.guest)
-      .getOrElse(throw NoSuchElementException(s"Guest session ${sessionId.value} was not found"))
+    AccessPrincipal.guest(touchGuestSession(connection, sessionId))
 
   def requestActor(connection: Connection, guestSessionId: Option[GuestSessionId], operatorId: Option[PlayerId]): AccessPrincipal =
     if guestSessionId.nonEmpty && operatorId.nonEmpty then
@@ -78,7 +76,7 @@ final class ApiPlanSupport(
       throw IllegalArgumentException("guestSessionId and operatorId cannot be provided together")
 
     operatorId.map(playerId =>
-      PlayerTable.findById(connection, playerId)
+      findPlayer(connection, playerId)
         .getOrElse(throw NoSuchElementException(s"Player ${playerId.value} was not found"))
     ) match
       case Some(player) =>
@@ -88,12 +86,17 @@ final class ApiPlanSupport(
           displayName = player.nickname,
           authenticated = true,
           roles = registeredRoleFlags(player),
-          player = Some(CurrentSessionPlayerView.fromDomain(player))
+          player = Some(
+            CurrentSessionPlayerView(
+              id = player.id.value,
+              userId = player.userId,
+              nickname = player.nickname
+            )
+          )
         )
       case None =>
         guestSessionId.map(sessionId =>
-          touchActiveGuestSession(connection, sessionId)
-            .getOrElse(throw NoSuchElementException(s"Guest session ${sessionId.value} was not found"))
+          touchGuestSession(connection, sessionId)
         ) match
           case Some(session) =>
             CurrentSessionView(
@@ -108,7 +111,12 @@ final class ApiPlanSupport(
                 isTournamentAdmin = false,
                 isSuperAdmin = false
               ),
-              guestSession = Some(CurrentSessionGuestSessionView.fromDomain(session))
+              guestSession = Some(
+                CurrentSessionGuestSessionView(
+                  id = session.id.value,
+                  displayName = session.displayName
+                )
+              )
             )
           case None =>
             CurrentSessionView(
@@ -140,27 +148,13 @@ final class ApiPlanSupport(
   def containsIgnoreCase(value: String, fragment: String): Boolean =
     value.toLowerCase.contains(fragment.toLowerCase)
 
-  private def touchActiveGuestSession(
-      connection: Connection,
-      sessionId: GuestSessionId,
-      seenAt: Instant = Instant.now()
-  ): Option[GuestAccessSession] =
-    authModule.transactionManager.inTransaction {
-      GuestSessionTable.findById(connection, sessionId).map { session =>
-        require(session.canAuthenticate(seenAt), inactiveSessionMessage(session, seenAt))
-        GuestSessionTable.save(connection, session.touch(seenAt))
-      }
-    }
+  private def touchGuestSession(connection: Connection, sessionId: GuestSessionId): GuestAccessSession =
+    ResolveGuestSessionAuthPrivateAPIMessage(sessionId)
+      .plan(ApiPlanContext(this, bearerToken = None, connection = connection))
+      .unsafeRunSync()
 
-  private def inactiveSessionMessage(session: GuestAccessSession, at: Instant): String =
-    if session.isRevoked then
-      s"Guest session ${session.id.value} has been revoked"
-    else if session.isUpgraded then
-      s"Guest session ${session.id.value} has already been upgraded to player access"
-    else if session.isExpired(at) then
-      s"Guest session ${session.id.value} expired at ${session.expiresAt}"
-    else
-      s"Guest session ${session.id.value} cannot be used for authentication"
+  private def findPlayer(connection: Connection, playerId: PlayerId): Option[Player] =
+    GetPlayerAPIMessage.findPlayer(connection, playerId)
 
 object ApiPlanSupport:
 

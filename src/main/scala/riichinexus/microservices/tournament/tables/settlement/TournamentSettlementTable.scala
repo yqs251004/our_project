@@ -7,7 +7,11 @@ import scala.util.Using
 
 import riichinexus.application.ports.OptimisticConcurrencyException
 import riichinexus.domain.model.*
-import riichinexus.microservices.tournament.domain.model.*
+import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
+import riichinexus.microservices.tournament.domain.recordmanagement.model.*
+import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
+import riichinexus.microservices.tournament.domain.tablemanagement.model.*
+import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.{read, write}
 
@@ -25,7 +29,7 @@ object TournamentSettlementTable:
       |where cast(tournament_settlements.payload ->> 'version' as integer) = ?
       |""".stripMargin
 
-  private[riichinexus] def save(
+  private[tournament] def save(
       connection: Connection,
       snapshot: TournamentSettlementSnapshot
   ): TournamentSettlementSnapshot =
@@ -55,7 +59,7 @@ object TournamentSettlementTable:
       |where id = ?
       |""".stripMargin
 
-  private[riichinexus] def findById(connection: Connection, id: SettlementSnapshotId): Option[TournamentSettlementSnapshot] =
+  private[tournament] def findById(connection: Connection, id: SettlementSnapshotId): Option[TournamentSettlementSnapshot] =
     Using.resource(connection.prepareStatement(findByIdSql)) { statement =>
       statement.setString(1, id.value)
       Using.resource(statement.executeQuery()) { resultSet =>
@@ -73,7 +77,7 @@ object TournamentSettlementTable:
       |limit 1
       |""".stripMargin
 
-  private[riichinexus] def findByTournamentAndStage(
+  private[tournament] def findByTournamentAndStage(
       connection: Connection,
       tournamentId: TournamentId,
       stageId: TournamentStageId
@@ -95,7 +99,7 @@ object TournamentSettlementTable:
       |order by generated_at desc
       |""".stripMargin
 
-  private[riichinexus] def findByTournament(
+  private[tournament] def findByTournament(
       connection: Connection,
       tournamentId: TournamentId
   ): Vector[TournamentSettlementSnapshot] =
@@ -111,7 +115,7 @@ object TournamentSettlementTable:
       |order by generated_at desc
       |""".stripMargin
 
-  private[riichinexus] def findAll(connection: Connection): Vector[TournamentSettlementSnapshot] =
+  private[tournament] def findAll(connection: Connection): Vector[TournamentSettlementSnapshot] =
     Using.resource(connection.prepareStatement(findAllSql)) { statement =>
       Using.resource(statement.executeQuery())(readSnapshots)
     }

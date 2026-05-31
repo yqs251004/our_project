@@ -1,6 +1,6 @@
 package riichinexus.microservices.tournament.appeal.domain
 
-import riichinexus.microservices.tournament.objects.{TableStatus}
+import riichinexus.microservices.tournament.objects.tablemanagement.TableStatus
 
 import java.sql.Connection
 import java.time.Instant
@@ -11,11 +11,16 @@ import riichinexus.application.ports.*
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.tournament.appeal.domain.model.*
-import riichinexus.microservices.tournament.domain.model.*
+import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
+import riichinexus.microservices.tournament.domain.recordmanagement.model.*
+import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
+import riichinexus.microservices.tournament.domain.tablemanagement.model.*
+import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.microservices.player.objects.*
 import riichinexus.microservices.auth.domain.*
-import riichinexus.microservices.player.tables.player.PlayerTable
-import riichinexus.microservices.tournament.domain.KnockoutStageCoordinator
+import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
+import riichinexus.microservices.tournament.domain.rulesmanagement.functions.knockout.KnockoutStageCoordinator
+import riichinexus.microservices.tournament.domain.tablemanagement.functions.TableFunctions
 import riichinexus.microservices.tournament.appeal.tables.appealticket.AppealTicketTable
 import riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable
 
@@ -83,7 +88,7 @@ final class AppealApplicationService(
               aggregate = ticket,
               persist = nextTicket =>
                 val savedTicket = AppealTicketTable.save(connection, nextTicket)
-                TournamentGameTable.save(connection, table.flagAppeal(savedTicket.id, Some(description)))
+                TournamentGameTable.save(connection, TableFunctions.flagAppeal(table, savedTicket.id, Some(description)))
                 savedTicket,
               auditEntries = savedTicket =>
                 Vector(
@@ -245,12 +250,13 @@ final class AppealApplicationService(
                     val updatedTable =
                       tableResolution.getOrElse(AppealTableResolution.RestorePriorState) match
                         case AppealTableResolution.ForceReset =>
-                          table.forceReset(
+                          TableFunctions.forceReset(
+                            table,
                             note.getOrElse(s"Appeal ${ticketId.value} adjudication requested reset"),
                             adjudicatedAt
                           )
                         case resolution =>
-                          table.resolveAppeal(resolution, note)
+                          TableFunctions.resolveAppeal(table, resolution, note)
 
                     TournamentGameTable.save(connection, updatedTable)
 
@@ -330,7 +336,7 @@ final class AppealApplicationService(
                 val reopenedTicket = AppealTicketTable.save(connection, nextTicket)
                 TournamentGameTable.findById(connection, ticket.tableId).foreach { table =>
                   if table.status != TableStatus.Archived then
-                    TournamentGameTable.save(connection, table.flagAppeal(ticket.id, note.orElse(Some(s"Appeal ${ticket.id.value} reopened"))))
+                    TournamentGameTable.save(connection, TableFunctions.flagAppeal(table, ticket.id, note.orElse(Some(s"Appeal ${ticket.id.value} reopened"))))
                 }
                 reopenedTicket,
               auditEntries = reopenedTicket =>
@@ -357,7 +363,7 @@ final class AppealApplicationService(
     }
 
   private def requireActiveAppealOperator(connection: Connection, playerId: PlayerId, context: String): Unit =
-    val player = PlayerTable.findById(connection, playerId)
+    val player = GetPlayerAPIMessage.findPlayer(connection, playerId)
       .getOrElse(throw NoSuchElementException(s"Player ${playerId.value} was not found"))
     if player.status != PlayerStatus.Active then
       throw IllegalArgumentException(context)

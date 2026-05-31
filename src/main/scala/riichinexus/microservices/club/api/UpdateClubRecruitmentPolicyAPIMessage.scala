@@ -24,13 +24,13 @@ final case class UpdateClubRecruitmentPolicyAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
-      actor <- IO.blocking(context.principal(request.operator))
+      actor <- IO.blocking(context.principal(PlayerId(request.operatorId)))
       occurredAt <- IO.realTimeInstant
       module = context.support.clubModule
       command = UpdateClubRecruitmentPolicyCommand(
         clubId = ClubId(clubId),
         actor = actor,
-        policy = request.policy,
+        policy = recruitmentPolicy(request),
         note = request.note,
         occurredAt = occurredAt
       )
@@ -46,7 +46,7 @@ final case class UpdateClubRecruitmentPolicyAPIMessage(
       module: ClubModuleContext,
       command: UpdateClubRecruitmentPolicyCommand
   ): Option[Club] =
-    riichinexus.microservices.club.tables.club.ClubTable.findById(connection, command.clubId).map { club =>
+    riichinexus.microservices.club.tables.clubs.ClubTable.findById(connection, command.clubId).map { club =>
       ClubAuthorization.ensureClubActive(club)
       ClubAuthorization.requireClubCapability(
         module = module,
@@ -68,7 +68,7 @@ final case class UpdateClubRecruitmentPolicyAPIMessage(
       .auditOnly(module.transactionManager, module.auditEventRepository)
       .commitAudited(
         aggregate = club.updateRecruitmentPolicy(command.policy),
-        persist = updatedClub => riichinexus.microservices.club.tables.club.ClubTable.save(connection, updatedClub),
+        persist = updatedClub => riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, updatedClub),
         aggregateType = "club",
         aggregateId = _.id.value,
         eventType = "ClubRecruitmentPolicyUpdated",
@@ -90,3 +90,13 @@ final case class UpdateClubRecruitmentPolicyAPIMessage(
       note: Option[String],
       occurredAt: Instant
   )
+
+  private def recruitmentPolicy(request: UpdateClubRecruitmentPolicyRequest): ClubRecruitmentPolicy =
+    request.expectedReviewSlaHours.foreach(hours =>
+      require(hours > 0, "expectedReviewSlaHours must be positive")
+    )
+    ClubRecruitmentPolicy(
+      applicationsOpen = request.applicationsOpen,
+      requirementsText = request.requirementsText.map(_.trim).filter(_.nonEmpty),
+      expectedReviewSlaHours = request.expectedReviewSlaHours
+    )

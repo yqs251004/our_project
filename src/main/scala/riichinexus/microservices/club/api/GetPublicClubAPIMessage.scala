@@ -6,17 +6,32 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.microservices.club.domain.model.*
-import riichinexus.microservices.club.tables.club.ClubTable
+import riichinexus.microservices.club.tables.clubs.ClubTable
 import riichinexus.microservices.player.objects.*
-import riichinexus.microservices.player.tables.player.PlayerTable
+import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import riichinexus.microservices.club.objects.apiTypes.*
 import riichinexus.microservices.player.objects.apiTypes.*
-import riichinexus.microservices.tournament.objects.apiTypes.*
-import riichinexus.microservices.tournament.domain.model.*
-import riichinexus.microservices.tournament.objects.TournamentStatus
-import riichinexus.microservices.tournament.objects.apiTypes.RankSnapshotView
-import riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTable
-import riichinexus.microservices.tournament.tables.tournament.TournamentTable
+import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.*
+import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
+import riichinexus.microservices.tournament.domain.lineupmanagement.functions.StageLineupSubmissionFunctions
+import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
+import riichinexus.microservices.tournament.domain.recordmanagement.model.*
+import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
+import riichinexus.microservices.tournament.domain.tablemanagement.model.*
+import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
+import riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentStatus
+import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.RankSnapshotView
+import riichinexus.microservices.tournament.api.`private`.{
+  ListClubTournamentsPrivateAPIMessage,
+  ListRecentClubMatchRecordsPrivateAPIMessage,
+  ResolveTournamentsPrivateAPIMessage
+}
 import upickle.default.*
 
 final case class GetPublicClubAPIMessage(
@@ -27,9 +42,11 @@ final case class GetPublicClubAPIMessage(
     for
       id <- IO.blocking(ClubId(clubId))
       club <- IO.blocking(publicClub(context, id))
-      recentRecords <- IO.blocking(recentMatchRecords(context, club))
-      lineupPlayerIds <- IO.blocking(currentLineupPlayerIds(context, club))
-      tournamentsById <- IO.blocking(recentTournamentsById(context, recentRecords))
+      recentRecords <- ListRecentClubMatchRecordsPrivateAPIMessage(club.id, limit = 8).plan(context)
+      clubTournaments <- ListClubTournamentsPrivateAPIMessage(club.id).plan(context)
+      lineupPlayerIds <- IO.blocking(currentLineupPlayerIds(club, clubTournaments))
+      tournaments <- ResolveTournamentsPrivateAPIMessage(recentRecords.map(_.tournamentId).distinct).plan(context)
+      tournamentsById <- IO.blocking(tournaments.map(tournament => tournament.id -> tournament).toMap)
       playersById <- IO.blocking(publicClubPlayersById(context, club, lineupPlayerIds, recentRecords))
     yield publicClubDetailView(club, lineupPlayerIds, recentRecords, tournamentsById, playersById)
 
@@ -39,19 +56,13 @@ final case class GetPublicClubAPIMessage(
       .filter(_.dissolvedAt.isEmpty)
       .getOrElse(throw NoSuchElementException("Resource not found"))
 
-  private def recentMatchRecords(context: ApiPlanContext, club: Club): Vector[MatchRecord] =
-    MatchRecordTable.findRecentByClub(context.connection, club.id, limit = 8)
-
-  private def currentLineupPlayerIds(context: ApiPlanContext, club: Club): Vector[PlayerId] =
-    latestClubLineupPlayerIds(context, club).getOrElse(club.members)
-
   private def publicClubPlayersById(
       context: ApiPlanContext,
       club: Club,
       lineupPlayerIds: Vector[PlayerId],
       recentRecords: Vector[MatchRecord]
   ): Map[PlayerId, Player] =
-    PlayerTable.findByIds(
+    ListPlayersAPIMessage.findPlayersByIds(
       context.connection,
       (club.members ++ lineupPlayerIds ++ recentRecords.flatMap(_.seatResults.map(_.playerId))).distinct
     ).map(player => player.id -> player).toMap
@@ -138,20 +149,6 @@ final case class GetPublicClubAPIMessage(
       )
     }
 
-  private def recentTournamentsById(
-      context: ApiPlanContext,
-      recentRecords: Vector[MatchRecord]
-  ): Map[TournamentId, Tournament] =
-    val connection = context.connection
-    val tournamentIds = recentRecords.map(_.tournamentId).distinct
-    val prefetched = TournamentTable.findByIds(connection, tournamentIds)
-      .map(tournament => tournament.id -> tournament)
-      .toMap
-    tournamentIds.foldLeft(prefetched) { (cached, id) =>
-      if cached.contains(id) then cached
-      else TournamentTable.findById(connection, id).fold(cached)(tournament => cached.updated(id, tournament))
-    }
-
   private def clubApplicationPolicy(club: Club): ClubApplicationPolicyView =
     val applicationsOpen = club.dissolvedAt.isEmpty && club.recruitmentPolicy.applicationsOpen
     ClubApplicationPolicyView(
@@ -163,12 +160,15 @@ final case class GetPublicClubAPIMessage(
       pendingApplicationCount = club.membershipApplications.count(_.isPending)
     )
 
-  private def latestClubLineupPlayerIds(context: ApiPlanContext, club: Club): Option[Vector[PlayerId]] =
-    TournamentTable.findByClub(context.connection, club.id)
+  private def currentLineupPlayerIds(club: Club, tournaments: Vector[Tournament]): Vector[PlayerId] =
+    latestClubLineupPlayerIds(club, tournaments).getOrElse(club.members)
+
+  private def latestClubLineupPlayerIds(club: Club, tournaments: Vector[Tournament]): Option[Vector[PlayerId]] =
+    tournaments
       .filter(_.status != TournamentStatus.Draft)
       .flatMap(_.stages)
       .flatMap(_.lineupSubmissions)
       .filter(_.clubId == club.id)
       .sortBy(submission => (submission.submittedAt, submission.id.value))
       .lastOption
-      .map(_.activePlayerIds)
+      .map(StageLineupSubmissionFunctions.activePlayerIds)

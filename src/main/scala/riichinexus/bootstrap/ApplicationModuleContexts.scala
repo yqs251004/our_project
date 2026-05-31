@@ -2,16 +2,14 @@ package riichinexus.bootstrap
 
 import riichinexus.application.ports.*
 import riichinexus.microservices.tournament.appeal.domain.AppealApplicationService
-import riichinexus.microservices.tournament.domain.{
-  TournamentPaifuArchiveService,
-  TournamentSettlementCoordinator,
-  TournamentStageCompletionCoordinator
-}
+import riichinexus.microservices.tournament.domain.paifumanagement.functions.TournamentPaifuArchiveService
+import riichinexus.microservices.tournament.domain.settlementmanagement.functions.TournamentSettlementCoordinator
+import riichinexus.microservices.tournament.domain.tournamentmanagement.functions.TournamentStageCompletionCoordinator
 import riichinexus.microservices.auth.domain.*
 
 final case class AuthModuleContext(
     auditEventRepository: AuditEventRepository,
-    transactionManager: TransactionManager,
+    transactionManager: TransactionManager
 )
 
 final case class PlayerModuleContext()

@@ -14,7 +14,11 @@ import riichinexus.microservices.tournament.appeal.domain.model.{
   AppealTableResolution as DomainAppealTableResolution,
   AppealTicket
 }
-import riichinexus.microservices.tournament.domain.model.*
+import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
+import riichinexus.microservices.tournament.domain.recordmanagement.model.*
+import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
+import riichinexus.microservices.tournament.domain.tablemanagement.model.*
+import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.tournament.appeal.objects.apiTypes.*
 import upickle.default.*
@@ -26,7 +30,7 @@ final case class AppealAdjudicateAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[AppealTicketView] =
     for
-      actor <- IO.blocking(context.principal(request.operator))
+      actor <- IO.blocking(context.principal(PlayerId(request.operatorId)))
       adjudicatedAt <- IO.realTimeInstant
       module = context.support.tournamentAppealModule
       command <- IO.blocking(resolveCommand(actor, adjudicatedAt))
@@ -36,10 +40,10 @@ final case class AppealAdjudicateAPIMessage(
   private def resolveCommand(actor: AccessPrincipal, adjudicatedAt: Instant): AdjudicateAppealCommand =
     AdjudicateAppealCommand(
       ticketId = AppealTicketId(appealId),
-      decision = request.decisionType,
+      decision = request.decision.toDomain,
       verdict = request.verdict,
       actor = actor,
-      tableResolution = request.resolution,
+      tableResolution = request.tableResolution.map(_.toDomain),
       note = request.note,
       adjudicatedAt = adjudicatedAt
     )

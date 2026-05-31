@@ -9,12 +9,7 @@ final case class ClubMembershipApplicationRequest(
     message: Option[String] = None,
     guestSessionId: Option[String] = None,
     operatorId: Option[String] = None
-):
-  def session: Option[GuestSessionId] =
-    guestSessionId.map(GuestSessionId(_))
-
-  def operator: Option[PlayerId] =
-    operatorId.map(PlayerId(_))
+)
 
 object ClubMembershipApplicationRequest:
   given ReadWriter[ClubMembershipApplicationRequest] = macroRW

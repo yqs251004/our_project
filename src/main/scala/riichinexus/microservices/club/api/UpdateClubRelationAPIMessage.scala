@@ -54,7 +54,7 @@ final case class UpdateClubRelationAPIMessage(
       module: ClubModuleContext,
       command: UpdateClubRelationCommand
   ): Option[Club] =
-    riichinexus.microservices.club.tables.club.ClubTable.findById(connection, command.clubId).map { club =>
+    riichinexus.microservices.club.tables.clubs.ClubTable.findById(connection, command.clubId).map { club =>
       ensureRelationCanBeUpdated(module, club, command)
       val targetClub = resolveTargetClub(connection, command)
       commitRelationUpdate(connection, module, club, targetClub, command)
@@ -79,7 +79,7 @@ final case class UpdateClubRelationAPIMessage(
       connection: java.sql.Connection,
       command: UpdateClubRelationCommand
   ): Club =
-    riichinexus.microservices.club.tables.club.ClubTable
+    riichinexus.microservices.club.tables.clubs.ClubTable
       .findById(connection, command.relation.targetClubId)
       .map { club =>
         ClubAuthorization.ensureClubActive(club)
@@ -106,11 +106,11 @@ final case class UpdateClubRelationAPIMessage(
       .commitAudited(
         aggregate = sourceClub,
         persist = source =>
-          val savedSource = riichinexus.microservices.club.tables.club.ClubTable.save(connection, source)
+          val savedSource = riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, source)
           if command.relation.relation == ClubRelationKind.Neutral then
-            riichinexus.microservices.club.tables.club.ClubTable.save(connection, targetClub.removeRelation(command.clubId))
+            riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, targetClub.removeRelation(command.clubId))
           else
-            riichinexus.microservices.club.tables.club.ClubTable.save(connection, 
+            riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, 
               targetClub.upsertRelation(
                 command.relation.copy(targetClubId = command.clubId)
               )

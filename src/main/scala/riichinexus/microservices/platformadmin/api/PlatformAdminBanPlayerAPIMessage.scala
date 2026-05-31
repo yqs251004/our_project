@@ -10,10 +10,11 @@ import riichinexus.application.changes.{DomainChange, DomainChangeInterpreter}
 import riichinexus.bootstrap.PlatformAdminModuleContext
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
+import riichinexus.microservices.auth.objects.Role
 import riichinexus.microservices.player.domain.PlayerBanned
 import riichinexus.microservices.player.objects.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.player.tables.player.PlayerTable
+import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import riichinexus.microservices.platformadmin.objects.apiTypes.PlatformAdminPlayerView
 import riichinexus.microservices.platformadmin.objects.apiTypes.*
 import upickle.default.*
@@ -43,7 +44,7 @@ final case class PlatformAdminBanPlayerAPIMessage(
           }
           .getOrElse(throw NoSuchElementException(s"Player ${command.playerId.value} was not found"))
       }
-    yield PlatformAdminPlayerView.fromDomain(player)
+    yield platformAdminPlayerView(player)
 
   private def banPlayer(
       connection: java.sql.Connection,
@@ -53,13 +54,13 @@ final case class PlatformAdminBanPlayerAPIMessage(
     module.authorizationService.requirePermission(command.actor, Permission.BanRegisteredPlayer)
     require(command.reason.trim.nonEmpty, "Ban reason cannot be empty")
 
-    PlayerTable.findById(connection, command.playerId).map { player =>
+    GetPlayerAPIMessage.findPlayer(connection, command.playerId).map { player =>
       DomainChangeInterpreter
         .auditAndEvents(module.transactionManager, module.auditEventRepository, module.eventBus)
         .commitWithinTransaction(
           DomainChange(
             aggregate = player.ban(command.reason),
-            persist = nextPlayer => PlayerTable.save(connection, nextPlayer),
+            persist = nextPlayer => CreatePlayerAPIMessage.persistPlayer(connection, nextPlayer),
             auditEntries = _ =>
               Vector(
                 AuditEventEntry(
@@ -77,6 +78,17 @@ final case class PlatformAdminBanPlayerAPIMessage(
           )
         )
     }
+
+  private def platformAdminPlayerView(player: Player): PlatformAdminPlayerView =
+    PlatformAdminPlayerView(
+      playerId = player.id.value,
+      userId = player.userId,
+      nickname = player.nickname,
+      status = player.status.toString,
+      clubIds = player.boundClubIds.map(_.value),
+      bannedReason = player.bannedReason,
+      isSuperAdmin = player.roleGrants.exists(_.role == Role.SuperAdmin)
+    )
 
   private final case class BanPlayerCommand(
       playerId: PlayerId,

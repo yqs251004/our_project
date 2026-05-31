@@ -1,29 +1,26 @@
 package riichinexus.microservices.tournament.api
 
-import riichinexus.microservices.tournament.objects.{TableStatus, TournamentFormat, TournamentStatus}
+import riichinexus.microservices.tournament.objects.tablemanagement.TableStatus
+import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentFormat, TournamentStatus}
 
 import java.util.NoSuchElementException
 
 import cats.effect.IO
+import cats.effect.unsafe.implicits.global
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.api.`private`.ResolveClubsPrivateAPIMessage
 import riichinexus.microservices.club.domain.model.*
-import riichinexus.microservices.club.tables.club.ClubTable
-import riichinexus.microservices.tournament.objects.apiTypes.{
-  AdvancementRuleView,
-  KnockoutRuleConfigView,
-  PublicTournamentDetailView,
-  PublicTournamentStageView,
-  SwissRuleConfigView
-}
-import riichinexus.microservices.tournament.domain.TournamentStageQueries
-import riichinexus.microservices.tournament.domain.model.*
-import riichinexus.microservices.tournament.objects.{
-  KnockoutBracketSnapshot as KnockoutBracketSnapshotResponse,
-  StageRankingSnapshot as StageRankingSnapshotResponse,
-  TournamentFormat
-}
-import riichinexus.microservices.tournament.tables.tournament.TournamentTable
+import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.{PublicTournamentDetailView, PublicTournamentStageView}
+import riichinexus.microservices.tournament.domain.rulesmanagement.functions.TournamentStageQueries
+import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
+import riichinexus.microservices.tournament.domain.recordmanagement.model.*
+import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
+import riichinexus.microservices.tournament.domain.tablemanagement.model.*
+import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.knockout.KnockoutBracketSnapshot
+import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.StageRankingSnapshot
+import riichinexus.microservices.tournament.tables.tournaments.TournamentTable
 import riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable
 import upickle.default.*
 
@@ -52,8 +49,9 @@ final case class GetPublicTournamentAPIMessage(
       context: ApiPlanContext,
       tournament: Tournament
   ): Map[ClubId, Club] =
-    ClubTable
-      .findByIds(context.connection, relatedClubIds(tournament))
+    ResolveClubsPrivateAPIMessage(relatedClubIds(tournament))
+      .plan(ApiPlanContext(support = null, bearerToken = None, connection = context.connection))
+      .unsafeRunSync()
       .map(club => club.id -> club)
       .toMap
 
@@ -116,22 +114,16 @@ final case class GetPublicTournamentAPIMessage(
       context: ApiPlanContext,
       tournament: Tournament,
       stage: TournamentStage
-  ): StageRankingSnapshotResponse =
-    StageRankingSnapshotResponse.fromDomain(
-      TournamentStageQueries.stageStandings(context.connection, tournament.id, stage.id)
-    )
+  ): StageRankingSnapshot =
+    TournamentStageQueries.stageStandings(context.connection, tournament.id, stage.id)
 
   private def publicStageBracket(
       context: ApiPlanContext,
       tournament: Tournament,
       stage: TournamentStage
-  ): Option[KnockoutBracketSnapshotResponse] =
+  ): Option[KnockoutBracketSnapshot] =
     if stage.format == TournamentFormat.Knockout || stage.format == TournamentFormat.Finals then
-      Some(
-        KnockoutBracketSnapshotResponse.fromDomain(
-          TournamentStageQueries.stageKnockoutBracket(context.connection, tournament.id, stage.id)
-        )
-      )
+      Some(TournamentStageQueries.stageKnockoutBracket(context.connection, tournament.id, stage.id))
     else None
 
   private def tournamentParticipantIds(

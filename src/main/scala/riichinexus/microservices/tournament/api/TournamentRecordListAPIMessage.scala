@@ -3,11 +3,30 @@ package riichinexus.microservices.tournament.api
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
-import riichinexus.microservices.tournament.domain.model.*
+import riichinexus.microservices.tournament.domain.recordmanagement.functions.MatchRecordFunctions
+import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
+import riichinexus.microservices.tournament.domain.recordmanagement.model.*
+import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
+import riichinexus.microservices.tournament.domain.tablemanagement.model.*
+import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.tournament.objects.apiTypes.*
-import riichinexus.microservices.tournament.objects.apiTypes.*
-import riichinexus.microservices.tournament.objects.apiTypes.AssignTournamentAdminRequest.given
+import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.*
+import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.*
+import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.AssignTournamentAdminRequest.given
 import riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTable
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
@@ -41,7 +60,7 @@ final case class TournamentRecordListAPIMessage(
   ): Vector[TournamentMatchRecordView] =
     MatchRecordTable
       .findAll(context.connection)
-      .filter(record => resolved.query.playerId.forall(record.playerIds.contains))
+      .filter(record => resolved.query.playerId.forall(MatchRecordFunctions.playerIds(record).contains))
       .filter(record => resolved.query.tournamentId.forall(_ == record.tournamentId))
       .filter(record => resolved.query.stageId.forall(_ == record.stageId))
       .filter(record => resolved.query.tableId.forall(_ == record.tableId))

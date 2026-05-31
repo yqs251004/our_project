@@ -33,7 +33,7 @@ final case class RevokeGuestSessionAuthAPIMessage(
           revokeGuestSession(context.connection, module, command)
         }
       }
-    yield GuestSessionResponse.fromDomain(session)
+    yield guestSessionResponse(session)
 
   private def revokeGuestSession(
       connection: java.sql.Connection,
@@ -68,6 +68,13 @@ final case class RevokeGuestSessionAuthAPIMessage(
     ResolvedRevokeGuestSessionInput(
       sessionId = GuestSessionId(sessionId),
       reason = reason.filter(_.trim.nonEmpty).getOrElse("revoked-by-operator")
+    )
+
+  private def guestSessionResponse(session: GuestAccessSession): GuestSessionResponse =
+    GuestSessionResponse(
+      id = session.id.value,
+      displayName = session.displayName,
+      createdAt = session.createdAt.toString
     )
 
   private final case class RevokeGuestSessionCommand(

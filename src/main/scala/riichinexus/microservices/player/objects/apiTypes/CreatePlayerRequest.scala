@@ -12,9 +12,7 @@ final case class CreatePlayerRequest(
     tier: String,
     stars: Option[Int] = None,
     initialElo: Int = 1500
-):
-  def toRankSnapshot: RankSnapshot =
-    RankSnapshot(RankPlatform.valueOf(rankPlatform), tier, stars)
+)
 
 object CreatePlayerRequest:
   given ReadWriter[CreatePlayerRequest] = macroRW

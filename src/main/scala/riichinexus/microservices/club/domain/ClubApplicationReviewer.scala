@@ -9,7 +9,7 @@ import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.player.objects.*
-import riichinexus.microservices.player.tables.player.PlayerTable
+import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 
 object ClubApplicationReviewer:
   def approve(
@@ -24,8 +24,8 @@ object ClubApplicationReviewer:
   ): Option[Club] =
     module.transactionManager.inTransaction {
       for
-        club <- riichinexus.microservices.club.tables.club.ClubTable.findById(connection, parsedClubId)
-        player <- PlayerTable.findById(connection, parsedPlayerId)
+        club <- riichinexus.microservices.club.tables.clubs.ClubTable.findById(connection, parsedClubId)
+        player <- GetPlayerAPIMessage.findPlayer(connection, parsedPlayerId)
       yield
         ClubAuthorization.ensureClubActive(club)
         requireActivePlayer(player, s"Player ${parsedPlayerId.value} cannot be approved into a club")
@@ -68,9 +68,9 @@ object ClubApplicationReviewer:
           .reviewApplication(parsedMembershipId, _.approve(reviewer, approvedAt, note))
           .addMember(parsedPlayerId)
 
-        val savedPlayer = PlayerTable.save(connection, player.joinClub(parsedClubId))
+        val savedPlayer = CreatePlayerAPIMessage.persistPlayer(connection, player.joinClub(parsedClubId))
         ClubProjectionRefresher.ensurePlayerDashboard(connection, savedPlayer.id, approvedAt)
-        riichinexus.microservices.club.tables.club.ClubTable.save(connection, ClubProjectionRefresher.refreshClubProjection(connection, module, updatedClub, approvedAt))
+        riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, ClubProjectionRefresher.refreshClubProjection(connection, module, updatedClub, approvedAt))
     }
 
   def reject(
@@ -83,7 +83,7 @@ object ClubApplicationReviewer:
       rejectedAt: Instant
   ): Option[Club] =
     module.transactionManager.inTransaction {
-      riichinexus.microservices.club.tables.club.ClubTable.findById(connection, parsedClubId).map { club =>
+      riichinexus.microservices.club.tables.clubs.ClubTable.findById(connection, parsedClubId).map { club =>
         ClubAuthorization.ensureClubActive(club)
         ClubAuthorization.requireClubCapability(
           module = module,
@@ -107,7 +107,7 @@ object ClubApplicationReviewer:
           )
 
         val reviewer = actor.playerId.getOrElse(club.creator)
-        riichinexus.microservices.club.tables.club.ClubTable.save(connection, 
+        riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, 
           club.reviewApplication(parsedMembershipId, _.reject(reviewer, rejectedAt, note))
         )
       }

@@ -3,56 +3,35 @@ package riichinexus.microservices.club.domain
 import java.sql.Connection
 import java.time.Instant
 
+import cats.effect.unsafe.implicits.global
+import riichinexus.api.ApiPlanContext
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
 import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.player.objects.*
-import riichinexus.microservices.opsanalytics.objects.{Dashboard, DashboardOwner}
-import riichinexus.microservices.opsanalytics.tables.dashboard.DashboardTable
-import riichinexus.microservices.player.tables.player.PlayerTable
+import riichinexus.microservices.opsanalytics.api.`private`.{
+  EnsurePlayerDashboardAPIMessage,
+  RecordClubDashboardAPIMessage
+}
+import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 
 object ClubProjectionRefresher:
   def ensurePlayerDashboard(connection: Connection, playerId: PlayerId, at: Instant): Unit =
-    val owner = DashboardOwner.Player(playerId)
-    if DashboardTable.findByOwner(connection, owner).isEmpty then
-      DashboardTable.save(connection, Dashboard.empty(owner, at))
+    EnsurePlayerDashboardAPIMessage(playerId, at)
+      .plan(apiContext(connection))
+      .unsafeRunSync()
 
   def refreshClubProjection(connection: Connection, module: ClubModuleContext, club: Club, at: Instant): Club =
     val refreshedClub = club.updatePowerRating(
       ClubPowerRatingService.calculate(club, findPlayer(connection))
     )
-    DashboardTable.save(connection, buildClubDashboard(connection, module, refreshedClub, at))
+    RecordClubDashboardAPIMessage(refreshedClub, at)
+      .plan(apiContext(connection))
+      .unsafeRunSync()
     refreshedClub
 
-  private def buildClubDashboard(connection: Connection, module: ClubModuleContext, club: Club, at: Instant): Dashboard =
-    val existingVersion = DashboardTable.findByOwner(connection, DashboardOwner.Club(club.id)).map(_.version).getOrElse(0)
-    val memberDashboards = club.members.flatMap { playerId =>
-      findPlayer(connection)(playerId)
-        .filter(_.status == PlayerStatus.Active)
-        .flatMap(_ => DashboardTable.findByOwner(connection, DashboardOwner.Player(playerId)))
-    }
-
-    if memberDashboards.isEmpty then Dashboard.empty(DashboardOwner.Club(club.id), at).copy(version = existingVersion)
-    else
-      Dashboard(
-        owner = DashboardOwner.Club(club.id),
-        sampleSize = memberDashboards.map(_.sampleSize).sum,
-        dealInRate = weightedAverage(memberDashboards, _.dealInRate),
-        winRate = weightedAverage(memberDashboards, _.winRate),
-        averageWinPoints = weightedAverage(memberDashboards, _.averageWinPoints),
-        riichiRate = weightedAverage(memberDashboards, _.riichiRate),
-        averagePlacement = weightedAverage(memberDashboards, _.averagePlacement),
-        topFinishRate = weightedAverage(memberDashboards, _.topFinishRate),
-        lastUpdatedAt = at,
-        version = existingVersion
-      )
-
   private def findPlayer(connection: Connection)(playerId: PlayerId): Option[Player] =
-    PlayerTable.findById(connection, playerId)
+    GetPlayerAPIMessage.findPlayer(connection, playerId)
 
-  private def weightedAverage(dashboards: Vector[Dashboard], selector: Dashboard => Double): Double =
-    val totalWeight = dashboards.map(_.sampleSize).sum
-    if totalWeight <= 0 then 0.0
-    else BigDecimal(dashboards.map(dashboard => selector(dashboard) * dashboard.sampleSize).sum / totalWeight.toDouble)
-      .setScale(2, BigDecimal.RoundingMode.HALF_UP)
-      .toDouble
+  private def apiContext(connection: Connection): ApiPlanContext =
+    ApiPlanContext(support = null, bearerToken = None, connection = connection)

@@ -8,16 +8,20 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.tournament.domain.model.*
+import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
+import riichinexus.microservices.tournament.domain.recordmanagement.model.*
+import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
+import riichinexus.microservices.tournament.domain.tablemanagement.model.*
+import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.microservices.club.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubAuthorization
 import riichinexus.microservices.club.objects.ClubTournamentParticipationStatus
 import riichinexus.microservices.club.objects.apiTypes.ClubTournamentParticipationView
 import riichinexus.microservices.club.objects.apiTypes.*
-import riichinexus.microservices.tournament.objects.{StageStatus, TournamentStatus}
-import riichinexus.microservices.club.tables.club.ClubTable
-import riichinexus.microservices.tournament.tables.tournament.TournamentTable
+import riichinexus.microservices.tournament.objects.tournamentmanagement.{StageStatus, TournamentStatus}
+import riichinexus.microservices.club.tables.clubs.ClubTable
+import riichinexus.microservices.tournament.api.`private`.ListClubTournamentsPrivateAPIMessage
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 
@@ -35,7 +39,8 @@ final case class ListClubTournamentsAPIMessage(
       now <- IO.realTimeInstant
       module = context.support.clubModule
       query <- IO.blocking(resolveQuery(context, now))
-      items <- IO.blocking(listTournaments(context.connection, module, query))
+      tournaments <- ListClubTournamentsPrivateAPIMessage(query.clubId).plan(context)
+      items <- IO.blocking(listTournaments(context.connection, module, query, tournaments))
     yield pagedResponse(items, query)
 
   private def resolveQuery(context: ApiPlanContext, now: Instant): ClubTournamentQuery =
@@ -56,13 +61,13 @@ final case class ListClubTournamentsAPIMessage(
   private def listTournaments(
       connection: java.sql.Connection,
       module: ClubModuleContext,
-      query: ClubTournamentQuery
+      query: ClubTournamentQuery,
+      tournaments: Vector[Tournament]
   ): Vector[ClubTournamentParticipationView] =
     ClubTable
       .findById(connection, query.clubId)
       .getOrElse(throw NoSuchElementException(s"Club ${query.clubId.value} was not found"))
-    val allItems = TournamentTable
-      .findByClub(connection, query.clubId)
+    val allItems = tournaments
       .flatMap(tournament => buildClubTournamentParticipationView(connection, module, query.clubId, tournament, query.viewerPrincipal))
     filterByScope(allItems, query)
 

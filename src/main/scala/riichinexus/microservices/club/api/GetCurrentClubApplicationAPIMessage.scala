@@ -9,9 +9,9 @@ import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.club.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.domain.ClubApplicationViewAssembler
+import riichinexus.microservices.club.api.`private`.ClubApplicationViewAssembler
 import riichinexus.microservices.club.objects.apiTypes.ClubMembershipApplicationView
-import riichinexus.microservices.club.tables.club.ClubTable
+import riichinexus.microservices.club.tables.clubs.ClubTable
 import upickle.default.*
 
 final case class GetCurrentClubApplicationAPIMessage(

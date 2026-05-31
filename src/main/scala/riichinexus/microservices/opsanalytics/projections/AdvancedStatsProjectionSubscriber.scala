@@ -1,5 +1,7 @@
 package riichinexus.microservices.opsanalytics.projections
 
+import cats.effect.unsafe.implicits.global
+import riichinexus.api.ApiPlanContext
 import java.sql.Connection
 import java.time.{Duration, Instant}
 import java.util.NoSuchElementException
@@ -8,18 +10,25 @@ import riichinexus.application.ports.{DomainEventSubscriber, DomainEventSubscrib
 import riichinexus.application.ports.*
 import riichinexus.application.ports.DomainEvent
 import riichinexus.domain.model.*
-import riichinexus.microservices.tournament.domain.model.*
+import riichinexus.microservices.tournament.domain.recordmanagement.functions.MatchRecordFunctions
+import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
+import riichinexus.microservices.tournament.domain.recordmanagement.model.*
+import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
+import riichinexus.microservices.tournament.domain.tablemanagement.model.*
+import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.microservices.club.domain.model.*
+import riichinexus.microservices.club.api.`private`.{ListClubsPrivateAPIMessage, ResolveClubPrivateAPIMessage, ResolveClubsPrivateAPIMessage, SaveClubPrivateAPIMessage}
 import riichinexus.microservices.player.objects.*
 import riichinexus.microservices.opsanalytics.domain.AdvancedStatsRoundAnalysis
 import riichinexus.microservices.opsanalytics.objects.{AdvancedStatsBoard, AdvancedStatsRecomputeTask, DashboardOwner}
-import riichinexus.microservices.club.tables.club.ClubTable
 import riichinexus.microservices.opsanalytics.tables.advancedstatsboard.AdvancedStatsBoardTable
 import riichinexus.microservices.opsanalytics.tables.advancedstatsrecomputetask.AdvancedStatsRecomputeTaskTable
-import riichinexus.microservices.player.tables.player.PlayerTable
-import riichinexus.microservices.tournament.domain.MatchRecordArchived
-import riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTable
-import riichinexus.microservices.tournament.tables.paifu.PaifuTable
+import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
+import riichinexus.microservices.tournament.domain.events.MatchRecordArchived
+import riichinexus.microservices.tournament.api.`private`.{
+  ListPlayerMatchRecordsPrivateAPIMessage,
+  ListPlayerPaifusPrivateAPIMessage
+}
 
 final class AdvancedStatsProjectionSubscriber(
     transactionManager: TransactionManager
@@ -47,7 +56,7 @@ final class AdvancedStatsProjectionSubscriber(
       requestedAt: Instant,
       reason: String = "match-record-archived"
   ): Vector[AdvancedStatsRecomputeTask] =
-    val impactedPlayers = matchRecord.playerIds.distinct
+    val impactedPlayers = MatchRecordFunctions.playerIds(matchRecord).distinct
     val impactedClubs = impactedPlayers
       .flatMap(playerId => findPlayer(connection, playerId).toVector.flatMap(_.boundClubIds))
       .distinct
@@ -107,7 +116,7 @@ final class AdvancedStatsProjectionSubscriber(
             case DashboardOwner.Player(playerId) =>
               AdvancedStatsBoardTable.save(connection, rebuildPlayerBoard(connection, playerId, processedAt))
             case DashboardOwner.Club(clubId) =>
-              val club = ClubTable.findById(connection, clubId).getOrElse(
+              val club = ResolveClubPrivateAPIMessage(clubId).plan(ApiPlanContext(support = null, bearerToken = None, connection = connection)).unsafeRunSync().getOrElse(
                 throw NoSuchElementException(s"Club ${clubId.value} was not found")
               )
               AdvancedStatsBoardTable.save(connection, rebuildClubBoard(connection, club, processedAt))
@@ -137,8 +146,12 @@ final class AdvancedStatsProjectionSubscriber(
       playerId: PlayerId,
       at: Instant
   ): AdvancedStatsBoard =
-    val records = MatchRecordTable.findByPlayer(connection, playerId)
-    val paifus = PaifuTable.findByPlayer(connection, playerId)
+    val records = ListPlayerMatchRecordsPrivateAPIMessage(playerId)
+      .plan(ApiPlanContext(support = null, bearerToken = None, connection = connection))
+      .unsafeRunSync()
+    val paifus = ListPlayerPaifusPrivateAPIMessage(playerId)
+      .plan(ApiPlanContext(support = null, bearerToken = None, connection = connection))
+      .unsafeRunSync()
     val existingVersion =
       AdvancedStatsBoardTable.findByOwner(connection, DashboardOwner.Player(playerId)).map(_.version).getOrElse(0)
     buildPlayerBoard(playerId, records, paifus, at).copy(version = existingVersion)
@@ -158,4 +171,4 @@ final class AdvancedStatsProjectionSubscriber(
     buildClubBoard(club, memberBoards, at).copy(version = existingVersion)
 
   private def findPlayer(connection: Connection, playerId: PlayerId): Option[Player] =
-    PlayerTable.findById(connection, playerId)
+    GetPlayerAPIMessage.findPlayer(connection, playerId)

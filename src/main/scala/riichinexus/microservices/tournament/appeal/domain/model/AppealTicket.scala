@@ -3,6 +3,7 @@ package riichinexus.microservices.tournament.appeal.domain.model
 import java.time.Instant
 
 import riichinexus.domain.model.{AppealTicketId, PlayerId, TableId, TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.appeal.objects.AppealDecisionLog
 
 final case class AppealTicket(
     id: AppealTicketId,

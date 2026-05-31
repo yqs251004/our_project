@@ -5,9 +5,11 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.microservices.club.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.player.objects.PlayerStatus
-import riichinexus.microservices.player.objects.apiTypes.PlayerProfileView
-import riichinexus.microservices.player.tables.player.PlayerTable
+import riichinexus.microservices.auth.objects.Role
+import riichinexus.microservices.player.objects.{Player, PlayerStatus}
+import riichinexus.microservices.player.objects.apiTypes.{PlayerProfileView, PlayerRoleFlagsView}
+import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
+import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.RankSnapshotView
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 
@@ -42,12 +44,32 @@ final case class ListClubMembersAPIMessage(
       context: ApiPlanContext,
       query: ResolvedClubMembersQuery
   ): Vector[PlayerProfileView] =
-    PlayerTable
-      .findByClub(context.connection, query.clubId)
+    ListPlayersAPIMessage
+      .findPlayersByClub(context.connection, query.clubId)
       .filter(player => query.status.forall(_ == player.status))
       .filter(player => query.nickname.forall(context.support.containsIgnoreCase(player.nickname, _)))
       .sortBy(player => (player.nickname, player.id.value))
-      .map(PlayerProfileView.fromDomain)
+      .map(playerProfileView)
+
+  private def playerProfileView(player: Player): PlayerProfileView =
+    PlayerProfileView(
+      playerId = player.id.value,
+      userId = player.userId,
+      nickname = player.nickname,
+      registeredAt = player.registeredAt.toString,
+      currentRank = RankSnapshotView(player.currentRank.platform, player.currentRank.tier, player.currentRank.stars),
+      elo = player.elo,
+      clubId = player.clubId.map(_.value),
+      affiliatedClubIds = player.affiliatedClubIds.map(_.value),
+      status = player.status.toString,
+      roles = PlayerRoleFlagsView(
+        isRegisteredPlayer = player.effectiveRoleGrants.exists(_.role == Role.RegisteredPlayer),
+        isClubAdmin = player.roleGrants.exists(_.role == Role.ClubAdmin),
+        isTournamentAdmin = player.roleGrants.exists(_.role == Role.TournamentAdmin),
+        isSuperAdmin = player.roleGrants.exists(_.role == Role.SuperAdmin)
+      ),
+      bannedReason = player.bannedReason
+    )
 
   private def pagedResponse(
       members: Vector[PlayerProfileView],

@@ -1,6 +1,5 @@
 package riichinexus.microservices.auth.objects.apiTypes
 
-import riichinexus.microservices.auth.domain.model.GuestAccessSession
 import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.*
 
@@ -11,9 +10,3 @@ final case class CurrentSessionGuestSessionView(
 
 object CurrentSessionGuestSessionView:
   given ReadWriter[CurrentSessionGuestSessionView] = macroRW
-
-  def fromDomain(session: GuestAccessSession): CurrentSessionGuestSessionView =
-    CurrentSessionGuestSessionView(
-      id = session.id.value,
-      displayName = session.displayName
-    )

@@ -32,7 +32,7 @@ final case class UpdateClubRankTreeAPIMessage(
       command = UpdateClubRankTreeCommand(
         clubId = ClubId(clubId),
         actor = actor,
-        ranks = ranks.map(_.toNode),
+        ranks = ranks.map(rankNode),
         note = note,
         occurredAt = occurredAt
       )
@@ -48,7 +48,7 @@ final case class UpdateClubRankTreeAPIMessage(
       module: ClubModuleContext,
       command: UpdateClubRankTreeCommand
   ): Option[Club] =
-    riichinexus.microservices.club.tables.club.ClubTable.findById(connection, command.clubId).map { club =>
+    riichinexus.microservices.club.tables.clubs.ClubTable.findById(connection, command.clubId).map { club =>
       ClubAuthorization.ensureClubActive(club)
       ClubAuthorization.requireClubAdmin(
         module = module,
@@ -69,7 +69,7 @@ final case class UpdateClubRankTreeAPIMessage(
       .auditOnly(module.transactionManager, module.auditEventRepository)
       .commitAudited(
         aggregate = club.updateRankTree(command.ranks),
-        persist = updatedClub => riichinexus.microservices.club.tables.club.ClubTable.save(connection, updatedClub),
+        persist = updatedClub => riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, updatedClub),
         aggregateType = "club",
         aggregateId = _.id.value,
         eventType = "ClubRankTreeUpdated",
@@ -86,3 +86,11 @@ final case class UpdateClubRankTreeAPIMessage(
       note: Option[String],
       occurredAt: Instant
   )
+
+  private def rankNode(request: ClubRankNodeRequest): ClubRankNode =
+    ClubRankNode(
+      code = request.code,
+      label = request.label,
+      minimumContribution = request.minimumContribution,
+      privileges = request.privileges
+    )

@@ -1,27 +1,45 @@
 package riichinexus.microservices.tournament.api
 
-import riichinexus.microservices.tournament.objects.{TournamentParticipantKind}
+import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentParticipantKind, TournamentWhitelistEntry}
 
 import java.util.NoSuchElementException
 
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
-import riichinexus.microservices.tournament.domain.model.*
+import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
+import riichinexus.microservices.tournament.domain.recordmanagement.model.*
+import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
+import riichinexus.microservices.tournament.domain.tablemanagement.model.*
+import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.tournament.objects.apiTypes.*
-import riichinexus.microservices.tournament.objects.apiTypes.*
-import riichinexus.microservices.tournament.objects.apiTypes.AssignTournamentAdminRequest.given
-import riichinexus.microservices.tournament.tables.tournament.TournamentTable
+import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.*
+import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.*
+import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.AssignTournamentAdminRequest.given
+import riichinexus.microservices.tournament.tables.tournaments.TournamentTable
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 
 final case class TournamentWhitelistListAPIMessage(
     tournamentId: String,
     query: TournamentWhitelistQuery = TournamentWhitelistQuery()
-) extends APIMessage[PagedResponse[TournamentWhitelistEntryView]] derives ReadWriter:
+) extends APIMessage[PagedResponse[TournamentWhitelistEntry]] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[PagedResponse[TournamentWhitelistEntryView]] =
+  override def plan(context: ApiPlanContext): IO[PagedResponse[TournamentWhitelistEntry]] =
     for
       resolved <- IO.blocking(resolveQuery)
       whitelist <- IO.blocking(listWhitelist(context, resolved))
@@ -45,7 +63,7 @@ final case class TournamentWhitelistListAPIMessage(
   private def listWhitelist(
       context: ApiPlanContext,
       query: ResolvedWhitelistQuery
-  ): Vector[TournamentWhitelistEntryView] =
+  ): Vector[TournamentWhitelistEntry] =
     TournamentTable
       .findById(context.connection, query.tournamentId)
       .map(_.whitelist
@@ -54,12 +72,11 @@ final case class TournamentWhitelistListAPIMessage(
         .filter(entry => query.clubId.forall(id => entry.clubId.contains(id)))
       )
       .getOrElse(throw NoSuchElementException(s"Tournament ${query.tournamentId.value} was not found"))
-      .map(TournamentWhitelistEntryView.fromDomain)
 
   private def pagedResponse(
-      items: Vector[TournamentWhitelistEntryView],
+      items: Vector[TournamentWhitelistEntry],
       query: ResolvedWhitelistQuery
-  ): PagedResponse[TournamentWhitelistEntryView] =
+  ): PagedResponse[TournamentWhitelistEntry] =
     require(query.limit > 0, "Input field limit must be positive")
     require(query.offset >= 0, "Input field offset must be non-negative")
     val boundedLimit = math.min(query.limit, 100)

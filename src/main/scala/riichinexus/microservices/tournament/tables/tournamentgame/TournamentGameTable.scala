@@ -7,8 +7,14 @@ import scala.util.Using
 
 import riichinexus.application.ports.OptimisticConcurrencyException
 import riichinexus.domain.model.*
-import riichinexus.microservices.tournament.domain.model.*
+import riichinexus.microservices.tournament.domain.tablemanagement.functions.TableFunctions
+import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
+import riichinexus.microservices.tournament.domain.recordmanagement.model.*
+import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
+import riichinexus.microservices.tournament.domain.tablemanagement.model.*
+import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.tournament.domain.tablemanagement.model.Table
 import upickle.default.{read, write}
 
 object TournamentGameTable:
@@ -26,8 +32,9 @@ object TournamentGameTable:
       |where cast(tables.payload ->> 'version' as integer) = ?
       |""".stripMargin
 
-  private[riichinexus] def save(connection: Connection, table: Table): Table =
-    val persisted = table.copy(version = table.version + 1)
+  private[tournament] def save(connection: Connection, table: Table): Table =
+    val validated = TableFunctions.validate(table)
+    val persisted = validated.copy(version = validated.version + 1)
     val rowsUpdated = Using.resource(connection.prepareStatement(upsertSql)) { statement =>
       statement.setString(1, persisted.id.value)
       statement.setString(2, persisted.tournamentId.value)
@@ -35,14 +42,14 @@ object TournamentGameTable:
       statement.setInt(4, persisted.tableNo)
       statement.setString(5, persisted.status.toString)
       statement.setString(6, write[Table](persisted))
-      statement.setInt(7, table.version)
+      statement.setInt(7, validated.version)
       statement.executeUpdate()
     }
     if rowsUpdated == 0 then
       throw OptimisticConcurrencyException(
         aggregateType = "table",
         aggregateId = persisted.id.value,
-        expectedVersion = table.version,
+        expectedVersion = validated.version,
         actualVersion = findById(connection, persisted.id).map(_.version)
       )
     persisted
@@ -53,7 +60,7 @@ object TournamentGameTable:
       |where id = ?
       |""".stripMargin
 
-  private[riichinexus] def delete(connection: Connection, id: TableId): Unit =
+  private[tournament] def delete(connection: Connection, id: TableId): Unit =
     Using.resource(connection.prepareStatement(deleteSql)) { statement =>
       statement.setString(1, id.value)
       statement.executeUpdate()
@@ -67,7 +74,7 @@ object TournamentGameTable:
       |where id = ?
       |""".stripMargin
 
-  private[riichinexus] def findById(connection: Connection, id: TableId): Option[Table] =
+  private[tournament] def findById(connection: Connection, id: TableId): Option[Table] =
     Using.resource(connection.prepareStatement(findByIdSql)) { statement =>
       statement.setString(1, id.value)
       Using.resource(statement.executeQuery()) { resultSet =>
@@ -84,7 +91,7 @@ object TournamentGameTable:
       |order by table_no
       |""".stripMargin
 
-  private[riichinexus] def findByTournamentAndStage(
+  private[tournament] def findByTournamentAndStage(
       connection: Connection,
       tournamentId: TournamentId,
       stageId: TournamentStageId
@@ -103,7 +110,7 @@ object TournamentGameTable:
       |order by tournament_id asc, stage_id asc, table_no asc
       |""".stripMargin
 
-  private[riichinexus] def findByTournamentIds(connection: Connection, tournamentIds: Vector[TournamentId]): Vector[Table] =
+  private[tournament] def findByTournamentIds(connection: Connection, tournamentIds: Vector[TournamentId]): Vector[Table] =
     if tournamentIds.isEmpty then Vector.empty
     else
       Using.resource(connection.prepareStatement(findByTournamentIdsSql)) { statement =>
@@ -121,7 +128,7 @@ object TournamentGameTable:
       |order by updated_at desc
       |""".stripMargin
 
-  private[riichinexus] def findAll(connection: Connection): Vector[Table] =
+  private[tournament] def findAll(connection: Connection): Vector[Table] =
     Using.resource(connection.prepareStatement(findAllSql)) { statement =>
       Using.resource(statement.executeQuery())(readTables)
     }

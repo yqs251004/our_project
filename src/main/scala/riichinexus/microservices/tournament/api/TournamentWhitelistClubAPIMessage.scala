@@ -3,17 +3,37 @@ package riichinexus.microservices.tournament.api
 import java.util.NoSuchElementException
 
 import cats.effect.IO
+import cats.effect.unsafe.implicits.global
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.tournament.domain.model.*
+import riichinexus.microservices.tournament.domain.tournamentmanagement.functions.TournamentFunctions
+import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
+import riichinexus.microservices.tournament.domain.recordmanagement.model.*
+import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
+import riichinexus.microservices.tournament.domain.tablemanagement.model.*
+import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
+import riichinexus.microservices.club.api.`private`.ResolveClubPrivateAPIMessage
 import riichinexus.microservices.club.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.tournament.objects.apiTypes.*
-import riichinexus.microservices.tournament.objects.apiTypes.*
-import riichinexus.microservices.tournament.objects.apiTypes.AssignTournamentAdminRequest.given
-import riichinexus.microservices.tournament.objects.apiTypes.OperatorRequest
+import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.*
+import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.*
+import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.AssignTournamentAdminRequest.given
 import upickle.default.*
 
 final case class TournamentWhitelistClubAPIMessage(tournamentId: String, clubId: String, operatorId: Option[String] = None) extends APIMessage[TournamentSummaryView] derives ReadWriter:
@@ -31,7 +51,7 @@ final case class TournamentWhitelistClubAPIMessage(tournamentId: String, clubId:
     yield TournamentSummaryView.fromDomain(tournament)
 
   private def resolveOperatorActor(context: ApiPlanContext): AccessPrincipal =
-    OperatorRequest(operatorId).operator
+    operatorId.map(PlayerId(_))
       .map(context.principal)
       .getOrElse(AccessPrincipal.system)
 
@@ -45,12 +65,13 @@ final case class TournamentWhitelistClubAPIMessage(tournamentId: String, clubId:
       Permission.ManageTournamentStages,
       tournamentId = Some(command.tournamentId)
     )
-    val club = riichinexus.microservices.club.tables.club.ClubTable
-      .findById(connection, command.clubId)
+    val club = ResolveClubPrivateAPIMessage(command.clubId)
+      .plan(ApiPlanContext(support = null, bearerToken = None, connection = connection))
+      .unsafeRunSync()
       .getOrElse(throw NoSuchElementException(s"Club ${command.clubId.value} was not found"))
     ensureClubActive(club)
-    riichinexus.microservices.tournament.tables.tournament.TournamentTable.findById(connection, command.tournamentId).map { tournament =>
-      riichinexus.microservices.tournament.tables.tournament.TournamentTable.save(connection, tournament.whitelistClub(command.clubId))
+    riichinexus.microservices.tournament.tables.tournaments.TournamentTable.findById(connection, command.tournamentId).map { tournament =>
+      riichinexus.microservices.tournament.tables.tournaments.TournamentTable.save(connection, TournamentFunctions.whitelistClub(tournament, command.clubId))
     }
 
   private def ensureClubActive(club: Club): Unit =

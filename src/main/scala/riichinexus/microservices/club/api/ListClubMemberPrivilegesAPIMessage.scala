@@ -8,7 +8,7 @@ import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.objects.ClubPrivilegeCode
 import riichinexus.microservices.club.objects.apiTypes.ClubMemberPrivilegeSnapshotView
 import riichinexus.microservices.club.objects.apiTypes.ClubMemberPrivilegeListQuery
-import riichinexus.microservices.club.tables.club.ClubTable
+import riichinexus.microservices.club.tables.clubs.ClubTable
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 

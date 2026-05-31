@@ -14,15 +14,7 @@ final case class FileAppealRequest(
     attachments: Vector[AppealAttachmentRequest] = Vector.empty,
     priority: Option[AppealPriority] = None,
     dueAt: Option[String] = None
-):
-  def player: PlayerId =
-    PlayerId(playerId)
-
-  def priorityLevel: DomainAppealPriority =
-    priority.map(_.toDomain).getOrElse(DomainAppealPriority.Normal)
-
-  def dueAtInstant: Option[Instant] =
-    dueAt.map(Instant.parse)
+)
 
 object FileAppealRequest:
   given ReadWriter[FileAppealRequest] = macroRW

@@ -24,7 +24,7 @@ object AccountCredentialTable:
       |where cast(account_credentials.payload ->> 'version' as integer) = ?
       |""".stripMargin
 
-  private[riichinexus] def save(connection: Connection, credential: AccountCredential): AccountCredential =
+  private[auth] def save(connection: Connection, credential: AccountCredential): AccountCredential =
     def persist(candidate: AccountCredential): AccountCredential =
       val persisted = candidate.copy(version = candidate.version + 1)
       val rowsUpdated = Using.resource(connection.prepareStatement(upsertSql)) { statement =>
@@ -55,7 +55,7 @@ object AccountCredentialTable:
       |where username = ?
       |""".stripMargin
 
-  private[riichinexus] def findByUsername(connection: Connection, username: String): Option[AccountCredential] =
+  private[auth] def findByUsername(connection: Connection, username: String): Option[AccountCredential] =
     Using.resource(connection.prepareStatement(findByUsernameSql)) { statement =>
       statement.setString(1, AccountCredential.normalizeUsername(username))
       Using.resource(statement.executeQuery()) { resultSet =>
@@ -71,7 +71,7 @@ object AccountCredentialTable:
       |where player_id = ?
       |""".stripMargin
 
-  private[riichinexus] def findByPlayerId(connection: Connection, playerId: PlayerId): Option[AccountCredential] =
+  private[auth] def findByPlayerId(connection: Connection, playerId: PlayerId): Option[AccountCredential] =
     Using.resource(connection.prepareStatement(findByPlayerIdSql)) { statement =>
       statement.setString(1, playerId.value)
       Using.resource(statement.executeQuery()) { resultSet =>
@@ -87,7 +87,7 @@ object AccountCredentialTable:
       |order by username
       |""".stripMargin
 
-  private[riichinexus] def findAll(connection: Connection): Vector[AccountCredential] =
+  private[auth] def findAll(connection: Connection): Vector[AccountCredential] =
     Using.resource(connection.prepareStatement(findAllSql)) { statement =>
       Using.resource(statement.executeQuery())(readCredentials)
     }

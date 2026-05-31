@@ -7,19 +7,41 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.tournament.domain.model.*
+import riichinexus.microservices.tournament.domain.tournamentmanagement.functions.{TournamentFunctions, TournamentStageFunctions}
+import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
+import riichinexus.microservices.tournament.domain.recordmanagement.model.*
+import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
+import riichinexus.microservices.tournament.domain.tablemanagement.model.*
+import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.tournament.domain.TournamentRuntimeDefaults
-import riichinexus.microservices.tournament.objects.apiTypes.*
-import riichinexus.microservices.tournament.objects.apiTypes.*
-import riichinexus.microservices.tournament.objects.apiTypes.AssignTournamentAdminRequest.given
+import riichinexus.microservices.tournament.domain.tournamentmanagement.functions.TournamentRuntimeDefaults
+import riichinexus.microservices.tournament.objects.rulesmanagement.stageprogression.{AdvancementRule, AdvancementRuleType}
+import riichinexus.microservices.tournament.objects.rulesmanagement.knockout.KnockoutRuleConfig
+import riichinexus.microservices.tournament.objects.rulesmanagement.swiss.SwissRuleConfig
+import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.*
+import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.*
+import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.AssignTournamentAdminRequest.given
 import upickle.default.*
 
 final case class TournamentStageConfigureRulesAPIMessage(tournamentId: String, stageId: String, request: ConfigureStageRulesRequest) extends APIMessage[TournamentSummaryView] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[TournamentSummaryView] =
     for
-      actor <- IO.blocking(context.principal(request.operator))
+      actor <- IO.blocking(context.principal(PlayerId(request.operatorId)))
       module = context.support.tournamentModule
       command = ConfigureStageRulesCommand(
         tournamentId = TournamentId(tournamentId),
@@ -39,7 +61,7 @@ final case class TournamentStageConfigureRulesAPIMessage(tournamentId: String, s
       module: TournamentModuleContext,
       command: ConfigureStageRulesCommand
   ): Option[Tournament] =
-    riichinexus.microservices.tournament.tables.tournament.TournamentTable.findById(connection, command.tournamentId).map { tournament =>
+    riichinexus.microservices.tournament.tables.tournaments.TournamentTable.findById(connection, command.tournamentId).map { tournament =>
       val currentStage = requireStage(tournament, command.stageId)
       module.authorizationService.requirePermission(
         command.actor,
@@ -47,8 +69,8 @@ final case class TournamentStageConfigureRulesAPIMessage(tournamentId: String, s
         tournamentId = Some(command.tournamentId)
       )
       val configuredStage = buildConfiguredStage(module, currentStage, command.request)
-      riichinexus.microservices.tournament.tables.tournament.TournamentTable.save(connection, 
-        tournament.updateStage(command.stageId, _ => configuredStage)
+      riichinexus.microservices.tournament.tables.tournaments.TournamentTable.save(connection, 
+        TournamentFunctions.updateStage(tournament, command.stageId, _ => configuredStage)
       )
     }
 
@@ -62,17 +84,62 @@ final case class TournamentStageConfigureRulesAPIMessage(tournamentId: String, s
       currentStage: TournamentStage,
       request: ConfigureStageRulesRequest
   ): TournamentStage =
+    validateRequest(request)
     val baseStage = currentStage.copy(
-      format = request.stageFormat.getOrElse(currentStage.format),
+      format = request.format.getOrElse(currentStage.format),
       roundCount = math.max(request.roundCount.getOrElse(currentStage.roundCount), currentStage.currentRound)
     )
     TournamentRuntimeDefaults.normalizeStage(
-      baseStage.withRules(
-        request.advancementRule,
-        request.swissRule,
-        request.knockoutRule,
+      TournamentStageFunctions.withRules(
+        baseStage,
+        advancementRule(request),
+        swissRule(request),
+        knockoutRule(request),
         request.schedulingPoolSize.getOrElse(baseStage.schedulingPoolSize)
       )
+    )
+
+  private def advancementRule(request: ConfigureStageRulesRequest): AdvancementRule =
+    AdvancementRule(
+      ruleType = request.advancementRuleType.map(AdvancementRuleType.valueOf).getOrElse(AdvancementRuleType.Custom),
+      cutSize = request.cutSize,
+      thresholdScore = request.thresholdScore,
+      targetTableCount = request.targetTableCount,
+      templateKey = request.ruleTemplateKey,
+      note = request.note
+    )
+
+  private def swissRule(request: ConfigureStageRulesRequest): Option[SwissRuleConfig] =
+    if request.pairingMethod.isDefined || request.carryOverPoints.isDefined || request.maxRounds.isDefined then
+      Some(
+        SwissRuleConfig(
+          pairingMethod = request.pairingMethod.map(_.trim.toLowerCase).getOrElse("balanced-elo"),
+          carryOverPoints = request.carryOverPoints.getOrElse(true),
+          maxRounds = request.maxRounds
+        )
+      )
+    else None
+
+  private def knockoutRule(request: ConfigureStageRulesRequest): Option[KnockoutRuleConfig] =
+    if request.bracketSize.isDefined || request.thirdPlaceMatch.isDefined || request.seedingPolicy.isDefined || request.repechageEnabled.isDefined then
+      Some(
+        KnockoutRuleConfig(
+          bracketSize = request.bracketSize,
+          thirdPlaceMatch = request.thirdPlaceMatch.getOrElse(false),
+          seedingPolicy = request.seedingPolicy.map(_.trim.toLowerCase).getOrElse("rating"),
+          repechageEnabled = request.repechageEnabled.getOrElse(false)
+        )
+      )
+    else None
+
+  private def validateRequest(request: ConfigureStageRulesRequest): Unit =
+    require(
+      request.advancementRuleType.forall(_.trim.nonEmpty),
+      "advancementRuleType must not be blank"
+    )
+    require(
+      request.ruleTemplateKey.forall(_.trim.nonEmpty),
+      "ruleTemplateKey must not be blank"
     )
 
   private final case class ConfigureStageRulesCommand(

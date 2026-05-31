@@ -11,10 +11,16 @@ import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.tournament.appeal.domain.model.{
   AppealAttachment,
+  AppealAttachmentMediaKind as DomainAppealAttachmentMediaKind,
+  AppealAttachmentStorageKind as DomainAppealAttachmentStorageKind,
   AppealPriority as DomainAppealPriority,
   AppealTicket
 }
-import riichinexus.microservices.tournament.domain.model.*
+import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
+import riichinexus.microservices.tournament.domain.recordmanagement.model.*
+import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
+import riichinexus.microservices.tournament.domain.tablemanagement.model.*
+import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.tournament.appeal.objects.apiTypes.*
 import upickle.default.*
@@ -26,7 +32,7 @@ final case class AppealFileAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[AppealTicketView] =
     for
-      actor <- IO.blocking(context.principal(request.player))
+      actor <- IO.blocking(context.principal(PlayerId(request.playerId)))
       createdAt <- IO.realTimeInstant
       module = context.support.tournamentAppealModule
       command <- IO.blocking(resolveCommand(actor, createdAt))
@@ -36,13 +42,27 @@ final case class AppealFileAPIMessage(
   private def resolveCommand(actor: AccessPrincipal, createdAt: Instant): FileAppealCommand =
     FileAppealCommand(
       tableId = TableId(tableId),
-      openedBy = request.player,
+      openedBy = PlayerId(request.playerId),
       description = request.description,
-      attachments = request.attachments.map(_.toAttachment),
-      priority = request.priorityLevel,
-      dueAt = request.dueAtInstant,
+      attachments = request.attachments.map(appealAttachment),
+      priority = request.priority.map(_.toDomain).getOrElse(DomainAppealPriority.Normal),
+      dueAt = request.dueAt.map(Instant.parse),
       actor = actor,
       createdAt = createdAt
+    )
+
+  private def appealAttachment(request: AppealAttachmentRequest): AppealAttachment =
+    AppealAttachment(
+      name = request.name,
+      uri = request.uri,
+      contentType = request.contentType,
+      storageKind = request.storageKind.map(_.toDomain).getOrElse(DomainAppealAttachmentStorageKind.ExternalUrl),
+      mediaKind = request.mediaKind.map(_.toDomain).getOrElse(DomainAppealAttachmentMediaKind.Other),
+      checksum = request.checksum,
+      checksumAlgorithm = request.checksumAlgorithm,
+      sizeBytes = request.sizeBytes,
+      uploadedAt = request.uploadedAt,
+      retentionUntil = request.retentionUntil
     )
 
   private def fileAppeal(

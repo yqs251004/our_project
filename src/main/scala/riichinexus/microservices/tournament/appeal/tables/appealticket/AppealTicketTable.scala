@@ -8,7 +8,11 @@ import scala.util.Using
 import riichinexus.application.ports.OptimisticConcurrencyException
 import riichinexus.domain.model.*
 import riichinexus.microservices.tournament.appeal.domain.model.*
-import riichinexus.microservices.tournament.domain.model.*
+import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
+import riichinexus.microservices.tournament.domain.recordmanagement.model.*
+import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
+import riichinexus.microservices.tournament.domain.tablemanagement.model.*
+import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.{read, write}
 
@@ -28,7 +32,7 @@ object AppealTicketTable:
       |where cast(appeal_tickets.payload ->> 'version' as integer) = ?
       |""".stripMargin
 
-  private[riichinexus] def save(connection: Connection, ticket: AppealTicket): AppealTicket =
+  private[appeal] def save(connection: Connection, ticket: AppealTicket): AppealTicket =
     val persisted = ticket.copy(version = ticket.version + 1)
     val rowsUpdated = Using.resource(connection.prepareStatement(upsertSql)) { statement =>
       statement.setString(1, persisted.id.value)
@@ -57,7 +61,7 @@ object AppealTicketTable:
       |where id = ?
       |""".stripMargin
 
-  private[riichinexus] def findById(connection: Connection, id: AppealTicketId): Option[AppealTicket] =
+  private[appeal] def findById(connection: Connection, id: AppealTicketId): Option[AppealTicket] =
     Using.resource(connection.prepareStatement(findByIdSql)) { statement =>
       statement.setString(1, id.value)
       Using.resource(statement.executeQuery()) { resultSet =>
@@ -73,7 +77,7 @@ object AppealTicketTable:
       |order by updated_at desc
       |""".stripMargin
 
-  private[riichinexus] def findAll(connection: Connection): Vector[AppealTicket] =
+  private[appeal] def findAll(connection: Connection): Vector[AppealTicket] =
     Using.resource(connection.prepareStatement(findAllSql)) { statement =>
       Using.resource(statement.executeQuery())(readTickets)
     }

@@ -5,7 +5,7 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.Permission
 import riichinexus.microservices.auth.domain.model.AccessPrincipal
 import riichinexus.microservices.club.domain.model.Club
-import riichinexus.microservices.club.tables.club.ClubTable
+import riichinexus.microservices.club.tables.clubs.ClubTable
 import riichinexus.microservices.club.objects.apiTypes.ClubLeaderboardEntry
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*

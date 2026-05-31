@@ -10,7 +10,11 @@ import riichinexus.bootstrap.TournamentAppealModuleContext
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.tournament.appeal.domain.model.*
-import riichinexus.microservices.tournament.domain.model.*
+import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
+import riichinexus.microservices.tournament.domain.recordmanagement.model.*
+import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
+import riichinexus.microservices.tournament.domain.tablemanagement.model.*
+import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.tournament.appeal.objects.apiTypes.*
 import upickle.default.*
@@ -25,7 +29,7 @@ final case class AppealResolveAPIMessage(
   override def plan(context: ApiPlanContext): IO[AppealTicketView] =
     for
       resolved <- IO.blocking(resolveInput)
-      actor <- IO.blocking(context.principal(resolved.operator))
+      actor <- IO.blocking(context.principal(PlayerId(resolved.operatorId)))
       resolvedAt <- IO.realTimeInstant
       module = context.support.tournamentAppealModule
       command = ResolveAppealCommand(AppealTicketId(appealId), resolved, actor, resolvedAt)

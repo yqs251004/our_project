@@ -6,8 +6,9 @@ import scala.annotation.tailrec
 import scala.util.Using
 
 import riichinexus.domain.model.*
-import riichinexus.microservices.tournament.domain.model.*
+import riichinexus.microservices.tournament.domain.paifumanagement.functions.PaifuFunctions
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.tournament.objects.paifumanagement.Paifu
 import upickle.default.{read, write}
 
 object PaifuTable:
@@ -25,14 +26,14 @@ object PaifuTable:
       |  updated_at = now()
       |""".stripMargin
 
-  private[riichinexus] def save(connection: Connection, paifu: Paifu): Paifu =
+  private[tournament] def save(connection: Connection, paifu: Paifu): Paifu =
     Using.resource(connection.prepareStatement(upsertSql)) { statement =>
       statement.setString(1, paifu.id.value)
       statement.setString(2, paifu.metadata.tableId.value)
       statement.setString(3, paifu.metadata.tournamentId.value)
       statement.setString(4, paifu.metadata.stageId.value)
       statement.setTimestamp(5, Timestamp.from(paifu.metadata.recordedAt))
-      statement.setArray(6, connection.createArrayOf("text", paifu.playerIds.map(_.value).toArray))
+      statement.setArray(6, connection.createArrayOf("text", PaifuFunctions.playerIds(paifu).map(_.value).toArray))
       statement.setString(7, write[Paifu](paifu))
       statement.executeUpdate()
     }
@@ -45,7 +46,7 @@ object PaifuTable:
       |where id = ?
       |""".stripMargin
 
-  private[riichinexus] def findById(connection: Connection, id: PaifuId): Option[Paifu] =
+  private[tournament] def findById(connection: Connection, id: PaifuId): Option[Paifu] =
     Using.resource(connection.prepareStatement(findByIdSql)) { statement =>
       statement.setString(1, id.value)
       Using.resource(statement.executeQuery()) { resultSet =>
@@ -61,7 +62,7 @@ object PaifuTable:
       |order by recorded_at desc
       |""".stripMargin
 
-  private[riichinexus] def findAll(connection: Connection): Vector[Paifu] =
+  private[tournament] def findAll(connection: Connection): Vector[Paifu] =
     Using.resource(connection.prepareStatement(findAllSql)) { statement =>
       Using.resource(statement.executeQuery())(readPaifus)
     }
@@ -74,7 +75,7 @@ object PaifuTable:
       |order by recorded_at desc
       |""".stripMargin
 
-  private[riichinexus] def findByPlayer(connection: Connection, playerId: PlayerId): Vector[Paifu] =
+  private[tournament] def findByPlayer(connection: Connection, playerId: PlayerId): Vector[Paifu] =
     Using.resource(connection.prepareStatement(findByPlayerSql)) { statement =>
       statement.setString(1, playerId.value)
       Using.resource(statement.executeQuery())(readPaifus)

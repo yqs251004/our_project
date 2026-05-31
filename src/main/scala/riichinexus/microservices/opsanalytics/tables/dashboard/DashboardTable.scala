@@ -25,7 +25,7 @@ object DashboardTable:
       |where cast(dashboards.payload ->> 'version' as integer) = ?
       |""".stripMargin
 
-  private[riichinexus] def save(connection: Connection, dashboard: Dashboard): Dashboard =
+  private[opsanalytics] def save(connection: Connection, dashboard: Dashboard): Dashboard =
     val persisted = dashboard.copy(version = dashboard.version + 1)
     val rowsUpdated = Using.resource(connection.prepareStatement(upsertSql)) { statement =>
       statement.setString(1, ownerKey(persisted.owner))
@@ -50,7 +50,7 @@ object DashboardTable:
       |where owner_key = ?
       |""".stripMargin
 
-  private[riichinexus] def findByOwner(connection: Connection, owner: DashboardOwner): Option[Dashboard] =
+  private[opsanalytics] def findByOwner(connection: Connection, owner: DashboardOwner): Option[Dashboard] =
     Using.resource(connection.prepareStatement(findByOwnerSql)) { statement =>
       statement.setString(1, ownerKey(owner))
       Using.resource(statement.executeQuery()) { resultSet =>
@@ -66,7 +66,7 @@ object DashboardTable:
       |order by owner_key
       |""".stripMargin
 
-  private[riichinexus] def findAll(connection: Connection): Vector[Dashboard] =
+  private[opsanalytics] def findAll(connection: Connection): Vector[Dashboard] =
     Using.resource(connection.prepareStatement(findAllSql)) { statement =>
       Using.resource(statement.executeQuery())(readDashboards)
     }

@@ -25,7 +25,7 @@ final case class ListGuestSessionsAuthAPIMessage(
         guestSessions(context, query)
       }
     yield PagedResponse.fromItems(sessions, limit, offset, query.appliedFilters)(
-      GuestSessionResponse.fromDomain
+      guestSessionResponse
     )
 
   private def guestSessions(
@@ -42,6 +42,13 @@ final case class ListGuestSessionsAuthAPIMessage(
       activeOnly = activeOnly,
       asOf = asOf,
       appliedFilters = activeOnly.map(value => Map("activeOnly" -> value.toString)).getOrElse(Map.empty)
+    )
+
+  private def guestSessionResponse(session: GuestAccessSession): GuestSessionResponse =
+    GuestSessionResponse(
+      id = session.id.value,
+      displayName = session.displayName,
+      createdAt = session.createdAt.toString
     )
 
   private final case class ResolvedGuestSessionsQuery(

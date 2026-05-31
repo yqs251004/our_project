@@ -47,7 +47,7 @@ final case class RevokeClubHonorAPIMessage(
       module: ClubModuleContext,
       command: RevokeClubHonorCommand
   ): Option[Club] =
-    riichinexus.microservices.club.tables.club.ClubTable.findById(connection, command.clubId).map { club =>
+    riichinexus.microservices.club.tables.clubs.ClubTable.findById(connection, command.clubId).map { club =>
       ClubAuthorization.ensureClubActive(club)
       ClubAuthorization.requireClubAdmin(
         module = module,
@@ -74,7 +74,7 @@ final case class RevokeClubHonorAPIMessage(
       .auditOnly(module.transactionManager, module.auditEventRepository)
       .commitAudited(
         aggregate = club.removeHonor(command.title),
-        persist = updatedClub => riichinexus.microservices.club.tables.club.ClubTable.save(connection, updatedClub),
+        persist = updatedClub => riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, updatedClub),
         aggregateType = "club",
         aggregateId = _.id.value,
         eventType = "ClubHonorRevoked",

@@ -10,10 +10,11 @@ import riichinexus.application.changes.{DomainChange, DomainChangeInterpreter}
 import riichinexus.bootstrap.PlatformAdminModuleContext
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
+import riichinexus.microservices.auth.objects.Role
 import riichinexus.microservices.player.objects.*
 import riichinexus.microservices.auth.domain.AuthorizationFailure
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.player.tables.player.PlayerTable
+import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import riichinexus.microservices.platformadmin.objects.apiTypes.PlatformAdminPlayerView
 import riichinexus.microservices.platformadmin.objects.apiTypes.*
 import upickle.default.*
@@ -41,7 +42,7 @@ final case class PlatformAdminGrantSuperAdminAPIMessage(
           }
           .getOrElse(throw NoSuchElementException(s"Player ${command.playerId.value} was not found"))
       }
-    yield PlatformAdminPlayerView.fromDomain(player)
+    yield platformAdminPlayerView(player)
 
   private def grantSuperAdmin(
       connection: java.sql.Connection,
@@ -49,13 +50,13 @@ final case class PlatformAdminGrantSuperAdminAPIMessage(
     command: GrantSuperAdminCommand
   ): Option[Player] =
     ensureSuperAdmin(command.actor)
-    PlayerTable.findById(connection, command.playerId).map { player =>
+    GetPlayerAPIMessage.findPlayer(connection, command.playerId).map { player =>
       DomainChangeInterpreter
         .auditOnly(module.transactionManager, module.auditEventRepository)
         .commitWithinTransaction(
           DomainChange(
             aggregate = player.grantRole(RoleGrant.superAdmin(command.grantedAt, command.actor.playerId)),
-            persist = nextPlayer => PlayerTable.save(connection, nextPlayer),
+            persist = nextPlayer => CreatePlayerAPIMessage.persistPlayer(connection, nextPlayer),
             auditEntries = _ =>
               Vector(
                 AuditEventEntry(
@@ -76,6 +77,17 @@ final case class PlatformAdminGrantSuperAdminAPIMessage(
   private def ensureSuperAdmin(actor: AccessPrincipal): Unit =
     if !actor.isSuperAdmin then
       throw AuthorizationFailure("Only an existing super admin can grant super admin access")
+
+  private def platformAdminPlayerView(player: Player): PlatformAdminPlayerView =
+    PlatformAdminPlayerView(
+      playerId = player.id.value,
+      userId = player.userId,
+      nickname = player.nickname,
+      status = player.status.toString,
+      clubIds = player.boundClubIds.map(_.value),
+      bannedReason = player.bannedReason,
+      isSuperAdmin = player.roleGrants.exists(_.role == Role.SuperAdmin)
+    )
 
   private final case class GrantSuperAdminCommand(
       playerId: PlayerId,

@@ -9,14 +9,31 @@ import riichinexus.application.changes.DomainChangeInterpreter
 import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.tournament.domain.model.*
+import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
+import riichinexus.microservices.tournament.domain.recordmanagement.model.*
+import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
+import riichinexus.microservices.tournament.domain.tablemanagement.model.*
+import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.microservices.player.objects.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.player.tables.player.PlayerTable
-import riichinexus.microservices.tournament.objects.apiTypes.*
-import riichinexus.microservices.tournament.objects.apiTypes.*
-import riichinexus.microservices.tournament.objects.apiTypes.AssignTournamentAdminRequest.given
-import riichinexus.microservices.tournament.objects.apiTypes.OperatorRequest
+import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
+import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.*
+import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.*
+import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.AssignTournamentAdminRequest.given
 import upickle.default.*
 
 final case class TournamentRevokeAdminAPIMessage(tournamentId: String, playerId: String, operatorId: Option[String] = None) extends APIMessage[TournamentSummaryView] derives ReadWriter:
@@ -40,7 +57,7 @@ final case class TournamentRevokeAdminAPIMessage(tournamentId: String, playerId:
     yield TournamentSummaryView.fromDomain(tournament)
 
   private def resolveOperatorActor(context: ApiPlanContext): AccessPrincipal =
-    OperatorRequest(operatorId).operator
+    operatorId.map(PlayerId(_))
       .map(context.principal)
       .getOrElse(AccessPrincipal.system)
 
@@ -50,8 +67,8 @@ final case class TournamentRevokeAdminAPIMessage(tournamentId: String, playerId:
       command: RevokeTournamentAdminCommand
   ): Option[Tournament] =
     for
-      tournament <- riichinexus.microservices.tournament.tables.tournament.TournamentTable.findById(connection, command.tournamentId)
-      player <- PlayerTable.findById(connection, command.playerId)
+      tournament <- riichinexus.microservices.tournament.tables.tournaments.TournamentTable.findById(connection, command.tournamentId)
+      player <- GetPlayerAPIMessage.findPlayer(connection, command.playerId)
     yield
       ensureAdminCanBeRevoked(module, tournament, command)
       commitAdminRevocation(connection, module, tournament, player, command)
@@ -87,8 +104,8 @@ final case class TournamentRevokeAdminAPIMessage(tournamentId: String, playerId:
       .commitAudited(
         aggregate = tournament.copy(admins = tournament.admins.filterNot(_ == command.playerId)),
         persist = nextTournament =>
-          PlayerTable.save(connection, player.revokeTournamentAdmin(command.tournamentId))
-          riichinexus.microservices.tournament.tables.tournament.TournamentTable.save(connection, nextTournament),
+          CreatePlayerAPIMessage.persistPlayer(connection, player.revokeTournamentAdmin(command.tournamentId))
+          riichinexus.microservices.tournament.tables.tournaments.TournamentTable.save(connection, nextTournament),
         aggregateType = "tournament",
         aggregateId = _.id.value,
         eventType = "TournamentAdminRevoked",

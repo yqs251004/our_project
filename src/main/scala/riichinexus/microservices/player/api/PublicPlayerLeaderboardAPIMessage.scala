@@ -7,9 +7,9 @@ import riichinexus.domain.model.Permission
 import riichinexus.microservices.auth.domain.model.AccessPrincipal
 import riichinexus.microservices.player.domain.PlayerRankNormalizationService
 import riichinexus.microservices.player.objects.{Player, PlayerStatus}
-import riichinexus.microservices.player.tables.player.PlayerTable
+import riichinexus.microservices.player.tables.players.PlayerTable
 import riichinexus.microservices.player.objects.apiTypes.PlayerLeaderboardEntry
-import riichinexus.microservices.tournament.objects.apiTypes.RankSnapshotView
+import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.RankSnapshotView
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 
@@ -54,13 +54,13 @@ final case class PublicPlayerLeaderboardAPIMessage(
       }
       .map { case (player, normalizedRank) =>
         PlayerLeaderboardEntry(
-          playerId = player.id,
+          playerId = player.id.value,
           nickname = player.nickname,
           elo = player.elo,
-          currentRank = RankSnapshotView.fromDomain(player.currentRank),
+          currentRank = RankSnapshotView(player.currentRank.platform, player.currentRank.tier, player.currentRank.stars),
           normalizedRankScore = normalizedRank.map(_.score),
-          clubIds = player.boundClubIds,
-          status = player.status
+          clubIds = player.boundClubIds.map(_.value),
+          status = player.status.toString
         )
       }
 

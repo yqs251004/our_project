@@ -9,12 +9,7 @@ final case class UpdateClubRankTreeRequest(
     operatorId: String,
     ranks: Vector[ClubRankNodeRequest],
     note: Option[String] = None
-):
-  def operator: PlayerId =
-    PlayerId(operatorId)
-
-  def nodes: Vector[ClubRankNode] =
-    ranks.map(_.toNode)
+)
 
 object UpdateClubRankTreeRequest:
   given ReadWriter[UpdateClubRankTreeRequest] = macroRW

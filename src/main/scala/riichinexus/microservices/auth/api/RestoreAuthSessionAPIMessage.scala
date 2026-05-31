@@ -3,6 +3,7 @@ package riichinexus.microservices.auth.api
 import java.time.Instant
 
 import cats.effect.IO
+import cats.effect.unsafe.implicits.global
 import riichinexus.api.{APIWithTokenMessage, ApiPlanContext}
 import riichinexus.bootstrap.AuthModuleContext
 import riichinexus.domain.service.AuthenticationFailure
@@ -10,7 +11,7 @@ import riichinexus.microservices.auth.objects.AuthenticatedSession
 import riichinexus.microservices.auth.objects.apiTypes.AuthSessionResponse
 import riichinexus.microservices.player.objects.{Player, PlayerStatus}
 import riichinexus.microservices.auth.tables.authenticatedsession.AuthenticatedSessionTable
-import riichinexus.microservices.player.tables.player.PlayerTable
+import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import upickle.default.*
 
 final case class RestoreAuthSessionAPIMessage() extends APIWithTokenMessage[AuthSessionResponse] derives ReadWriter:
@@ -23,31 +24,30 @@ final case class RestoreAuthSessionAPIMessage() extends APIWithTokenMessage[Auth
       command = RestoreSessionCommand(token, asOf)
       result <- IO.blocking {
         module.transactionManager.inTransaction {
-          restoreSession(context.connection, module, command)
+          restoreSession(context, module, command)
         }
       }
-    yield AuthSessionResponse.fromView(
-      riichinexus.microservices.auth.objects.apiTypes.AuthSessionView(
-        userId = result.player.id.value,
-        username = result.session.username,
-        displayName = result.player.nickname,
-        authenticated = true,
-        roles = context.support.registeredRoleFlags(result.player)
-      )
+    yield AuthSessionResponse(
+      userId = result.player.id.value,
+      username = result.session.username,
+      displayName = result.player.nickname,
+      authenticated = true,
+      roles = context.support.registeredRoleFlags(result.player)
     )
 
   private def restoreSession(
-      connection: java.sql.Connection,
+      context: ApiPlanContext,
       module: AuthModuleContext,
       command: RestoreSessionCommand
   ): RestoreSessionResult =
+    val connection = context.connection
     val session = AuthenticatedSessionTable.findByToken(connection, command.token)
       .getOrElse(throw AuthenticationFailure("Session is invalid or expired", "invalid_session"))
     if !session.canAuthenticate(command.asOf) then
       throw AuthenticationFailure("Session is invalid or expired", "invalid_session")
 
     val touched = AuthenticatedSessionTable.save(connection, session.touch(command.asOf))
-    val player = PlayerTable.findById(connection, touched.playerId)
+    val player = GetPlayerAPIMessage.findPlayer(context.connection, touched.playerId)
       .getOrElse(throw AuthenticationFailure(s"Player ${touched.playerId.value} was not found", "invalid_session"))
     if player.status != PlayerStatus.Active then
       throw AuthenticationFailure(s"Player ${player.id.value} is not active", "inactive_account")

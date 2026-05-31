@@ -3,25 +3,39 @@ package riichinexus.infrastructure.events.projections
 import java.sql.Connection
 import java.time.Instant
 
+import cats.effect.unsafe.implicits.global
+import riichinexus.api.ApiPlanContext
 import riichinexus.application.ports.*
 import riichinexus.application.ports.DomainEvent
 import riichinexus.domain.model.*
 import riichinexus.microservices.club.domain.ClubDissolved
-import riichinexus.microservices.tournament.domain.model.*
+import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
+import riichinexus.microservices.tournament.domain.recordmanagement.model.*
+import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
+import riichinexus.microservices.tournament.domain.tablemanagement.model.*
+import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.microservices.club.domain.model.*
+import riichinexus.microservices.club.api.`private`.{ListClubsPrivateAPIMessage, ResolveClubPrivateAPIMessage, ResolveClubsPrivateAPIMessage, SaveClubPrivateAPIMessage}
 import riichinexus.microservices.player.objects.*
 import riichinexus.microservices.player.domain.PlayerBanned
 import riichinexus.microservices.opsanalytics.domain.AdvancedStatsRoundAnalysis
 import riichinexus.microservices.club.domain.ClubPowerRatingService
-import riichinexus.microservices.club.tables.club.ClubTable
-import riichinexus.microservices.opsanalytics.objects.{AdvancedStatsBoard, Dashboard, DashboardOwner}
-import riichinexus.microservices.opsanalytics.tables.advancedstatsboard.AdvancedStatsBoardTable
-import riichinexus.microservices.opsanalytics.tables.dashboard.DashboardTable
-import riichinexus.microservices.player.tables.player.PlayerTable
+import riichinexus.microservices.opsanalytics.api.`private`.{
+  RecordClubAdvancedStatsBoardAPIMessage,
+  RecordClubDashboardAPIMessage,
+  ResetClubAdvancedStatsBoardAPIMessage,
+  ResetClubDashboardAPIMessage,
+  ResetPlayerAdvancedStatsBoardAPIMessage,
+  ResetPlayerDashboardAPIMessage
+}
+import riichinexus.microservices.opsanalytics.objects.{AdvancedStatsBoard, DashboardOwner}
+import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import riichinexus.microservices.tournament.appeal.domain.*
-import riichinexus.microservices.tournament.domain.TournamentSettlementRecorded
-import riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTable
-import riichinexus.microservices.tournament.tables.paifu.PaifuTable
+import riichinexus.microservices.tournament.domain.events.TournamentSettlementRecorded
+import riichinexus.microservices.tournament.api.`private`.{
+  ListPlayerMatchRecordsPrivateAPIMessage,
+  ListPlayerPaifusPrivateAPIMessage
+}
 
 final class SystemEventCascadeSubscriber(
     eventCascadeRecordRepository: EventCascadeRecordRepository
@@ -136,24 +150,15 @@ final class SystemEventCascadeSubscriber(
           )
         )
       case PlayerBanned(playerId, reason, occurredAt) =>
-        val playerOwner = DashboardOwner.Player(playerId)
-        DashboardTable.save(
-          connection,
-          Dashboard.empty(playerOwner, occurredAt).copy(
-            version = DashboardTable.findByOwner(connection, playerOwner).map(_.version).getOrElse(0)
-          )
-        )
-        AdvancedStatsBoardTable.save(
-          connection,
-          AdvancedStatsBoard.empty(playerOwner, occurredAt).copy(
-            version = AdvancedStatsBoardTable.findByOwner(connection, playerOwner).map(_.version).getOrElse(0)
-          )
-        )
+        ResetPlayerDashboardAPIMessage(playerId, occurredAt).plan(apiContext(connection)).unsafeRunSync()
+        ResetPlayerAdvancedStatsBoardAPIMessage(playerId, occurredAt).plan(apiContext(connection)).unsafeRunSync()
         val repairedClubIds = findPlayer(connection, playerId).toVector.flatMap(_.boundClubIds).distinct.flatMap { clubId =>
-          ClubTable.findById(connection, clubId).map { club =>
+          ResolveClubPrivateAPIMessage(clubId).plan(ApiPlanContext(support = null, bearerToken = None, connection = connection)).unsafeRunSync().map { club =>
             val refreshed = refreshClubProjection(connection, club, occurredAt)
-            ClubTable.save(connection, refreshed)
-            AdvancedStatsBoardTable.save(connection, rebuildClubBoard(connection, refreshed, occurredAt))
+            SaveClubPrivateAPIMessage(refreshed).plan(ApiPlanContext(support = null, bearerToken = None, connection = connection)).unsafeRunSync()
+            RecordClubAdvancedStatsBoardAPIMessage(rebuildClubBoard(connection, refreshed, occurredAt))
+              .plan(apiContext(connection))
+              .unsafeRunSync()
             clubId.value
           }
         }
@@ -174,19 +179,8 @@ final class SystemEventCascadeSubscriber(
           )
         )
       case ClubDissolved(clubId, occurredAt) =>
-        val clubOwner = DashboardOwner.Club(clubId)
-        DashboardTable.save(
-          connection,
-          Dashboard.empty(clubOwner, occurredAt).copy(
-            version = DashboardTable.findByOwner(connection, clubOwner).map(_.version).getOrElse(0)
-          )
-        )
-        AdvancedStatsBoardTable.save(
-          connection,
-          AdvancedStatsBoard.empty(clubOwner, occurredAt).copy(
-            version = AdvancedStatsBoardTable.findByOwner(connection, clubOwner).map(_.version).getOrElse(0)
-          )
-        )
+        ResetClubDashboardAPIMessage(clubId, occurredAt).plan(apiContext(connection)).unsafeRunSync()
+        ResetClubAdvancedStatsBoardAPIMessage(clubId, occurredAt).plan(apiContext(connection)).unsafeRunSync()
         eventCascadeRecordRepository.save(
           EventCascadeRecord.completed(
             eventType = "ClubDissolved",
@@ -207,7 +201,7 @@ final class SystemEventCascadeSubscriber(
       at: Instant
   ): Club =
     val refreshedClub = recalculateClubPowerRating(connection, club)
-    DashboardTable.save(connection, buildClubDashboard(connection, refreshedClub, at))
+    RecordClubDashboardAPIMessage(refreshedClub, at).plan(apiContext(connection)).unsafeRunSync()
     refreshedClub
 
   private def recalculateClubPowerRating(
@@ -218,51 +212,14 @@ final class SystemEventCascadeSubscriber(
       ClubPowerRatingService.calculate(club, findPlayer(connection, _))
     )
 
-  private def buildClubDashboard(connection: Connection, club: Club, at: Instant): Dashboard =
-    val existingVersion = DashboardTable.findByOwner(connection, DashboardOwner.Club(club.id)).map(_.version).getOrElse(0)
-    val memberDashboards = club.members.flatMap { playerId =>
-      findPlayer(connection, playerId)
-        .filter(_.status == PlayerStatus.Active)
-        .flatMap(_ => DashboardTable.findByOwner(connection, DashboardOwner.Player(playerId)))
-    }
-
-    if memberDashboards.isEmpty then Dashboard.empty(DashboardOwner.Club(club.id), at).copy(version = existingVersion)
-    else
-      Dashboard(
-        owner = DashboardOwner.Club(club.id),
-        sampleSize = memberDashboards.map(_.sampleSize).sum,
-        dealInRate = dashboardWeightedAverage(memberDashboards, _.dealInRate),
-        winRate = dashboardWeightedAverage(memberDashboards, _.winRate),
-        averageWinPoints = dashboardWeightedAverage(memberDashboards, _.averageWinPoints),
-        riichiRate = dashboardWeightedAverage(memberDashboards, _.riichiRate),
-        averagePlacement = dashboardWeightedAverage(memberDashboards, _.averagePlacement),
-        topFinishRate = dashboardWeightedAverage(memberDashboards, _.topFinishRate),
-        lastUpdatedAt = at,
-        version = existingVersion
-      )
-
-  private def dashboardWeightedAverage(
-      dashboards: Vector[Dashboard],
-      selector: Dashboard => Double
-  ): Double =
-    val totalWeight = dashboards.map(_.sampleSize).sum
-    if totalWeight <= 0 then 0.0
-    else
-      round2(
-        dashboards.map(dashboard => selector(dashboard) * dashboard.sampleSize).sum /
-          totalWeight.toDouble
-      )
-
   private def rebuildPlayerBoard(
       connection: Connection,
       playerId: PlayerId,
       at: Instant
   ): AdvancedStatsBoard =
-    val records = MatchRecordTable.findByPlayer(connection, playerId)
-    val paifus = PaifuTable.findByPlayer(connection, playerId)
-    val existingVersion =
-      AdvancedStatsBoardTable.findByOwner(connection, DashboardOwner.Player(playerId)).map(_.version).getOrElse(0)
-    buildPlayerBoard(playerId, records, paifus, at).copy(version = existingVersion)
+    val records = ListPlayerMatchRecordsPrivateAPIMessage(playerId).plan(apiContext(connection)).unsafeRunSync()
+    val paifus = ListPlayerPaifusPrivateAPIMessage(playerId).plan(apiContext(connection)).unsafeRunSync()
+    buildPlayerBoard(playerId, records, paifus, at)
 
   private def rebuildClubBoard(
       connection: Connection,
@@ -274,9 +231,10 @@ final class SystemEventCascadeSubscriber(
         .filter(_.status == PlayerStatus.Active)
         .map(_ => rebuildPlayerBoard(connection, playerId, at))
     }
-    val existingVersion =
-      AdvancedStatsBoardTable.findByOwner(connection, DashboardOwner.Club(club.id)).map(_.version).getOrElse(0)
-    buildClubBoard(club, memberBoards, at).copy(version = existingVersion)
+    buildClubBoard(club, memberBoards, at)
 
   private def findPlayer(connection: Connection, playerId: PlayerId): Option[Player] =
-    PlayerTable.findById(connection, playerId)
+    GetPlayerAPIMessage.findPlayer(connection, playerId)
+
+  private def apiContext(connection: Connection): ApiPlanContext =
+    ApiPlanContext(support = null, bearerToken = None, connection = connection)

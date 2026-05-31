@@ -1,18 +1,25 @@
 package riichinexus.microservices.tournament.api
 
+import cats.effect.unsafe.implicits.global
+import riichinexus.api.ApiPlanContext
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.api.`private`.ResolveClubsPrivateAPIMessage
 import riichinexus.microservices.club.domain.model.Club
 import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.club.tables.club.ClubTable
 import riichinexus.microservices.player.objects.Player
-import riichinexus.microservices.player.tables.player.PlayerTable
-import riichinexus.microservices.tournament.domain.model.*
-import riichinexus.microservices.tournament.objects.{StageStatus, TableStatus, TournamentStatus}
-import riichinexus.microservices.tournament.objects.apiTypes.PublicScheduleView
-import riichinexus.microservices.tournament.domain.StageLineupResolver
-import riichinexus.microservices.tournament.tables.tournament.TournamentTable
+import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
+import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
+import riichinexus.microservices.tournament.domain.recordmanagement.model.*
+import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
+import riichinexus.microservices.tournament.domain.tablemanagement.model.*
+import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
+import riichinexus.microservices.tournament.objects.tournamentmanagement.{StageStatus, TournamentStatus}
+import riichinexus.microservices.tournament.objects.tablemanagement.TableStatus
+import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.PublicScheduleView
+import riichinexus.microservices.tournament.domain.lineupmanagement.functions.StageLineupResolver
+import riichinexus.microservices.tournament.tables.tournaments.TournamentTable
 import riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
@@ -58,8 +65,7 @@ final case class ListPublicSchedulesAPIMessage(
       context: ApiPlanContext,
       tournaments: Vector[Tournament]
   ): Map[PlayerId, Player] =
-    PlayerTable
-      .findByIds(context.connection, tournaments.flatMap(_.stages.flatMap(_.lineupSubmissions.flatMap(_.seats.map(_.playerId)))).distinct)
+    ListPlayersAPIMessage.findPlayersByIds(context.connection, tournaments.flatMap(_.stages.flatMap(_.lineupSubmissions.flatMap(_.seats.map(_.playerId)))).distinct)
       .map(player => player.id -> player)
       .toMap
 
@@ -75,7 +81,9 @@ final case class ListPublicSchedulesAPIMessage(
       context: ApiPlanContext,
       tournaments: Vector[Tournament]
   ): Map[ClubId, Club] =
-    ClubTable.findByIds(context.connection, tournaments.flatMap(_.participatingClubs).distinct)
+    ResolveClubsPrivateAPIMessage(tournaments.flatMap(_.participatingClubs).distinct)
+      .plan(ApiPlanContext(support = null, bearerToken = None, connection = context.connection))
+      .unsafeRunSync()
       .map(club => club.id -> club)
       .toMap
 

@@ -3,9 +3,20 @@ package riichinexus.microservices.tournament.router
 import riichinexus.api.RegisteredAPIMessage
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.tournament.api.*
-import riichinexus.microservices.tournament.objects.{KnockoutBracketSnapshot, StageAdvancementSnapshot, StageRankingSnapshot, Table}
-import riichinexus.microservices.tournament.objects.apiTypes.*
-import riichinexus.microservices.tournament.objects.apiTypes.AssignTournamentAdminRequest.given
+import riichinexus.microservices.tournament.objects.rulesmanagement.knockout.KnockoutBracketSnapshot
+import riichinexus.microservices.tournament.objects.paifumanagement.Paifu
+import riichinexus.microservices.tournament.objects.rulesmanagement.stageprogression.StageAdvancementSnapshot
+import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.StageRankingSnapshot
+import riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentWhitelistEntry
+import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.*
+import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.AssignTournamentAdminRequest.given
 import riichinexus.system.objects.PagedResponse
 
 object TournamentAPIMessageRegistry:
@@ -18,7 +29,7 @@ object TournamentAPIMessageRegistry:
       RegisteredAPIMessage.api[ListPublicTournamentsAPIMessage, PagedResponse[PublicTournamentSummaryView]],
       RegisteredAPIMessage.api[GetPublicTournamentAPIMessage, PublicTournamentDetailView],
       RegisteredAPIMessage.api[TournamentStageDirectoryAPIMessage, Vector[TournamentStageDirectoryEntry]],
-      RegisteredAPIMessage.api[TournamentWhitelistListAPIMessage, PagedResponse[TournamentWhitelistEntryView]],
+      RegisteredAPIMessage.api[TournamentWhitelistListAPIMessage, PagedResponse[TournamentWhitelistEntry]],
       RegisteredAPIMessage.api[TournamentSettlementListAPIMessage, PagedResponse[TournamentSettlementView]],
       RegisteredAPIMessage.api[TournamentSettlementGetAPIMessage, TournamentSettlementView],
       RegisteredAPIMessage.created[TournamentCreateAPIMessage, TournamentSummaryView],
@@ -41,7 +52,7 @@ object TournamentAPIMessageRegistry:
       RegisteredAPIMessage.api[TournamentStageTablesAPIMessage, PagedResponse[TournamentTableView]],
       RegisteredAPIMessage.api[TournamentStageAdvancementPreviewAPIMessage, StageAdvancementSnapshot],
       RegisteredAPIMessage.api[TournamentStageKnockoutBracketAPIMessage, KnockoutBracketSnapshot],
-      RegisteredAPIMessage.api[TournamentStageAdvanceAPIMessage, Vector[Table]],
+      RegisteredAPIMessage.api[TournamentStageAdvanceAPIMessage, Vector[TournamentTableView]],
       RegisteredAPIMessage.api[TournamentStageCompleteAPIMessage, StageAdvancementSnapshot],
       RegisteredAPIMessage.api[TournamentTableListAPIMessage, PagedResponse[TournamentTableView]],
       RegisteredAPIMessage.api[TournamentTableGetAPIMessage, TournamentTableView],
@@ -53,6 +64,6 @@ object TournamentAPIMessageRegistry:
       RegisteredAPIMessage.api[TournamentRecordListAPIMessage, PagedResponse[TournamentMatchRecordView]],
       RegisteredAPIMessage.api[TournamentRecordGetAPIMessage, TournamentMatchRecordView],
       RegisteredAPIMessage.api[TournamentRecordGetByTableAPIMessage, TournamentMatchRecordView],
-      RegisteredAPIMessage.api[TournamentPaifuListAPIMessage, PagedResponse[TournamentPaifuSummaryView]],
-      RegisteredAPIMessage.api[TournamentPaifuGetAPIMessage, TournamentPaifuSummaryView]
+      RegisteredAPIMessage.api[TournamentPaifuListAPIMessage, PagedResponse[PaifuSummary]],
+      RegisteredAPIMessage.api[TournamentPaifuGetAPIMessage, Paifu]
     )

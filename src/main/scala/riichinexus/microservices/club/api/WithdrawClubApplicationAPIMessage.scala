@@ -13,7 +13,7 @@ import riichinexus.microservices.auth.domain.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubAuthorization
 import riichinexus.microservices.club.objects.apiTypes.ClubMembershipApplicationResponse
-import riichinexus.microservices.player.tables.player.PlayerTable
+import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import upickle.default.*
 
 final case class WithdrawClubApplicationAPIMessage(
@@ -55,13 +55,13 @@ final case class WithdrawClubApplicationAPIMessage(
       command: WithdrawClubApplicationCommand
   ): Option[ClubMembershipApplication] =
     module.authorizationService.requirePermission(command.actor, Permission.WithdrawClubApplication)
-    riichinexus.microservices.club.tables.club.ClubTable.findById(connection, command.clubId).map { club =>
+    riichinexus.microservices.club.tables.clubs.ClubTable.findById(connection, command.clubId).map { club =>
       ClubAuthorization.ensureClubActive(club)
       val application = resolveApplication(club, command)
       ensureApplicationPending(application, command.membershipId)
       requireApplicationOwnership(connection, application, command.actor)
       val updatedApplication = application.withdraw(command.actor.principalId, command.withdrawnAt, command.note)
-      riichinexus.microservices.club.tables.club.ClubTable.save(connection, club.reviewApplication(command.membershipId, _ => updatedApplication))
+      riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, club.reviewApplication(command.membershipId, _ => updatedApplication))
       updatedApplication
     }
 
@@ -96,7 +96,7 @@ final case class WithdrawClubApplicationAPIMessage(
 
     val ownedByRegisteredPlayer =
       actor.playerId.flatMap(playerId =>
-        PlayerTable.findById(connection, playerId)
+        GetPlayerAPIMessage.findPlayer(connection, playerId)
       ).exists(player =>
         application.applicantUserId.contains(player.userId)
       )

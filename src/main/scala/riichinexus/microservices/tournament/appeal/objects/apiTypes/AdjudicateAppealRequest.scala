@@ -15,15 +15,7 @@ final case class AdjudicateAppealRequest(
     verdict: String,
     tableResolution: Option[AppealTableResolution] = None,
     note: Option[String] = None
-):
-  def operator: PlayerId =
-    PlayerId(operatorId)
-
-  def decisionType: DomainAppealDecisionType =
-    decision.toDomain
-
-  def resolution: Option[DomainAppealTableResolution] =
-    tableResolution.map(_.toDomain)
+)
 
 object AdjudicateAppealRequest:
   given ReadWriter[AdjudicateAppealRequest] = macroRW

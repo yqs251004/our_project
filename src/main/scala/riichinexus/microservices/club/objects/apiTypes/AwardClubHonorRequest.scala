@@ -12,16 +12,7 @@ final case class AwardClubHonorRequest(
     title: String,
     note: Option[String] = None,
     achievedAt: Option[Instant] = None
-):
-  def operator: PlayerId =
-    PlayerId(operatorId)
-
-  def honor: ClubHonor =
-    ClubHonor(
-      title = title,
-      achievedAt = achievedAt.getOrElse(Instant.now()),
-      note = note
-    )
+)
 
 object AwardClubHonorRequest:
   given ReadWriter[AwardClubHonorRequest] = macroRW

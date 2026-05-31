@@ -36,7 +36,7 @@ object AdvancedStatsRecomputeTaskTable:
       |where cast(advanced_stats_recompute_tasks.payload ->> 'version' as integer) = ?
       |""".stripMargin
 
-  private[riichinexus] def save(connection: Connection, task: AdvancedStatsRecomputeTask): AdvancedStatsRecomputeTask =
+  private[opsanalytics] def save(connection: Connection, task: AdvancedStatsRecomputeTask): AdvancedStatsRecomputeTask =
     val persisted = task.copy(version = task.version + 1)
     val rowsUpdated = Using.resource(connection.prepareStatement(upsertSql)) { statement =>
       statement.setString(1, persisted.id.value)
@@ -65,7 +65,7 @@ object AdvancedStatsRecomputeTaskTable:
       |where id = ?
       |""".stripMargin
 
-  private[riichinexus] def findById(
+  private[opsanalytics] def findById(
       connection: Connection,
       id: AdvancedStatsRecomputeTaskId
   ): Option[AdvancedStatsRecomputeTask] =
@@ -84,7 +84,7 @@ object AdvancedStatsRecomputeTaskTable:
       |order by requested_at, id
       |""".stripMargin
 
-  private[riichinexus] def findAll(connection: Connection): Vector[AdvancedStatsRecomputeTask] =
+  private[opsanalytics] def findAll(connection: Connection): Vector[AdvancedStatsRecomputeTask] =
     Using.resource(connection.prepareStatement(findAllSql)) { statement =>
       Using.resource(statement.executeQuery())(readTasks)
     }
@@ -97,7 +97,7 @@ object AdvancedStatsRecomputeTaskTable:
       |order by requested_at, id
       |""".stripMargin
 
-  private[riichinexus] def findPending(
+  private[opsanalytics] def findPending(
       connection: Connection,
       limit: Int,
       asOf: Instant = Instant.now()
@@ -120,7 +120,7 @@ object AdvancedStatsRecomputeTaskTable:
       |limit 1
       |""".stripMargin
 
-  private[riichinexus] def findActiveByOwner(
+  private[opsanalytics] def findActiveByOwner(
       connection: Connection,
       owner: DashboardOwner,
       calculatorVersion: Int

@@ -1,7 +1,6 @@
 package riichinexus.microservices.auth.objects.apiTypes
 
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.player.objects.Player
 import upickle.default.*
 
 final case class CurrentSessionPlayerView(
@@ -12,10 +11,3 @@ final case class CurrentSessionPlayerView(
 
 object CurrentSessionPlayerView:
   given ReadWriter[CurrentSessionPlayerView] = macroRW
-
-  def fromDomain(player: Player): CurrentSessionPlayerView =
-    CurrentSessionPlayerView(
-      id = player.id.value,
-      userId = player.userId,
-      nickname = player.nickname
-    )

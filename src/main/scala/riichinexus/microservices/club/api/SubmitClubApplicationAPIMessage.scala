@@ -14,7 +14,7 @@ import riichinexus.microservices.auth.domain.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubAuthorization
 import riichinexus.microservices.club.objects.apiTypes.{ClubMembershipApplicationResponse, ClubMembershipApplicationRequest}
-import riichinexus.microservices.player.tables.player.PlayerTable
+import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import upickle.default.*
 
 final case class SubmitClubApplicationAPIMessage(
@@ -24,7 +24,7 @@ final case class SubmitClubApplicationAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubMembershipApplicationResponse] =
     for
-      actor <- IO.blocking(context.requestActor(request.session, request.operator))
+      actor <- IO.blocking(context.requestActor(request.guestSessionId.map(GuestSessionId(_)), request.operatorId.map(PlayerId(_))))
       module = context.support.clubModule
       parsedClubId = ClubId(clubId)
       submittedAt <- IO.realTimeInstant
@@ -50,7 +50,7 @@ final case class SubmitClubApplicationAPIMessage(
       request: ClubMembershipApplicationRequest
   ): ResolvedClubApplicationInput =
     val operatorPlayer = request.operatorId.filter(_.nonEmpty)
-      .flatMap(id => PlayerTable.findById(connection, PlayerId(id)))
+      .flatMap(id => GetPlayerAPIMessage.findPlayer(connection, PlayerId(id)))
     val applicantUserId = request.applicantUserId
       .orElse(request.guestSessionId.filter(_.nonEmpty).map(session => s"guest:$session"))
       .orElse(operatorPlayer.map(_.userId))
@@ -68,11 +68,11 @@ final case class SubmitClubApplicationAPIMessage(
       command: SubmitClubApplicationCommand
   ): ClubMembershipApplication =
     module.authorizationService.requirePermission(command.actor, Permission.SubmitClubApplication)
-    val club = riichinexus.microservices.club.tables.club.ClubTable.findById(connection, command.clubId)
+    val club = riichinexus.microservices.club.tables.clubs.ClubTable.findById(connection, command.clubId)
       .getOrElse(throw NoSuchElementException("Resource not found"))
     validateSubmission(connection, module, club, command)
     val application = createApplication(command)
-    riichinexus.microservices.club.tables.club.ClubTable.save(connection, club.submitApplication(application))
+    riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, club.submitApplication(application))
     application
 
   private def validateSubmission(
@@ -111,7 +111,7 @@ final case class SubmitClubApplicationAPIMessage(
       command: SubmitClubApplicationCommand
   ): Unit =
     command.input.applicantUserId.foreach { userId =>
-      PlayerTable.findByUserId(connection, userId).foreach { existingPlayer =>
+      CreatePlayerAPIMessage.findPlayerByUserId(connection, userId).foreach { existingPlayer =>
         if existingPlayer.boundClubIds.contains(command.clubId) then
           throw IllegalArgumentException(
             s"Player ${existingPlayer.id.value} is already a member of club ${command.clubId.value}"

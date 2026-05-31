@@ -1,7 +1,7 @@
 package riichinexus.microservices.club.domain.model
 
 import riichinexus.domain.model.Permission
-import riichinexus.microservices.club.objects.ClubPrivilegeCode
+import riichinexus.microservices.club.objects.{ClubPrivilegeCode, ClubPrivilegeDefinition}
 
 object ClubPrivilegeRegistry:
   private val definitionsByCode: Map[ClubPrivilegeCode, ClubPrivilegeDefinition] = Map(

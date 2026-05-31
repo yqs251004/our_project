@@ -1,15 +1,20 @@
 package riichinexus.microservices.tournament.api
 
-import riichinexus.microservices.tournament.objects.{StageStatus, TournamentStatus}
+import riichinexus.microservices.tournament.objects.tournamentmanagement.{StageStatus, TournamentStatus}
 
 import cats.effect.IO
+import cats.effect.unsafe.implicits.global
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.api.`private`.ResolveClubsPrivateAPIMessage
 import riichinexus.microservices.club.domain.model.*
-import riichinexus.microservices.club.tables.club.ClubTable
-import riichinexus.microservices.tournament.objects.apiTypes.PublicTournamentSummaryView
-import riichinexus.microservices.tournament.domain.model.*
-import riichinexus.microservices.tournament.tables.tournament.TournamentTable
+import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.PublicTournamentSummaryView
+import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
+import riichinexus.microservices.tournament.domain.recordmanagement.model.*
+import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
+import riichinexus.microservices.tournament.domain.tablemanagement.model.*
+import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
+import riichinexus.microservices.tournament.tables.tournaments.TournamentTable
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 
@@ -57,8 +62,9 @@ final case class ListPublicTournamentsAPIMessage(
       context: ApiPlanContext,
       tournaments: Vector[Tournament]
   ): Map[ClubId, Club] =
-    ClubTable
-      .findByIds(context.connection, tournaments.flatMap(relatedClubIds))
+    ResolveClubsPrivateAPIMessage(tournaments.flatMap(relatedClubIds))
+      .plan(ApiPlanContext(support = null, bearerToken = None, connection = context.connection))
+      .unsafeRunSync()
       .map(club => club.id -> club)
       .toMap
 

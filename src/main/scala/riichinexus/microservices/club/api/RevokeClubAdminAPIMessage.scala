@@ -13,7 +13,7 @@ import riichinexus.microservices.auth.domain.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubAuthorization
 import riichinexus.microservices.club.objects.ClubView
-import riichinexus.microservices.player.tables.player.PlayerTable
+import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import upickle.default.*
 
 final case class RevokeClubAdminAPIMessage(
@@ -49,12 +49,12 @@ final case class RevokeClubAdminAPIMessage(
       command: RevokeClubAdminCommand
   ): Option[Club] =
     for
-      club <- riichinexus.microservices.club.tables.club.ClubTable.findById(connection, command.clubId)
-      player <- PlayerTable.findById(connection, command.playerId)
+      club <- riichinexus.microservices.club.tables.clubs.ClubTable.findById(connection, command.clubId)
+      player <- GetPlayerAPIMessage.findPlayer(connection, command.playerId)
     yield
       ensureAdminCanBeRevoked(module, club, command)
-      PlayerTable.save(connection, player.revokeClubAdmin(command.clubId))
-      riichinexus.microservices.club.tables.club.ClubTable.save(connection, club.revokeAdmin(command.playerId))
+      CreatePlayerAPIMessage.persistPlayer(connection, player.revokeClubAdmin(command.clubId))
+      riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, club.revokeAdmin(command.playerId))
 
   private def ensureAdminCanBeRevoked(
       module: ClubModuleContext,

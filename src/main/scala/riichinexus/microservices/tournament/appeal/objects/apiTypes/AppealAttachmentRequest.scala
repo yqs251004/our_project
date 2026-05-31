@@ -23,20 +23,7 @@ final case class AppealAttachmentRequest(
     sizeBytes: Option[Long] = None,
     uploadedAt: Option[Instant] = None,
     retentionUntil: Option[Instant] = None
-):
-  def toAttachment: AppealAttachment =
-    AppealAttachment(
-      name = name,
-      uri = uri,
-      contentType = contentType,
-      storageKind = storageKind.map(_.toDomain).getOrElse(DomainAppealAttachmentStorageKind.ExternalUrl),
-      mediaKind = mediaKind.map(_.toDomain).getOrElse(DomainAppealAttachmentMediaKind.Other),
-      checksum = checksum,
-      checksumAlgorithm = checksumAlgorithm,
-      sizeBytes = sizeBytes,
-      uploadedAt = uploadedAt,
-      retentionUntil = retentionUntil
-    )
+)
 
 object AppealAttachmentRequest:
   given ReadWriter[AppealAttachmentRequest] = macroRW

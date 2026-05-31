@@ -15,14 +15,3 @@ final case class CurrentSessionResponse(
 
 object CurrentSessionResponse:
   given ReadWriter[CurrentSessionResponse] = macroRW
-
-  def fromView(view: CurrentSessionView): CurrentSessionResponse =
-    CurrentSessionResponse(
-      principalKind = view.principalKind,
-      principalId = view.principalId,
-      displayName = view.displayName,
-      authenticated = view.authenticated,
-      roles = view.roles,
-      player = view.player,
-      guestSession = view.guestSession
-    )

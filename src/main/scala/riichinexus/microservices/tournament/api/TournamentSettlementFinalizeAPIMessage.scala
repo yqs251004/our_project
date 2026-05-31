@@ -1,6 +1,6 @@
 package riichinexus.microservices.tournament.api
 
-import riichinexus.microservices.tournament.objects.{TournamentSettlementStatus}
+import riichinexus.microservices.tournament.objects.settlementmanagement.TournamentSettlementStatus
 
 import java.util.NoSuchElementException
 import java.time.Instant
@@ -11,18 +11,37 @@ import riichinexus.application.changes.DomainChangeInterpreter
 import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.tournament.domain.model.*
+import riichinexus.microservices.tournament.domain.settlementmanagement.functions.TournamentSettlementSnapshotFunctions
+import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
+import riichinexus.microservices.tournament.domain.recordmanagement.model.*
+import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
+import riichinexus.microservices.tournament.domain.tablemanagement.model.*
+import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.tournament.objects.apiTypes.*
-import riichinexus.microservices.tournament.objects.apiTypes.*
-import riichinexus.microservices.tournament.objects.apiTypes.AssignTournamentAdminRequest.given
+import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.*
+import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.*
+import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.AssignTournamentAdminRequest.given
 import upickle.default.*
 
 final case class TournamentSettlementFinalizeAPIMessage(tournamentId: String, settlementId: String, request: FinalizeTournamentSettlementRequest) extends APIMessage[TournamentSettlementView] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[TournamentSettlementView] =
     for
-      actor <- IO.blocking(context.principal(request.operator))
+      actor <- IO.blocking(context.principal(PlayerId(request.operatorId)))
       finalizedAt <- IO.realTimeInstant
       module = context.support.tournamentModule
       command = FinalizeSettlementCommand(
@@ -70,10 +89,10 @@ final case class TournamentSettlementFinalizeAPIMessage(tournamentId: String, se
       .auditOnly(module.transactionManager, module.auditEventRepository)
       .commitAudited(
         aggregate =
-          if settlement.status == riichinexus.microservices.tournament.objects.TournamentSettlementStatus.Finalized then settlement
-          else settlement.finalize(command.finalizedAt),
+          if settlement.status == riichinexus.microservices.tournament.objects.settlementmanagement.TournamentSettlementStatus.Finalized then settlement
+          else TournamentSettlementSnapshotFunctions.finalize(settlement, command.finalizedAt),
         persist = finalized =>
-          if settlement.status == riichinexus.microservices.tournament.objects.TournamentSettlementStatus.Finalized then finalized
+          if settlement.status == riichinexus.microservices.tournament.objects.settlementmanagement.TournamentSettlementStatus.Finalized then finalized
           else riichinexus.microservices.tournament.tables.settlement.TournamentSettlementTable.save(connection, finalized),
         aggregateType = "tournament",
         aggregateId = _.tournamentId.value,

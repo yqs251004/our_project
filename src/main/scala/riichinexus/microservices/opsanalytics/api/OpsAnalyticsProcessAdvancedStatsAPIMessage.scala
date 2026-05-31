@@ -1,5 +1,7 @@
 package riichinexus.microservices.opsanalytics.api
 
+import cats.effect.unsafe.implicits.global
+import riichinexus.api.ApiPlanContext
 import java.time.{Duration, Instant}
 import java.util.NoSuchElementException
 
@@ -9,13 +11,22 @@ import riichinexus.application.ports.OptimisticConcurrencyException
 import riichinexus.bootstrap.OpsAnalyticsModuleContext
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.tournament.domain.model.*
+import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
+import riichinexus.microservices.tournament.domain.recordmanagement.model.*
+import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
+import riichinexus.microservices.tournament.domain.tablemanagement.model.*
+import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.microservices.club.domain.model.*
+import riichinexus.microservices.club.api.`private`.{ListClubsPrivateAPIMessage, ResolveClubPrivateAPIMessage, ResolveClubsPrivateAPIMessage, SaveClubPrivateAPIMessage}
 import riichinexus.microservices.player.objects.*
 import riichinexus.microservices.opsanalytics.domain.AdvancedStatsRoundAnalysis.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.opsanalytics.objects.*
-import riichinexus.microservices.player.tables.player.PlayerTable
+import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
+import riichinexus.microservices.tournament.api.`private`.{
+  ListPlayerMatchRecordsPrivateAPIMessage,
+  ListPlayerPaifusPrivateAPIMessage
+}
 import upickle.default.*
 
 final case class OpsAnalyticsProcessAdvancedStatsAPIMessage(
@@ -59,7 +70,7 @@ final case class OpsAnalyticsProcessAdvancedStatsAPIMessage(
             case DashboardOwner.Player(playerId) =>
               riichinexus.microservices.opsanalytics.tables.advancedstatsboard.AdvancedStatsBoardTable.save(connection, rebuildPlayerBoard(connection, module, playerId, command.processedAt))
             case DashboardOwner.Club(clubId) =>
-              val club = riichinexus.microservices.club.tables.club.ClubTable.findById(connection, clubId).getOrElse(
+              val club = ResolveClubPrivateAPIMessage(clubId).plan(ApiPlanContext(support = null, bearerToken = None, connection = connection)).unsafeRunSync().getOrElse(
                 throw NoSuchElementException(s"Club ${clubId.value} was not found")
               )
               riichinexus.microservices.opsanalytics.tables.advancedstatsboard.AdvancedStatsBoardTable.save(connection, rebuildClubBoard(connection, module, club, command.processedAt))
@@ -89,8 +100,12 @@ final case class OpsAnalyticsProcessAdvancedStatsAPIMessage(
       playerId: PlayerId,
       at: Instant
   ): AdvancedStatsBoard =
-    val records = riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTable.findByPlayer(connection, playerId)
-    val paifus = riichinexus.microservices.tournament.tables.paifu.PaifuTable.findByPlayer(connection, playerId)
+    val records = ListPlayerMatchRecordsPrivateAPIMessage(playerId)
+      .plan(ApiPlanContext(support = null, bearerToken = None, connection = connection))
+      .unsafeRunSync()
+    val paifus = ListPlayerPaifusPrivateAPIMessage(playerId)
+      .plan(ApiPlanContext(support = null, bearerToken = None, connection = connection))
+      .unsafeRunSync()
     val existingVersion =
       riichinexus.microservices.opsanalytics.tables.advancedstatsboard.AdvancedStatsBoardTable.findByOwner(connection, DashboardOwner.Player(playerId)).map(_.version).getOrElse(0)
     buildPlayerBoard(playerId, records, paifus, at).copy(version = existingVersion)
@@ -102,7 +117,7 @@ final case class OpsAnalyticsProcessAdvancedStatsAPIMessage(
       at: Instant
   ): AdvancedStatsBoard =
     val memberBoards = club.members.flatMap { playerId =>
-      PlayerTable.findById(connection, playerId)
+      GetPlayerAPIMessage.findPlayer(connection, playerId)
         .filter(_.status == PlayerStatus.Active)
         .map(_ => rebuildPlayerBoard(connection, module, playerId, at))
     }

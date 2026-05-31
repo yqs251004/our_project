@@ -1,6 +1,7 @@
 package riichinexus.infrastructure.json
 
-import riichinexus.microservices.tournament.objects.{HandOutcome, PaifuActionType, TournamentSettlementStatus}
+import riichinexus.microservices.tournament.objects.paifumanagement.{AgariResult, FinalStanding, HandOutcome, KyokuDescriptor, Paifu, PaifuAction, PaifuActionType, PaifuHand, PaifuMetadata, PaifuPlayerTrack, PaifuRound, PaifuRoundPlayer, PaifuTimeline, PaifuTile, RoundSettlement, ScoreChange, Yaku}
+import riichinexus.microservices.tournament.objects.settlementmanagement.TournamentSettlementStatus
 
 import java.time.Instant
 import scala.annotation.targetName
@@ -8,7 +9,11 @@ import scala.annotation.targetName
 import riichinexus.application.ports.DomainEvent
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.tournament.domain.model.*
+import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
+import riichinexus.microservices.tournament.domain.recordmanagement.model.*
+import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
+import riichinexus.microservices.tournament.domain.tablemanagement.model.*
+import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.microservices.tournament.appeal.domain.model.*
 import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.player.objects.*
@@ -19,8 +24,15 @@ import riichinexus.microservices.opsanalytics.objects.*
 import riichinexus.microservices.player.domain.PlayerBanned
 import riichinexus.microservices.player.objects.{Player, PlayerStatus, RankPlatform, RankSnapshot}
 import riichinexus.microservices.tournament.appeal.domain.*
-import riichinexus.microservices.tournament.domain.{MatchRecordArchived, TournamentSettlementRecorded}
-import riichinexus.microservices.tournament.objects.{AdvancementRuleType, KnockoutLane, SeatWind, StageStatus, TableStatus, TournamentFormat, TournamentParticipantKind, TournamentStatus}
+import riichinexus.microservices.tournament.domain.events.{MatchRecordArchived, TournamentSettlementRecorded}
+import riichinexus.microservices.tournament.domain.paifumanagement.functions.PaifuTileFunctions
+import riichinexus.microservices.tournament.appeal.objects.AppealDecisionLog
+import riichinexus.microservices.tournament.objects.rulesmanagement.stageprogression.{AdvancementRule, AdvancementRuleType}
+import riichinexus.microservices.tournament.objects.rulesmanagement.knockout.{KnockoutLane, KnockoutRuleConfig}
+import riichinexus.microservices.tournament.objects.tablemanagement.{SeatWind, TableSeat, TableStatus}
+import riichinexus.microservices.tournament.objects.tournamentmanagement.{StageStatus, TournamentFormat, TournamentParticipantKind, TournamentStatus, TournamentWhitelistEntry}
+import riichinexus.microservices.tournament.objects.rulesmanagement.swiss.SwissRuleConfig
+import riichinexus.microservices.tournament.objects.settlementmanagement.{TournamentSettlementAdjustment, TournamentSettlementEntry}
 import upickle.default.*
 
 object JsonCodecs:
@@ -135,7 +147,6 @@ object JsonCodecs:
       ClubApplicationStatus.toString
     )
   given ReadWriter[ClubMembershipApplication] = macroRW
-  given ReadWriter[ClubPrivilegeDefinition] = macroRW
   given ReadWriter[ClubRankNode] = macroRW
   given ReadWriter[ClubMemberContribution] = macroRW
   given ReadWriter[ClubMemberPrivilegeSnapshot] = macroRW
@@ -176,14 +187,6 @@ object JsonCodecs:
     stringEnumReadWriter(TournamentParticipantKind.valueOf, _.toString)
   given ReadWriter[TournamentWhitelistEntry] = macroRW
   given ReadWriter[TournamentStage] = macroRW
-  given ReadWriter[StageStandingEntry] = macroRW
-  given ReadWriter[StageRankingSnapshot] = macroRW
-  given ReadWriter[StageAdvancementSnapshot] = macroRW
-  given ReadWriter[KnockoutBracketSlot] = macroRW
-  given ReadWriter[KnockoutBracketResult] = macroRW
-  given ReadWriter[KnockoutBracketMatch] = macroRW
-  given ReadWriter[KnockoutBracketRound] = macroRW
-  given ReadWriter[KnockoutBracketSnapshot] = macroRW
   given ReadWriter[TournamentSettlementStatus] =
     stringEnumReadWriter(TournamentSettlementStatus.valueOf, _.toString)
   given ReadWriter[TournamentSettlementAdjustment] = macroRW
@@ -281,10 +284,10 @@ object JsonCodecs:
             sequenceNo = read[Int](obj("sequenceNo")),
             actor = obj.value.get("actor").fold(Option.empty[PlayerId])(read[Option[PlayerId]](_)),
             actionType = read[PaifuActionType](obj("actionType")),
-            tile = obj.value.get("tile").fold(Option.empty[String])(read[Option[String]](_)),
+            tile = obj.value.get("tile").fold(Option.empty[PaifuTile])(read[Option[PaifuTile]](_)),
             shantenAfterAction = obj.value.get("shantenAfterAction").fold(Option.empty[Int])(read[Option[Int]](_)),
-            handTilesAfterAction = obj.value.get("handTilesAfterAction").fold(Option.empty[Vector[String]])(read[Option[Vector[String]]](_)),
-            revealedTiles = obj.value.get("revealedTiles").fold(Vector.empty[String])(read[Vector[String]](_)),
+            handTilesAfterAction = obj.value.get("handTilesAfterAction").fold(Option.empty[Vector[PaifuTile]])(read[Option[Vector[PaifuTile]]](_)),
+            revealedTiles = obj.value.get("revealedTiles").fold(Vector.empty[PaifuTile])(read[Vector[PaifuTile]](_)),
             note = obj.value.get("note").fold(Option.empty[String])(read[Option[String]](_))
           )
         case json =>
@@ -310,8 +313,8 @@ object JsonCodecs:
           throw upickle.core.Abort(s"Expected KyokuDescriptor object, got $json")
       }
     )
-  given ReadWriter[Map[PlayerId, Vector[String]]] =
-    readwriter[ujson.Value].bimap[Map[PlayerId, Vector[String]]](
+  given ReadWriter[Map[PlayerId, Vector[PaifuTile]]] =
+    readwriter[ujson.Value].bimap[Map[PlayerId, Vector[PaifuTile]]](
       hands =>
         ujson.Obj.from(
           hands.toSeq.map { case (playerId, tiles) =>
@@ -321,13 +324,17 @@ object JsonCodecs:
       {
         case obj: ujson.Obj =>
           obj.value.map { case (playerId, tiles) =>
-            PlayerId(playerId) -> read[Vector[String]](tiles)
+            PlayerId(playerId) -> read[Vector[PaifuTile]](tiles)
           }.toMap
         case json =>
-          read[Vector[(PlayerId, Vector[String])]](json).toMap
+          read[Vector[(PlayerId, Vector[PaifuTile])]](json).toMap
       }
     )
-  given ReadWriter[KyokuRecord] = macroRW
+  given ReadWriter[PaifuHand] = macroRW
+  given ReadWriter[PaifuPlayerTrack] = macroRW
+  given ReadWriter[PaifuRoundPlayer] = macroRW
+  given ReadWriter[PaifuTimeline] = macroRW
+  given ReadWriter[PaifuRound] = macroRW
   given ReadWriter[FinalStanding] = macroRW
   given ReadWriter[PaifuMetadata] = macroRW
   given ReadWriter[Paifu] = macroRW

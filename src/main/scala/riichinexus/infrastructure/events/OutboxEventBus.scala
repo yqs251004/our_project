@@ -15,7 +15,7 @@ import riichinexus.infrastructure.postgres.JdbcConnectionFactory
 import riichinexus.microservices.club.domain.ClubDissolved
 import riichinexus.microservices.player.domain.PlayerBanned
 import riichinexus.microservices.tournament.appeal.domain.*
-import riichinexus.microservices.tournament.domain.{MatchRecordArchived, TournamentSettlementRecorded}
+import riichinexus.microservices.tournament.domain.events.{MatchRecordArchived, TournamentSettlementRecorded}
 import upickle.default.*
 
 private object DomainEventSerializationSupport:

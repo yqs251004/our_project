@@ -12,17 +12,7 @@ final case class UpdateClubRelationRequest(
     targetClubId: String,
     relation: ClubRelationKind,
     note: Option[String] = None
-):
-  def operator: PlayerId =
-    PlayerId(operatorId)
-
-  def toRelation(updatedAt: Instant = Instant.now()): ClubRelation =
-    ClubRelation(
-      targetClubId = ClubId(targetClubId),
-      relation = relation,
-      updatedAt = updatedAt,
-      note = note
-    )
+)
 
 object UpdateClubRelationRequest:
   given ReadWriter[UpdateClubRelationRequest] = macroRW

@@ -24,7 +24,7 @@ object GuestSessionTable:
       |where cast(guest_sessions.payload ->> 'version' as integer) = ?
       |""".stripMargin
 
-  private[riichinexus] def save(connection: Connection, session: GuestAccessSession): GuestAccessSession =
+  private[auth] def save(connection: Connection, session: GuestAccessSession): GuestAccessSession =
     val persisted = session.copy(version = session.version + 1)
     val rowsUpdated = Using.resource(connection.prepareStatement(upsertSql)) { statement =>
       statement.setString(1, persisted.id.value)
@@ -50,7 +50,7 @@ object GuestSessionTable:
       |where id = ?
       |""".stripMargin
 
-  private[riichinexus] def findById(connection: Connection, id: GuestSessionId): Option[GuestAccessSession] =
+  private[auth] def findById(connection: Connection, id: GuestSessionId): Option[GuestAccessSession] =
     Using.resource(connection.prepareStatement(findByIdSql)) { statement =>
       statement.setString(1, id.value)
       Using.resource(statement.executeQuery()) { resultSet =>
@@ -66,7 +66,7 @@ object GuestSessionTable:
       |order by created_at desc
       |""".stripMargin
 
-  private[riichinexus] def findAll(connection: Connection): Vector[GuestAccessSession] =
+  private[auth] def findAll(connection: Connection): Vector[GuestAccessSession] =
     Using.resource(connection.prepareStatement(findAllSql)) { statement =>
       Using.resource(statement.executeQuery())(readSessions)
     }

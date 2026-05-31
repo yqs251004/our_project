@@ -25,7 +25,7 @@ object AuthenticatedSessionTable:
       |where cast(authenticated_sessions.payload ->> 'version' as integer) = ?
       |""".stripMargin
 
-  private[riichinexus] def save(connection: Connection, session: AuthenticatedSession): AuthenticatedSession =
+  private[auth] def save(connection: Connection, session: AuthenticatedSession): AuthenticatedSession =
     val persisted = session.copy(version = session.version + 1)
     val rowsUpdated = Using.resource(connection.prepareStatement(upsertSql)) { statement =>
       statement.setString(1, persisted.token)
@@ -53,7 +53,7 @@ object AuthenticatedSessionTable:
       |where token = ?
       |""".stripMargin
 
-  private[riichinexus] def findByToken(connection: Connection, token: String): Option[AuthenticatedSession] =
+  private[auth] def findByToken(connection: Connection, token: String): Option[AuthenticatedSession] =
     Using.resource(connection.prepareStatement(findByTokenSql)) { statement =>
       statement.setString(1, token)
       Using.resource(statement.executeQuery()) { resultSet =>
@@ -69,7 +69,7 @@ object AuthenticatedSessionTable:
       |order by created_at desc
       |""".stripMargin
 
-  private[riichinexus] def findAll(connection: Connection): Vector[AuthenticatedSession] =
+  private[auth] def findAll(connection: Connection): Vector[AuthenticatedSession] =
     Using.resource(connection.prepareStatement(findAllSql)) { statement =>
       Using.resource(statement.executeQuery())(readSessions)
     }

@@ -8,6 +8,7 @@ import riichinexus.api.ApiPlanContext
 import riichinexus.bootstrap.ApplicationContext
 import riichinexus.domain.model.*
 import riichinexus.microservices.tournament.api.*
+import riichinexus.microservices.tournament.domain.model.StageAdvancementSnapshot
 import riichinexus.microservices.tournament.objects.apiTypes.*
 
 final class TournamentAPIMessageTestClient(

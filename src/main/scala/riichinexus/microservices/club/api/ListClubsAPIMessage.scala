@@ -7,7 +7,7 @@ import riichinexus.microservices.club.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.objects.ClubView
 import riichinexus.microservices.club.objects.apiTypes.ClubListQuery
-import riichinexus.microservices.club.tables.club.ClubTable
+import riichinexus.microservices.club.tables.clubs.ClubTable
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 

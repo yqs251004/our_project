@@ -14,7 +14,7 @@ import riichinexus.microservices.auth.domain.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.{ClubAuthorization, ClubProjectionRefresher}
 import riichinexus.microservices.club.objects.ClubView
-import riichinexus.microservices.player.tables.player.PlayerTable
+import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import upickle.default.*
 
 final case class CreateClubAPIMessage(
@@ -45,8 +45,7 @@ final case class CreateClubAPIMessage(
     val normalizedName = command.name.trim
     require(normalizedName.nonEmpty, "Club name cannot be empty")
 
-    val creator = PlayerTable
-      .findById(connection, command.creatorId)
+    val creator = GetPlayerAPIMessage.findPlayer(connection, command.creatorId)
       .getOrElse(throw NoSuchElementException(s"Player ${command.creatorId.value} was not found"))
     requireActivePlayer(creator, s"Player ${command.creatorId.value} cannot create a club")
     ensureCreatorCanCreateClub(command.actor, command.creatorId)
@@ -56,9 +55,9 @@ final case class CreateClubAPIMessage(
       .joinClub(club.id)
       .grantRole(RoleGrant.clubAdmin(club.id, command.createdAt, command.actor.playerId))
 
-    val savedCreator = PlayerTable.save(connection, updatedCreator)
+    val savedCreator = CreatePlayerAPIMessage.persistPlayer(connection, updatedCreator)
     ClubProjectionRefresher.ensurePlayerDashboard(connection, savedCreator.id, command.createdAt)
-    riichinexus.microservices.club.tables.club.ClubTable.save(connection, ClubProjectionRefresher.refreshClubProjection(connection, module, club, command.createdAt))
+    riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, ClubProjectionRefresher.refreshClubProjection(connection, module, club, command.createdAt))
 
   private def resolveClubToCreate(
       connection: java.sql.Connection,
@@ -66,7 +65,7 @@ final case class CreateClubAPIMessage(
       creatorId: PlayerId,
       createdAt: Instant
   ): Club =
-    riichinexus.microservices.club.tables.club.ClubTable.findByName(connection, normalizedName) match
+    riichinexus.microservices.club.tables.clubs.ClubTable.findByName(connection, normalizedName) match
       case Some(existing) =>
         ClubAuthorization.ensureClubActive(existing)
         existing

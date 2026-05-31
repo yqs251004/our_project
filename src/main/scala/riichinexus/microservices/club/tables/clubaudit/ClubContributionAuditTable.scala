@@ -18,7 +18,7 @@ object ClubContributionAuditTable:
       |order by occurred_at asc, id asc
       |""".stripMargin
 
-  private[riichinexus] def findContributionChanges(
+  private[club] def findContributionChanges(
       connection: Connection,
       clubId: ClubId
   ): Vector[AuditEventEntry] =

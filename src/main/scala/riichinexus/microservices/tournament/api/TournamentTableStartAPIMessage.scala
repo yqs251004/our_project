@@ -8,12 +8,31 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.tournament.domain.model.*
+import riichinexus.microservices.tournament.domain.tablemanagement.functions.TableFunctions
+import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
+import riichinexus.microservices.tournament.domain.recordmanagement.model.*
+import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
+import riichinexus.microservices.tournament.domain.tablemanagement.model.*
+import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.tournament.objects.apiTypes.*
-import riichinexus.microservices.tournament.objects.apiTypes.*
-import riichinexus.microservices.tournament.objects.apiTypes.AssignTournamentAdminRequest.given
-import riichinexus.microservices.tournament.objects.apiTypes.OperatorRequest
+import riichinexus.microservices.tournament.domain.tablemanagement.model.Table
+import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.*
+import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.*
+import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.AssignTournamentAdminRequest.given
 import upickle.default.*
 
 final case class TournamentTableStartAPIMessage(tableId: String, operatorId: Option[String] = None) extends APIMessage[TournamentTableView] derives ReadWriter:
@@ -32,7 +51,7 @@ final case class TournamentTableStartAPIMessage(tableId: String, operatorId: Opt
     yield TournamentTableView.fromDomain(table)
 
   private def resolveOperatorActor(context: ApiPlanContext): AccessPrincipal =
-    OperatorRequest(operatorId.filter(_.nonEmpty)).operator
+    operatorId.filter(_.nonEmpty).map(PlayerId(_))
       .map(context.principal)
       .getOrElse(AccessPrincipal.system)
 
@@ -43,7 +62,7 @@ final case class TournamentTableStartAPIMessage(tableId: String, operatorId: Opt
         Permission.ManageTournamentStages,
         tournamentId = Some(table.tournamentId)
       )
-      riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.save(connection, table.start(command.startedAt))
+      riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.save(connection, TableFunctions.start(table, command.startedAt))
     }
 
   private final case class StartTableCommand(

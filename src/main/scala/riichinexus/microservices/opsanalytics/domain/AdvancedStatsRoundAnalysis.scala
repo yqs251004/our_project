@@ -1,11 +1,15 @@
 package riichinexus.microservices.opsanalytics.domain
 
-import riichinexus.microservices.tournament.objects.{HandOutcome, PaifuActionType}
+import riichinexus.microservices.tournament.objects.paifumanagement.{HandOutcome, Paifu, PaifuActionType, PaifuRound}
 
 import java.time.Instant
 
 import riichinexus.domain.model.*
-import riichinexus.microservices.tournament.domain.model.*
+import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
+import riichinexus.microservices.tournament.domain.recordmanagement.model.*
+import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
+import riichinexus.microservices.tournament.domain.tablemanagement.model.*
+import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.player.objects.*
 import riichinexus.microservices.opsanalytics.objects.{AdvancedStatsBoard, DashboardOwner}
@@ -97,12 +101,12 @@ private[riichinexus] object AdvancedStatsRoundAnalysis:
         lastUpdatedAt = at
       )
 
-  def buildRoundStats(round: KyokuRecord, playerId: PlayerId): PlayerRoundStats =
-    val playerActions = round.actions.filter(_.actor.contains(playerId))
+  def buildRoundStats(round: PaifuRound, playerId: PlayerId): PlayerRoundStats =
+    val playerActions = round.timeline.events.filter(_.actor.contains(playerId))
     val shantenPath = playerActions.flatMap(_.shantenAfterAction)
     val riichiDeclared = playerActions.exists(_.actionType == PaifuActionType.Riichi)
     val callCount = playerActions.count(action => AdvancedStatsExactAnalyzer.isOpenCall(action.actionType))
-    val externalRiichiSequence = round.actions.collectFirst {
+    val externalRiichiSequence = round.timeline.events.collectFirst {
       case action
           if action.actionType == PaifuActionType.Riichi && action.actor.exists(_ != playerId) =>
         action.sequenceNo

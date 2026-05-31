@@ -1,15 +1,17 @@
 package riichinexus.microservices.opsanalytics.projections
 
+import cats.effect.unsafe.implicits.global
+import riichinexus.api.ApiPlanContext
 import java.sql.Connection
 
 import riichinexus.application.ports.{DomainEventSubscriber, DomainEventSubscriberPartitionStrategy}
 import riichinexus.application.ports.DomainEvent
 import riichinexus.domain.model.PlayerId
+import riichinexus.microservices.club.api.`private`.{ResolveClubPrivateAPIMessage, SaveClubPrivateAPIMessage}
 import riichinexus.microservices.club.domain.model.Club
 import riichinexus.microservices.club.domain.ClubPowerRatingService
-import riichinexus.microservices.club.tables.club.ClubTable
-import riichinexus.microservices.player.tables.player.PlayerTable
-import riichinexus.microservices.tournament.domain.MatchRecordArchived
+import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
+import riichinexus.microservices.tournament.domain.events.MatchRecordArchived
 
 final class ClubProjectionSubscriber extends DomainEventSubscriber:
   override def partitionStrategy: DomainEventSubscriberPartitionStrategy =
@@ -26,15 +28,19 @@ final class ClubProjectionSubscriber extends DomainEventSubscriber:
 
         matchRecord.seatResults.foreach { result =>
           result.clubId.foreach { clubId =>
-            ClubTable.findById(connection, clubId).foreach { club =>
-              ClubTable.save(connection, club.addPoints(result.scoreDelta))
+            ResolveClubPrivateAPIMessage(clubId).plan(ApiPlanContext(support = null, bearerToken = None, connection = connection)).unsafeRunSync().foreach { club =>
+              SaveClubPrivateAPIMessage(club.addPoints(result.scoreDelta))
+                .plan(ApiPlanContext(support = null, bearerToken = None, connection = connection))
+                .unsafeRunSync()
             }
           }
         }
 
         impactedClubIds.foreach { clubId =>
-          ClubTable.findById(connection, clubId).foreach { club =>
-            ClubTable.save(connection, recalculateClubPowerRating(connection, club))
+          ResolveClubPrivateAPIMessage(clubId).plan(ApiPlanContext(support = null, bearerToken = None, connection = connection)).unsafeRunSync().foreach { club =>
+            SaveClubPrivateAPIMessage(recalculateClubPowerRating(connection, club))
+              .plan(ApiPlanContext(support = null, bearerToken = None, connection = connection))
+              .unsafeRunSync()
           }
         }
 
@@ -50,4 +56,4 @@ final class ClubProjectionSubscriber extends DomainEventSubscriber:
     )
 
   private def findPlayer(connection: Connection, playerId: PlayerId) =
-    PlayerTable.findById(connection, playerId)
+    GetPlayerAPIMessage.findPlayer(connection, playerId)

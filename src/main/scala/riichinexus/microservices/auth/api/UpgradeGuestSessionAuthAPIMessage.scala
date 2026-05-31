@@ -4,18 +4,20 @@ import java.time.Instant
 import java.util.NoSuchElementException
 
 import cats.effect.IO
+import cats.effect.unsafe.implicits.global
+import riichinexus.api.ApiPlanContext
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.application.changes.{DomainChange, DomainChangeInterpreter}
 import riichinexus.bootstrap.AuthModuleContext
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.club.domain.model.*
+import riichinexus.microservices.club.api.`private`.{ListClubsPrivateAPIMessage, ResolveClubPrivateAPIMessage, ResolveClubsPrivateAPIMessage, SaveClubPrivateAPIMessage}
 import riichinexus.microservices.player.objects.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.auth.objects.apiTypes.GuestSessionResponse
 import riichinexus.microservices.auth.tables.guestsession.GuestSessionTable
-import riichinexus.microservices.club.tables.club.ClubTable
-import riichinexus.microservices.player.tables.player.PlayerTable
+import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import upickle.default.*
 
 final case class UpgradeGuestSessionAuthAPIMessage(
@@ -34,20 +36,20 @@ final case class UpgradeGuestSessionAuthAPIMessage(
       )
       session <- IO.blocking {
         module.transactionManager.inTransaction {
-          upgradeGuestSession(context.connection, module, command)
+          upgradeGuestSession(context, module, command)
         }
       }
-    yield GuestSessionResponse.fromDomain(session)
+    yield guestSessionResponse(session)
 
   private def upgradeGuestSession(
-      connection: java.sql.Connection,
+      context: ApiPlanContext,
       module: AuthModuleContext,
       command: UpgradeGuestSessionCommand
   ): GuestAccessSession =
+    val connection = context.connection
     val session = GuestSessionTable.findById(connection, command.sessionId)
       .getOrElse(throw NoSuchElementException(s"Guest session ${command.sessionId.value} was not found"))
-    val player = PlayerTable
-      .findById(connection, command.playerId)
+    val player = GetPlayerAPIMessage.findPlayer(context.connection, command.playerId)
       .getOrElse(throw NoSuchElementException(s"Player ${command.playerId.value} was not found"))
     require(
       player.status == PlayerStatus.Active,
@@ -85,7 +87,7 @@ final case class UpgradeGuestSessionAuthAPIMessage(
       player: Player
   ): Unit =
     val guestApplicantId = s"guest:${sessionId.value}"
-    ClubTable.findAll(connection).foreach { club =>
+    ListClubsPrivateAPIMessage().plan(ApiPlanContext(support = null, bearerToken = None, connection = connection)).unsafeRunSync().foreach { club =>
       val updatedApplications = club.membershipApplications.map { application =>
         if application.isPending && application.applicantUserId.contains(guestApplicantId) then
           application.bindRegisteredApplicant(player.userId, player.nickname)
@@ -93,8 +95,17 @@ final case class UpgradeGuestSessionAuthAPIMessage(
       }
 
       if updatedApplications != club.membershipApplications then
-        ClubTable.save(connection, club.copy(membershipApplications = updatedApplications))
+        SaveClubPrivateAPIMessage(club.copy(membershipApplications = updatedApplications))
+          .plan(ApiPlanContext(support = null, bearerToken = None, connection = connection))
+          .unsafeRunSync()
     }
+
+  private def guestSessionResponse(session: GuestAccessSession): GuestSessionResponse =
+    GuestSessionResponse(
+      id = session.id.value,
+      displayName = session.displayName,
+      createdAt = session.createdAt.toString
+    )
 
   private final case class UpgradeGuestSessionCommand(
       sessionId: GuestSessionId,

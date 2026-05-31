@@ -6,9 +6,9 @@ import riichinexus.domain.model.{ClubId, Permission, PlayerId}
 import riichinexus.microservices.auth.domain.model.AccessPrincipal
 import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.club.objects.ClubRelationKind
-import riichinexus.microservices.club.tables.club.ClubTable
+import riichinexus.microservices.club.tables.clubs.ClubTable
 import riichinexus.microservices.player.objects.{Player, PlayerStatus}
-import riichinexus.microservices.player.tables.player.PlayerTable
+import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import riichinexus.microservices.club.objects.apiTypes.{PublicClubDirectoryEntry, PublicClubRelationView}
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
@@ -49,8 +49,7 @@ final case class ListPublicClubsAPIMessage(
       context: ApiPlanContext,
       clubs: Vector[Club]
   ): Map[PlayerId, Player] =
-    PlayerTable
-      .findByIds(context.connection, clubs.flatMap(_.members).distinct)
+    ListPlayersAPIMessage.findPlayersByIds(context.connection, clubs.flatMap(_.members).distinct)
       .map(player => player.id -> player)
       .toMap
 

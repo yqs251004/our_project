@@ -11,11 +11,12 @@ import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.player.objects.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.domain.{ClubApplicationReviewer, ClubApplicationViewAssembler}
+import riichinexus.microservices.club.api.`private`.ClubApplicationViewAssembler
+import riichinexus.microservices.club.domain.ClubApplicationReviewer
 import riichinexus.microservices.club.objects.apiTypes.ClubMembershipApplicationView
 import riichinexus.microservices.club.objects.apiTypes.{ClubApplicationReviewDecision, ReviewClubApplicationRequest}
-import riichinexus.microservices.club.tables.club.ClubTable
-import riichinexus.microservices.player.tables.player.PlayerTable
+import riichinexus.microservices.club.tables.clubs.ClubTable
+import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import upickle.default.*
 
 final case class ReviewClubApplicationAPIMessage(
@@ -27,14 +28,14 @@ final case class ReviewClubApplicationAPIMessage(
   override def plan(context: ApiPlanContext): IO[ClubMembershipApplicationView] =
     for
       decision <- IO.blocking(resolveDecision(request.decision))
-      actor <- IO.blocking(context.principal(request.operator))
+      actor <- IO.blocking(context.principal(PlayerId(request.operatorId)))
       reviewedAt <- IO.realTimeInstant
       module = context.support.clubModule
       command = ReviewClubApplicationCommand(
         clubId = ClubId(clubId),
         membershipId = MembershipApplicationId(membershipId),
         actor = actor,
-        requestedPlayerId = request.player,
+        requestedPlayerId = request.playerId.map(PlayerId(_)),
         decision = decision,
         note = request.note,
         reviewedAt = reviewedAt
@@ -105,11 +106,11 @@ final case class ReviewClubApplicationAPIMessage(
       )
     )
     command.requestedPlayerId
-      .flatMap(PlayerTable.findById(connection, _))
+      .flatMap(GetPlayerAPIMessage.findPlayer(connection, _))
       .orElse(
         application.applicantUserId
           .filterNot(_.startsWith("guest:"))
-          .flatMap(PlayerTable.findByUserId(connection, _))
+          .flatMap(CreatePlayerAPIMessage.findPlayerByUserId(connection, _))
       )
       .getOrElse(
         throw IllegalArgumentException(

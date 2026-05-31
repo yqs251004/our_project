@@ -14,7 +14,7 @@ import riichinexus.microservices.auth.domain.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.{ClubAuthorization, ClubProjectionRefresher}
 import riichinexus.microservices.club.objects.ClubView
-import riichinexus.microservices.player.tables.player.PlayerTable
+import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import upickle.default.*
 
 final case class AddClubMemberAPIMessage(
@@ -54,8 +54,8 @@ final case class AddClubMemberAPIMessage(
       command: AddClubMemberCommand
   ): Option[Club] =
     for
-      club <- riichinexus.microservices.club.tables.club.ClubTable.findById(connection, command.clubId)
-      player <- PlayerTable.findById(connection, command.playerId)
+      club <- riichinexus.microservices.club.tables.clubs.ClubTable.findById(connection, command.clubId)
+      player <- GetPlayerAPIMessage.findPlayer(connection, command.playerId)
     yield
       ClubAuthorization.ensureClubActive(club)
       requireActivePlayer(player, s"Player ${command.playerId.value} cannot join club ${command.clubId.value}")
@@ -67,9 +67,9 @@ final case class AddClubMemberAPIMessage(
         delegatedPrivileges = Set(ClubPrivilege.ApproveRoster)
       )
 
-      val savedPlayer = PlayerTable.save(connection, player.joinClub(command.clubId))
+      val savedPlayer = CreatePlayerAPIMessage.persistPlayer(connection, player.joinClub(command.clubId))
       ClubProjectionRefresher.ensurePlayerDashboard(connection, savedPlayer.id, command.occurredAt)
-      riichinexus.microservices.club.tables.club.ClubTable.save(connection, 
+      riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, 
         ClubProjectionRefresher.refreshClubProjection(connection, module, club.addMember(command.playerId), command.occurredAt)
       )
 

@@ -13,7 +13,11 @@ import riichinexus.microservices.tournament.appeal.domain.model.{
   AppealPriority as DomainAppealPriority,
   AppealTicket
 }
-import riichinexus.microservices.tournament.domain.model.*
+import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
+import riichinexus.microservices.tournament.domain.recordmanagement.model.*
+import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
+import riichinexus.microservices.tournament.domain.tablemanagement.model.*
+import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.tournament.appeal.objects.apiTypes.*
 import upickle.default.*
@@ -25,7 +29,7 @@ final case class AppealUpdateWorkflowAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[AppealTicketView] =
     for
-      actor <- IO.blocking(context.principal(request.operator))
+      actor <- IO.blocking(context.principal(PlayerId(request.operatorId)))
       updatedAt <- IO.realTimeInstant
       module = context.support.tournamentAppealModule
       command <- IO.blocking(resolveCommand(actor, updatedAt))
@@ -33,16 +37,27 @@ final case class AppealUpdateWorkflowAPIMessage(
     yield AppealTicketView.fromDomain(ticket)
 
   private def resolveCommand(actor: AccessPrincipal, updatedAt: Instant): UpdateAppealWorkflowCommand =
+    validateRequest()
     UpdateAppealWorkflowCommand(
       ticketId = AppealTicketId(appealId),
       actor = actor,
-      assigneeId = request.assignee,
+      assigneeId = request.assigneeId.map(PlayerId(_)),
       clearAssignee = request.clearAssignee,
-      priority = request.priorityLevel,
-      dueAt = request.dueAtInstant,
+      priority = request.priority.map(_.toDomain),
+      dueAt = request.dueAt.map(Instant.parse),
       clearDueAt = request.clearDueAt,
       note = request.note,
       updatedAt = updatedAt
+    )
+
+  private def validateRequest(): Unit =
+    require(
+      !(request.clearAssignee && request.assigneeId.exists(_.trim.nonEmpty)),
+      "clearAssignee cannot be combined with assigneeId"
+    )
+    require(
+      !(request.clearDueAt && request.dueAt.exists(_.trim.nonEmpty)),
+      "clearDueAt cannot be combined with dueAt"
     )
 
   private def updateWorkflow(

@@ -1,20 +1,12 @@
 package riichinexus.microservices.club.objects
 
-import riichinexus.microservices.club.domain.model.{ClubPrivilegeDefinition as DomainClubPrivilegeDefinition}
+import riichinexus.domain.model.Permission
+import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.*
 
 final case class ClubPrivilegeDefinition(
     code: ClubPrivilegeCode,
     label: String,
     description: String,
-    delegatedPermissions: Vector[String]
-) derives ReadWriter
-
-object ClubPrivilegeDefinition:
-  def fromDomain(definition: DomainClubPrivilegeDefinition): ClubPrivilegeDefinition =
-    ClubPrivilegeDefinition(
-      code = definition.code,
-      label = definition.label,
-      description = definition.description,
-      delegatedPermissions = definition.delegatedPermissions.map(_.toString)
-    )
+    delegatedPermissions: Vector[Permission] = Vector.empty
+) derives CanEqual, ReadWriter

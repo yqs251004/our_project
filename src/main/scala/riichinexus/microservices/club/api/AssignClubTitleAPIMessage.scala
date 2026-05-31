@@ -15,7 +15,7 @@ import riichinexus.microservices.auth.domain.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubAuthorization
 import riichinexus.microservices.club.objects.ClubView
-import riichinexus.microservices.player.tables.player.PlayerTable
+import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import upickle.default.*
 
 final case class AssignClubTitleAPIMessage(
@@ -52,8 +52,8 @@ final case class AssignClubTitleAPIMessage(
       command: AssignClubTitleCommand
   ): Option[Club] =
     for
-      club <- riichinexus.microservices.club.tables.club.ClubTable.findById(connection, command.clubId)
-      player <- PlayerTable.findById(connection, command.playerId)
+      club <- riichinexus.microservices.club.tables.clubs.ClubTable.findById(connection, command.clubId)
+      player <- GetPlayerAPIMessage.findPlayer(connection, command.playerId)
     yield
       ensureTitleCanBeAssigned(module, club, player, command)
       commitTitleAssignment(connection, module, club, command, assignedBy = command.actor.playerId.getOrElse(club.creator))
@@ -93,7 +93,7 @@ final case class AssignClubTitleAPIMessage(
             note = command.note
           )
         ),
-        persist = updatedClub => riichinexus.microservices.club.tables.club.ClubTable.save(connection, updatedClub),
+        persist = updatedClub => riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, updatedClub),
         aggregateType = "club",
         aggregateId = _.id.value,
         eventType = "ClubTitleAssigned",

@@ -34,7 +34,7 @@ final case class CreateGuestSessionAuthAPIMessage(
           createGuestSession(context.connection, module, command)
         }
       }
-    yield GuestSessionResponse.fromDomain(session)
+    yield guestSessionResponse(session)
 
   private def createGuestSession(
       connection: java.sql.Connection,
@@ -74,10 +74,18 @@ final case class CreateGuestSessionAuthAPIMessage(
       )
 
   private def resolveInput: ResolvedGuestSessionInput =
+    ttlHours.foreach(hours => require(hours > 0, "Guest session ttlHours must be positive"))
     ResolvedGuestSessionInput(
       displayName = displayName.map(_.trim).filter(_.nonEmpty).getOrElse("guest"),
       ttl = Duration.ofHours(ttlHours.getOrElse(24 * 30).toLong),
       deviceFingerprint = deviceFingerprint
+    )
+
+  private def guestSessionResponse(session: GuestAccessSession): GuestSessionResponse =
+    GuestSessionResponse(
+      id = session.id.value,
+      displayName = session.displayName,
+      createdAt = session.createdAt.toString
     )
 
   private final case class CreateGuestSessionCommand(

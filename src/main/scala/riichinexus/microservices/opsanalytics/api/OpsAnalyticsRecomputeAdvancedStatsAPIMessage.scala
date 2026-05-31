@@ -1,5 +1,7 @@
 package riichinexus.microservices.opsanalytics.api
 
+import cats.effect.unsafe.implicits.global
+import riichinexus.api.ApiPlanContext
 import java.time.Instant
 
 import cats.effect.IO
@@ -8,11 +10,12 @@ import riichinexus.bootstrap.OpsAnalyticsModuleContext
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.club.domain.model.*
+import riichinexus.microservices.club.api.`private`.{ListClubsPrivateAPIMessage, ResolveClubPrivateAPIMessage, ResolveClubsPrivateAPIMessage, SaveClubPrivateAPIMessage}
 import riichinexus.microservices.player.objects.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.opsanalytics.objects.*
 import riichinexus.microservices.opsanalytics.objects.apiTypes.AdvancedStatsRecomputeRequest
-import riichinexus.microservices.player.tables.player.PlayerTable
+import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import upickle.default.*
 
 final case class OpsAnalyticsRecomputeAdvancedStatsAPIMessage(
@@ -33,16 +36,31 @@ final case class OpsAnalyticsRecomputeAdvancedStatsAPIMessage(
       operator: AccessPrincipal,
       requestedAt: Instant
   ): RecomputeAdvancedStatsCommand =
+    validateRequest()
     RecomputeAdvancedStatsCommand(
       operator = operator,
-      targetOwner = request.targetOwner,
+      targetOwner = targetOwner,
       mode = request.mode,
-      targetedReason = request.targetedReason,
-      fullReason = request.fullReason,
-      backfillReason = request.backfillReason,
+      targetedReason = request.reason.getOrElse("manual-targeted-recompute"),
+      fullReason = request.reason.getOrElse("manual-full-recompute"),
+      backfillReason = request.reason.getOrElse(s"manual-${request.mode.toString.toLowerCase}-backfill"),
       limit = request.limit,
       requestedAt = requestedAt
     )
+
+  private def validateRequest(): Unit =
+    require(
+      request.ownerType.isDefined == request.ownerId.isDefined,
+      "ownerType and ownerId must be provided together"
+    )
+    require(request.limit > 0, "Advanced stats recompute limit must be positive")
+
+  private def targetOwner: Option[DashboardOwner] =
+    (request.ownerType, request.ownerId) match
+      case (Some("player"), Some(id)) => Some(DashboardOwner.Player(PlayerId(id)))
+      case (Some("club"), Some(id))   => Some(DashboardOwner.Club(ClubId(id)))
+      case (Some(other), Some(_))     => throw IllegalArgumentException(s"Unsupported advanced stats ownerType: $other")
+      case _                          => None
 
   private def requireOpsAdmin(context: ApiPlanContext, operator: AccessPrincipal): Unit =
     context.support.requirePermission(operator, Permission.ManagePlatformOperations)
@@ -89,8 +107,8 @@ final case class OpsAnalyticsRecomputeAdvancedStatsAPIMessage(
       reason: String
   ): Vector[AdvancedStatsRecomputeTask] =
     val owners =
-      PlayerTable.findAll(connection).map(player => DashboardOwner.Player(player.id)) ++
-        riichinexus.microservices.club.tables.club.ClubTable.findFiltered(connection, activeOnly = true).map(club => DashboardOwner.Club(club.id))
+      ListPlayersAPIMessage.findAllPlayers(connection).map(player => DashboardOwner.Player(player.id)) ++
+        ListClubsPrivateAPIMessage(activeOnly = true).plan(ApiPlanContext(support = null, bearerToken = None, connection = connection)).unsafeRunSync().map(club => DashboardOwner.Club(club.id))
 
     owners.distinct.map(owner => enqueueOwnerRecompute(connection, module, owner, reason, requestedAt))
 
@@ -103,8 +121,8 @@ final case class OpsAnalyticsRecomputeAdvancedStatsAPIMessage(
       limit: Int
   ): Vector[AdvancedStatsRecomputeTask] =
     val owners =
-      PlayerTable.findAll(connection).map(player => DashboardOwner.Player(player.id)) ++
-        riichinexus.microservices.club.tables.club.ClubTable.findFiltered(connection, activeOnly = true).map(club => DashboardOwner.Club(club.id))
+      ListPlayersAPIMessage.findAllPlayers(connection).map(player => DashboardOwner.Player(player.id)) ++
+        ListClubsPrivateAPIMessage(activeOnly = true).plan(ApiPlanContext(support = null, bearerToken = None, connection = connection)).unsafeRunSync().map(club => DashboardOwner.Club(club.id))
 
     owners.distinct
       .filter(owner => shouldBackfillOwner(connection, module, owner, mode))

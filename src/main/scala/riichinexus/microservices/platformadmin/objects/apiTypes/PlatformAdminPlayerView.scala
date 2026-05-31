@@ -1,9 +1,5 @@
 package riichinexus.microservices.platformadmin.objects.apiTypes
 
-import riichinexus.domain.model.*
-import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.auth.objects.Role
-import riichinexus.microservices.player.objects.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.*
 
@@ -19,14 +15,3 @@ final case class PlatformAdminPlayerView(
 
 object PlatformAdminPlayerView:
   given ReadWriter[PlatformAdminPlayerView] = macroRW
-
-  def fromDomain(player: Player): PlatformAdminPlayerView =
-    PlatformAdminPlayerView(
-      playerId = player.id.value,
-      userId = player.userId,
-      nickname = player.nickname,
-      status = player.status.toString,
-      clubIds = player.boundClubIds.map(_.value),
-      bannedReason = player.bannedReason,
-      isSuperAdmin = player.roleGrants.exists(_.role == Role.SuperAdmin)
-    )
