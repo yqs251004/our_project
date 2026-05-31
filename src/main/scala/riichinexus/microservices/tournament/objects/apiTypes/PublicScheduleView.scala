@@ -3,7 +3,6 @@ package riichinexus.microservices.tournament.objects.apiTypes
 import java.time.Instant
 
 import riichinexus.domain.model.{TournamentId, TournamentStageId}
-import riichinexus.microservices.tournament.domain.model.{StageStatus as DomainStageStatus, TournamentStatus as DomainTournamentStatus}
 import riichinexus.microservices.tournament.objects.{StageStatus, TournamentStatus}
 import upickle.default.*
 
@@ -31,10 +30,10 @@ object PublicScheduleView:
   def apply(
       tournamentId: TournamentId,
       tournamentName: String,
-      tournamentStatus: DomainTournamentStatus,
+      tournamentStatus: TournamentStatus,
       stageId: TournamentStageId,
       stageName: String,
-      stageStatus: DomainStageStatus,
+      stageStatus: StageStatus,
       currentRound: Int,
       roundCount: Int,
       startsAt: Instant,
@@ -48,10 +47,10 @@ object PublicScheduleView:
     PublicScheduleView(
       tournamentId = tournamentId.value,
       tournamentName = tournamentName,
-      tournamentStatus = TournamentStatus.fromDomain(tournamentStatus),
+      tournamentStatus = tournamentStatus,
       stageId = stageId.value,
       stageName = stageName,
-      stageStatus = StageStatus.fromDomain(stageStatus),
+      stageStatus = stageStatus,
       currentRound = currentRound,
       roundCount = roundCount,
       startsAt = startsAt.toString,

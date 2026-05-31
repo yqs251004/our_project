@@ -3,7 +3,8 @@ package riichinexus.microservices.player.objects
 import java.time.Instant
 
 import riichinexus.domain.model.{ClubId, PlayerId, TournamentId}
-import riichinexus.microservices.auth.domain.model.{AccessPrincipal, RoleGrant, RoleKind}
+import riichinexus.microservices.auth.domain.model.{AccessPrincipal, RoleGrant}
+import riichinexus.microservices.auth.objects.Role
 
 final case class Player(
     id: PlayerId,
@@ -23,7 +24,7 @@ final case class Player(
     (clubId.toVector ++ affiliatedClubIds).distinct
 
   def effectiveRoleGrants: Vector[RoleGrant] =
-    if roleGrants.exists(_.role == RoleKind.RegisteredPlayer) then roleGrants
+    if roleGrants.exists(_.role == Role.RegisteredPlayer) then roleGrants
     else RoleGrant.registered(registeredAt) +: roleGrants
 
   def asPrincipal: AccessPrincipal =
@@ -70,12 +71,12 @@ final case class Player(
 
   def revokeClubAdmin(clubId: ClubId): Player =
     copy(roleGrants = roleGrants.filterNot(grant =>
-      grant.role == RoleKind.ClubAdmin && grant.clubId.contains(clubId)
+      grant.role == Role.ClubAdmin && grant.clubId.contains(clubId)
     ))
 
   def revokeTournamentAdmin(tournamentId: TournamentId): Player =
     copy(roleGrants = roleGrants.filterNot(grant =>
-      grant.role == RoleKind.TournamentAdmin && grant.tournamentId.contains(tournamentId)
+      grant.role == Role.TournamentAdmin && grant.tournamentId.contains(tournamentId)
     ))
 
   def ban(reason: String): Player =

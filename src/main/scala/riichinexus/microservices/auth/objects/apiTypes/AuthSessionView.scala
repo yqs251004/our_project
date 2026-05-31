@@ -1,15 +1,15 @@
-package riichinexus.microservices.auth.objects
+package riichinexus.microservices.auth.objects.apiTypes
 
 import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.*
 
-final case class AuthSuccessView(
+final case class AuthSessionView(
     userId: String,
     username: String,
     displayName: String,
-    token: String,
+    authenticated: Boolean,
     roles: CurrentSessionRoleFlags
 ) derives CanEqual
 
-object AuthSuccessView:
-  given ReadWriter[AuthSuccessView] = macroRW
+object AuthSessionView:
+  given ReadWriter[AuthSessionView] = macroRW

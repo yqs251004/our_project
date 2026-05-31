@@ -3,6 +3,7 @@ package riichinexus.microservices.auth.domain.model
 import java.time.Instant
 
 import riichinexus.domain.model.{ClubId, PlayerId, TournamentId}
+import riichinexus.microservices.auth.objects.Role
 
 final case class AccessPrincipal(
     principalId: String,
@@ -14,15 +15,15 @@ final case class AccessPrincipal(
     playerId.isEmpty
 
   def isSuperAdmin: Boolean =
-    roleGrants.exists(_.role == RoleKind.SuperAdmin)
+    roleGrants.exists(_.role == Role.SuperAdmin)
 
-  def hasRole(role: RoleKind): Boolean =
+  def hasRole(role: Role): Boolean =
     isSuperAdmin || roleGrants.exists(_.role == role)
 
-  def hasClubRole(role: RoleKind, clubId: ClubId): Boolean =
+  def hasClubRole(role: Role, clubId: ClubId): Boolean =
     isSuperAdmin || roleGrants.exists(grant => grant.role == role && grant.clubId.contains(clubId))
 
-  def hasTournamentRole(role: RoleKind, tournamentId: TournamentId): Boolean =
+  def hasTournamentRole(role: Role, tournamentId: TournamentId): Boolean =
     isSuperAdmin || roleGrants.exists(grant =>
       grant.role == role && grant.tournamentId.contains(tournamentId)
     )

@@ -10,12 +10,13 @@ import riichinexus.bootstrap.*
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.auth.domain.AuthorizationPolicy
-import riichinexus.microservices.auth.objects.{
+import riichinexus.microservices.auth.objects.Role
+import riichinexus.microservices.auth.objects.SessionPrincipalKind
+import riichinexus.microservices.auth.objects.apiTypes.{
   CurrentSessionGuestSessionView,
   CurrentSessionPlayerView,
   CurrentSessionRoleFlags,
-  CurrentSessionView,
-  SessionPrincipalKind
+  CurrentSessionView
 }
 import riichinexus.microservices.auth.tables.guestsession.GuestSessionTable
 import riichinexus.microservices.player.objects.Player
@@ -128,9 +129,9 @@ final class ApiPlanSupport(
     CurrentSessionRoleFlags(
       isGuest = false,
       isRegisteredPlayer = true,
-      isClubAdmin = player.roleGrants.exists(_.role == RoleKind.ClubAdmin),
-      isTournamentAdmin = player.roleGrants.exists(_.role == RoleKind.TournamentAdmin),
-      isSuperAdmin = player.roleGrants.exists(_.role == RoleKind.SuperAdmin)
+      isClubAdmin = player.roleGrants.exists(_.role == Role.ClubAdmin),
+      isTournamentAdmin = player.roleGrants.exists(_.role == Role.TournamentAdmin),
+      isSuperAdmin = player.roleGrants.exists(_.role == Role.SuperAdmin)
     )
 
   def parseEnum[E](label: String, value: String)(parse: String => E): E =

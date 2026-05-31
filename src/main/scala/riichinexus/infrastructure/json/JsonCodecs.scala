@@ -1,5 +1,7 @@
 package riichinexus.infrastructure.json
 
+import riichinexus.microservices.tournament.objects.{HandOutcome, PaifuActionType, TournamentSettlementStatus}
+
 import java.time.Instant
 import scala.annotation.targetName
 
@@ -10,11 +12,11 @@ import riichinexus.microservices.tournament.domain.model.*
 import riichinexus.microservices.tournament.appeal.domain.model.*
 import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.player.objects.*
-import riichinexus.microservices.auth.objects.{AccountCredential, AuthenticatedSession, SessionPrincipalKind}
-import riichinexus.microservices.club.objects.ClubApplicationStatus
+import riichinexus.microservices.auth.objects.{AccountCredential, AuthenticatedSession, Role, SessionPrincipalKind}
+import riichinexus.microservices.club.objects.{ClubApplicationStatus, ClubPrivilegeCode, ClubRelationKind}
 import riichinexus.microservices.opsanalytics.objects.*
 import riichinexus.microservices.player.objects.{Player, PlayerStatus, RankPlatform, RankSnapshot}
-import riichinexus.microservices.tournament.objects.{SeatWind, TournamentFormat}
+import riichinexus.microservices.tournament.objects.{AdvancementRuleType, KnockoutLane, SeatWind, StageStatus, TableStatus, TournamentFormat, TournamentParticipantKind, TournamentStatus}
 import upickle.default.*
 
 object JsonCodecs:
@@ -95,8 +97,8 @@ object JsonCodecs:
   given ReadWriter[DomainEventSubscriberCursorId] =
     readwriter[String].bimap[DomainEventSubscriberCursorId](_.value, DomainEventSubscriberCursorId(_))
 
-  given ReadWriter[RoleKind] =
-    stringEnumReadWriter(RoleKind.valueOf, _.toString)
+  given ReadWriter[Role] =
+    stringEnumReadWriter(Role.valueOf, _.toString)
   given ReadWriter[Permission] =
     stringEnumReadWriter(Permission.valueOf, _.toString)
   given ReadWriter[RoleGrant] = macroRW
@@ -129,8 +131,6 @@ object JsonCodecs:
       ClubApplicationStatus.toString
     )
   given ReadWriter[ClubMembershipApplication] = macroRW
-  given ReadWriter[ClubPrivilegeCode] =
-    stringEnumReadWriter(ClubPrivilegeCode.valueOf, _.toString)
   given ReadWriter[ClubPrivilegeDefinition] = macroRW
   given ReadWriter[ClubRankNode] = macroRW
   given ReadWriter[ClubMemberContribution] = macroRW
@@ -146,8 +146,6 @@ object JsonCodecs:
 
   given ReadWriter[TournamentStatus] =
     stringEnumReadWriter(TournamentStatus.valueOf, _.toString)
-  given ReadWriter[StageFormat] =
-    stringEnumReadWriter(StageFormat.valueOf, _.toString)
   given ReadWriter[TournamentFormat] =
     eitherStringEnumReadWriter(
       TournamentFormat.fromString,

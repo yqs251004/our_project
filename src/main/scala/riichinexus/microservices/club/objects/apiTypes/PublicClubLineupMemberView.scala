@@ -1,6 +1,7 @@
 package riichinexus.microservices.club.objects.apiTypes
 
 import riichinexus.domain.model.PlayerId
+import riichinexus.microservices.club.objects.ClubPrivilegeCode
 import riichinexus.microservices.player.objects.PlayerStatus
 import riichinexus.microservices.tournament.objects.apiTypes.RankSnapshotView
 import upickle.default.*
@@ -13,7 +14,7 @@ final case class PublicClubLineupMemberView(
     status: String,
     isAdmin: Boolean,
     internalTitle: Option[String],
-    privileges: Vector[String]
+    privileges: Vector[ClubPrivilegeCode]
 ) derives CanEqual
 
 object PublicClubLineupMemberView:
@@ -27,7 +28,7 @@ object PublicClubLineupMemberView:
       status: PlayerStatus,
       isAdmin: Boolean,
       internalTitle: Option[String],
-      privileges: Vector[String]
+      privileges: Vector[ClubPrivilegeCode]
   ): PublicClubLineupMemberView =
     PublicClubLineupMemberView(
       playerId = playerId.value,

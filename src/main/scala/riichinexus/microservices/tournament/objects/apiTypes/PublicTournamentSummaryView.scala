@@ -3,7 +3,6 @@ package riichinexus.microservices.tournament.objects.apiTypes
 import java.time.Instant
 
 import riichinexus.domain.model.TournamentId
-import riichinexus.microservices.tournament.domain.model.{TournamentStatus as DomainTournamentStatus}
 import riichinexus.microservices.tournament.objects.TournamentStatus
 import upickle.default.*
 
@@ -28,7 +27,7 @@ object PublicTournamentSummaryView:
       tournamentId: TournamentId,
       name: String,
       organizer: String,
-      status: DomainTournamentStatus,
+      status: TournamentStatus,
       startsAt: Instant,
       endsAt: Instant,
       stageCount: Int,
@@ -41,7 +40,7 @@ object PublicTournamentSummaryView:
       tournamentId = tournamentId.value,
       name = name,
       organizer = organizer,
-      status = TournamentStatus.fromDomain(status),
+      status = status,
       startsAt = startsAt.toString,
       endsAt = endsAt.toString,
       stageCount = stageCount,

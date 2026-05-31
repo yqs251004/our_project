@@ -1,5 +1,9 @@
 package riichinexus.microservices.tournament.domain
 
+import riichinexus.microservices.tournament.objects.{TournamentSettlementStatus}
+
+import riichinexus.microservices.tournament.objects.{AdvancementRuleType, KnockoutLane, StageStatus, TournamentFormat, TournamentStatus}
+
 import java.sql.Connection
 import java.time.Instant
 import java.util.NoSuchElementException
@@ -279,8 +283,8 @@ final class TournamentSettlementCoordinator(
       )
 
   private def isKnockoutStage(stage: TournamentStage): Boolean =
-    stage.format == StageFormat.Knockout ||
-      stage.format == StageFormat.Finals ||
+    stage.format == TournamentFormat.Knockout ||
+      stage.format == TournamentFormat.Finals ||
       stage.advancementRule.ruleType == AdvancementRuleType.KnockoutElimination
 
   private def allocatePrizePool(

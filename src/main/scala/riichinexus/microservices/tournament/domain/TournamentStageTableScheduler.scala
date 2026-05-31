@@ -7,9 +7,10 @@ import riichinexus.bootstrap.TournamentModuleContext
 import riichinexus.domain.model.*
 import riichinexus.microservices.tournament.domain.model.*
 import riichinexus.microservices.club.domain.model.*
+import riichinexus.microservices.club.objects.ClubRelationKind
 import riichinexus.microservices.player.objects.*
 import riichinexus.microservices.player.tables.player.PlayerTable
-import riichinexus.microservices.tournament.objects.SeatWind
+import riichinexus.microservices.tournament.objects.{AdvancementRuleType, SeatWind, TableStatus, TournamentFormat, TournamentStatus}
 
 object TournamentStageTableScheduler:
   def schedule(
@@ -32,8 +33,8 @@ object TournamentStageTableScheduler:
       )
 
     val isKnockoutStage =
-      stage.format == StageFormat.Knockout ||
-        stage.format == StageFormat.Finals ||
+      stage.format == TournamentFormat.Knockout ||
+        stage.format == TournamentFormat.Finals ||
         stage.advancementRule.ruleType == AdvancementRuleType.KnockoutElimination
 
     if isKnockoutStage then
@@ -55,7 +56,7 @@ object TournamentStageTableScheduler:
       throw IllegalArgumentException(
         s"Stage ${stage.id.value} needs at least four active players before scheduling"
       )
-    if stage.format != StageFormat.Custom && tournamentPlayers.size % 4 != 0 then
+    if stage.format != TournamentFormat.Custom && tournamentPlayers.size % 4 != 0 then
       throw IllegalArgumentException(
         s"Stage ${stage.id.value} requires player counts divisible by four; got ${tournamentPlayers.size}"
       )
@@ -211,9 +212,9 @@ object TournamentStageTableScheduler:
       riichinexus.microservices.club.tables.club.ClubTable.findFiltered(connection, activeOnly = true)
     )
     stage.format match
-      case StageFormat.RoundRobin =>
+      case TournamentFormat.RoundRobin =>
         buildRoundRobinTables(participants, stage, roundNumber)
-      case StageFormat.Custom =>
+      case TournamentFormat.Custom =>
         val selectedPlayers = selectCustomStageParticipants(module, tournament, stage, participants, history, roundNumber)
         SeatingPolicy.planTables(selectedPlayers, stage, history, clubRelations)
       case _ =>

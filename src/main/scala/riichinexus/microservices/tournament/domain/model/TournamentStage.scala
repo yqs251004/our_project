@@ -3,12 +3,12 @@ package riichinexus.microservices.tournament.domain.model
 import java.time.Instant
 
 import riichinexus.domain.model.*
-import riichinexus.microservices.tournament.objects.SeatWind
+import riichinexus.microservices.tournament.objects.{AdvancementRuleType, StageStatus, TournamentFormat}
 
 final case class TournamentStage(
     id: TournamentStageId,
     name: String,
-    format: StageFormat,
+    format: TournamentFormat,
     order: Int,
     roundCount: Int,
     currentRound: Int = 1,

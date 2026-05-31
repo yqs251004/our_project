@@ -42,7 +42,7 @@ final case class TournamentStageTablesAPIMessage(
   ): Vector[Table] =
     TournamentGameTable
       .findByTournamentAndStage(context.connection, resolved.tournamentId, resolved.stageId)
-      .filter(table => resolved.query.status.forall(_.toDomain == table.status))
+      .filter(table => resolved.query.status.forall(_ == table.status))
       .filter(table => resolved.query.roundNumber.forall(_ == table.stageRoundNumber))
       .filter(table => resolved.query.playerId.forall(playerId => table.seats.exists(_.playerId == playerId)))
       .sortBy(table => (table.stageRoundNumber, table.tableNo, table.id.value))

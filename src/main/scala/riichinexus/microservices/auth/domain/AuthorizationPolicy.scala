@@ -2,6 +2,7 @@ package riichinexus.microservices.auth.domain
 
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
+import riichinexus.microservices.auth.objects.Role
 
 final case class AuthorizationPolicy(
     canEvaluate: AuthorizationPolicy.DecisionInput => Boolean
@@ -61,32 +62,32 @@ object AuthorizationPolicy:
           principal.isSuperAdmin || principal.playerId.exists(subjectPlayerId.contains)
 
         case Permission.ViewClubDashboard =>
-          clubId.exists(id => principal.hasClubRole(RoleKind.ClubAdmin, id))
+          clubId.exists(id => principal.hasClubRole(Role.ClubAdmin, id))
 
         case Permission.SubmitClubApplication =>
-          principal.isGuest || principal.hasRole(RoleKind.RegisteredPlayer)
+          principal.isGuest || principal.hasRole(Role.RegisteredPlayer)
 
         case Permission.WithdrawClubApplication =>
-          principal.isGuest || principal.hasRole(RoleKind.RegisteredPlayer)
+          principal.isGuest || principal.hasRole(Role.RegisteredPlayer)
 
         case Permission.ManageClubMembership |
             Permission.ManageClubOperations |
             Permission.SetClubTitle |
             Permission.AssignClubAdmin =>
-          clubId.exists(id => principal.hasClubRole(RoleKind.ClubAdmin, id))
+          clubId.exists(id => principal.hasClubRole(Role.ClubAdmin, id))
 
         case Permission.SubmitTournamentLineup =>
-          clubId.exists(id => principal.hasClubRole(RoleKind.ClubAdmin, id))
+          clubId.exists(id => principal.hasClubRole(Role.ClubAdmin, id))
 
         case Permission.ManageTournamentStages |
             Permission.ConfigureTournamentRules |
             Permission.ResetTableState |
             Permission.ResolveAppeal =>
-          tournamentId.exists(id => principal.hasTournamentRole(RoleKind.TournamentAdmin, id))
+          tournamentId.exists(id => principal.hasTournamentRole(Role.TournamentAdmin, id))
 
         case Permission.ManageTableSeatState =>
           principal.isSuperAdmin ||
-            tournamentId.exists(id => principal.hasTournamentRole(RoleKind.TournamentAdmin, id)) ||
+            tournamentId.exists(id => principal.hasTournamentRole(Role.TournamentAdmin, id)) ||
             principal.playerId.exists(playerId => subjectPlayerId.contains(playerId))
 
         case Permission.FileAppealTicket =>

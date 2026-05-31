@@ -41,7 +41,7 @@ final case class TournamentSettlementListAPIMessage(
     TournamentSettlementTable
       .findByTournament(context.connection, resolved.tournamentId)
       .filter(snapshot => resolved.query.stageId.forall(_ == snapshot.stageId))
-      .filter(snapshot => resolved.query.status.forall(_.toDomain == snapshot.status))
+      .filter(snapshot => resolved.query.status.forall(_ == snapshot.status))
       .filter(snapshot => resolved.query.championId.forall(_ == snapshot.championId))
       .sortBy(snapshot => (snapshot.generatedAt, snapshot.revision))
 

@@ -1,5 +1,7 @@
 package riichinexus.microservices.tournament.domain
 
+import riichinexus.microservices.tournament.objects.{TournamentFormat}
+
 import java.time.Instant
 
 import riichinexus.domain.model.*
@@ -89,7 +91,7 @@ private[domain] object TournamentStageRankingBuilder:
       stage: TournamentStage,
       records: Vector[MatchRecord]
   ): Vector[MatchRecord] =
-    if stage.format != StageFormat.Swiss || stage.swissRule.forall(_.carryOverPoints) then records
+    if stage.format != TournamentFormat.Swiss || stage.swissRule.forall(_.carryOverPoints) then records
     else
       val latestRound = records.map(_.stageRoundNumber).foldLeft(0)(math.max)
       if latestRound <= 0 then records

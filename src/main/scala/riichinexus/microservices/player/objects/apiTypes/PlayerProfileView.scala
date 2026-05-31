@@ -2,6 +2,7 @@ package riichinexus.microservices.player.objects.apiTypes
 
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
+import riichinexus.microservices.auth.objects.Role
 import riichinexus.microservices.tournament.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.player.objects.Player
@@ -37,10 +38,10 @@ object PlayerProfileView:
       affiliatedClubIds = player.affiliatedClubIds.map(_.value),
       status = player.status.toString,
       roles = PlayerRoleFlagsView(
-        isRegisteredPlayer = player.effectiveRoleGrants.exists(_.role == RoleKind.RegisteredPlayer),
-        isClubAdmin = player.roleGrants.exists(_.role == RoleKind.ClubAdmin),
-        isTournamentAdmin = player.roleGrants.exists(_.role == RoleKind.TournamentAdmin),
-        isSuperAdmin = player.roleGrants.exists(_.role == RoleKind.SuperAdmin)
+        isRegisteredPlayer = player.effectiveRoleGrants.exists(_.role == Role.RegisteredPlayer),
+        isClubAdmin = player.roleGrants.exists(_.role == Role.ClubAdmin),
+        isTournamentAdmin = player.roleGrants.exists(_.role == Role.TournamentAdmin),
+        isSuperAdmin = player.roleGrants.exists(_.role == Role.SuperAdmin)
       ),
       bannedReason = player.bannedReason
     )

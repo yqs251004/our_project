@@ -4,6 +4,7 @@ import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.club.domain.model.*
+import riichinexus.microservices.club.objects.ClubPrivilegeCode
 import riichinexus.microservices.auth.domain.{AuthorizationFailure, AuthorizationPolicy}
 
 object ClubAuthorization:
@@ -44,7 +45,7 @@ object ClubAuthorization:
       actor: AccessPrincipal,
       club: Club,
       permission: Permission,
-      delegatedPrivileges: Set[String] = Set.empty
+      delegatedPrivileges: Set[ClubPrivilegeCode] = Set.empty
   ): Unit =
     requireClubCapability(module.authorizationService, actor, club, permission, delegatedPrivileges)
 
@@ -53,7 +54,7 @@ object ClubAuthorization:
       actor: AccessPrincipal,
       club: Club,
       permission: Permission,
-      delegatedPrivileges: Set[String]
+      delegatedPrivileges: Set[ClubPrivilegeCode]
   ): Unit =
     val hasBasePermission = authorizationService.can(actor, permission, clubId = Some(club.id))
     if !hasBasePermission && !hasDelegatedPrivilege(actor, club, delegatedPrivileges) then
@@ -64,7 +65,7 @@ object ClubAuthorization:
   def hasDelegatedPrivilege(
       actor: AccessPrincipal,
       club: Club,
-      delegatedPrivileges: Set[String]
+      delegatedPrivileges: Set[ClubPrivilegeCode]
   ): Boolean =
     actor.playerId.exists { playerId =>
       club.members.contains(playerId) &&

@@ -35,7 +35,7 @@ object TournamentTableView:
       stageRoundNumber = table.stageRoundNumber,
       bracketMatchId = table.bracketMatchId,
       bracketRoundNumber = table.bracketRoundNumber,
-      status = TableStatus.fromDomain(table.status),
+      status = table.status,
       startedAt = table.startedAt.map(_.toString),
       scoringStartedAt = table.scoringStartedAt.map(_.toString),
       endedAt = table.endedAt.map(_.toString),

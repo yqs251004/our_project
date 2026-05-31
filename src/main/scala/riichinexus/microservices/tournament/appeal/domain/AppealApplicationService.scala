@@ -1,5 +1,7 @@
 package riichinexus.microservices.tournament.appeal.domain
 
+import riichinexus.microservices.tournament.objects.{TableStatus}
+
 import java.sql.Connection
 import java.time.Instant
 import java.util.NoSuchElementException

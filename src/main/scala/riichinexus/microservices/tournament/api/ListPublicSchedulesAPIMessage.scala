@@ -9,6 +9,7 @@ import riichinexus.microservices.club.tables.club.ClubTable
 import riichinexus.microservices.player.objects.Player
 import riichinexus.microservices.player.tables.player.PlayerTable
 import riichinexus.microservices.tournament.domain.model.*
+import riichinexus.microservices.tournament.objects.{StageStatus, TableStatus, TournamentStatus}
 import riichinexus.microservices.tournament.objects.apiTypes.PublicScheduleView
 import riichinexus.microservices.tournament.domain.StageLineupResolver
 import riichinexus.microservices.tournament.tables.tournament.TournamentTable
@@ -119,8 +120,8 @@ final case class ListPublicSchedulesAPIMessage(
       query: ResolvedScheduleQuery
   ): Vector[PublicScheduleView] =
     schedules
-      .filter(schedule => query.tournamentStatus.forall(status => riichinexus.microservices.tournament.objects.TournamentStatus.fromDomain(status) == schedule.tournamentStatus))
-      .filter(schedule => query.stageStatus.forall(status => riichinexus.microservices.tournament.objects.StageStatus.fromDomain(status) == schedule.stageStatus))
+      .filter(schedule => query.tournamentStatus.forall(_ == schedule.tournamentStatus))
+      .filter(schedule => query.stageStatus.forall(_ == schedule.stageStatus))
       .sortBy(schedule => (schedule.startsAt, schedule.tournamentName, schedule.stageName))
 
   private final case class ResolvedScheduleQuery(

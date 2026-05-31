@@ -7,7 +7,7 @@ final case class ClubRankNodeView(
     code: String,
     label: String,
     minimumContribution: Int,
-    privileges: Vector[String]
+    privileges: Vector[ClubPrivilegeCode]
 ) derives ReadWriter
 
 object ClubRankNodeView:

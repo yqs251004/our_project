@@ -1,12 +1,14 @@
 package riichinexus.microservices.tournament.objects.apiTypes
 
+import riichinexus.microservices.tournament.objects.{AdvancementRuleType, StageStatus, TournamentFormat}
+
 import upickle.default.*
 
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.tournament.domain.model.*
 import riichinexus.microservices.tournament.objects.{
-  StageStatus as ApiStageStatus,
+  StageStatus,
   TournamentFormat
 }
 
@@ -15,7 +17,7 @@ final case class TournamentStageSummaryView(
     name: String,
     format: TournamentFormat,
     order: Int,
-    status: ApiStageStatus,
+    status: StageStatus,
     currentRound: Int,
     roundCount: Int,
     schedulingPoolSize: Int,
@@ -32,7 +34,7 @@ object TournamentStageSummaryView:
   def apply(
       stageId: TournamentStageId,
       name: String,
-      format: StageFormat,
+      format: TournamentFormat,
       order: Int,
       status: StageStatus,
       currentRound: Int,
@@ -47,9 +49,9 @@ object TournamentStageSummaryView:
     TournamentStageSummaryView(
       stageId = stageId.value,
       name = name,
-      format = TournamentFormat.fromStageFormat(format),
+      format = format,
       order = order,
-      status = ApiStageStatus.fromDomain(status),
+      status = status,
       currentRound = currentRound,
       roundCount = roundCount,
       schedulingPoolSize = schedulingPoolSize,
@@ -64,9 +66,9 @@ object TournamentStageSummaryView:
     TournamentStageSummaryView(
       stageId = stage.id.value,
       name = stage.name,
-      format = TournamentFormat.fromStageFormat(stage.format),
+      format = stage.format,
       order = stage.order,
-      status = ApiStageStatus.fromDomain(stage.status),
+      status = stage.status,
       currentRound = stage.currentRound,
       roundCount = stage.roundCount,
       schedulingPoolSize = stage.schedulingPoolSize,

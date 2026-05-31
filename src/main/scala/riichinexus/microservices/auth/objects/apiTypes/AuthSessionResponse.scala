@@ -1,7 +1,7 @@
 package riichinexus.microservices.auth.objects.apiTypes
 
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.auth.objects.{AuthSessionView, CurrentSessionRoleFlags}
+import riichinexus.microservices.auth.objects.apiTypes.{AuthSessionView, CurrentSessionRoleFlags}
 import upickle.default.*
 
 final case class AuthSessionResponse(

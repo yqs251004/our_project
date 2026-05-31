@@ -1,9 +1,6 @@
-package riichinexus.microservices.tournament.domain.model
+package riichinexus.microservices.tournament.objects
 
-import java.time.Instant
-
-import riichinexus.domain.model.*
-import riichinexus.microservices.tournament.objects.SeatWind
+import upickle.default.*
 
 enum PaifuActionType derives CanEqual:
   case Draw
@@ -19,3 +16,6 @@ enum PaifuActionType derives CanEqual:
   case ClosedKan
   case OpenKan
 
+object PaifuActionType:
+  given ReadWriter[PaifuActionType] =
+    readwriter[String].bimap(_.toString, PaifuActionType.valueOf)

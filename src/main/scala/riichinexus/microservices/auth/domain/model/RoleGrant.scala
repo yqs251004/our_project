@@ -3,9 +3,10 @@ package riichinexus.microservices.auth.domain.model
 import java.time.Instant
 
 import riichinexus.domain.model.{ClubId, PlayerId, TournamentId}
+import riichinexus.microservices.auth.objects.Role
 
 final case class RoleGrant(
-    role: RoleKind,
+    role: Role,
     grantedAt: Instant,
     grantedBy: Option[PlayerId] = None,
     clubId: Option[ClubId] = None,
@@ -13,27 +14,27 @@ final case class RoleGrant(
 ) derives CanEqual:
   require(
     role match
-      case RoleKind.Guest | RoleKind.RegisteredPlayer | RoleKind.SuperAdmin =>
+      case Role.Guest | Role.RegisteredPlayer | Role.SuperAdmin =>
         clubId.isEmpty && tournamentId.isEmpty
-      case RoleKind.ClubAdmin =>
+      case Role.ClubAdmin =>
         clubId.nonEmpty && tournamentId.isEmpty
-      case RoleKind.TournamentAdmin =>
+      case Role.TournamentAdmin =>
         tournamentId.nonEmpty && clubId.isEmpty,
     s"Invalid scope for role $role"
   )
 
   def appliesToClub(targetClubId: ClubId): Boolean =
-    role == RoleKind.SuperAdmin || clubId.contains(targetClubId)
+    role == Role.SuperAdmin || clubId.contains(targetClubId)
 
   def appliesToTournament(targetTournamentId: TournamentId): Boolean =
-    role == RoleKind.SuperAdmin || tournamentId.contains(targetTournamentId)
+    role == Role.SuperAdmin || tournamentId.contains(targetTournamentId)
 
 object RoleGrant:
   def guest(at: Instant = Instant.now()): RoleGrant =
-    RoleGrant(RoleKind.Guest, grantedAt = at)
+    RoleGrant(Role.Guest, grantedAt = at)
 
   def registered(at: Instant): RoleGrant =
-    RoleGrant(RoleKind.RegisteredPlayer, grantedAt = at)
+    RoleGrant(Role.RegisteredPlayer, grantedAt = at)
 
   def clubAdmin(
       clubId: ClubId,
@@ -41,7 +42,7 @@ object RoleGrant:
       grantedBy: Option[PlayerId] = None
   ): RoleGrant =
     RoleGrant(
-      role = RoleKind.ClubAdmin,
+      role = Role.ClubAdmin,
       grantedAt = grantedAt,
       grantedBy = grantedBy,
       clubId = Some(clubId)
@@ -53,7 +54,7 @@ object RoleGrant:
       grantedBy: Option[PlayerId] = None
   ): RoleGrant =
     RoleGrant(
-      role = RoleKind.TournamentAdmin,
+      role = Role.TournamentAdmin,
       grantedAt = grantedAt,
       grantedBy = grantedBy,
       tournamentId = Some(tournamentId)
@@ -64,7 +65,7 @@ object RoleGrant:
       grantedBy: Option[PlayerId] = None
   ): RoleGrant =
     RoleGrant(
-      role = RoleKind.SuperAdmin,
+      role = Role.SuperAdmin,
       grantedAt = grantedAt,
       grantedBy = grantedBy
     )

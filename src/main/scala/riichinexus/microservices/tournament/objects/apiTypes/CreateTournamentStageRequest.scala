@@ -3,7 +3,7 @@ package riichinexus.microservices.tournament.objects.apiTypes
 import riichinexus.domain.model.*
 import riichinexus.microservices.tournament.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.tournament.objects.TournamentFormat
+import riichinexus.microservices.tournament.objects.{AdvancementRuleType, TournamentFormat}
 import upickle.default.*
 
 final case class CreateTournamentStageRequest(
@@ -32,11 +32,10 @@ final case class CreateTournamentStageRequest(
     operatorId.map(PlayerId(_))
 
   def toStage: TournamentStage =
-    val stageFormat = TournamentFormat.toStageFormat(format)
     TournamentStage(
       id = id.map(TournamentStageId(_)).getOrElse(IdGenerator.stageId()),
       name = name,
-      format = stageFormat,
+      format = format,
       order = order,
       roundCount = roundCount,
       advancementRule = advancementRuleType
@@ -51,9 +50,9 @@ final case class CreateTournamentStageRequest(
           )
         )
         .getOrElse(
-          AdvancementRule.defaultFor(stageFormat).copy(
+          AdvancementRule.defaultFor(format).copy(
             templateKey = ruleTemplateKey,
-            note = note.orElse(AdvancementRule.defaultFor(stageFormat).note)
+            note = note.orElse(AdvancementRule.defaultFor(format).note)
           )
         ),
       swissRule =

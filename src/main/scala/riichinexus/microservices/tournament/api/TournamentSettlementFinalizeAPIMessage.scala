@@ -1,5 +1,7 @@
 package riichinexus.microservices.tournament.api
 
+import riichinexus.microservices.tournament.objects.{TournamentSettlementStatus}
+
 import java.util.NoSuchElementException
 import java.time.Instant
 
@@ -68,10 +70,10 @@ final case class TournamentSettlementFinalizeAPIMessage(tournamentId: String, se
       .auditOnly(module.transactionManager, module.auditEventRepository)
       .commitAudited(
         aggregate =
-          if settlement.status == riichinexus.microservices.tournament.domain.model.TournamentSettlementStatus.Finalized then settlement
+          if settlement.status == riichinexus.microservices.tournament.objects.TournamentSettlementStatus.Finalized then settlement
           else settlement.finalize(command.finalizedAt),
         persist = finalized =>
-          if settlement.status == riichinexus.microservices.tournament.domain.model.TournamentSettlementStatus.Finalized then finalized
+          if settlement.status == riichinexus.microservices.tournament.objects.TournamentSettlementStatus.Finalized then finalized
           else riichinexus.microservices.tournament.tables.settlement.TournamentSettlementTable.save(connection, finalized),
         aggregateType = "tournament",
         aggregateId = _.tournamentId.value,

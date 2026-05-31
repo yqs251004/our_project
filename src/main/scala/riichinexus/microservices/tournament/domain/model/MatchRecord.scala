@@ -4,7 +4,7 @@ import java.time.Instant
 import java.util.NoSuchElementException
 
 import riichinexus.domain.model.*
-import riichinexus.microservices.tournament.objects.SeatWind
+
 
 final case class MatchRecord(
     id: MatchRecordId,

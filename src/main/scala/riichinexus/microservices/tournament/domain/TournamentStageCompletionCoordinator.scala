@@ -1,5 +1,7 @@
 package riichinexus.microservices.tournament.domain
 
+import riichinexus.microservices.tournament.objects.{AdvancementRuleType, TableStatus, TournamentFormat}
+
 import java.sql.Connection
 import java.time.Instant
 import java.util.NoSuchElementException
@@ -99,8 +101,8 @@ final class TournamentStageCompletionCoordinator(
       )
 
   private def isKnockoutStage(stage: TournamentStage): Boolean =
-    stage.format == StageFormat.Knockout ||
-      stage.format == StageFormat.Finals ||
+    stage.format == TournamentFormat.Knockout ||
+      stage.format == TournamentFormat.Finals ||
       stage.advancementRule.ruleType == AdvancementRuleType.KnockoutElimination
 
   private def resolveParticipants(
@@ -148,7 +150,7 @@ final class TournamentStageCompletionCoordinator(
       at: Instant
   ): Int =
     stage.format match
-      case StageFormat.Custom =>
+      case TournamentFormat.Custom =>
         val selectedPlayers = selectCustomStageParticipants(
           tournament = tournament,
           stage = stage,

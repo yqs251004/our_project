@@ -27,7 +27,7 @@ final case class RestoreAuthSessionAPIMessage() extends APIWithTokenMessage[Auth
         }
       }
     yield AuthSessionResponse.fromView(
-      riichinexus.microservices.auth.objects.AuthSessionView(
+      riichinexus.microservices.auth.objects.apiTypes.AuthSessionView(
         userId = result.player.id.value,
         username = result.session.username,
         displayName = result.player.nickname,

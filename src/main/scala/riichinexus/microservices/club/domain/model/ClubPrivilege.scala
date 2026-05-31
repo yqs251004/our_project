@@ -1,9 +1,11 @@
 package riichinexus.microservices.club.domain.model
 
-object ClubPrivilege:
-  val PriorityLineup: String = ClubPrivilegeRegistry.requireSupported("priority-lineup")
-  val ApproveRoster: String = ClubPrivilegeRegistry.requireSupported("approve-roster")
-  val ManageBank: String = ClubPrivilegeRegistry.requireSupported("manage-bank")
+import riichinexus.microservices.club.objects.ClubPrivilegeCode
 
-  def normalize(value: String): String =
-    ClubPrivilegeRegistry.normalize(value)
+object ClubPrivilege:
+  val PriorityLineup: ClubPrivilegeCode = ClubPrivilegeCode.PriorityLineup
+  val ApproveRoster: ClubPrivilegeCode = ClubPrivilegeCode.ApproveRoster
+  val ManageBank: ClubPrivilegeCode = ClubPrivilegeCode.ManageBank
+
+  def normalize(value: String): ClubPrivilegeCode =
+    ClubPrivilegeRegistry.requireSupported(value)

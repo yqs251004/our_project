@@ -2,6 +2,7 @@ package riichinexus.microservices.platformadmin.objects.apiTypes
 
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
+import riichinexus.microservices.auth.objects.Role
 import riichinexus.microservices.player.objects.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.*
@@ -27,5 +28,5 @@ object PlatformAdminPlayerView:
       status = player.status.toString,
       clubIds = player.boundClubIds.map(_.value),
       bannedReason = player.bannedReason,
-      isSuperAdmin = player.roleGrants.exists(_.role == RoleKind.SuperAdmin)
+      isSuperAdmin = player.roleGrants.exists(_.role == Role.SuperAdmin)
     )

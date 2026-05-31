@@ -1,10 +1,11 @@
 package riichinexus.microservices.club.objects.apiTypes
 
+import riichinexus.microservices.club.objects.ClubPrivilegeCode
 import upickle.default.*
 
 final case class ClubMemberPrivilegeListQuery(
     playerId: Option[String] = None,
-    privilege: Option[String] = None,
+    privilege: Option[ClubPrivilegeCode] = None,
     rankCode: Option[String] = None,
     limit: Option[Int] = None,
     offset: Option[Int] = None

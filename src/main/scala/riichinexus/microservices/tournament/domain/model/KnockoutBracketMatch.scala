@@ -3,7 +3,7 @@ package riichinexus.microservices.tournament.domain.model
 import java.time.Instant
 
 import riichinexus.domain.model.*
-import riichinexus.microservices.tournament.objects.SeatWind
+import riichinexus.microservices.tournament.objects.{KnockoutLane}
 
 final case class KnockoutBracketMatch(
     id: String,

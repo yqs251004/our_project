@@ -1,5 +1,7 @@
 package riichinexus.microservices.tournament.api
 
+import riichinexus.microservices.tournament.objects.{TableStatus, TournamentFormat, TournamentStatus}
+
 import java.util.NoSuchElementException
 
 import cats.effect.IO
@@ -124,7 +126,7 @@ final case class GetPublicTournamentAPIMessage(
       tournament: Tournament,
       stage: TournamentStage
   ): Option[KnockoutBracketSnapshotResponse] =
-    if stage.format == StageFormat.Knockout || stage.format == StageFormat.Finals then
+    if stage.format == TournamentFormat.Knockout || stage.format == TournamentFormat.Finals then
       Some(
         KnockoutBracketSnapshotResponse.fromDomain(
           TournamentStageQueries.stageKnockoutBracket(context.connection, tournament.id, stage.id)

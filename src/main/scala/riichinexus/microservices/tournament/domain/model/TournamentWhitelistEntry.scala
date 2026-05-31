@@ -1,6 +1,7 @@
 package riichinexus.microservices.tournament.domain.model
 
 import riichinexus.domain.model.{ClubId, PlayerId}
+import riichinexus.microservices.tournament.objects.TournamentParticipantKind
 
 final case class TournamentWhitelistEntry(
     participantKind: TournamentParticipantKind,

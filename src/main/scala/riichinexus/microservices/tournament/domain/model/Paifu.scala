@@ -1,5 +1,7 @@
 package riichinexus.microservices.tournament.domain.model
 
+import riichinexus.microservices.tournament.objects.{HandOutcome, PaifuActionType}
+
 import riichinexus.domain.model.*
 
 final case class Paifu(

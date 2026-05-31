@@ -5,6 +5,7 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.microservices.club.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.club.objects.ClubPrivilegeCode
 import riichinexus.microservices.club.objects.apiTypes.ClubMemberPrivilegeSnapshotView
 import riichinexus.microservices.club.objects.apiTypes.ClubMemberPrivilegeListQuery
 import riichinexus.microservices.club.tables.club.ClubTable
@@ -26,13 +27,13 @@ final case class ListClubMemberPrivilegesAPIMessage(
     ResolvedClubMemberPrivilegeQuery(
       clubId = ClubId(clubId),
       playerId = query.playerId.filter(_.nonEmpty).map(PlayerId(_)),
-      privilege = query.privilege.filter(_.nonEmpty).map(ClubPrivilegeRegistry.requireSupported),
+      privilege = query.privilege,
       rankCode = query.rankCode.filter(_.nonEmpty).map(_.trim.toLowerCase),
       limit = query.limit.getOrElse(20),
       offset = query.offset.getOrElse(0),
       appliedFilters = Vector(
         query.playerId.filter(_.nonEmpty).map("playerId" -> _),
-        query.privilege.filter(_.nonEmpty).map("privilege" -> _),
+        query.privilege.map(value => "privilege" -> value.wireValue),
         query.rankCode.filter(_.nonEmpty).map("rankCode" -> _)
       ).flatten.toMap
     )
@@ -72,7 +73,7 @@ final case class ListClubMemberPrivilegesAPIMessage(
   private final case class ResolvedClubMemberPrivilegeQuery(
       clubId: ClubId,
       playerId: Option[PlayerId],
-      privilege: Option[String],
+      privilege: Option[ClubPrivilegeCode],
       rankCode: Option[String],
       limit: Int,
       offset: Int,

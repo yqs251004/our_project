@@ -3,7 +3,7 @@ package riichinexus.microservices.tournament.objects.apiTypes
 import riichinexus.domain.model.*
 import riichinexus.microservices.tournament.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.tournament.objects.TournamentFormat
+import riichinexus.microservices.tournament.objects.{AdvancementRuleType, TournamentFormat}
 import upickle.default.*
 
 final case class ConfigureStageRulesRequest(
@@ -33,8 +33,8 @@ final case class ConfigureStageRulesRequest(
   def operator: PlayerId =
     PlayerId(operatorId)
 
-  def stageFormat: Option[StageFormat] =
-    format.map(TournamentFormat.toStageFormat)
+  def stageFormat: Option[TournamentFormat] =
+    format
 
   def advancementRule: AdvancementRule =
     AdvancementRule(

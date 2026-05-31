@@ -1,5 +1,7 @@
 package riichinexus.microservices.tournament.domain
 
+import riichinexus.microservices.tournament.objects.{AdvancementRuleType}
+
 import riichinexus.domain.model.*
 import riichinexus.microservices.tournament.domain.model.*
 

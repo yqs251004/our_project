@@ -3,8 +3,9 @@ package riichinexus.microservices.tournament.domain
 import riichinexus.domain.model.*
 import riichinexus.microservices.tournament.domain.model.*
 import riichinexus.microservices.club.domain.model.*
+import riichinexus.microservices.club.objects.ClubRelationKind
 import riichinexus.microservices.player.objects.Player
-import riichinexus.microservices.tournament.objects.SeatWind
+import riichinexus.microservices.tournament.objects.{SeatWind}
 
 object SeatingPolicy:
   def planTables(

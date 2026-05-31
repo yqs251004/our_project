@@ -1,5 +1,7 @@
 package riichinexus.microservices.opsanalytics.domain
 
+import riichinexus.microservices.tournament.objects.{PaifuActionType}
+
 import riichinexus.domain.model.*
 import riichinexus.microservices.tournament.domain.model.*
 

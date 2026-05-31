@@ -1,11 +1,13 @@
 package riichinexus.microservices.tournament.objects.apiTypes
 
+import riichinexus.microservices.tournament.objects.{HandOutcome}
+
 import upickle.default.*
 
 import riichinexus.microservices.tournament.domain.model.AgariResult
 
 final case class TournamentPaifuRoundResultView(
-    outcome: TournamentPaifuHandOutcome,
+    outcome: HandOutcome,
     winner: Option[String],
     target: Option[String],
     han: Option[Int],
@@ -25,7 +27,7 @@ object TournamentPaifuRoundResultView:
 
   def fromDomain(result: AgariResult): TournamentPaifuRoundResultView =
     TournamentPaifuRoundResultView(
-      outcome = TournamentPaifuHandOutcome.fromDomain(result.outcome),
+      outcome = result.outcome,
       winner = result.winner.map(_.value),
       target = result.target.map(_.value),
       han = result.han,

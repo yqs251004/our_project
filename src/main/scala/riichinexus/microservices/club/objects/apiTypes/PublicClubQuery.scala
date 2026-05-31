@@ -1,7 +1,7 @@
 package riichinexus.microservices.club.objects.apiTypes
 
-import riichinexus.microservices.club.domain.model.ClubRelationKind
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.club.objects.ClubRelationKind
 import upickle.default.*
 
 final case class PublicClubQuery(

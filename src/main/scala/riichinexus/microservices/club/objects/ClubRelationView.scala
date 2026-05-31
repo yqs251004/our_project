@@ -4,9 +4,9 @@ import riichinexus.microservices.club.domain.model.{ClubRelation as DomainClubRe
 import upickle.default.*
 
 final case class ClubRelationView(
-    relation: String
+    relation: ClubRelationKind
 ) derives ReadWriter
 
 object ClubRelationView:
   def fromDomain(relation: DomainClubRelation): ClubRelationView =
-    ClubRelationView(relation = relation.relation.toString)
+    ClubRelationView(relation = relation.relation)

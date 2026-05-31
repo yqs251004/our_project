@@ -1,11 +1,12 @@
 package riichinexus.microservices.tournament.api
 
+import riichinexus.microservices.tournament.objects.{TournamentStatus}
+
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.microservices.tournament.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.tournament.objects.apiTypes.*
 import riichinexus.microservices.tournament.objects.apiTypes.*
 import riichinexus.microservices.tournament.objects.apiTypes.AssignTournamentAdminRequest.given
 import riichinexus.microservices.tournament.tables.tournament.TournamentTable
@@ -49,7 +50,7 @@ final case class TournamentListAPIMessage(
     TournamentTable
       .findFiltered(
         context.connection,
-        status = resolved.query.status.map(_.toDomain),
+        status = resolved.query.status,
         adminId = resolved.query.adminId,
         organizer = resolved.query.organizer
       )

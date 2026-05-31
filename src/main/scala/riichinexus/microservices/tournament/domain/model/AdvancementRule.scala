@@ -3,7 +3,7 @@ package riichinexus.microservices.tournament.domain.model
 import java.time.Instant
 
 import riichinexus.domain.model.*
-import riichinexus.microservices.tournament.objects.SeatWind
+import riichinexus.microservices.tournament.objects.{AdvancementRuleType, TournamentFormat}
 
 final case class AdvancementRule(
     ruleType: AdvancementRuleType,
@@ -15,16 +15,16 @@ final case class AdvancementRule(
 ) derives CanEqual
 
 object AdvancementRule:
-  def defaultFor(format: StageFormat): AdvancementRule =
+  def defaultFor(format: TournamentFormat): AdvancementRule =
     format match
-      case StageFormat.Swiss =>
+      case TournamentFormat.Swiss =>
         AdvancementRule(AdvancementRuleType.SwissCut, cutSize = Some(16))
-      case StageFormat.Knockout =>
+      case TournamentFormat.Knockout =>
         AdvancementRule(AdvancementRuleType.KnockoutElimination, targetTableCount = Some(1))
-      case StageFormat.RoundRobin =>
+      case TournamentFormat.RoundRobin =>
         AdvancementRule(AdvancementRuleType.ScoreThreshold, thresholdScore = Some(0))
-      case StageFormat.Finals =>
+      case TournamentFormat.Finals =>
         AdvancementRule(AdvancementRuleType.KnockoutElimination, targetTableCount = Some(1))
-      case StageFormat.Custom =>
+      case TournamentFormat.Custom =>
         AdvancementRule(AdvancementRuleType.Custom, note = Some("custom policy"))
 

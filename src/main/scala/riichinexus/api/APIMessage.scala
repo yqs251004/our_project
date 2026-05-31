@@ -7,7 +7,7 @@ import riichinexus.api.runtime.ApiPlanSupport
 import riichinexus.domain.service.AuthenticationFailure
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.auth.objects.CurrentSessionView
+import riichinexus.microservices.auth.objects.apiTypes.CurrentSessionView
 import upickle.default.*
 
 import scala.reflect.ClassTag

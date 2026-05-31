@@ -5,7 +5,6 @@ import upickle.default.*
 import java.time.Instant
 
 import riichinexus.domain.model.TournamentId
-import riichinexus.microservices.tournament.domain.model.{TournamentStatus as DomainTournamentStatus}
 import riichinexus.microservices.tournament.objects.TournamentStatus
 
 final case class TournamentDetailView(
@@ -28,7 +27,7 @@ object TournamentDetailView:
       tournamentId: TournamentId,
       name: String,
       organizer: String,
-      status: DomainTournamentStatus,
+      status: TournamentStatus,
       startsAt: Instant,
       endsAt: Instant,
       participatingClubs: Vector[TournamentParticipantClubView],
@@ -40,7 +39,7 @@ object TournamentDetailView:
       tournamentId = tournamentId.value,
       name = name,
       organizer = organizer,
-      status = TournamentStatus.fromDomain(status),
+      status = status,
       startsAt = startsAt.toString,
       endsAt = endsAt.toString,
       participatingClubs = participatingClubs,

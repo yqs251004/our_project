@@ -1,13 +1,14 @@
 package riichinexus.microservices.tournament.domain.model
 
 import riichinexus.domain.model.IdGenerator
+import riichinexus.microservices.tournament.objects.TournamentFormat
 
 object TournamentDefaults:
   def initialStage(): TournamentStage =
     TournamentStage(
       id = IdGenerator.stageId(),
       name = "Swiss Stage 1",
-      format = StageFormat.Swiss,
+      format = TournamentFormat.Swiss,
       order = 1,
       roundCount = 4
     )

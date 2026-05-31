@@ -4,7 +4,6 @@ import upickle.default.*
 
 import riichinexus.domain.model.TournamentStageId
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.tournament.domain.model.{StageFormat, StageStatus as DomainStageStatus}
 import riichinexus.microservices.tournament.objects.{StageStatus, TournamentFormat}
 
 final case class TournamentStageDirectoryEntry(
@@ -26,9 +25,9 @@ object TournamentStageDirectoryEntry:
   def apply(
       stageId: TournamentStageId,
       name: String,
-      format: StageFormat,
+      format: TournamentFormat,
       order: Int,
-      status: DomainStageStatus,
+      status: StageStatus,
       currentRound: Int,
       roundCount: Int,
       schedulingPoolSize: Int,
@@ -38,9 +37,9 @@ object TournamentStageDirectoryEntry:
     TournamentStageDirectoryEntry(
       stageId = stageId.value,
       name = name,
-      format = TournamentFormat.fromStageFormat(format),
+      format = format,
       order = order,
-      status = StageStatus.fromDomain(status),
+      status = status,
       currentRound = currentRound,
       roundCount = roundCount,
       schedulingPoolSize = schedulingPoolSize,

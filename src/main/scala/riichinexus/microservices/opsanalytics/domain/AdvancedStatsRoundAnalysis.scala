@@ -1,5 +1,7 @@
 package riichinexus.microservices.opsanalytics.domain
 
+import riichinexus.microservices.tournament.objects.{HandOutcome, PaifuActionType}
+
 import java.time.Instant
 
 import riichinexus.domain.model.*

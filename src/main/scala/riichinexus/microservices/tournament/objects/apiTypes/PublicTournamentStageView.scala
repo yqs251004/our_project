@@ -1,12 +1,14 @@
 package riichinexus.microservices.tournament.objects.apiTypes
 
+import riichinexus.microservices.tournament.objects.{AdvancementRuleType, StageStatus, TournamentFormat}
+
 import riichinexus.domain.model.*
 import riichinexus.microservices.tournament.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.tournament.objects.{
   KnockoutBracketSnapshot,
-  StageStatus as ApiStageStatus,
   StageRankingSnapshot,
+  StageStatus,
   TournamentFormat
 }
 import upickle.default.*
@@ -16,7 +18,7 @@ final case class PublicTournamentStageView(
     name: String,
     format: TournamentFormat,
     order: Int,
-    status: ApiStageStatus,
+    status: StageStatus,
     currentRound: Int,
     roundCount: Int,
     schedulingPoolSize: Int,
@@ -36,7 +38,7 @@ object PublicTournamentStageView:
   def apply(
       stageId: TournamentStageId,
       name: String,
-      format: StageFormat,
+      format: TournamentFormat,
       order: Int,
       status: StageStatus,
       currentRound: Int,
@@ -54,9 +56,9 @@ object PublicTournamentStageView:
     PublicTournamentStageView(
       stageId = stageId.value,
       name = name,
-      format = TournamentFormat.fromStageFormat(format),
+      format = format,
       order = order,
-      status = ApiStageStatus.fromDomain(status),
+      status = status,
       currentRound = currentRound,
       roundCount = roundCount,
       schedulingPoolSize = schedulingPoolSize,

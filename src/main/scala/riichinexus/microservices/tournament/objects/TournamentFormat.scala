@@ -1,7 +1,5 @@
 package riichinexus.microservices.tournament.objects
 
-import riichinexus.microservices.tournament.domain.model.StageFormat
-
 enum TournamentFormat:
   case Swiss
   case Knockout
@@ -27,19 +25,3 @@ object TournamentFormat:
       case "Finals" => Right(TournamentFormat.Finals)
       case "Custom" => Right(TournamentFormat.Custom)
       case other => Left(s"Unsupported TournamentFormat value: $other")
-
-  def fromStageFormat(format: StageFormat): TournamentFormat =
-    format match
-      case StageFormat.Swiss      => TournamentFormat.Swiss
-      case StageFormat.Knockout   => TournamentFormat.Knockout
-      case StageFormat.RoundRobin => TournamentFormat.RoundRobin
-      case StageFormat.Finals     => TournamentFormat.Finals
-      case StageFormat.Custom     => TournamentFormat.Custom
-
-  def toStageFormat(format: TournamentFormat): StageFormat =
-    format match
-      case TournamentFormat.Swiss      => StageFormat.Swiss
-      case TournamentFormat.Knockout   => StageFormat.Knockout
-      case TournamentFormat.RoundRobin => StageFormat.RoundRobin
-      case TournamentFormat.Finals     => StageFormat.Finals
-      case TournamentFormat.Custom     => StageFormat.Custom

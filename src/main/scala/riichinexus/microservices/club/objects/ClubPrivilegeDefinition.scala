@@ -4,7 +4,7 @@ import riichinexus.microservices.club.domain.model.{ClubPrivilegeDefinition as D
 import upickle.default.*
 
 final case class ClubPrivilegeDefinition(
-    code: String,
+    code: ClubPrivilegeCode,
     label: String,
     description: String,
     delegatedPermissions: Vector[String]

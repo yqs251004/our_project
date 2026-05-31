@@ -5,6 +5,7 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.{ClubId, Permission, PlayerId}
 import riichinexus.microservices.auth.domain.model.AccessPrincipal
 import riichinexus.microservices.club.domain.model.*
+import riichinexus.microservices.club.objects.ClubRelationKind
 import riichinexus.microservices.club.tables.club.ClubTable
 import riichinexus.microservices.player.objects.{Player, PlayerStatus}
 import riichinexus.microservices.player.tables.player.PlayerTable
@@ -14,7 +15,7 @@ import upickle.default.*
 
 final case class ListPublicClubsAPIMessage(
     name: Option[String] = None,
-    relation: Option[String] = None,
+    relation: Option[ClubRelationKind] = None,
     limit: Option[Int] = None,
     offset: Option[Int] = None
 ) extends APIMessage[PagedResponse[PublicClubDirectoryEntry]] derives ReadWriter:
@@ -34,12 +35,10 @@ final case class ListPublicClubsAPIMessage(
       .requirePermission(AccessPrincipal.guest(), Permission.ViewClubDirectory)
     ResolvedClubDirectoryQuery(
       name = name.filter(_.nonEmpty),
-      relation = relation.filter(_.nonEmpty).map(
-        context.support.parseEnum("relation", _)(ClubRelationKind.valueOf)
-      ),
+      relation = relation,
       appliedFilters = Vector(
         name.filter(_.nonEmpty).map("name" -> _),
-        relation.filter(_.nonEmpty).map("relation" -> _)
+        relation.map(value => "relation" -> value.toString)
       ).flatten.toMap
     )
 
@@ -110,7 +109,7 @@ final case class ListPublicClubsAPIMessage(
   ): Vector[PublicClubDirectoryEntry] =
     entries
       .filter(club => query.name.forall(context.support.containsIgnoreCase(club.name, _)))
-      .filter(club => query.relation.forall(relationKind => club.relations.exists(_.relation == relationKind.toString)))
+      .filter(club => query.relation.forall(relationKind => club.relations.exists(_.relation == relationKind)))
       .sortBy(_.name)
 
   private def round2(value: Double): Double =

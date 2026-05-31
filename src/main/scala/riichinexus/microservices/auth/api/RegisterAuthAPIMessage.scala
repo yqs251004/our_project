@@ -41,7 +41,7 @@ final case class RegisterAuthAPIMessage(
         }
       }
     yield AuthSuccessResponse.fromView(
-      riichinexus.microservices.auth.objects.AuthSuccessView(
+      riichinexus.microservices.auth.objects.apiTypes.AuthSuccessView(
         userId = result.player.id.value,
         username = result.username,
         displayName = result.player.nickname,

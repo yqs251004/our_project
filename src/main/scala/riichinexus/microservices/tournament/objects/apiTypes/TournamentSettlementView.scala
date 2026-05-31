@@ -1,5 +1,7 @@
 package riichinexus.microservices.tournament.objects.apiTypes
 
+import riichinexus.microservices.tournament.objects.{TournamentSettlementStatus}
+
 import riichinexus.domain.model.*
 import riichinexus.microservices.tournament.domain.model.TournamentSettlementSnapshot
 import riichinexus.infrastructure.json.JsonCodecs.given
@@ -32,7 +34,7 @@ object TournamentSettlementView:
       tournamentId = snapshot.tournamentId.value,
       stageId = snapshot.stageId.value,
       revision = snapshot.revision,
-      status = TournamentSettlementStatus.fromDomain(snapshot.status),
+      status = snapshot.status,
       generatedAt = snapshot.generatedAt.toString,
       finalizedAt = snapshot.finalizedAt.map(_.toString),
       supersededAt = snapshot.supersededAt.map(_.toString),

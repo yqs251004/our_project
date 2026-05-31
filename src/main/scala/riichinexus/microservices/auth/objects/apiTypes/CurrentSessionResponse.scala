@@ -1,12 +1,6 @@
 package riichinexus.microservices.auth.objects.apiTypes
 
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.auth.objects.{
-  CurrentSessionGuestSessionView,
-  CurrentSessionPlayerView,
-  CurrentSessionRoleFlags,
-  CurrentSessionView
-}
 import upickle.default.*
 
 final case class CurrentSessionResponse(

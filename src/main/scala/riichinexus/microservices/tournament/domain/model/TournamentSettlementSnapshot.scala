@@ -1,5 +1,7 @@
 package riichinexus.microservices.tournament.domain.model
 
+import riichinexus.microservices.tournament.objects.{TournamentSettlementStatus}
+
 import java.time.Instant
 
 import riichinexus.domain.model.{PlayerId, SettlementSnapshotId, TournamentId, TournamentStageId}

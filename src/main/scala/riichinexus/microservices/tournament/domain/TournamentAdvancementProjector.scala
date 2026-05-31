@@ -1,5 +1,7 @@
 package riichinexus.microservices.tournament.domain
 
+import riichinexus.microservices.tournament.objects.{AdvancementRuleType}
+
 import java.time.Instant
 
 import riichinexus.domain.model.*

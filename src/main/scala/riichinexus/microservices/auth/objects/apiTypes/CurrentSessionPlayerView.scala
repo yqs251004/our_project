@@ -1,4 +1,4 @@
-package riichinexus.microservices.auth.objects
+package riichinexus.microservices.auth.objects.apiTypes
 
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.player.objects.Player

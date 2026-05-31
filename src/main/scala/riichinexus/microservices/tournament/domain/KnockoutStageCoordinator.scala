@@ -11,7 +11,7 @@ import riichinexus.microservices.player.objects.*
 import riichinexus.application.ports.TransactionManager
 import riichinexus.microservices.club.tables.club.ClubTable
 import riichinexus.microservices.player.tables.player.PlayerTable
-import riichinexus.microservices.tournament.objects.SeatWind
+import riichinexus.microservices.tournament.objects.{SeatWind, TableStatus, TournamentStatus}
 import riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTable
 import riichinexus.microservices.tournament.tables.tournament.TournamentTable
 import riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable

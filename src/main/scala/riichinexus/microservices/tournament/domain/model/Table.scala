@@ -5,7 +5,7 @@ import java.util.NoSuchElementException
 
 import riichinexus.domain.model.*
 import riichinexus.microservices.tournament.appeal.domain.model.AppealTableResolution
-import riichinexus.microservices.tournament.objects.SeatWind
+import riichinexus.microservices.tournament.objects.{SeatWind, TableStatus}
 
 final case class Table(
     id: TableId,

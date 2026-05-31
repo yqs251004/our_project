@@ -12,6 +12,7 @@ import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.auth.domain.*
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.club.objects.ClubRelationKind
 import riichinexus.microservices.club.domain.ClubAuthorization
 import riichinexus.microservices.club.objects.ClubView
 import upickle.default.*
@@ -20,7 +21,7 @@ final case class UpdateClubRelationAPIMessage(
     clubId: String,
     operatorId: String,
     targetClubId: String,
-    relation: String,
+    relation: ClubRelationKind,
     note: Option[String] = None
 ) extends APIMessage[ClubView] derives ReadWriter:
 
@@ -35,7 +36,7 @@ final case class UpdateClubRelationAPIMessage(
         actor = actor,
         relation = ClubRelation(
           targetClubId = ClubId(targetClubId),
-          relation = ClubRelationKind.valueOf(relation),
+          relation = relation,
           updatedAt = relationUpdatedAt,
           note = note
         ),

@@ -1,5 +1,7 @@
 package riichinexus.microservices.tournament.api
 
+import riichinexus.microservices.tournament.objects.{StageStatus, TournamentStatus}
+
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*

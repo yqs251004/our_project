@@ -3,6 +3,7 @@ package riichinexus.microservices.club.domain.model
 import java.time.Instant
 
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.objects.{ClubDefaultRank, ClubPrivilegeCode}
 
 final case class Club(
     id: ClubId,
@@ -116,11 +117,11 @@ final case class Club(
         .getOrElse(rankTree.head)
     }
 
-  def privilegesFor(playerId: PlayerId): Vector[String] =
+  def privilegesFor(playerId: PlayerId): Vector[ClubPrivilegeCode] =
     rankFor(playerId).map(_.privileges).getOrElse(Vector.empty)
 
-  def hasPrivilege(playerId: PlayerId, privilege: String): Boolean =
-    privilegesFor(playerId).contains(ClubPrivilege.normalize(privilege))
+  def hasPrivilege(playerId: PlayerId, privilege: ClubPrivilegeCode): Boolean =
+    privilegesFor(playerId).contains(privilege)
 
   def memberPrivilegeSnapshot(playerId: PlayerId): Option[ClubMemberPrivilegeSnapshot] =
     rankFor(playerId).map { rank =>
@@ -154,10 +155,8 @@ final case class Club(
     require(nodes.nonEmpty, "Club rank tree cannot be empty")
     val normalizedNodes = nodes.map { node =>
       val normalizedPrivileges = node.privileges
-        .map(ClubPrivilegeRegistry.requireSupported)
-        .filter(_.nonEmpty)
         .distinct
-        .sorted
+        .sortBy(_.wireValue)
       node.copy(
         code = node.code.trim,
         label = node.label.trim,
@@ -203,9 +202,6 @@ final case class Club(
 
 object Club:
   val defaultRankTree: Vector[ClubRankNode] =
-    Vector(
-      ClubRankNode("rookie", "萌新", minimumContribution = 0),
-      ClubRankNode("member", "同伴", minimumContribution = 500),
-      ClubRankNode("core", "主力", minimumContribution = 1500),
-      ClubRankNode("ace", "王牌", minimumContribution = 3000)
+    ClubDefaultRank.all.map(rank =>
+      ClubRankNode(rank.code, rank.label, rank.minimumContribution)
     )

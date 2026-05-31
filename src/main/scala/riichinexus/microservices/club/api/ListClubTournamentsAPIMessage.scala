@@ -15,6 +15,7 @@ import riichinexus.microservices.club.domain.ClubAuthorization
 import riichinexus.microservices.club.objects.ClubTournamentParticipationStatus
 import riichinexus.microservices.club.objects.apiTypes.ClubTournamentParticipationView
 import riichinexus.microservices.club.objects.apiTypes.*
+import riichinexus.microservices.tournament.objects.{StageStatus, TournamentStatus}
 import riichinexus.microservices.club.tables.club.ClubTable
 import riichinexus.microservices.tournament.tables.tournament.TournamentTable
 import riichinexus.system.objects.PagedResponse

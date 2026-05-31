@@ -1,5 +1,7 @@
 package riichinexus.microservices.tournament.api
 
+import riichinexus.microservices.tournament.objects.{AdvancementRuleType, TournamentFormat}
+
 import java.util.NoSuchElementException
 import java.time.Instant
 
@@ -63,8 +65,8 @@ final case class TournamentStageAdvanceAPIMessage(tournamentId: String, stageId:
 
   private def ensureKnockoutStage(stage: TournamentStage, stageId: TournamentStageId): Unit =
     val isKnockoutStage =
-      stage.format == StageFormat.Knockout ||
-        stage.format == StageFormat.Finals ||
+      stage.format == TournamentFormat.Knockout ||
+        stage.format == TournamentFormat.Finals ||
         stage.advancementRule.ruleType == AdvancementRuleType.KnockoutElimination
     if !isKnockoutStage then
       throw IllegalArgumentException(

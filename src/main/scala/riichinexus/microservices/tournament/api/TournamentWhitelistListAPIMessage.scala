@@ -1,5 +1,7 @@
 package riichinexus.microservices.tournament.api
 
+import riichinexus.microservices.tournament.objects.{TournamentParticipantKind}
+
 import java.util.NoSuchElementException
 
 import cats.effect.IO

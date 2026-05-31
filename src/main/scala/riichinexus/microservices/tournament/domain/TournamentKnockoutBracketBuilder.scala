@@ -1,5 +1,7 @@
 package riichinexus.microservices.tournament.domain
 
+import riichinexus.microservices.tournament.objects.{AdvancementRuleType, KnockoutLane, TableStatus, TournamentFormat}
+
 import java.time.Instant
 
 import riichinexus.domain.model.*
@@ -17,8 +19,8 @@ private[domain] object TournamentKnockoutBracketBuilder:
       at: Instant
   ): KnockoutBracketSnapshot =
     val isKnockoutStage =
-      stage.format == StageFormat.Knockout ||
-        stage.format == StageFormat.Finals ||
+      stage.format == TournamentFormat.Knockout ||
+        stage.format == TournamentFormat.Finals ||
         stage.advancementRule.ruleType == AdvancementRuleType.KnockoutElimination
 
     if !isKnockoutStage then

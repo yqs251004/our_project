@@ -1,5 +1,7 @@
 package riichinexus.microservices.tournament.domain
 
+import riichinexus.microservices.tournament.objects.{HandOutcome, PaifuActionType}
+
 import java.sql.Connection
 
 import riichinexus.application.changes.{DomainChange, DomainChangeInterpreter}

@@ -10,7 +10,6 @@ import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.player.objects.*
 import riichinexus.microservices.club.tables.club.ClubTable
 import riichinexus.microservices.player.tables.player.PlayerTable
-import riichinexus.microservices.tournament.objects.apiTypes.StageTableQuery
 import riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTable
 import riichinexus.microservices.tournament.tables.tournament.TournamentTable
 import riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable
@@ -59,7 +58,7 @@ object TournamentStageQueries:
       stage = context.stage,
       participants = context.participants,
       records = context.records,
-      tables = listStageTables(connection, tournamentId, stageId, StageTableQuery()),
+      tables = stageTables(connection, tournamentId, stageId),
       at = at
     )
 
@@ -121,14 +120,10 @@ object TournamentStageQueries:
       playersById.get(playerId).filter(_.status == PlayerStatus.Active)
     }
 
-  private def listStageTables(
+  private def stageTables(
       connection: Connection,
       tournamentId: TournamentId,
-      stageId: TournamentStageId,
-      query: StageTableQuery
+      stageId: TournamentStageId
   ): Vector[Table] =
     TournamentGameTable.findByTournamentAndStage(connection, tournamentId, stageId)
-      .filter(table => query.status.forall(_.toDomain == table.status))
-      .filter(table => query.roundNumber.forall(_ == table.stageRoundNumber))
-      .filter(table => query.playerId.forall(playerId => table.seats.exists(_.playerId == playerId)))
       .sortBy(table => (table.stageRoundNumber, table.tableNo, table.id.value))
