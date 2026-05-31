@@ -8,9 +8,9 @@ import java.util.NoSuchElementException
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.application.changes.{DomainChange, DomainChangeInterpreter}
 import riichinexus.bootstrap.PlatformAdminModuleContext
-import riichinexus.domain.event.ClubDissolved
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
+import riichinexus.microservices.club.domain.ClubDissolved
 import riichinexus.microservices.club.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.tables.club.ClubTable

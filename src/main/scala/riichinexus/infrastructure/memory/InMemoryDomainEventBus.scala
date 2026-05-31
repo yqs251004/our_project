@@ -1,7 +1,7 @@
 package riichinexus.infrastructure.memory
 
 import riichinexus.application.ports.*
-import riichinexus.domain.event.DomainEvent
+import riichinexus.application.ports.DomainEvent
 
 final class InMemoryDomainEventBus(
     initialSubscribers: Vector[DomainEventSubscriber] = Vector.empty

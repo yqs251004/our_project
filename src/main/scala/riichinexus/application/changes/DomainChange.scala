@@ -1,7 +1,7 @@
 package riichinexus.application.changes
 
 import riichinexus.application.ports.*
-import riichinexus.domain.event.DomainEvent
+import riichinexus.application.ports.DomainEvent
 import riichinexus.domain.model.*
 
 final case class DomainChange[A](

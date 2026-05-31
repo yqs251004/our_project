@@ -6,7 +6,6 @@ import java.sql.Connection
 
 import riichinexus.application.changes.{DomainChange, DomainChangeInterpreter}
 import riichinexus.application.ports.{AuditEventRepository, DomainEventBus, TransactionManager}
-import riichinexus.domain.event.*
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.AuthorizationPolicy
 import riichinexus.microservices.auth.domain.model.*

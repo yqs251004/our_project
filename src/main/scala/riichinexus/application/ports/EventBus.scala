@@ -3,8 +3,10 @@ package riichinexus.application.ports
 import java.sql.Connection
 import java.time.Instant
 
-import riichinexus.domain.event.DomainEvent
 import riichinexus.domain.model.DomainEventOutboxRecord
+
+trait DomainEvent:
+  def occurredAt: Instant
 
 enum DomainEventSubscriberPartitionStrategy derives CanEqual:
   case Global

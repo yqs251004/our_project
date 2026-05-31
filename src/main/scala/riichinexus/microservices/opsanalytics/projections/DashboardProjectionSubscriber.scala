@@ -4,7 +4,7 @@ import java.sql.Connection
 import java.time.Instant
 
 import riichinexus.application.ports.{DomainEventSubscriber, DomainEventSubscriberPartitionStrategy}
-import riichinexus.domain.event.*
+import riichinexus.application.ports.DomainEvent
 import riichinexus.domain.model.*
 import riichinexus.microservices.tournament.domain.model.*
 import riichinexus.microservices.club.domain.model.*
@@ -14,6 +14,7 @@ import riichinexus.microservices.opsanalytics.objects.{Dashboard, DashboardOwner
 import riichinexus.microservices.club.tables.club.ClubTable
 import riichinexus.microservices.opsanalytics.tables.dashboard.DashboardTable
 import riichinexus.microservices.player.tables.player.PlayerTable
+import riichinexus.microservices.tournament.domain.MatchRecordArchived
 import riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTable
 import riichinexus.microservices.tournament.tables.paifu.PaifuTable
 

@@ -3,9 +3,10 @@ package riichinexus.microservices.opsanalytics.projections
 import java.sql.Connection
 
 import riichinexus.application.ports.{DomainEventSubscriber, DomainEventSubscriberPartitionStrategy}
-import riichinexus.domain.event.*
+import riichinexus.application.ports.DomainEvent
 import riichinexus.microservices.opsanalytics.domain.RatingService
 import riichinexus.microservices.player.tables.player.PlayerTable
+import riichinexus.microservices.tournament.domain.MatchRecordArchived
 
 final class RatingProjectionSubscriber extends DomainEventSubscriber:
   override def partitionStrategy: DomainEventSubscriberPartitionStrategy =

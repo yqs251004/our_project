@@ -6,7 +6,7 @@ import java.util.NoSuchElementException
 
 import riichinexus.application.ports.{DomainEventSubscriber, DomainEventSubscriberPartitionStrategy}
 import riichinexus.application.ports.*
-import riichinexus.domain.event.*
+import riichinexus.application.ports.DomainEvent
 import riichinexus.domain.model.*
 import riichinexus.microservices.tournament.domain.model.*
 import riichinexus.microservices.club.domain.model.*
@@ -17,6 +17,7 @@ import riichinexus.microservices.club.tables.club.ClubTable
 import riichinexus.microservices.opsanalytics.tables.advancedstatsboard.AdvancedStatsBoardTable
 import riichinexus.microservices.opsanalytics.tables.advancedstatsrecomputetask.AdvancedStatsRecomputeTaskTable
 import riichinexus.microservices.player.tables.player.PlayerTable
+import riichinexus.microservices.tournament.domain.MatchRecordArchived
 import riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTable
 import riichinexus.microservices.tournament.tables.paifu.PaifuTable
 

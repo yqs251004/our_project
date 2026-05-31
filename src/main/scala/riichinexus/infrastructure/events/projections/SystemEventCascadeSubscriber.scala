@@ -4,11 +4,13 @@ import java.sql.Connection
 import java.time.Instant
 
 import riichinexus.application.ports.*
-import riichinexus.domain.event.*
+import riichinexus.application.ports.DomainEvent
 import riichinexus.domain.model.*
+import riichinexus.microservices.club.domain.ClubDissolved
 import riichinexus.microservices.tournament.domain.model.*
 import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.player.objects.*
+import riichinexus.microservices.player.domain.PlayerBanned
 import riichinexus.microservices.opsanalytics.domain.AdvancedStatsRoundAnalysis
 import riichinexus.microservices.club.domain.ClubPowerRatingService
 import riichinexus.microservices.club.tables.club.ClubTable
@@ -16,6 +18,8 @@ import riichinexus.microservices.opsanalytics.objects.{AdvancedStatsBoard, Dashb
 import riichinexus.microservices.opsanalytics.tables.advancedstatsboard.AdvancedStatsBoardTable
 import riichinexus.microservices.opsanalytics.tables.dashboard.DashboardTable
 import riichinexus.microservices.player.tables.player.PlayerTable
+import riichinexus.microservices.tournament.appeal.domain.*
+import riichinexus.microservices.tournament.domain.TournamentSettlementRecorded
 import riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTable
 import riichinexus.microservices.tournament.tables.paifu.PaifuTable
 

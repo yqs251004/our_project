@@ -8,9 +8,9 @@ import java.util.NoSuchElementException
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.application.changes.{DomainChange, DomainChangeInterpreter}
 import riichinexus.bootstrap.PlatformAdminModuleContext
-import riichinexus.domain.event.PlayerBanned
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
+import riichinexus.microservices.player.domain.PlayerBanned
 import riichinexus.microservices.player.objects.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.player.tables.player.PlayerTable

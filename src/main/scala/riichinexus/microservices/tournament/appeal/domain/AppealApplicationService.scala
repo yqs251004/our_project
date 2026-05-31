@@ -8,7 +8,6 @@ import java.util.NoSuchElementException
 
 import riichinexus.application.changes.{DomainChange, DomainChangeInterpreter}
 import riichinexus.application.ports.*
-import riichinexus.domain.event.*
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.tournament.appeal.domain.model.*

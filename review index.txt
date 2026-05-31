@@ -208,3 +208,7 @@ domain：微服务内部业务逻辑/业务服务
 projections：读模型/派生视图/查询投影
 它一般不是核心写模型，而是为了查询、页面展示、统计、索引，把多个 aggregate 或事件整理成更适合读的结构。
 比如“公共大厅需要看的赛事摘要”“某个列表页的聚合展示”“从 domain event 派生出的状态”。projection 的特点是：它服务读侧，通常可以重建，不应该作为唯一事实来源。
+
+150+行，服务 6 个 API 的 *ViewAssembler 应该放在哪里
+domain 的存在合理吗，domain/ domain/model 的边界又是什么
+下面有 *Coordinator，领域文件，*Services

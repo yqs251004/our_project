@@ -5,7 +5,7 @@ import riichinexus.microservices.tournament.objects.{HandOutcome, PaifuActionTyp
 import java.time.Instant
 import scala.annotation.targetName
 
-import riichinexus.domain.event.*
+import riichinexus.application.ports.DomainEvent
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.tournament.domain.model.*
@@ -13,9 +13,13 @@ import riichinexus.microservices.tournament.appeal.domain.model.*
 import riichinexus.microservices.club.domain.model.*
 import riichinexus.microservices.player.objects.*
 import riichinexus.microservices.auth.objects.{AccountCredential, AuthenticatedSession, Role, SessionPrincipalKind}
+import riichinexus.microservices.club.domain.ClubDissolved
 import riichinexus.microservices.club.objects.{ClubApplicationStatus, ClubPrivilegeCode, ClubRelationKind}
 import riichinexus.microservices.opsanalytics.objects.*
+import riichinexus.microservices.player.domain.PlayerBanned
 import riichinexus.microservices.player.objects.{Player, PlayerStatus, RankPlatform, RankSnapshot}
+import riichinexus.microservices.tournament.appeal.domain.*
+import riichinexus.microservices.tournament.domain.{MatchRecordArchived, TournamentSettlementRecorded}
 import riichinexus.microservices.tournament.objects.{AdvancementRuleType, KnockoutLane, SeatWind, StageStatus, TableStatus, TournamentFormat, TournamentParticipantKind, TournamentStatus}
 import upickle.default.*
 
@@ -371,4 +375,67 @@ object JsonCodecs:
   given ReadWriter[TournamentSettlementRecorded] = macroRW
   given ReadWriter[PlayerBanned] = macroRW
   given ReadWriter[ClubDissolved] = macroRW
-  given ReadWriter[DomainEvent] = macroRW
+  given ReadWriter[DomainEvent] =
+    readwriter[ujson.Value].bimap[DomainEvent](
+      {
+        case event: MatchRecordArchived =>
+          taggedDomainEvent("MatchRecordArchived", event)
+        case event: AppealTicketFiled =>
+          taggedDomainEvent("AppealTicketFiled", event)
+        case event: AppealTicketResolved =>
+          taggedDomainEvent("AppealTicketResolved", event)
+        case event: AppealTicketWorkflowUpdated =>
+          taggedDomainEvent("AppealTicketWorkflowUpdated", event)
+        case event: AppealTicketReopened =>
+          taggedDomainEvent("AppealTicketReopened", event)
+        case event: AppealTicketAdjudicated =>
+          taggedDomainEvent("AppealTicketAdjudicated", event)
+        case event: TournamentSettlementRecorded =>
+          taggedDomainEvent("TournamentSettlementRecorded", event)
+        case event: PlayerBanned =>
+          taggedDomainEvent("PlayerBanned", event)
+        case event: ClubDissolved =>
+          taggedDomainEvent("ClubDissolved", event)
+      },
+      {
+        case obj: ujson.Obj =>
+          val eventType = obj.value
+            .get("eventType")
+            .orElse(obj.value.get("$type"))
+            .map(_.str.split('.').last)
+            .getOrElse(throw upickle.core.Abort("DomainEvent is missing eventType"))
+          val payload = obj.value.get("payload").getOrElse(stripDomainEventType(obj))
+          eventType match
+            case "MatchRecordArchived" =>
+              read[MatchRecordArchived](payload)
+            case "AppealTicketFiled" =>
+              read[AppealTicketFiled](payload)
+            case "AppealTicketResolved" =>
+              read[AppealTicketResolved](payload)
+            case "AppealTicketWorkflowUpdated" =>
+              read[AppealTicketWorkflowUpdated](payload)
+            case "AppealTicketReopened" =>
+              read[AppealTicketReopened](payload)
+            case "AppealTicketAdjudicated" =>
+              read[AppealTicketAdjudicated](payload)
+            case "TournamentSettlementRecorded" =>
+              read[TournamentSettlementRecorded](payload)
+            case "PlayerBanned" =>
+              read[PlayerBanned](payload)
+            case "ClubDissolved" =>
+              read[ClubDissolved](payload)
+            case other =>
+              throw upickle.core.Abort(s"Unknown DomainEvent type: $other")
+        case json =>
+          throw upickle.core.Abort(s"Expected DomainEvent object, got $json")
+      }
+    )
+
+  private def taggedDomainEvent[A: ReadWriter](eventType: String, event: A): ujson.Value =
+    ujson.Obj(
+      "eventType" -> eventType,
+      "payload" -> writeJs(event)
+    )
+
+  private def stripDomainEventType(obj: ujson.Obj): ujson.Obj =
+    ujson.Obj.from(obj.value.filterNot { case (key, _) => key == "$type" || key == "eventType" })

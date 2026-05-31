@@ -8,12 +8,14 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
 import scala.annotation.tailrec
 import riichinexus.application.ports.*
-import riichinexus.domain.event.*
+import riichinexus.application.ports.DomainEvent
 import riichinexus.domain.model.*
-import riichinexus.microservices.tournament.domain.model.*
-import riichinexus.microservices.club.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.infrastructure.postgres.JdbcConnectionFactory
+import riichinexus.microservices.club.domain.ClubDissolved
+import riichinexus.microservices.player.domain.PlayerBanned
+import riichinexus.microservices.tournament.appeal.domain.*
+import riichinexus.microservices.tournament.domain.{MatchRecordArchived, TournamentSettlementRecorded}
 import upickle.default.*
 
 private object DomainEventSerializationSupport:
