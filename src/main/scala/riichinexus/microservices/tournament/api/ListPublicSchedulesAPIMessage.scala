@@ -52,7 +52,7 @@ final case class ListPublicSchedulesAPIMessage(
     )
 
   private def publicTournaments(context: ApiPlanContext): Vector[Tournament] =
-    TournamentTable.findPublic(context.connection)
+    TournamentTable.findFiltered(context.connection, includeDraft = false)
 
   private def lineupPlayersById(
       context: ApiPlanContext,

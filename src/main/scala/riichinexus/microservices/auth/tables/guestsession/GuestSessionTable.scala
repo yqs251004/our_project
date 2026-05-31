@@ -1,7 +1,6 @@
 package riichinexus.microservices.auth.tables.guestsession
 
 import java.sql.{Connection, ResultSet, Timestamp}
-import java.time.Instant
 
 import scala.annotation.tailrec
 import scala.util.Using
@@ -71,15 +70,6 @@ object GuestSessionTable:
     Using.resource(connection.prepareStatement(findAllSql)) { statement =>
       Using.resource(statement.executeQuery())(readSessions)
     }
-
-  private[riichinexus] def list(
-      connection: Connection,
-      activeOnly: Option[Boolean] = None,
-      asOf: Instant = Instant.now()
-  ): Vector[GuestAccessSession] =
-    findAll(connection)
-      .filter(session => activeOnly.forall(flag => !flag || session.canAuthenticate(asOf)))
-      .sortBy(session => (session.createdAt, session.id.value))
 
   private def readSessions(resultSet: ResultSet): Vector[GuestAccessSession] =
     @tailrec

@@ -25,28 +25,28 @@ object AccountCredentialTable:
       |""".stripMargin
 
   private[riichinexus] def save(connection: Connection, credential: AccountCredential): AccountCredential =
-    try persist(connection, credential)
+    def persist(candidate: AccountCredential): AccountCredential =
+      val persisted = candidate.copy(version = candidate.version + 1)
+      val rowsUpdated = Using.resource(connection.prepareStatement(upsertSql)) { statement =>
+        statement.setString(1, persisted.username)
+        statement.setString(2, persisted.playerId.value)
+        statement.setString(3, write[AccountCredential](persisted))
+        statement.setInt(4, candidate.version)
+        statement.executeUpdate()
+      }
+      if rowsUpdated == 0 then
+        throw OptimisticConcurrencyException(
+          aggregateType = "account-credential",
+          aggregateId = persisted.username,
+          expectedVersion = candidate.version,
+          actualVersion = findByUsername(connection, persisted.username).map(_.version)
+        )
+      persisted
+
+    try persist(credential)
     catch
       case error: SQLException if isUniqueViolation(error, "idx_account_credentials_player_id") =>
         throw IllegalArgumentException(s"Player ${credential.playerId.value} already has a registered account")
-
-  private def persist(connection: Connection, credential: AccountCredential): AccountCredential =
-    val persisted = credential.copy(version = credential.version + 1)
-    val rowsUpdated = Using.resource(connection.prepareStatement(upsertSql)) { statement =>
-      statement.setString(1, persisted.username)
-      statement.setString(2, persisted.playerId.value)
-      statement.setString(3, write[AccountCredential](persisted))
-      statement.setInt(4, credential.version)
-      statement.executeUpdate()
-    }
-    if rowsUpdated == 0 then
-      throw OptimisticConcurrencyException(
-        aggregateType = "account-credential",
-        aggregateId = persisted.username,
-        expectedVersion = credential.version,
-        actualVersion = findByUsername(connection, persisted.username).map(_.version)
-      )
-    persisted
 
   private val findByUsernameSql: String =
     """

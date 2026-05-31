@@ -28,34 +28,34 @@ object TournamentTable:
       |""".stripMargin
 
   private[riichinexus] def save(connection: Connection, tournament: Tournament): Tournament =
+    def persist(candidate: Tournament): Tournament =
+      val persisted = candidate.copy(version = candidate.version + 1)
+      val rowsUpdated = Using.resource(connection.prepareStatement(upsertSql)) { statement =>
+        statement.setString(1, persisted.id.value)
+        statement.setString(2, persisted.name)
+        statement.setString(3, persisted.organizer)
+        statement.setString(4, persisted.status.toString)
+        statement.setString(5, write[Tournament](persisted))
+        statement.setInt(6, candidate.version)
+        statement.executeUpdate()
+      }
+      if rowsUpdated == 0 then
+        throw OptimisticConcurrencyException(
+          aggregateType = "tournament",
+          aggregateId = persisted.id.value,
+          expectedVersion = candidate.version,
+          actualVersion = findById(connection, persisted.id).map(_.version)
+        )
+      persisted
+
     val normalizedTournament = TournamentDefaults.ensureInitialStage(tournament)
-    try persist(connection, normalizedTournament)
+    try persist(normalizedTournament)
     catch
       case error: SQLException if isUniqueViolation(error, "idx_tournaments_name_start") =>
         val normalized = findByNameAndOrganizer(connection, tournament.name, tournament.organizer)
           .map(existing => normalizedTournament.copy(id = existing.id, version = existing.version))
           .getOrElse(throw error)
-        persist(connection, normalized)
-
-  private def persist(connection: Connection, tournament: Tournament): Tournament =
-    val persisted = tournament.copy(version = tournament.version + 1)
-    val rowsUpdated = Using.resource(connection.prepareStatement(upsertSql)) { statement =>
-      statement.setString(1, persisted.id.value)
-      statement.setString(2, persisted.name)
-      statement.setString(3, persisted.organizer)
-      statement.setString(4, persisted.status.toString)
-      statement.setString(5, write[Tournament](persisted))
-      statement.setInt(6, tournament.version)
-      statement.executeUpdate()
-    }
-    if rowsUpdated == 0 then
-      throw OptimisticConcurrencyException(
-        aggregateType = "tournament",
-        aggregateId = persisted.id.value,
-        expectedVersion = tournament.version,
-        actualVersion = findById(connection, persisted.id).map(_.version)
-      )
-    persisted
+        persist(normalized)
 
   private val findByIdSql: String =
     """
@@ -164,9 +164,6 @@ object TournamentTable:
       |from tournaments
       |order by updated_at desc
       |""".stripMargin
-
-  private[riichinexus] def findPublic(connection: Connection): Vector[Tournament] =
-    findFiltered(connection, includeDraft = false)
 
   private[riichinexus] def findAll(connection: Connection): Vector[Tournament] =
     Using.resource(connection.prepareStatement(findAllSql)) { statement =>

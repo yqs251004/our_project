@@ -3,7 +3,7 @@ package riichinexus.microservices.club.domain.model
 import java.time.Instant
 
 import riichinexus.domain.model.*
-import riichinexus.microservices.club.objects.{ClubDefaultRank, ClubPrivilegeCode}
+import riichinexus.microservices.club.objects.ClubPrivilegeCode
 
 final case class Club(
     id: ClubId,

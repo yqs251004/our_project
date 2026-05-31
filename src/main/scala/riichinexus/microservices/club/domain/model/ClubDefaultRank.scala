@@ -1,4 +1,4 @@
-package riichinexus.microservices.club.objects
+package riichinexus.microservices.club.domain.model
 
 enum ClubDefaultRank(
     val code: String,

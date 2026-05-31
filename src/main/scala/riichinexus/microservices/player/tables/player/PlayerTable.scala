@@ -32,26 +32,31 @@ object PlayerTable:
       |where cast(players.payload ->> 'version' as integer) = ?
       |""".stripMargin
 
-  private[riichinexus] def upsert(
-      connection: Connection,
-      persisted: Player,
-      expectedVersion: Int
-  ): Int =
-    Using.resource(connection.prepareStatement(upsertSql)) { statement =>
-      statement.setString(1, persisted.id.value)
-      statement.setString(2, persisted.userId)
-      statement.setString(3, persisted.nickname)
-      persisted.clubId match
-        case Some(clubId) => statement.setString(4, clubId.value)
-        case None         => statement.setNull(4, Types.VARCHAR)
-      statement.setInt(5, persisted.elo)
-      statement.setString(6, write[Player](persisted))
-      statement.setInt(7, expectedVersion)
-      statement.executeUpdate()
-    }
-
   private[riichinexus] def save(connection: Connection, player: Player): Player =
-    try persist(connection, player)
+    def persist(candidate: Player): Player =
+      val persisted = candidate.copy(version = candidate.version + 1)
+      val rowsUpdated = Using.resource(connection.prepareStatement(upsertSql)) { statement =>
+        statement.setString(1, persisted.id.value)
+        statement.setString(2, persisted.userId)
+        statement.setString(3, persisted.nickname)
+        persisted.clubId match
+          case Some(clubId) => statement.setString(4, clubId.value)
+          case None         => statement.setNull(4, Types.VARCHAR)
+        statement.setInt(5, persisted.elo)
+        statement.setString(6, write[Player](persisted))
+        statement.setInt(7, candidate.version)
+        statement.executeUpdate()
+      }
+      if rowsUpdated == 0 then
+        throw OptimisticConcurrencyException(
+          aggregateType = "player",
+          aggregateId = persisted.id.value,
+          expectedVersion = candidate.version,
+          actualVersion = findById(connection, persisted.id).map(_.version)
+        )
+      persisted
+
+    try persist(player)
     catch
       case error: SQLException if isUniqueViolation(error, "idx_players_user_id") =>
         val normalized = findByUserId(connection, player.userId)
@@ -63,19 +68,7 @@ object PlayerTable:
             )
           )
           .getOrElse(throw error)
-        persist(connection, normalized)
-
-  private def persist(connection: Connection, player: Player): Player =
-    val persisted = player.copy(version = player.version + 1)
-    val rowsUpdated = upsert(connection, persisted, player.version)
-    if rowsUpdated == 0 then
-      throw OptimisticConcurrencyException(
-        aggregateType = "player",
-        aggregateId = persisted.id.value,
-        expectedVersion = player.version,
-        actualVersion = findById(connection, persisted.id).map(_.version)
-      )
-    persisted
+        persist(normalized)
 
   private val findByIdSql: String =
     """

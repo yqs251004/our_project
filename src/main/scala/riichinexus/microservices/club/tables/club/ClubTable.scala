@@ -26,9 +26,6 @@ object ClubTable:
       |""".stripMargin
 
   private[riichinexus] def save(connection: Connection, club: Club): Club =
-    persist(connection, club)
-
-  private def persist(connection: Connection, club: Club): Club =
     val persisted = club.copy(version = club.version + 1)
     val rowsUpdated = Using.resource(connection.prepareStatement(upsertSql)) { statement =>
       statement.setString(1, persisted.id.value)
