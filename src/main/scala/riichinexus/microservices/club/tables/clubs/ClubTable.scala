@@ -7,7 +7,11 @@ import scala.util.Using
 
 import riichinexus.application.ports.OptimisticConcurrencyException
 import riichinexus.domain.model.*
-import riichinexus.microservices.club.domain.model.*
+import riichinexus.microservices.club.domain.Club
+import riichinexus.microservices.club.domain.clubmanagement.model.*
+import riichinexus.microservices.club.domain.membershipmanagement.model.*
+import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
+import riichinexus.microservices.club.domain.relationmanagement.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.{read, write}
 

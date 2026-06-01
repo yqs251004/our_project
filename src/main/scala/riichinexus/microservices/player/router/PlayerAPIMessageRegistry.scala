@@ -1,4 +1,5 @@
 package riichinexus.microservices.player.router
+import riichinexus.api.functions.RegisteredAPIMessageFunctions
 
 import riichinexus.api.RegisteredAPIMessage
 import riichinexus.infrastructure.json.JsonCodecs.given
@@ -10,9 +11,9 @@ object PlayerAPIMessageRegistry:
 
   val apiMessages: Vector[RegisteredAPIMessage] =
     Vector(
-      RegisteredAPIMessage.created[CreatePlayerAPIMessage, PlayerProfileView],
-      RegisteredAPIMessage.api[GetCurrentPlayerAPIMessage, PlayerProfileView],
-      RegisteredAPIMessage.api[GetPlayerAPIMessage, PlayerProfileView],
-      RegisteredAPIMessage.api[ListPlayersAPIMessage, PagedResponse[PlayerProfileView]],
-      RegisteredAPIMessage.api[PublicPlayerLeaderboardAPIMessage, PagedResponse[PlayerLeaderboardEntry]]
+      RegisteredAPIMessageFunctions.created[CreatePlayerAPIMessage, PlayerProfileView],
+      RegisteredAPIMessageFunctions.api[GetCurrentPlayerAPIMessage, PlayerProfileView],
+      RegisteredAPIMessageFunctions.api[GetPlayerAPIMessage, PlayerProfileView],
+      RegisteredAPIMessageFunctions.api[ListPlayersAPIMessage, PagedResponse[PlayerProfileView]],
+      RegisteredAPIMessageFunctions.api[PublicPlayerLeaderboardAPIMessage, PagedResponse[PlayerLeaderboardEntry]]
     )

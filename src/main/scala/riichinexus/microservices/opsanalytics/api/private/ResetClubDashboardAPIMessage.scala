@@ -6,6 +6,7 @@ import java.time.Instant
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.ClubId
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.opsanalytics.domain.functions.DashboardFunctions
 import riichinexus.microservices.opsanalytics.objects.{Dashboard, DashboardOwner}
 import riichinexus.microservices.opsanalytics.tables.dashboard.DashboardTable
 import upickle.default.*
@@ -21,7 +22,7 @@ final case class ResetClubDashboardAPIMessage(
         val owner = DashboardOwner.Club(clubId)
         DashboardTable.save(
           context.connection,
-          Dashboard.empty(owner, at).copy(
+          DashboardFunctions.empty(owner, at).copy(
             version = DashboardTable.findByOwner(context.connection, owner).map(_.version).getOrElse(0)
           )
         )

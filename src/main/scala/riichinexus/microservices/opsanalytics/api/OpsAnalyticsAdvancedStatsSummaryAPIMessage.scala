@@ -1,4 +1,5 @@
 package riichinexus.microservices.opsanalytics.api
+import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
 
 import java.time.Instant
 
@@ -7,6 +8,7 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.opsanalytics.domain.functions.AdvancedStatsRecomputeTaskFunctions
 import riichinexus.microservices.opsanalytics.objects.{
   AdvancedStatsRecomputeTask,
   AdvancedStatsRecomputeTaskStatus,
@@ -22,7 +24,7 @@ final case class OpsAnalyticsAdvancedStatsSummaryAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[AdvancedStatsTaskQueueSummary] =
     for
-      operator <- IO.blocking(context.principal(operatorId))
+      operator <- IO.blocking(AuthAccessPrincipalResolver.principal(context, operatorId))
       _ <- IO.blocking(requireOpsAdmin(context, operator))
       resolvedAsOf <- resolveAsOf
       tasks <- IO.blocking(AdvancedStatsRecomputeTaskTable.findAll(context.connection))
@@ -35,7 +37,7 @@ final case class OpsAnalyticsAdvancedStatsSummaryAPIMessage(
       case None        => IO.realTimeInstant
 
   private def requireOpsAdmin(context: ApiPlanContext, operator: AccessPrincipal): Unit =
-    context.support.requirePermission(operator, Permission.ManagePlatformOperations)
+    riichinexus.microservices.auth.domain.functions.AuthorizationPolicyFunctions.requirePermission(context.support.authorizationService, operator, Permission.ManagePlatformOperations)
 
   private def buildSummary(
       tasks: Vector[AdvancedStatsRecomputeTask],
@@ -43,7 +45,7 @@ final case class OpsAnalyticsAdvancedStatsSummaryAPIMessage(
   ): AdvancedStatsTaskQueueSummary =
     AdvancedStatsTaskQueueSummary(
       asOf = resolvedAsOf,
-      runnablePendingCount = tasks.count(_.isRunnable(resolvedAsOf)),
+      runnablePendingCount = tasks.count(AdvancedStatsRecomputeTaskFunctions.isRunnable(_, resolvedAsOf)),
       scheduledRetryCount = tasks.count(task =>
         task.status == AdvancedStatsRecomputeTaskStatus.Pending &&
           task.nextAttemptAt.exists(_.isAfter(resolvedAsOf))
@@ -52,7 +54,11 @@ final case class OpsAnalyticsAdvancedStatsSummaryAPIMessage(
       completedCount = tasks.count(_.status == AdvancedStatsRecomputeTaskStatus.Completed),
       failedCount = tasks.count(_.status == AdvancedStatsRecomputeTaskStatus.Failed),
       deadLetterCount = tasks.count(_.status == AdvancedStatsRecomputeTaskStatus.DeadLetter),
-      oldestRunnableRequestedAt = tasks.filter(_.isRunnable(resolvedAsOf)).map(_.requestedAt).sorted.headOption,
+      oldestRunnableRequestedAt = tasks
+        .filter(AdvancedStatsRecomputeTaskFunctions.isRunnable(_, resolvedAsOf))
+        .map(_.requestedAt)
+        .sorted
+        .headOption,
       nextScheduledRetryAt = tasks
         .filter(task => task.status == AdvancedStatsRecomputeTaskStatus.Pending)
         .flatMap(_.nextAttemptAt)

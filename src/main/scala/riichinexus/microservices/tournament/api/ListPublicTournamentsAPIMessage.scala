@@ -7,7 +7,11 @@ import cats.effect.unsafe.implicits.global
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.microservices.club.api.`private`.ResolveClubsPrivateAPIMessage
-import riichinexus.microservices.club.domain.model.*
+import riichinexus.microservices.club.domain.Club
+import riichinexus.microservices.club.domain.clubmanagement.model.*
+import riichinexus.microservices.club.domain.membershipmanagement.model.*
+import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
+import riichinexus.microservices.club.domain.relationmanagement.model.*
 import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.PublicTournamentSummaryView
 import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
 import riichinexus.microservices.tournament.domain.recordmanagement.model.*
@@ -36,7 +40,7 @@ final case class ListPublicTournamentsAPIMessage(
   private def resolveQuery(context: ApiPlanContext): ResolvedPublicTournamentsQuery =
     ResolvedPublicTournamentsQuery(
       status = status.filter(_.nonEmpty).map(
-        context.support.parseEnum("status", _)(TournamentStatus.valueOf)
+        riichinexus.system.functions.EnumParsingFunctions.parse("status", _)(TournamentStatus.valueOf)
       ),
       organizer = organizer.filter(_.nonEmpty),
       appliedFilters = Vector(

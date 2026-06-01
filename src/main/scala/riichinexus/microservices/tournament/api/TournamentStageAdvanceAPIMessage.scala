@@ -1,4 +1,7 @@
 package riichinexus.microservices.tournament.api
+import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
+
+import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
 import riichinexus.microservices.tournament.objects.rulesmanagement.stageprogression.AdvancementRuleType
 import riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentFormat
@@ -23,7 +26,6 @@ import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.*
 import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
@@ -34,7 +36,7 @@ final case class TournamentStageAdvanceAPIMessage(tournamentId: String, stageId:
 
   override def plan(context: ApiPlanContext): IO[Vector[TournamentTableView]] =
     for
-      actor <- IO.blocking(operatorId.filter(_.nonEmpty).map(PlayerId(_)).map(context.principal).getOrElse(AccessPrincipal.system))
+      actor <- IO.blocking(operatorId.filter(_.nonEmpty).map(PlayerId(_)).map(AuthAccessPrincipalResolver.principal(context, _)).getOrElse(AccessPrincipalFunctions.system))
       at <- IO.realTimeInstant
       module = context.support.tournamentModule
       command = AdvanceKnockoutStageCommand(
@@ -61,7 +63,7 @@ final case class TournamentStageAdvanceAPIMessage(tournamentId: String, stageId:
     val stage = tournament.stages
       .find(_.id == command.stageId)
       .getOrElse(throw NoSuchElementException(s"Stage ${command.stageId.value} was not found"))
-    module.authorizationService.requirePermission(
+    AuthorizationPolicyFunctions.requirePermission(module.authorizationService, 
       command.actor,
       Permission.ManageTournamentStages,
       tournamentId = Some(command.tournamentId)

@@ -1,4 +1,5 @@
 package riichinexus.microservices.club.api
+import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
 
 import java.time.Instant
 import java.util.NoSuchElementException
@@ -7,10 +8,14 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.club.domain.model.*
+import riichinexus.microservices.club.domain.Club
+import riichinexus.microservices.club.domain.clubmanagement.model.*
+import riichinexus.microservices.club.domain.membershipmanagement.model.*
+import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
+import riichinexus.microservices.club.domain.relationmanagement.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubApplicationReviewer
-import riichinexus.microservices.club.objects.ClubView
+import riichinexus.microservices.club.objects.clubmanagement.ClubView
 import upickle.default.*
 
 final case class ApproveClubApplicationAPIMessage(
@@ -23,7 +28,7 @@ final case class ApproveClubApplicationAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
-      actor <- IO.blocking(context.principal(PlayerId(operatorId)))
+      actor <- IO.blocking(AuthAccessPrincipalResolver.principal(context, PlayerId(operatorId)))
       approvedAt <- IO.realTimeInstant
       module = context.support.clubModule
       command = ApproveClubApplicationCommand(

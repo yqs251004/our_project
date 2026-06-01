@@ -1,5 +1,9 @@
 package riichinexus.microservices.platformadmin.api
+import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
 
+import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+
+import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import cats.effect.unsafe.implicits.global
 import cats.effect.IO
 
@@ -11,10 +15,15 @@ import riichinexus.application.changes.{DomainChange, DomainChangeInterpreter}
 import riichinexus.bootstrap.PlatformAdminModuleContext
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.club.domain.ClubDissolved
-import riichinexus.microservices.club.domain.model.*
+import riichinexus.microservices.club.domain.clubmanagement.model.ClubDissolved
+import riichinexus.microservices.club.domain.Club
+import riichinexus.microservices.club.domain.clubmanagement.model.*
+import riichinexus.microservices.club.domain.membershipmanagement.model.*
+import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
+import riichinexus.microservices.club.domain.relationmanagement.model.*
 import riichinexus.microservices.club.api.`private`.{ListClubsPrivateAPIMessage, ResolveClubPrivateAPIMessage, ResolveClubsPrivateAPIMessage, SaveClubPrivateAPIMessage}
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.player.domain.functions.{PlayerClubBindingFunctions, PlayerRoleFunctions}
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import riichinexus.microservices.platformadmin.objects.apiTypes.PlatformAdminClubView
 import riichinexus.microservices.platformadmin.objects.apiTypes.*
@@ -27,7 +36,7 @@ final case class PlatformAdminDissolveClubAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[PlatformAdminClubView] =
     for
-      actor <- IO.blocking(context.principal(operatorId))
+      actor <- IO.blocking(AuthAccessPrincipalResolver.principal(context, operatorId))
       module = context.support.platformAdminModule
       request = DissolveClubRequest(operatorId = operatorId)
       dissolvedAt <- IO.realTimeInstant
@@ -50,7 +59,7 @@ final case class PlatformAdminDissolveClubAPIMessage(
       module: PlatformAdminModuleContext,
       command: DissolveClubCommand
   ): Option[Club] =
-    module.authorizationService.requirePermission(command.actor, Permission.DissolveClub)
+    AuthorizationPolicyFunctions.requirePermission(module.authorizationService, command.actor, Permission.DissolveClub)
     ResolveClubPrivateAPIMessage(command.clubId).plan(ApiPlanContext(support = null, bearerToken = None, connection = connection)).unsafeRunSync().map { club =>
       ensureClubCanDissolve(club, command.clubId)
       removeMembersFromClub(connection, club, command.clubId)
@@ -67,9 +76,10 @@ final case class PlatformAdminDissolveClubAPIMessage(
       GetPlayerAPIMessage.findPlayer(connection, memberId).foreach { player =>
         CreatePlayerAPIMessage.persistPlayer(
           connection,
-          player
-            .leaveClub(clubId)
-            .revokeClubAdmin(clubId)
+          PlayerRoleFunctions.revokeClubAdmin(
+            PlayerClubBindingFunctions.leaveClub(player, clubId),
+            clubId
+          )
         )
       }
     }
@@ -79,7 +89,7 @@ final case class PlatformAdminDissolveClubAPIMessage(
       .filterNot(_.id == clubId)
       .filter(_.relations.exists(_.targetClubId == clubId))
       .foreach { relatedClub =>
-        SaveClubPrivateAPIMessage(relatedClub.removeRelation(clubId))
+        SaveClubPrivateAPIMessage(ClubFunctions.removeRelation(relatedClub, clubId))
           .plan(ApiPlanContext(support = null, bearerToken = None, connection = connection))
           .unsafeRunSync()
       }
@@ -94,7 +104,7 @@ final case class PlatformAdminDissolveClubAPIMessage(
       .auditAndEvents(module.transactionManager, module.auditEventRepository, module.eventBus)
       .commitWithinTransaction(
         DomainChange(
-          aggregate = club.dissolve(command.actor.playerId.getOrElse(club.creator), command.dissolvedAt),
+          aggregate = ClubFunctions.dissolve(club, command.actor.playerId.getOrElse(club.creator), command.dissolvedAt),
           persist = updatedClub => SaveClubPrivateAPIMessage(updatedClub).plan(ApiPlanContext(support = null, bearerToken = None, connection = connection)).unsafeRunSync(),
           auditEntries = _ =>
             Vector(

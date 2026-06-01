@@ -1,5 +1,7 @@
 package riichinexus.microservices.club.api
+import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
 
+import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.time.Instant
 import java.util.NoSuchElementException
 
@@ -8,13 +10,18 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.club.domain.model.*
+import riichinexus.microservices.club.domain.Club
+import riichinexus.microservices.club.domain.clubmanagement.model.*
+import riichinexus.microservices.club.domain.membershipmanagement.model.*
+import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
+import riichinexus.microservices.club.domain.relationmanagement.model.*
+import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.api.`private`.ClubApplicationViewAssembler
 import riichinexus.microservices.club.domain.ClubApplicationReviewer
-import riichinexus.microservices.club.objects.apiTypes.ClubMembershipApplicationView
-import riichinexus.microservices.club.objects.apiTypes.{ClubApplicationReviewDecision, ReviewClubApplicationRequest}
+import riichinexus.microservices.club.objects.membershipmanagement.apiTypes.ClubMembershipApplicationView
+import riichinexus.microservices.club.objects.membershipmanagement.apiTypes.{ClubApplicationReviewDecision, ReviewClubApplicationRequest}
 import riichinexus.microservices.club.tables.clubs.ClubTable
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import upickle.default.*
@@ -28,7 +35,7 @@ final case class ReviewClubApplicationAPIMessage(
   override def plan(context: ApiPlanContext): IO[ClubMembershipApplicationView] =
     for
       decision <- IO.blocking(resolveDecision(request.decision))
-      actor <- IO.blocking(context.principal(PlayerId(request.operatorId)))
+      actor <- IO.blocking(AuthAccessPrincipalResolver.principal(context, PlayerId(request.operatorId)))
       reviewedAt <- IO.realTimeInstant
       module = context.support.clubModule
       command = ReviewClubApplicationCommand(
@@ -56,7 +63,7 @@ final case class ReviewClubApplicationAPIMessage(
   ): ReviewClubApplicationResult =
     val reviewedClub = submitReview(connection, module, command)
       .getOrElse(throw NoSuchElementException(s"Club ${command.clubId.value} was not found"))
-    val reviewedApplication = reviewedClub.findApplication(command.membershipId).getOrElse(
+    val reviewedApplication = ClubFunctions.findApplication(reviewedClub, command.membershipId).getOrElse(
       throw NoSuchElementException(
         s"Membership application ${command.membershipId.value} was not found in club ${command.clubId.value}"
       )
@@ -100,7 +107,7 @@ final case class ReviewClubApplicationAPIMessage(
     val club = ClubTable
       .findById(connection, command.clubId)
       .getOrElse(throw NoSuchElementException(s"Club ${command.clubId.value} was not found"))
-    val application = club.findApplication(command.membershipId).getOrElse(
+    val application = ClubFunctions.findApplication(club, command.membershipId).getOrElse(
       throw NoSuchElementException(
         s"Membership application ${command.membershipId.value} was not found in club ${command.clubId.value}"
       )

@@ -1,5 +1,9 @@
 package riichinexus.microservices.club.api
+import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
 
+import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+
+import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.time.Instant
 import java.util.NoSuchElementException
 
@@ -8,12 +12,19 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.club.domain.model.*
+import riichinexus.microservices.club.domain.Club
+import riichinexus.microservices.club.domain.clubmanagement.model.*
+import riichinexus.microservices.club.domain.membershipmanagement.functions.ClubMembershipApplicationFunctions
+import riichinexus.microservices.club.domain.membershipmanagement.model.*
+import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
+import riichinexus.microservices.club.domain.relationmanagement.model.*
+import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
+import riichinexus.microservices.player.domain.functions.PlayerClubBindingFunctions
 import riichinexus.microservices.auth.domain.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubAuthorization
-import riichinexus.microservices.club.objects.apiTypes.{ClubMembershipApplicationResponse, ClubMembershipApplicationRequest}
+import riichinexus.microservices.club.objects.membershipmanagement.apiTypes.{ClubMembershipApplicationResponse, ClubMembershipApplicationRequest}
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import upickle.default.*
 
@@ -24,7 +35,7 @@ final case class SubmitClubApplicationAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubMembershipApplicationResponse] =
     for
-      actor <- IO.blocking(context.requestActor(request.guestSessionId.map(GuestSessionId(_)), request.operatorId.map(PlayerId(_))))
+      actor <- IO.blocking(AuthAccessPrincipalResolver.requestActor(context, request.guestSessionId.map(GuestSessionId(_)), request.operatorId.map(PlayerId(_))))
       module = context.support.clubModule
       parsedClubId = ClubId(clubId)
       submittedAt <- IO.realTimeInstant
@@ -67,12 +78,12 @@ final case class SubmitClubApplicationAPIMessage(
       module: ClubModuleContext,
       command: SubmitClubApplicationCommand
   ): ClubMembershipApplication =
-    module.authorizationService.requirePermission(command.actor, Permission.SubmitClubApplication)
+    AuthorizationPolicyFunctions.requirePermission(module.authorizationService, command.actor, Permission.SubmitClubApplication)
     val club = riichinexus.microservices.club.tables.clubs.ClubTable.findById(connection, command.clubId)
       .getOrElse(throw NoSuchElementException("Resource not found"))
     validateSubmission(connection, module, club, command)
     val application = createApplication(command)
-    riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, club.submitApplication(application))
+    riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, ClubFunctions.submitApplication(club, application))
     application
 
   private def validateSubmission(
@@ -98,7 +109,7 @@ final case class SubmitClubApplicationAPIMessage(
   private def ensureNoPendingApplication(club: Club, command: SubmitClubApplicationCommand): Unit =
     command.input.applicantUserId.foreach { userId =>
       if club.membershipApplications.exists(application =>
-          application.applicantUserId.contains(userId) && application.isPending
+          application.applicantUserId.contains(userId) && ClubMembershipApplicationFunctions.isPending(application)
         )
       then
         throw IllegalArgumentException(
@@ -112,7 +123,7 @@ final case class SubmitClubApplicationAPIMessage(
   ): Unit =
     command.input.applicantUserId.foreach { userId =>
       CreatePlayerAPIMessage.findPlayerByUserId(connection, userId).foreach { existingPlayer =>
-        if existingPlayer.boundClubIds.contains(command.clubId) then
+        if PlayerClubBindingFunctions.boundClubIds(existingPlayer).contains(command.clubId) then
           throw IllegalArgumentException(
             s"Player ${existingPlayer.id.value} is already a member of club ${command.clubId.value}"
           )

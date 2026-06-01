@@ -1,4 +1,7 @@
 package riichinexus.microservices.tournament.api
+import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
+
+import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
 import riichinexus.microservices.tournament.objects.rulesmanagement.stageprogression.{AdvancementRule, AdvancementRuleType}
 import riichinexus.microservices.tournament.objects.rulesmanagement.knockout.KnockoutRuleConfig
@@ -25,7 +28,6 @@ import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.*
 import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
@@ -33,7 +35,6 @@ import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.*
 import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
@@ -44,7 +45,7 @@ final case class TournamentStageCreateAPIMessage(tournamentId: String, request: 
 
   override def plan(context: ApiPlanContext): IO[TournamentSummaryView] =
     for
-      actor <- IO.blocking(request.operatorId.map(PlayerId(_)).map(context.principal).getOrElse(AccessPrincipal.system))
+      actor <- IO.blocking(request.operatorId.map(PlayerId(_)).map(AuthAccessPrincipalResolver.principal(context, _)).getOrElse(AccessPrincipalFunctions.system))
       module = context.support.tournamentModule
       command = CreateStageCommand(
         tournamentId = TournamentId(tournamentId),
@@ -77,7 +78,7 @@ final case class TournamentStageCreateAPIMessage(tournamentId: String, request: 
       throw IllegalArgumentException(
         s"Cannot add stages to tournament ${command.tournamentId.value} in status ${tournament.status}"
       )
-    module.authorizationService.requirePermission(
+    AuthorizationPolicyFunctions.requirePermission(module.authorizationService, 
       command.actor,
       Permission.ManageTournamentStages,
       tournamentId = Some(command.tournamentId)

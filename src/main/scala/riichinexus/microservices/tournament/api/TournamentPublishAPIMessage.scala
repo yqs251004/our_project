@@ -1,4 +1,7 @@
 package riichinexus.microservices.tournament.api
+import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
+
+import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
 import java.util.NoSuchElementException
 
@@ -19,7 +22,6 @@ import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.*
 import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
@@ -27,7 +29,6 @@ import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.*
 import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
@@ -54,8 +55,8 @@ final case class TournamentPublishAPIMessage(tournamentId: String, operatorId: O
 
   private def resolveOperatorActor(context: ApiPlanContext): AccessPrincipal =
     operatorId.filter(_.nonEmpty).map(PlayerId(_))
-      .map(context.principal)
-      .getOrElse(AccessPrincipal.system)
+      .map(AuthAccessPrincipalResolver.principal(context, _))
+      .getOrElse(AccessPrincipalFunctions.system)
 
   private def publishTournament(
       connection: java.sql.Connection,
@@ -63,7 +64,7 @@ final case class TournamentPublishAPIMessage(tournamentId: String, operatorId: O
       command: PublishTournamentCommand
   ): Unit =
     riichinexus.microservices.tournament.tables.tournaments.TournamentTable.findById(connection, command.tournamentId).foreach { tournament =>
-      module.authorizationService.requirePermission(
+      AuthorizationPolicyFunctions.requirePermission(module.authorizationService, 
         command.actor,
         Permission.ManageTournamentStages,
         tournamentId = Some(command.tournamentId)

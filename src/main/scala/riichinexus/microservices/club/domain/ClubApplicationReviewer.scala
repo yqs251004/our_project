@@ -1,5 +1,6 @@
 package riichinexus.microservices.club.domain
 
+import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.sql.Connection
 import java.time.Instant
 import java.util.NoSuchElementException
@@ -7,8 +8,16 @@ import java.util.NoSuchElementException
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.club.domain.model.*
+import riichinexus.microservices.club.domain.Club
+import riichinexus.microservices.club.domain.clubmanagement.model.*
+import riichinexus.microservices.club.domain.membershipmanagement.functions.ClubMembershipApplicationFunctions
+import riichinexus.microservices.club.domain.membershipmanagement.model.*
+import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
+import riichinexus.microservices.club.domain.relationmanagement.model.*
+import riichinexus.microservices.club.objects.rankprivilegemanagement.ClubPrivilegeCode
+import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
+import riichinexus.microservices.player.domain.functions.PlayerClubBindingFunctions
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 
 object ClubApplicationReviewer:
@@ -34,18 +43,17 @@ object ClubApplicationReviewer:
           actor = actor,
           club = club,
           permission = Permission.ManageClubMembership,
-          delegatedPrivileges = Set(ClubPrivilege.ApproveRoster)
+          delegatedPrivileges = Set(ClubPrivilegeCode.ApproveRoster)
         )
 
-        val application = club
-          .findApplication(parsedMembershipId)
+        val application = ClubFunctions.findApplication(club, parsedMembershipId)
           .getOrElse(
             throw NoSuchElementException(
               s"Membership application ${parsedMembershipId.value} was not found in club ${parsedClubId.value}"
             )
           )
 
-        if !application.isPending then
+        if !ClubMembershipApplicationFunctions.isPending(application) then
           throw IllegalArgumentException(
             s"Membership application ${parsedMembershipId.value} has already been reviewed"
           )
@@ -64,11 +72,12 @@ object ClubApplicationReviewer:
           )
 
         val reviewer = actor.playerId.getOrElse(club.creator)
-        val updatedClub = club
-          .reviewApplication(parsedMembershipId, _.approve(reviewer, approvedAt, note))
-          .addMember(parsedPlayerId)
+        val updatedClub = ClubFunctions.addMember(
+          ClubFunctions.reviewApplication(club, parsedMembershipId, ClubMembershipApplicationFunctions.approve(_, reviewer, approvedAt, note)),
+          parsedPlayerId
+        )
 
-        val savedPlayer = CreatePlayerAPIMessage.persistPlayer(connection, player.joinClub(parsedClubId))
+        val savedPlayer = CreatePlayerAPIMessage.persistPlayer(connection, PlayerClubBindingFunctions.joinClub(player, parsedClubId))
         ClubProjectionRefresher.ensurePlayerDashboard(connection, savedPlayer.id, approvedAt)
         riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, ClubProjectionRefresher.refreshClubProjection(connection, module, updatedClub, approvedAt))
     }
@@ -90,25 +99,24 @@ object ClubApplicationReviewer:
           actor = actor,
           club = club,
           permission = Permission.ManageClubMembership,
-          delegatedPrivileges = Set(ClubPrivilege.ApproveRoster)
+          delegatedPrivileges = Set(ClubPrivilegeCode.ApproveRoster)
         )
 
-        val application = club
-          .findApplication(parsedMembershipId)
+        val application = ClubFunctions.findApplication(club, parsedMembershipId)
           .getOrElse(
             throw NoSuchElementException(
               s"Membership application ${parsedMembershipId.value} was not found in club ${parsedClubId.value}"
             )
           )
 
-        if !application.isPending then
+        if !ClubMembershipApplicationFunctions.isPending(application) then
           throw IllegalArgumentException(
             s"Membership application ${parsedMembershipId.value} has already been reviewed"
           )
 
         val reviewer = actor.playerId.getOrElse(club.creator)
         riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, 
-          club.reviewApplication(parsedMembershipId, _.reject(reviewer, rejectedAt, note))
+          ClubFunctions.reviewApplication(club, parsedMembershipId, ClubMembershipApplicationFunctions.reject(_, reviewer, rejectedAt, note))
         )
       }
     }

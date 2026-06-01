@@ -1,5 +1,7 @@
 package riichinexus.microservices.tournament.domain.settlementmanagement.functions
 
+import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+
 import riichinexus.microservices.tournament.domain.lineupmanagement.functions.*
 import riichinexus.microservices.tournament.domain.paifumanagement.functions.*
 import riichinexus.microservices.tournament.domain.recordmanagement.functions.*
@@ -27,10 +29,15 @@ import riichinexus.application.ports.{AuditEventRepository, DomainEventBus, Tran
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.AuthorizationPolicy
 import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.club.domain.model.*
+import riichinexus.microservices.club.domain.Club
+import riichinexus.microservices.club.domain.clubmanagement.model.*
+import riichinexus.microservices.club.domain.membershipmanagement.model.*
+import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
+import riichinexus.microservices.club.domain.relationmanagement.model.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.functions.TournamentFunctions
 import riichinexus.microservices.tournament.domain.settlementmanagement.functions.TournamentSettlementSnapshotFunctions
 import riichinexus.microservices.tournament.domain.events.TournamentSettlementRecorded
+import riichinexus.microservices.player.domain.functions.PlayerClubBindingFunctions
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
 import riichinexus.microservices.tournament.domain.recordmanagement.model.*
@@ -75,7 +82,7 @@ final class TournamentSettlementCoordinator(
 
     val tournament = requireTournament(connection, settlement.tournamentId)
     val finalStage = requireStage(tournament, settlement.finalStageId)
-    authorizationService.requirePermission(
+    AuthorizationPolicyFunctions.requirePermission(authorizationService, 
       settlement.actor,
       Permission.ManageTournamentStages,
       tournamentId = Some(settlement.tournamentId)
@@ -267,7 +274,7 @@ final class TournamentSettlementCoordinator(
         adjustmentsByPlayer.getOrElse(playerId, Vector.empty).filter(_.amount < 0L).map(adjustment => math.abs(adjustment.amount)).sum
       val netAwardAmount = baseAwards.lift(index).getOrElse(0L) + adjustmentAmount - deductionAmount
       val clubId = GetPlayerAPIMessage.findPlayer(connection, playerId)
-        .flatMap(_.boundClubIds.headOption)
+        .flatMap(player => PlayerClubBindingFunctions.boundClubIds(player).headOption)
       val clubShareAmount =
         if clubId.nonEmpty then math.floor(netAwardAmount.toDouble * settlement.clubShareRatio).toLong
         else 0L

@@ -1,5 +1,6 @@
 package riichinexus
 
+import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.time.Instant
 
 import munit.FunSuite
@@ -64,7 +65,7 @@ class RiichiNexusCoreSuite extends FunSuite with RiichiNexusSuiteSupport:
     assertEquals(withdrawn.withdrawnByPrincipalId, Some(applicant.id.value))
     assertEquals(withdrawn.reviewNote, Some("changed my mind"))
     assertEquals(
-      clubRepository(app).findById(club.id).flatMap(_.findApplication(application.id)).map(_.status),
+      clubRepository(app).findById(club.id).flatMap(ClubFunctions.findApplication(_, application.id)).map(_.status),
       Some(ClubMembershipApplicationStatus.Withdrawn)
     )
   }

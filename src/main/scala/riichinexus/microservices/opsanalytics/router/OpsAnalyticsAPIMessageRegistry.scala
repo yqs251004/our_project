@@ -1,4 +1,5 @@
 package riichinexus.microservices.opsanalytics.router
+import riichinexus.api.functions.RegisteredAPIMessageFunctions
 
 import riichinexus.api.RegisteredAPIMessage
 import riichinexus.infrastructure.json.JsonCodecs.given
@@ -10,12 +11,12 @@ object OpsAnalyticsAPIMessageRegistry:
 
   val apiMessages: Vector[RegisteredAPIMessage] =
     Vector(
-      RegisteredAPIMessage.api[OpsAnalyticsPlayerDashboardAPIMessage, Dashboard],
-      RegisteredAPIMessage.api[OpsAnalyticsClubDashboardAPIMessage, Dashboard],
-      RegisteredAPIMessage.api[OpsAnalyticsPlayerAdvancedStatsAPIMessage, AdvancedStatsBoard],
-      RegisteredAPIMessage.api[OpsAnalyticsClubAdvancedStatsAPIMessage, AdvancedStatsBoard],
-      RegisteredAPIMessage.api[OpsAnalyticsListAdvancedStatsTasksAPIMessage, PagedResponse[AdvancedStatsRecomputeTask]],
-      RegisteredAPIMessage.api[OpsAnalyticsAdvancedStatsSummaryAPIMessage, AdvancedStatsTaskQueueSummary],
-      RegisteredAPIMessage.accepted[OpsAnalyticsRecomputeAdvancedStatsAPIMessage, Vector[AdvancedStatsRecomputeTask]],
-      RegisteredAPIMessage.api[OpsAnalyticsProcessAdvancedStatsAPIMessage, Vector[AdvancedStatsRecomputeTask]]
+      RegisteredAPIMessageFunctions.api[OpsAnalyticsPlayerDashboardAPIMessage, Dashboard],
+      RegisteredAPIMessageFunctions.api[OpsAnalyticsClubDashboardAPIMessage, Dashboard],
+      RegisteredAPIMessageFunctions.api[OpsAnalyticsPlayerAdvancedStatsAPIMessage, AdvancedStatsBoard],
+      RegisteredAPIMessageFunctions.api[OpsAnalyticsClubAdvancedStatsAPIMessage, AdvancedStatsBoard],
+      RegisteredAPIMessageFunctions.api[OpsAnalyticsListAdvancedStatsTasksAPIMessage, PagedResponse[AdvancedStatsRecomputeTask]],
+      RegisteredAPIMessageFunctions.api[OpsAnalyticsAdvancedStatsSummaryAPIMessage, AdvancedStatsTaskQueueSummary],
+      RegisteredAPIMessageFunctions.accepted[OpsAnalyticsRecomputeAdvancedStatsAPIMessage, Vector[AdvancedStatsRecomputeTask]],
+      RegisteredAPIMessageFunctions.api[OpsAnalyticsProcessAdvancedStatsAPIMessage, Vector[AdvancedStatsRecomputeTask]]
     )

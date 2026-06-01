@@ -7,6 +7,7 @@ import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.GuestSessionId
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.auth.domain.functions.GuestAccessSessionFunctions
 import riichinexus.microservices.auth.domain.model.GuestAccessSession
 import riichinexus.microservices.auth.tables.guestsession.GuestSessionTable
 import upickle.default.*
@@ -31,17 +32,17 @@ final case class ResolveGuestSessionAuthPrivateAPIMessage(
       .findById(connection, sessionId)
       .getOrElse(throw NoSuchElementException(s"Guest session ${sessionId.value} was not found"))
     ensureCanAuthenticate(session, seenAt)
-    GuestSessionTable.save(connection, session.touch(seenAt))
+    GuestSessionTable.save(connection, GuestAccessSessionFunctions.touch(session, seenAt))
 
   private def ensureCanAuthenticate(session: GuestAccessSession, seenAt: Instant): Unit =
-    require(session.canAuthenticate(seenAt), inactiveSessionMessage(session, seenAt))
+    require(GuestAccessSessionFunctions.canAuthenticate(session, seenAt), inactiveSessionMessage(session, seenAt))
 
   private def inactiveSessionMessage(session: GuestAccessSession, at: Instant): String =
-    if session.isRevoked then
+    if GuestAccessSessionFunctions.isRevoked(session) then
       s"Guest session ${session.id.value} has been revoked"
-    else if session.isUpgraded then
+    else if GuestAccessSessionFunctions.isUpgraded(session) then
       s"Guest session ${session.id.value} has already been upgraded to player access"
-    else if session.isExpired(at) then
+    else if GuestAccessSessionFunctions.isExpired(session, at) then
       s"Guest session ${session.id.value} expired at ${session.expiresAt}"
     else
       s"Guest session ${session.id.value} cannot be used for authentication"

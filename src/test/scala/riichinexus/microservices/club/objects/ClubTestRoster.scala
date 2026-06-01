@@ -1,11 +1,13 @@
 package riichinexus.microservices.club.objects
 
+import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.time.Instant
 import java.util.NoSuchElementException
 
 import riichinexus.application.ports.*
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.*
+import riichinexus.microservices.club.domain.Club
 
 final class ClubTestRoster(
     clubRepository: ClubRepository,
@@ -37,9 +39,10 @@ final class ClubTestRoster(
       val club = clubRepository.findByName(normalizedName) match
         case Some(existing) =>
           ensureClubActive(existing)
-          existing
-            .addMember(creatorId)
-            .grantAdmin(creatorId)
+          ClubFunctions.grantAdmin(
+            ClubFunctions.addMember(existing, creatorId),
+            creatorId
+          )
         case None =>
           Club(
             id = IdGenerator.clubId(),
@@ -84,14 +87,14 @@ final class ClubTestRoster(
           actor = actor,
           club = club,
           permission = Permission.ManageClubMembership,
-          delegatedPrivileges = Set(ClubPrivilege.ApproveRoster)
+          delegatedPrivileges = Set(ClubPrivilegeCode.ApproveRoster)
         )
 
         val savedPlayer = playerRepository.save(player.joinClub(clubId))
         ensurePlayerDashboard(savedPlayer.id, dashboardRepository, Instant.now())
         clubRepository.save(
           refreshClubProjection(
-            club.addMember(playerId),
+            ClubFunctions.addMember(club, playerId),
             playerRepository,
             globalDictionaryRepository,
             dashboardRepository,
@@ -117,7 +120,7 @@ final class ClubTestRoster(
           actor = actor,
           club = club,
           permission = Permission.ManageClubMembership,
-          delegatedPrivileges = Set(ClubPrivilege.ApproveRoster)
+          delegatedPrivileges = Set(ClubPrivilegeCode.ApproveRoster)
         )
 
         if club.creator == playerId then
@@ -137,7 +140,7 @@ final class ClubTestRoster(
         )
         clubRepository.save(
           refreshClubProjection(
-            club.removeMember(playerId),
+            ClubFunctions.removeMember(club, playerId),
             playerRepository,
             globalDictionaryRepository,
             dashboardRepository,
@@ -169,7 +172,7 @@ final class ClubTestRoster(
         playerRepository.save(
           player.grantRole(RoleGrant.clubAdmin(clubId, grantedAt, actor.playerId))
         )
-        clubRepository.save(club.grantAdmin(playerId))
+        clubRepository.save(ClubFunctions.grantAdmin(club, playerId))
     }
 
   def revokeAdmin(
@@ -201,7 +204,7 @@ final class ClubTestRoster(
           )
 
         playerRepository.save(player.revokeClubAdmin(clubId))
-        clubRepository.save(club.revokeAdmin(playerId))
+        clubRepository.save(ClubFunctions.revokeAdmin(club, playerId))
     }
 
   def setInternalTitle(
@@ -228,7 +231,7 @@ final class ClubTestRoster(
 
         val assignedBy = actor.playerId.getOrElse(club.creator)
         val updatedClub = clubRepository.save(
-          club.setInternalTitle(
+          ClubFunctions.setInternalTitle(club,
             ClubTitleAssignment(
               playerId = playerId,
               title = title,
@@ -284,7 +287,7 @@ final class ClubTestRoster(
             )
           )
 
-        val updatedClub = clubRepository.save(club.clearInternalTitle(playerId))
+        val updatedClub = clubRepository.save(ClubFunctions.clearInternalTitle(club, playerId))
         auditEventRepository.save(
           AuditEventEntry(
             id = IdGenerator.auditEventId(),
@@ -341,7 +344,7 @@ final class ClubTestRoster(
     val hasBasePermission = authorizationService.can(actor, permission, clubId = Some(club.id))
     val hasDelegatedPrivilege = actor.playerId.exists { playerId =>
       club.members.contains(playerId) &&
-      delegatedPrivileges.exists(privilege => club.hasPrivilege(playerId, privilege))
+      delegatedPrivileges.exists(privilege => ClubFunctions.hasPrivilege(club, playerId, privilege))
     }
 
     if !hasBasePermission && !hasDelegatedPrivilege then
@@ -365,7 +368,7 @@ final class ClubTestRoster(
       dashboardRepository: DashboardRepository,
       at: Instant
   ): Club =
-    val refreshedClub = club.updatePowerRating(
+    val refreshedClub = ClubFunctions.updatePowerRating(club,
       calculateClubPowerRating(club, playerRepository, dictionarySnapshot(globalDictionaryRepository))
     )
     dashboardRepository.save(buildClubDashboard(refreshedClub, playerRepository, dashboardRepository, at))

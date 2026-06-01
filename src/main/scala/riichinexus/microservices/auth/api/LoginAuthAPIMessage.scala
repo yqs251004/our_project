@@ -1,4 +1,5 @@
 package riichinexus.microservices.auth.api
+import riichinexus.microservices.auth.api.`private`.CurrentSessionViewResolver
 
 import java.time.Instant
 
@@ -7,11 +8,12 @@ import cats.effect.unsafe.implicits.global
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.AuthModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
 import riichinexus.domain.service.AuthenticationFailure
-import riichinexus.microservices.auth.objects.{AccountCredential, AuthenticatedSession}
-import riichinexus.microservices.auth.objects.apiTypes.{AuthSuccessResponse, CurrentSessionRoleFlags}
-import riichinexus.microservices.auth.security.AuthPasswordHasher
+import riichinexus.microservices.auth.domain.functions.{AccountCredentialFunctions, AuthenticatedSessionFunctions, PasswordHashFunctions}
+import riichinexus.microservices.auth.domain.model.{AccountCredential, AuthenticatedSession}
+import riichinexus.microservices.auth.objects.apiTypes.AuthSuccessView
 import riichinexus.microservices.auth.tables.accountcredential.AccountCredentialTable
 import riichinexus.microservices.auth.tables.authenticatedsession.AuthenticatedSessionTable
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
@@ -20,26 +22,26 @@ import upickle.default.*
 final case class LoginAuthAPIMessage(
     username: String,
     password: String
-) extends APIMessage[AuthSuccessResponse] derives ReadWriter:
+) extends APIMessage[AuthSuccessView] derives ReadWriter:
 
   private val SessionTtl = java.time.Duration.ofDays(30)
 
-  override def plan(context: ApiPlanContext): IO[AuthSuccessResponse] =
+  override def plan(context: ApiPlanContext): IO[AuthSuccessView] =
     for
       loginAt <- IO.realTimeInstant
       module = context.support.authModule
-      command = LoginCommand(AccountCredential.normalizeUsername(username), password, loginAt)
+      command = LoginCommand(AccountCredentialFunctions.normalizeUsername(username), password, loginAt)
       result <- IO.blocking {
         module.transactionManager.inTransaction {
           login(context, module, command)
         }
       }
-    yield AuthSuccessResponse(
+    yield AuthSuccessView(
       userId = result.player.id.value,
       username = result.credential.username,
       displayName = result.player.nickname,
       token = result.session.token,
-      roles = context.support.registeredRoleFlags(result.player)
+      roles = CurrentSessionViewResolver.registeredRoleFlags(result.player)
     )
 
   private def login(context: ApiPlanContext, module: AuthModuleContext, command: LoginCommand): LoginResult =
@@ -47,7 +49,7 @@ final case class LoginAuthAPIMessage(
     require(command.password.nonEmpty, "Password is required")
     val credential = AccountCredentialTable.findByUsername(connection, command.username)
       .getOrElse(throw AuthenticationFailure("Invalid username or password", "invalid_credentials"))
-    if !AuthPasswordHasher.verify(command.password, credential) then
+    if !PasswordHashFunctions.verify(command.password, credential) then
       throw AuthenticationFailure("Invalid username or password", "invalid_credentials")
 
     val player = GetPlayerAPIMessage.findPlayer(context.connection, credential.playerId)
@@ -56,7 +58,7 @@ final case class LoginAuthAPIMessage(
 
     val session = AuthenticatedSessionTable.save(
       connection,
-      AuthenticatedSession.create(
+      AuthenticatedSessionFunctions.create(
         username = credential.username,
         playerId = credential.playerId,
         createdAt = command.loginAt,

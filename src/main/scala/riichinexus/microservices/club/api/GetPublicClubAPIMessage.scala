@@ -1,21 +1,35 @@
 package riichinexus.microservices.club.api
 
+import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
+import java.time.Instant
 import java.util.NoSuchElementException
 
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
-import riichinexus.microservices.club.domain.model.*
+import riichinexus.microservices.club.domain.Club
+import riichinexus.microservices.club.domain.clubmanagement.model.*
+import riichinexus.microservices.club.domain.membershipmanagement.functions.ClubMembershipApplicationFunctions
+import riichinexus.microservices.club.domain.membershipmanagement.model.*
+import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
+import riichinexus.microservices.club.domain.relationmanagement.model.*
+import riichinexus.microservices.club.objects.relationmanagement.ClubRelationView
 import riichinexus.microservices.club.tables.clubs.ClubTable
+import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
-import riichinexus.microservices.club.objects.apiTypes.*
+import riichinexus.microservices.club.objects.clubmanagement.apiTypes.*
+import riichinexus.microservices.club.objects.membershipmanagement.apiTypes.*
+import riichinexus.microservices.club.objects.rankprivilegemanagement.ClubPrivilegeCode
+import riichinexus.microservices.club.objects.rankprivilegemanagement.apiTypes.*
+import riichinexus.microservices.club.objects.relationmanagement.apiTypes.*
+import riichinexus.microservices.club.objects.tournamentparticipation.apiTypes.*
+import riichinexus.microservices.club.objects.auditreadmodel.apiTypes.*
 import riichinexus.microservices.player.objects.apiTypes.*
 import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.*
 import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
@@ -26,7 +40,6 @@ import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
 import riichinexus.microservices.tournament.domain.tablemanagement.model.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentStatus
-import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.RankSnapshotView
 import riichinexus.microservices.tournament.api.`private`.{
   ListClubTournamentsPrivateAPIMessage,
   ListRecentClubMatchRecordsPrivateAPIMessage,
@@ -75,7 +88,7 @@ final case class GetPublicClubAPIMessage(
       playersById: Map[PlayerId, Player]
   ): PublicClubDetailView =
     PublicClubDetailView(
-      clubId = club.id,
+      clubId = club.id.value,
       name = club.name,
       memberCount = club.members.size,
       activeMemberCount = club.members.count(playerId =>
@@ -86,8 +99,8 @@ final case class GetPublicClubAPIMessage(
       totalPoints = club.totalPoints,
       treasuryBalance = club.treasuryBalance,
       pointPool = club.pointPool,
-      relations = club.relations.map(PublicClubRelationView.fromDomain),
-      honors = club.honors.sortBy(honor => (honor.achievedAt, honor.title)).reverse.map(PublicClubHonorView.fromDomain),
+      relations = club.relations.map(ClubRelationView.fromDomain),
+      honors = club.honors.sortBy(honor => (honor.achievedAt, honor.title)).reverse.map(publicClubHonorView),
       applicationPolicy = clubApplicationPolicy(club),
       currentLineup = currentLineup(club, lineupPlayerIds, playersById),
       recentMatches = recentMatches(recentRecords, tournamentsById, playersById)
@@ -102,18 +115,39 @@ final case class GetPublicClubAPIMessage(
       .flatMap(playersById.get)
       .sortBy(player => (-player.elo, player.nickname, player.id.value))
       .map { player =>
-        val privilegeSnapshot = club.memberPrivilegeSnapshot(player.id)
-        PublicClubLineupMemberView(
+        val privilegeSnapshot = ClubFunctions.memberPrivilegeSnapshot(club, player.id)
+        publicClubLineupMemberView(
           playerId = player.id,
           nickname = player.nickname,
           elo = player.elo,
-          currentRank = RankSnapshotView.fromDomain(player.currentRank),
+          currentRank = player.currentRank,
           status = player.status,
           isAdmin = club.admins.contains(player.id),
           internalTitle = privilegeSnapshot.flatMap(_.internalTitle),
           privileges = privilegeSnapshot.map(_.privileges).getOrElse(Vector.empty)
         )
       }
+
+  private def publicClubLineupMemberView(
+      playerId: PlayerId,
+      nickname: String,
+      elo: Int,
+      currentRank: RankSnapshot,
+      status: PlayerStatus,
+      isAdmin: Boolean,
+      internalTitle: Option[String],
+      privileges: Vector[ClubPrivilegeCode]
+  ): PublicClubLineupMemberView =
+    PublicClubLineupMemberView(
+      playerId = playerId.value,
+      nickname = nickname,
+      elo = elo,
+      currentRank = currentRank,
+      status = status.toString,
+      isAdmin = isAdmin,
+      internalTitle = internalTitle,
+      privileges = privileges
+    )
 
   private def recentMatches(
       records: Vector[MatchRecord],
@@ -122,7 +156,7 @@ final case class GetPublicClubAPIMessage(
   ): Vector[PublicClubRecentMatchView] =
     records.map { record =>
       val tournament = tournamentsById.get(record.tournamentId)
-      PublicClubRecentMatchView(
+      publicClubRecentMatchView(
         matchRecordId = record.id,
         tournamentId = record.tournamentId,
         tournamentName = tournament.map(_.name).getOrElse(record.tournamentId.value),
@@ -136,7 +170,7 @@ final case class GetPublicClubAPIMessage(
         seats = record.seatResults
           .sortBy(_.placement)
           .map { result =>
-            PublicClubRecentMatchSeatView(
+            publicClubRecentMatchSeatView(
               playerId = result.playerId,
               nickname = playersById.get(result.playerId).map(_.nickname).getOrElse(result.playerId.value),
               clubId = result.clubId,
@@ -149,6 +183,49 @@ final case class GetPublicClubAPIMessage(
       )
     }
 
+  private def publicClubRecentMatchView(
+      matchRecordId: MatchRecordId,
+      tournamentId: TournamentId,
+      tournamentName: String,
+      stageId: TournamentStageId,
+      stageName: String,
+      tableId: TableId,
+      generatedAt: Instant,
+      seats: Vector[PublicClubRecentMatchSeatView]
+  ): PublicClubRecentMatchView =
+    PublicClubRecentMatchView(
+      matchRecordId = matchRecordId.value,
+      tournamentId = tournamentId.value,
+      tournamentName = tournamentName,
+      stageId = stageId.value,
+      stageName = stageName,
+      tableId = tableId.value,
+      generatedAt = generatedAt.toString,
+      seats = seats
+    )
+
+  private def publicClubRecentMatchSeatView(
+      playerId: PlayerId,
+      nickname: String,
+      clubId: Option[ClubId],
+      seat: String,
+      placement: Int,
+      scoreDelta: Int,
+      finalPoints: Int
+  ): PublicClubRecentMatchSeatView =
+    PublicClubRecentMatchSeatView(
+      playerId = playerId.value,
+      nickname = nickname,
+      clubId = clubId.map(_.value),
+      seat = seat,
+      placement = placement,
+      scoreDelta = scoreDelta,
+      finalPoints = finalPoints
+    )
+
+  private def publicClubHonorView(honor: ClubHonor): PublicClubHonorView =
+    PublicClubHonorView(title = honor.title)
+
   private def clubApplicationPolicy(club: Club): ClubApplicationPolicyView =
     val applicationsOpen = club.dissolvedAt.isEmpty && club.recruitmentPolicy.applicationsOpen
     ClubApplicationPolicyView(
@@ -157,7 +234,7 @@ final case class GetPublicClubAPIMessage(
         if applicationsOpen then club.recruitmentPolicy.requirementsText else None,
       expectedReviewSlaHours =
         if applicationsOpen then club.recruitmentPolicy.expectedReviewSlaHours else None,
-      pendingApplicationCount = club.membershipApplications.count(_.isPending)
+      pendingApplicationCount = club.membershipApplications.count(ClubMembershipApplicationFunctions.isPending)
     )
 
   private def currentLineupPlayerIds(club: Club, tournaments: Vector[Tournament]): Vector[PlayerId] =

@@ -3,13 +3,18 @@ package riichinexus.microservices.club.api
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
-import riichinexus.microservices.club.domain.model.*
+import riichinexus.microservices.club.domain.Club
+import riichinexus.microservices.club.domain.clubmanagement.model.*
+import riichinexus.microservices.club.domain.membershipmanagement.model.*
+import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
+import riichinexus.microservices.club.domain.relationmanagement.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.auth.objects.Role
-import riichinexus.microservices.player.objects.{Player, PlayerStatus}
+import riichinexus.microservices.auth.domain.model.Role
+import riichinexus.microservices.player.domain.Player
+import riichinexus.microservices.player.domain.functions.PlayerRoleFunctions
+import riichinexus.microservices.player.objects.PlayerStatus
 import riichinexus.microservices.player.objects.apiTypes.{PlayerProfileView, PlayerRoleFlagsView}
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
-import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.RankSnapshotView
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 
@@ -30,7 +35,7 @@ final case class ListClubMembersAPIMessage(
   private def resolveQuery(context: ApiPlanContext): ResolvedClubMembersQuery =
     ResolvedClubMembersQuery(
       clubId = ClubId(clubId),
-      status = status.filter(_.nonEmpty).map(context.support.parseEnum("status", _)(PlayerStatus.valueOf)),
+      status = status.filter(_.nonEmpty).map(riichinexus.system.functions.EnumParsingFunctions.parse("status", _)(PlayerStatus.valueOf)),
       nickname = nickname.filter(_.nonEmpty),
       limit = limit.getOrElse(20),
       offset = offset.getOrElse(0),
@@ -47,7 +52,7 @@ final case class ListClubMembersAPIMessage(
     ListPlayersAPIMessage
       .findPlayersByClub(context.connection, query.clubId)
       .filter(player => query.status.forall(_ == player.status))
-      .filter(player => query.nickname.forall(context.support.containsIgnoreCase(player.nickname, _)))
+      .filter(player => query.nickname.forall(riichinexus.system.functions.TextSearchFunctions.containsIgnoreCase(player.nickname, _)))
       .sortBy(player => (player.nickname, player.id.value))
       .map(playerProfileView)
 
@@ -57,13 +62,13 @@ final case class ListClubMembersAPIMessage(
       userId = player.userId,
       nickname = player.nickname,
       registeredAt = player.registeredAt.toString,
-      currentRank = RankSnapshotView(player.currentRank.platform, player.currentRank.tier, player.currentRank.stars),
+      currentRank = player.currentRank,
       elo = player.elo,
       clubId = player.clubId.map(_.value),
       affiliatedClubIds = player.affiliatedClubIds.map(_.value),
       status = player.status.toString,
       roles = PlayerRoleFlagsView(
-        isRegisteredPlayer = player.effectiveRoleGrants.exists(_.role == Role.RegisteredPlayer),
+        isRegisteredPlayer = PlayerRoleFunctions.effectiveRoleGrants(player).exists(_.role == Role.RegisteredPlayer),
         isClubAdmin = player.roleGrants.exists(_.role == Role.ClubAdmin),
         isTournamentAdmin = player.roleGrants.exists(_.role == Role.TournamentAdmin),
         isSuperAdmin = player.roleGrants.exists(_.role == Role.SuperAdmin)

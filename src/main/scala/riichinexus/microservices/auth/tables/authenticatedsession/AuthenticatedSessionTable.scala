@@ -7,7 +7,8 @@ import scala.util.Using
 
 import riichinexus.application.ports.OptimisticConcurrencyException
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.auth.objects.AuthenticatedSession
+import riichinexus.microservices.auth.domain.functions.AuthenticatedSessionFunctions
+import riichinexus.microservices.auth.domain.model.AuthenticatedSession
 import upickle.default.{read, write}
 
 object AuthenticatedSessionTable:
@@ -26,6 +27,7 @@ object AuthenticatedSessionTable:
       |""".stripMargin
 
   private[auth] def save(connection: Connection, session: AuthenticatedSession): AuthenticatedSession =
+    AuthenticatedSessionFunctions.validate(session)
     val persisted = session.copy(version = session.version + 1)
     val rowsUpdated = Using.resource(connection.prepareStatement(upsertSql)) { statement =>
       statement.setString(1, persisted.token)

@@ -1,5 +1,7 @@
 package riichinexus.microservices.club.api
+import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
 
+import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.time.Instant
 import java.util.NoSuchElementException
 
@@ -9,12 +11,17 @@ import riichinexus.application.changes.DomainChangeInterpreter
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.club.domain.model.*
+import riichinexus.microservices.club.domain.Club
+import riichinexus.microservices.club.domain.clubmanagement.model.*
+import riichinexus.microservices.club.domain.membershipmanagement.model.*
+import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
+import riichinexus.microservices.club.domain.relationmanagement.model.*
 import riichinexus.microservices.auth.domain.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubAuthorization
-import riichinexus.microservices.club.objects.ClubView
-import riichinexus.microservices.club.objects.apiTypes.UpdateClubRecruitmentPolicyRequest
+import riichinexus.microservices.club.objects.rankprivilegemanagement.ClubPrivilegeCode
+import riichinexus.microservices.club.objects.clubmanagement.ClubView
+import riichinexus.microservices.club.objects.membershipmanagement.apiTypes.UpdateClubRecruitmentPolicyRequest
 import upickle.default.*
 
 final case class UpdateClubRecruitmentPolicyAPIMessage(
@@ -24,7 +31,7 @@ final case class UpdateClubRecruitmentPolicyAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
-      actor <- IO.blocking(context.principal(PlayerId(request.operatorId)))
+      actor <- IO.blocking(AuthAccessPrincipalResolver.principal(context, PlayerId(request.operatorId)))
       occurredAt <- IO.realTimeInstant
       module = context.support.clubModule
       command = UpdateClubRecruitmentPolicyCommand(
@@ -53,7 +60,7 @@ final case class UpdateClubRecruitmentPolicyAPIMessage(
         actor = command.actor,
         club = club,
         permission = Permission.ManageClubMembership,
-        delegatedPrivileges = Set(ClubPrivilege.ApproveRoster)
+        delegatedPrivileges = Set(ClubPrivilegeCode.ApproveRoster)
       )
       commitRecruitmentPolicyUpdate(connection, module, club, command)
     }
@@ -67,7 +74,7 @@ final case class UpdateClubRecruitmentPolicyAPIMessage(
     DomainChangeInterpreter
       .auditOnly(module.transactionManager, module.auditEventRepository)
       .commitAudited(
-        aggregate = club.updateRecruitmentPolicy(command.policy),
+        aggregate = ClubFunctions.updateRecruitmentPolicy(club, command.policy),
         persist = updatedClub => riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, updatedClub),
         aggregateType = "club",
         aggregateId = _.id.value,

@@ -8,7 +8,8 @@ import java.time.Instant
 
 import munit.FunSuite
 
-import riichinexus.api.{ApiRuntimeContext, ApiServerConfig, RiichiNexusApiServer}
+import riichinexus.api.ApiServerConfig
+import riichinexus.api.functions.{ApiRuntimeContextFunctions, ApiServerFunctions}
 import riichinexus.bootstrap.ApplicationContext
 import riichinexus.domain.model.*
 import riichinexus.microservices.opsanalytics.objects.PerformanceDiagnosticsSnapshot
@@ -24,14 +25,11 @@ trait ApiServerSuiteSupport extends TestApplicationAccess:
 
   protected def withServer[A](app: ApplicationContext)(f: String => A): A =
     val config = ApiServerConfig(host = "127.0.0.1", port = 0, storageLabel = "memory")
-    val server = RiichiNexusApiServer(
-      ApiRuntimeContext.fromApplication(app, config),
-      config
-    )
+    val server = ApiServerFunctions.state(ApiRuntimeContextFunctions.fromApplication(app, config), config)
 
-    server.start()
-    try f(s"http://127.0.0.1:${server.port}")
-    finally server.stop()
+    ApiServerFunctions.start(server)
+    try f(s"http://127.0.0.1:${ApiServerFunctions.port(server)}")
+    finally ApiServerFunctions.stop(server)
 
   protected def get(url: String): HttpResponse[String] =
     client.send(

@@ -15,14 +15,22 @@ import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
 import riichinexus.microservices.tournament.domain.tablemanagement.model.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.microservices.tournament.appeal.domain.model.*
-import riichinexus.microservices.club.domain.model.*
+import riichinexus.microservices.club.domain.Club
+import riichinexus.microservices.club.domain.clubmanagement.model.*
+import riichinexus.microservices.club.domain.membershipmanagement.model.*
+import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
+import riichinexus.microservices.club.domain.relationmanagement.model.*
 import riichinexus.microservices.player.objects.*
-import riichinexus.microservices.auth.objects.{AccountCredential, AuthenticatedSession, Role, SessionPrincipalKind}
-import riichinexus.microservices.club.domain.ClubDissolved
-import riichinexus.microservices.club.objects.{ClubApplicationStatus, ClubPrivilegeCode, ClubRelationKind}
+import riichinexus.microservices.auth.domain.model.{AccountCredential, AuthenticatedSession, Role}
+import riichinexus.microservices.auth.objects.SessionPrincipalKind
+import riichinexus.microservices.club.domain.clubmanagement.model.ClubDissolved
+import riichinexus.microservices.club.objects.membershipmanagement.ClubApplicationStatus
+import riichinexus.microservices.club.objects.rankprivilegemanagement.{ClubPrivilegeCode, ClubRankNode}
+import riichinexus.microservices.club.objects.relationmanagement.ClubRelationKind
 import riichinexus.microservices.opsanalytics.objects.*
 import riichinexus.microservices.player.domain.PlayerBanned
-import riichinexus.microservices.player.objects.{Player, PlayerStatus, RankPlatform, RankSnapshot}
+import riichinexus.microservices.player.domain.Player
+import riichinexus.microservices.player.objects.{PlayerStatus, RankPlatform, RankSnapshot}
 import riichinexus.microservices.tournament.appeal.domain.*
 import riichinexus.microservices.tournament.domain.events.{MatchRecordArchived, TournamentSettlementRecorded}
 import riichinexus.microservices.tournament.domain.paifumanagement.functions.PaifuTileFunctions
@@ -114,7 +122,7 @@ object JsonCodecs:
     readwriter[String].bimap[DomainEventSubscriberCursorId](_.value, DomainEventSubscriberCursorId(_))
 
   given ReadWriter[Role] =
-    stringEnumReadWriter(Role.valueOf, _.toString)
+    eitherStringEnumReadWriter(Role.fromString, Role.toString)
   given ReadWriter[Permission] =
     stringEnumReadWriter(Permission.valueOf, _.toString)
   given ReadWriter[RoleGrant] = macroRW
@@ -142,7 +150,7 @@ object JsonCodecs:
   given ReadWriter[Player] = macroRW
 
   given ReadWriter[ClubApplicationStatus] =
-    eitherStringEnumReadWriter(
+    stringEnumReadWriter(
       ClubApplicationStatus.fromString,
       ClubApplicationStatus.toString
     )
@@ -152,7 +160,7 @@ object JsonCodecs:
   given ReadWriter[ClubMemberPrivilegeSnapshot] = macroRW
   given ReadWriter[ClubTitleAssignment] = macroRW
   given ReadWriter[ClubRelationKind] =
-    stringEnumReadWriter(ClubRelationKind.valueOf, _.toString)
+    stringEnumReadWriter(ClubRelationKind.fromString, ClubRelationKind.toString)
   given ReadWriter[ClubRelation] = macroRW
   given ReadWriter[ClubRecruitmentPolicy] = macroRW
   given ReadWriter[ClubHonor] = macroRW

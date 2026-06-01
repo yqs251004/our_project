@@ -3,15 +3,15 @@ package riichinexus.microservices.tournament.objects.tournamentmanagement.apiTyp
 import upickle.default.*
 
 import riichinexus.domain.model.{ClubId, PlayerId}
+import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.player.objects.{PlayerStatus, RankSnapshot}
-import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.RankSnapshotView
 
 final case class TournamentParticipantPlayerView(
     playerId: String,
     nickname: String,
     status: String,
     elo: Int,
-    currentRank: RankSnapshotView,
+    currentRank: RankSnapshot,
     clubIds: Vector[String]
 ) derives CanEqual
 
@@ -31,6 +31,6 @@ object TournamentParticipantPlayerView:
       nickname = nickname,
       status = status.toString,
       elo = elo,
-      currentRank = RankSnapshotView.fromDomain(currentRank),
+      currentRank = currentRank,
       clubIds = clubIds.map(_.value)
     )

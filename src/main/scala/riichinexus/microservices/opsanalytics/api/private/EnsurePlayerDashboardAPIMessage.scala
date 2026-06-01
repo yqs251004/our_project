@@ -6,6 +6,7 @@ import java.time.Instant
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.PlayerId
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.opsanalytics.domain.functions.DashboardFunctions
 import riichinexus.microservices.opsanalytics.objects.{Dashboard, DashboardOwner}
 import riichinexus.microservices.opsanalytics.tables.dashboard.DashboardTable
 import upickle.default.*
@@ -20,6 +21,6 @@ final case class EnsurePlayerDashboardAPIMessage(
       dashboard <- IO.blocking {
         val owner = DashboardOwner.Player(playerId)
         DashboardTable.findByOwner(context.connection, owner)
-          .getOrElse(DashboardTable.save(context.connection, Dashboard.empty(owner, at)))
+          .getOrElse(DashboardTable.save(context.connection, DashboardFunctions.empty(owner, at)))
       }
     yield dashboard

@@ -1,5 +1,7 @@
 package riichinexus.microservices.tournament.domain.tournamentmanagement.functions
 
+import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+
 import riichinexus.microservices.tournament.domain.lineupmanagement.functions.*
 import riichinexus.microservices.tournament.domain.paifumanagement.functions.*
 import riichinexus.microservices.tournament.domain.recordmanagement.functions.*
@@ -25,7 +27,12 @@ import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.AuthorizationPolicy
 import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.club.api.`private`.ResolveClubsPrivateAPIMessage
-import riichinexus.microservices.club.domain.model.*
+import riichinexus.microservices.club.domain.Club
+import riichinexus.microservices.club.domain.clubmanagement.model.*
+import riichinexus.microservices.club.domain.membershipmanagement.model.*
+import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
+import riichinexus.microservices.club.domain.relationmanagement.model.*
+import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import riichinexus.microservices.tournament.domain.tournamentmanagement.functions.{TournamentFunctions, TournamentStageFunctions}
@@ -49,7 +56,7 @@ final class TournamentStageCompletionCoordinator(
       completedAt: Instant
   ): Option[StageAdvancementSnapshot] =
     TournamentTable.findById(connection, tournamentId).map { tournament =>
-      authorizationService.requirePermission(
+      AuthorizationPolicyFunctions.requirePermission(authorizationService, 
         actor,
         Permission.ManageTournamentStages,
         tournamentId = Some(tournamentId)

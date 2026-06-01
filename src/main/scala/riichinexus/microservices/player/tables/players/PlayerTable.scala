@@ -9,7 +9,8 @@ import org.postgresql.util.PSQLException
 import riichinexus.application.ports.OptimisticConcurrencyException
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.player.objects.Player
+import riichinexus.microservices.player.domain.Player
+import riichinexus.microservices.player.domain.functions.PlayerClubBindingFunctions
 import riichinexus.microservices.player.objects.apiTypes.PlayerListQuery
 import upickle.default.{read, write}
 
@@ -121,7 +122,7 @@ object PlayerTable:
           statement.setNull(2, Types.VARCHAR)
       Using.resource(statement.executeQuery())(readPlayers)
     }
-      .filter(player => query.clubId.forall(player.boundClubIds.contains))
+      .filter(player => query.clubId.forall(PlayerClubBindingFunctions.boundClubIds(player).contains))
       .filter(player => query.status.forall(_ == player.status))
       .sortBy(player => (player.nickname, player.id.value))
 

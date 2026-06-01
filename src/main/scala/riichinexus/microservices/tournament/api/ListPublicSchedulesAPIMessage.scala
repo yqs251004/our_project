@@ -1,14 +1,16 @@
 package riichinexus.microservices.tournament.api
 
+import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+
 import cats.effect.unsafe.implicits.global
 import riichinexus.api.ApiPlanContext
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.microservices.club.api.`private`.ResolveClubsPrivateAPIMessage
-import riichinexus.microservices.club.domain.model.Club
+import riichinexus.microservices.club.domain.Club
 import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.player.objects.Player
+import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
 import riichinexus.microservices.tournament.domain.recordmanagement.model.*
@@ -43,14 +45,17 @@ final case class ListPublicSchedulesAPIMessage(
     yield PagedResponse.fromItems(filteredSchedules, limit, offset, query.appliedFilters)(identity)
 
   private def resolveQuery(context: ApiPlanContext): ResolvedScheduleQuery =
-    context.support.authorizationService
-      .requirePermission(AccessPrincipal.guest(), Permission.ViewPublicSchedule)
+    AuthorizationPolicyFunctions.requirePermission(
+      context.support.authorizationService,
+      AccessPrincipalFunctions.guest(),
+      Permission.ViewPublicSchedule
+    )
     ResolvedScheduleQuery(
       tournamentStatus = tournamentStatus.filter(_.nonEmpty).map(
-        context.support.parseEnum("tournamentStatus", _)(TournamentStatus.valueOf)
+        riichinexus.system.functions.EnumParsingFunctions.parse("tournamentStatus", _)(TournamentStatus.valueOf)
       ),
       stageStatus = stageStatus.filter(_.nonEmpty).map(
-        context.support.parseEnum("stageStatus", _)(StageStatus.valueOf)
+        riichinexus.system.functions.EnumParsingFunctions.parse("stageStatus", _)(StageStatus.valueOf)
       ),
       appliedFilters = Vector(
         tournamentStatus.filter(_.nonEmpty).map("tournamentStatus" -> _),

@@ -7,9 +7,15 @@ import scala.util.Using
 
 import riichinexus.application.ports.OptimisticConcurrencyException
 import riichinexus.domain.model.*
-import riichinexus.microservices.club.domain.model.*
+import riichinexus.microservices.club.domain.Club
+import riichinexus.microservices.club.domain.clubmanagement.model.*
+import riichinexus.microservices.club.domain.membershipmanagement.model.*
+import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
+import riichinexus.microservices.club.domain.relationmanagement.model.*
+import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.opsanalytics.domain.functions.DashboardFunctions
 import riichinexus.microservices.opsanalytics.objects.{Dashboard, DashboardOwner}
 import upickle.default.{read, write}
 
@@ -28,8 +34,8 @@ object DashboardTable:
   private[opsanalytics] def save(connection: Connection, dashboard: Dashboard): Dashboard =
     val persisted = dashboard.copy(version = dashboard.version + 1)
     val rowsUpdated = Using.resource(connection.prepareStatement(upsertSql)) { statement =>
-      statement.setString(1, ownerKey(persisted.owner))
-      statement.setString(2, ownerType(persisted.owner))
+      statement.setString(1, DashboardFunctions.ownerKey(persisted.owner))
+      statement.setString(2, DashboardFunctions.ownerType(persisted.owner))
       statement.setString(3, write[Dashboard](persisted))
       statement.setInt(4, dashboard.version)
       statement.executeUpdate()
@@ -37,7 +43,7 @@ object DashboardTable:
     if rowsUpdated == 0 then
       throw OptimisticConcurrencyException(
         aggregateType = "dashboard",
-        aggregateId = ownerKey(persisted.owner),
+        aggregateId = DashboardFunctions.ownerKey(persisted.owner),
         expectedVersion = dashboard.version,
         actualVersion = findByOwner(connection, persisted.owner).map(_.version)
       )
@@ -52,7 +58,7 @@ object DashboardTable:
 
   private[opsanalytics] def findByOwner(connection: Connection, owner: DashboardOwner): Option[Dashboard] =
     Using.resource(connection.prepareStatement(findByOwnerSql)) { statement =>
-      statement.setString(1, ownerKey(owner))
+      statement.setString(1, DashboardFunctions.ownerKey(owner))
       Using.resource(statement.executeQuery()) { resultSet =>
         if resultSet.next() then Some(readDashboard(resultSet))
         else None
@@ -70,16 +76,6 @@ object DashboardTable:
     Using.resource(connection.prepareStatement(findAllSql)) { statement =>
       Using.resource(statement.executeQuery())(readDashboards)
     }
-
-  private def ownerKey(owner: DashboardOwner): String =
-    owner match
-      case DashboardOwner.Player(playerId) => s"player:${playerId.value}"
-      case DashboardOwner.Club(clubId)     => s"club:${clubId.value}"
-
-  private def ownerType(owner: DashboardOwner): String =
-    owner match
-      case DashboardOwner.Player(_) => "player"
-      case DashboardOwner.Club(_)   => "club"
 
   private def readDashboards(resultSet: ResultSet): Vector[Dashboard] =
     @tailrec

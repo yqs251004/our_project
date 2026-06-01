@@ -19,7 +19,7 @@ import riichinexus.microservices.tournament.domain.recordmanagement.model.*
 import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
 import riichinexus.microservices.tournament.domain.tablemanagement.model.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
-import riichinexus.microservices.player.objects.Player
+import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.tournament.objects.rulesmanagement.knockout.KnockoutBracketSnapshot
 import riichinexus.microservices.tournament.objects.rulesmanagement.stageprogression.StageAdvancementSnapshot
 import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.StageRankingSnapshot

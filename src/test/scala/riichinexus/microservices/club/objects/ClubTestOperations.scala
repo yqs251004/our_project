@@ -1,11 +1,13 @@
 package riichinexus.microservices.club.objects
 
+import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.time.Instant
 import java.util.NoSuchElementException
 
 import riichinexus.application.ports.*
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.*
+import riichinexus.microservices.club.domain.Club
 
 final class ClubTestOperations(
     clubRepository: ClubRepository,
@@ -29,10 +31,10 @@ final class ClubTestOperations(
           actor = actor,
           club = club,
           permission = Permission.ManageClubOperations,
-          delegatedPrivileges = Set(ClubPrivilege.ManageBank)
+          delegatedPrivileges = Set(ClubPrivilegeCode.ManageBank)
         )
 
-        val updatedClub = clubRepository.save(club.adjustTreasury(delta))
+        val updatedClub = clubRepository.save(ClubFunctions.adjustTreasury(club, delta))
         auditEventRepository.save(
           AuditEventEntry(
             id = IdGenerator.auditEventId(),
@@ -67,10 +69,10 @@ final class ClubTestOperations(
           actor = actor,
           club = club,
           permission = Permission.ManageClubOperations,
-          delegatedPrivileges = Set(ClubPrivilege.ManageBank)
+          delegatedPrivileges = Set(ClubPrivilegeCode.ManageBank)
         )
 
-        val updatedClub = clubRepository.save(club.adjustPointPool(delta))
+        val updatedClub = clubRepository.save(ClubFunctions.adjustPointPool(club, delta))
         auditEventRepository.save(
           AuditEventEntry(
             id = IdGenerator.auditEventId(),
@@ -106,7 +108,7 @@ final class ClubTestOperations(
           clubId = Some(clubId)
         )
 
-        val updatedClub = clubRepository.save(club.updateRankTree(rankTree))
+        val updatedClub = clubRepository.save(ClubFunctions.updateRankTree(club, rankTree))
         auditEventRepository.save(
           AuditEventEntry(
             id = IdGenerator.auditEventId(),
@@ -146,11 +148,11 @@ final class ClubTestOperations(
         )
 
         val updatedBy = actor.playerId.getOrElse(club.creator)
-        val nextContribution = club.contributionOf(playerId) + delta
+        val nextContribution = ClubFunctions.contributionOf(club, playerId) + delta
         require(nextContribution >= 0, s"Club member contribution for ${playerId.value} cannot be negative")
 
         val updatedClub = clubRepository.save(
-          club.updateMemberContribution(
+          ClubFunctions.updateMemberContribution(club,
             ClubMemberContribution(
               playerId = playerId,
               amount = nextContribution,
@@ -172,7 +174,7 @@ final class ClubTestOperations(
               "playerId" -> playerId.value,
               "delta" -> delta.toString,
               "contribution" -> nextContribution.toString,
-              "rankCode" -> updatedClub.rankFor(playerId).map(_.code).getOrElse("unknown")
+              "rankCode" -> ClubFunctions.rankFor(updatedClub, playerId).map(_.code).getOrElse("unknown")
             ),
             note = note
           )
@@ -195,7 +197,7 @@ final class ClubTestOperations(
           clubId = Some(clubId)
         )
 
-        val updatedClub = clubRepository.save(club.addHonor(honor))
+        val updatedClub = clubRepository.save(ClubFunctions.addHonor(club, honor))
         auditEventRepository.save(
           AuditEventEntry(
             id = IdGenerator.auditEventId(),
@@ -232,7 +234,7 @@ final class ClubTestOperations(
         if !club.honors.exists(_.title.trim.toLowerCase == normalizedTitle) then
           throw NoSuchElementException(s"Club ${clubId.value} does not have honor '$title'")
 
-        val updatedClub = clubRepository.save(club.removeHonor(title))
+        val updatedClub = clubRepository.save(ClubFunctions.removeHonor(club, title))
         auditEventRepository.save(
           AuditEventEntry(
             id = IdGenerator.auditEventId(),
@@ -264,10 +266,10 @@ final class ClubTestOperations(
           actor = actor,
           club = club,
           permission = Permission.ManageClubMembership,
-          delegatedPrivileges = Set(ClubPrivilege.ApproveRoster)
+          delegatedPrivileges = Set(ClubPrivilegeCode.ApproveRoster)
         )
 
-        val updatedClub = clubRepository.save(club.updateRecruitmentPolicy(policy))
+        val updatedClub = clubRepository.save(ClubFunctions.updateRecruitmentPolicy(club, policy))
         auditEventRepository.save(
           AuditEventEntry(
             id = IdGenerator.auditEventId(),
@@ -318,14 +320,15 @@ final class ClubTestOperations(
 
         val updatedSourceClub =
           if relation.relation == ClubRelationKind.Neutral then
-            clubRepository.save(club.removeRelation(relation.targetClubId))
-          else clubRepository.save(club.upsertRelation(relation))
+            clubRepository.save(ClubFunctions.removeRelation(club, relation.targetClubId))
+          else clubRepository.save(ClubFunctions.upsertRelation(club, relation))
 
         if relation.relation == ClubRelationKind.Neutral then
-          clubRepository.save(targetClub.removeRelation(clubId))
+          clubRepository.save(ClubFunctions.removeRelation(targetClub, clubId))
         else
           clubRepository.save(
-            targetClub.upsertRelation(
+            ClubFunctions.upsertRelation(
+              targetClub,
               relation.copy(targetClubId = clubId)
             )
           )
@@ -340,7 +343,7 @@ final class ClubTestOperations(
             actorId = actor.playerId,
             details = Map(
               "targetClubId" -> relation.targetClubId.value,
-              "relation" -> relation.relation.toString
+              "relation" -> ClubRelationKind.toString(relation.relation)
             ),
             note = relation.note
           )
@@ -373,7 +376,7 @@ final class ClubTestOperations(
     val hasBasePermission = authorizationService.can(actor, permission, clubId = Some(club.id))
     val hasDelegatedPrivilege = actor.playerId.exists { playerId =>
       club.members.contains(playerId) &&
-      delegatedPrivileges.exists(privilege => club.hasPrivilege(playerId, privilege))
+      delegatedPrivileges.exists(privilege => ClubFunctions.hasPrivilege(club, playerId, privilege))
     }
 
     if !hasBasePermission && !hasDelegatedPrivilege then

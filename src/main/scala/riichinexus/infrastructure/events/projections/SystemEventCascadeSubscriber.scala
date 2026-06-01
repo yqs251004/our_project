@@ -1,5 +1,6 @@
 package riichinexus.infrastructure.events.projections
 
+import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.sql.Connection
 import java.time.Instant
 
@@ -8,17 +9,22 @@ import riichinexus.api.ApiPlanContext
 import riichinexus.application.ports.*
 import riichinexus.application.ports.DomainEvent
 import riichinexus.domain.model.*
-import riichinexus.microservices.club.domain.ClubDissolved
+import riichinexus.microservices.club.domain.clubmanagement.model.ClubDissolved
 import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
 import riichinexus.microservices.tournament.domain.recordmanagement.model.*
 import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
 import riichinexus.microservices.tournament.domain.tablemanagement.model.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
-import riichinexus.microservices.club.domain.model.*
+import riichinexus.microservices.club.domain.Club
+import riichinexus.microservices.club.domain.clubmanagement.model.*
+import riichinexus.microservices.club.domain.membershipmanagement.model.*
+import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
+import riichinexus.microservices.club.domain.relationmanagement.model.*
 import riichinexus.microservices.club.api.`private`.{ListClubsPrivateAPIMessage, ResolveClubPrivateAPIMessage, ResolveClubsPrivateAPIMessage, SaveClubPrivateAPIMessage}
+import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
+import riichinexus.microservices.player.domain.functions.PlayerClubBindingFunctions
 import riichinexus.microservices.player.domain.PlayerBanned
-import riichinexus.microservices.opsanalytics.domain.AdvancedStatsRoundAnalysis
 import riichinexus.microservices.club.domain.ClubPowerRatingService
 import riichinexus.microservices.opsanalytics.api.`private`.{
   RecordClubAdvancedStatsBoardAPIMessage,
@@ -28,24 +34,24 @@ import riichinexus.microservices.opsanalytics.api.`private`.{
   ResetPlayerAdvancedStatsBoardAPIMessage,
   ResetPlayerDashboardAPIMessage
 }
-import riichinexus.microservices.opsanalytics.objects.{AdvancedStatsBoard, DashboardOwner}
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import riichinexus.microservices.tournament.appeal.domain.*
 import riichinexus.microservices.tournament.domain.events.TournamentSettlementRecorded
-import riichinexus.microservices.tournament.api.`private`.{
-  ListPlayerMatchRecordsPrivateAPIMessage,
-  ListPlayerPaifusPrivateAPIMessage
-}
 
-final class SystemEventCascadeSubscriber(
-    eventCascadeRecordRepository: EventCascadeRecordRepository
-) extends DomainEventSubscriber:
-  import AdvancedStatsRoundAnalysis.*
+object SystemEventCascadeSubscriber:
+  def apply(eventCascadeRecordRepository: EventCascadeRecordRepository): DomainEventSubscriber =
+    DomainEventSubscriber(
+      id = "riichinexus.infrastructure.events.projections.SystemEventCascadeSubscriber",
+      strategy = DomainEventSubscriberPartitionStrategy.AggregateRoot
+    ) { (connection, event) =>
+      handle(eventCascadeRecordRepository, connection, event)
+    }
 
-  override def partitionStrategy: DomainEventSubscriberPartitionStrategy =
-    DomainEventSubscriberPartitionStrategy.AggregateRoot
-
-  override def handle(connection: Connection, event: DomainEvent): Unit =
+  private def handle(
+      eventCascadeRecordRepository: EventCascadeRecordRepository,
+      connection: Connection,
+      event: DomainEvent
+  ): Unit =
     event match
       case AppealTicketFiled(ticket, occurredAt) =>
         eventCascadeRecordRepository.save(
@@ -152,11 +158,11 @@ final class SystemEventCascadeSubscriber(
       case PlayerBanned(playerId, reason, occurredAt) =>
         ResetPlayerDashboardAPIMessage(playerId, occurredAt).plan(apiContext(connection)).unsafeRunSync()
         ResetPlayerAdvancedStatsBoardAPIMessage(playerId, occurredAt).plan(apiContext(connection)).unsafeRunSync()
-        val repairedClubIds = findPlayer(connection, playerId).toVector.flatMap(_.boundClubIds).distinct.flatMap { clubId =>
+        val repairedClubIds = findPlayer(connection, playerId).toVector.flatMap(PlayerClubBindingFunctions.boundClubIds).distinct.flatMap { clubId =>
           ResolveClubPrivateAPIMessage(clubId).plan(ApiPlanContext(support = null, bearerToken = None, connection = connection)).unsafeRunSync().map { club =>
             val refreshed = refreshClubProjection(connection, club, occurredAt)
             SaveClubPrivateAPIMessage(refreshed).plan(ApiPlanContext(support = null, bearerToken = None, connection = connection)).unsafeRunSync()
-            RecordClubAdvancedStatsBoardAPIMessage(rebuildClubBoard(connection, refreshed, occurredAt))
+            RecordClubAdvancedStatsBoardAPIMessage(refreshed, occurredAt)
               .plan(apiContext(connection))
               .unsafeRunSync()
             clubId.value
@@ -208,30 +214,9 @@ final class SystemEventCascadeSubscriber(
       connection: Connection,
       club: Club
   ): Club =
-    club.updatePowerRating(
+    ClubFunctions.updatePowerRating(club,
       ClubPowerRatingService.calculate(club, findPlayer(connection, _))
     )
-
-  private def rebuildPlayerBoard(
-      connection: Connection,
-      playerId: PlayerId,
-      at: Instant
-  ): AdvancedStatsBoard =
-    val records = ListPlayerMatchRecordsPrivateAPIMessage(playerId).plan(apiContext(connection)).unsafeRunSync()
-    val paifus = ListPlayerPaifusPrivateAPIMessage(playerId).plan(apiContext(connection)).unsafeRunSync()
-    buildPlayerBoard(playerId, records, paifus, at)
-
-  private def rebuildClubBoard(
-      connection: Connection,
-      club: Club,
-      at: Instant
-  ): AdvancedStatsBoard =
-    val memberBoards = club.members.flatMap { playerId =>
-      findPlayer(connection, playerId)
-        .filter(_.status == PlayerStatus.Active)
-        .map(_ => rebuildPlayerBoard(connection, playerId, at))
-    }
-    buildClubBoard(club, memberBoards, at)
 
   private def findPlayer(connection: Connection, playerId: PlayerId): Option[Player] =
     GetPlayerAPIMessage.findPlayer(connection, playerId)

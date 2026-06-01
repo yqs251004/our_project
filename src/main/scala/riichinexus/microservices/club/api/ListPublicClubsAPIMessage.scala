@@ -1,15 +1,22 @@
 package riichinexus.microservices.club.api
 
+import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.{ClubId, Permission, PlayerId}
 import riichinexus.microservices.auth.domain.model.AccessPrincipal
-import riichinexus.microservices.club.domain.model.*
-import riichinexus.microservices.club.objects.ClubRelationKind
+import riichinexus.microservices.club.domain.Club
+import riichinexus.microservices.club.domain.clubmanagement.model.*
+import riichinexus.microservices.club.domain.membershipmanagement.model.*
+import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
+import riichinexus.microservices.club.domain.relationmanagement.model.*
+import riichinexus.microservices.club.objects.relationmanagement.{ClubRelationKind, ClubRelationView}
 import riichinexus.microservices.club.tables.clubs.ClubTable
-import riichinexus.microservices.player.objects.{Player, PlayerStatus}
+import riichinexus.microservices.player.domain.Player
+import riichinexus.microservices.player.objects.PlayerStatus
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
-import riichinexus.microservices.club.objects.apiTypes.{PublicClubDirectoryEntry, PublicClubRelationView}
+import riichinexus.microservices.club.objects.clubmanagement.apiTypes.PublicClubDirectoryEntry
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 
@@ -31,14 +38,17 @@ final case class ListPublicClubsAPIMessage(
     yield PagedResponse.fromItems(filteredEntries, limit, offset, query.appliedFilters)(identity)
 
   private def resolveQuery(context: ApiPlanContext): ResolvedClubDirectoryQuery =
-    context.support.authorizationService
-      .requirePermission(AccessPrincipal.guest(), Permission.ViewClubDirectory)
+    AuthorizationPolicyFunctions.requirePermission(
+      context.support.authorizationService,
+      AccessPrincipalFunctions.guest(),
+      Permission.ViewClubDirectory
+    )
     ResolvedClubDirectoryQuery(
       name = name.filter(_.nonEmpty),
       relation = relation,
       appliedFilters = Vector(
         name.filter(_.nonEmpty).map("name" -> _),
-        relation.map(value => "relation" -> value.toString)
+        relation.map(value => "relation" -> ClubRelationKind.toString(value))
       ).flatten.toMap
     )
 
@@ -82,7 +92,7 @@ final case class ListPublicClubsAPIMessage(
         .flatMap(relation => clubsById.get(relation.targetClubId))
         .sortBy(rival => (-rival.powerRating, rival.name))
         .headOption
-      PublicClubDirectoryEntry(
+      publicClubDirectoryEntry(
         clubId = club.id,
         name = club.name,
         memberCount = club.members.size,
@@ -97,9 +107,44 @@ final case class ListPublicClubsAPIMessage(
         strongestRivalClubId = strongestRival.map(_.id),
         strongestRivalPower = strongestRival.map(rival => round2(rival.powerRating)),
         honorTitles = club.honors.map(_.title).sorted,
-        relations = club.relations.map(PublicClubRelationView.fromDomain)
+        relations = club.relations.map(ClubRelationView.fromDomain)
       )
     }
+
+  private def publicClubDirectoryEntry(
+      clubId: ClubId,
+      name: String,
+      memberCount: Int,
+      activeMemberCount: Int,
+      adminCount: Int,
+      powerRating: Double,
+      totalPoints: Int,
+      treasuryBalance: Long,
+      pointPool: Int,
+      allianceCount: Int,
+      rivalryCount: Int,
+      strongestRivalClubId: Option[ClubId],
+      strongestRivalPower: Option[Double],
+      honorTitles: Vector[String],
+      relations: Vector[ClubRelationView]
+  ): PublicClubDirectoryEntry =
+    PublicClubDirectoryEntry(
+      clubId = clubId.value,
+      name = name,
+      memberCount = memberCount,
+      activeMemberCount = activeMemberCount,
+      adminCount = adminCount,
+      powerRating = powerRating,
+      totalPoints = totalPoints,
+      treasuryBalance = treasuryBalance,
+      pointPool = pointPool,
+      allianceCount = allianceCount,
+      rivalryCount = rivalryCount,
+      strongestRivalClubId = strongestRivalClubId.map(_.value),
+      strongestRivalPower = strongestRivalPower,
+      honorTitles = honorTitles,
+      relations = relations
+    )
 
   private def filterPublicClubDirectoryEntries(
       context: ApiPlanContext,
@@ -107,7 +152,7 @@ final case class ListPublicClubsAPIMessage(
       query: ResolvedClubDirectoryQuery
   ): Vector[PublicClubDirectoryEntry] =
     entries
-      .filter(club => query.name.forall(context.support.containsIgnoreCase(club.name, _)))
+      .filter(club => query.name.forall(riichinexus.system.functions.TextSearchFunctions.containsIgnoreCase(club.name, _)))
       .filter(club => query.relation.forall(relationKind => club.relations.exists(_.relation == relationKind)))
       .sortBy(_.name)
 

@@ -1,5 +1,6 @@
 package riichinexus.microservices.club.domain
 
+import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.sql.Connection
 import java.time.Instant
 
@@ -7,7 +8,12 @@ import cats.effect.unsafe.implicits.global
 import riichinexus.api.ApiPlanContext
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
-import riichinexus.microservices.club.domain.model.*
+import riichinexus.microservices.club.domain.Club
+import riichinexus.microservices.club.domain.clubmanagement.model.*
+import riichinexus.microservices.club.domain.membershipmanagement.model.*
+import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
+import riichinexus.microservices.club.domain.relationmanagement.model.*
+import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
 import riichinexus.microservices.opsanalytics.api.`private`.{
   EnsurePlayerDashboardAPIMessage,
@@ -22,7 +28,7 @@ object ClubProjectionRefresher:
       .unsafeRunSync()
 
   def refreshClubProjection(connection: Connection, module: ClubModuleContext, club: Club, at: Instant): Club =
-    val refreshedClub = club.updatePowerRating(
+    val refreshedClub = ClubFunctions.updatePowerRating(club,
       ClubPowerRatingService.calculate(club, findPlayer(connection))
     )
     RecordClubDashboardAPIMessage(refreshedClub, at)

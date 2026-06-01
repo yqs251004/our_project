@@ -1,4 +1,7 @@
 package riichinexus.microservices.platformadmin.api
+import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
+
+import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
 import cats.effect.IO
 
@@ -10,8 +13,10 @@ import riichinexus.application.changes.{DomainChange, DomainChangeInterpreter}
 import riichinexus.bootstrap.PlatformAdminModuleContext
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.auth.objects.Role
+import riichinexus.microservices.auth.domain.model.Role
+import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.domain.PlayerBanned
+import riichinexus.microservices.player.domain.functions.{PlayerClubBindingFunctions, PlayerStatusFunctions}
 import riichinexus.microservices.player.objects.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
@@ -27,7 +32,7 @@ final case class PlatformAdminBanPlayerAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[PlatformAdminPlayerView] =
     for
-      actor <- IO.blocking(context.principal(operatorId))
+      actor <- IO.blocking(AuthAccessPrincipalResolver.principal(context, operatorId))
       module = context.support.platformAdminModule
       request = BanPlayerRequest(operatorId = operatorId, reason = reason)
       bannedAt <- IO.realTimeInstant
@@ -51,7 +56,7 @@ final case class PlatformAdminBanPlayerAPIMessage(
       module: PlatformAdminModuleContext,
       command: BanPlayerCommand
   ): Option[Player] =
-    module.authorizationService.requirePermission(command.actor, Permission.BanRegisteredPlayer)
+    AuthorizationPolicyFunctions.requirePermission(module.authorizationService, command.actor, Permission.BanRegisteredPlayer)
     require(command.reason.trim.nonEmpty, "Ban reason cannot be empty")
 
     GetPlayerAPIMessage.findPlayer(connection, command.playerId).map { player =>
@@ -59,7 +64,7 @@ final case class PlatformAdminBanPlayerAPIMessage(
         .auditAndEvents(module.transactionManager, module.auditEventRepository, module.eventBus)
         .commitWithinTransaction(
           DomainChange(
-            aggregate = player.ban(command.reason),
+            aggregate = PlayerStatusFunctions.ban(player, command.reason),
             persist = nextPlayer => CreatePlayerAPIMessage.persistPlayer(connection, nextPlayer),
             auditEntries = _ =>
               Vector(
@@ -85,7 +90,7 @@ final case class PlatformAdminBanPlayerAPIMessage(
       userId = player.userId,
       nickname = player.nickname,
       status = player.status.toString,
-      clubIds = player.boundClubIds.map(_.value),
+      clubIds = PlayerClubBindingFunctions.boundClubIds(player).map(_.value),
       bannedReason = player.bannedReason,
       isSuperAdmin = player.roleGrants.exists(_.role == Role.SuperAdmin)
     )

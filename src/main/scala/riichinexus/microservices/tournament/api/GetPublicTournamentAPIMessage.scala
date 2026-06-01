@@ -10,7 +10,11 @@ import cats.effect.unsafe.implicits.global
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
 import riichinexus.microservices.club.api.`private`.ResolveClubsPrivateAPIMessage
-import riichinexus.microservices.club.domain.model.*
+import riichinexus.microservices.club.domain.Club
+import riichinexus.microservices.club.domain.clubmanagement.model.*
+import riichinexus.microservices.club.domain.membershipmanagement.model.*
+import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
+import riichinexus.microservices.club.domain.relationmanagement.model.*
 import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.{PublicTournamentDetailView, PublicTournamentStageView}
 import riichinexus.microservices.tournament.domain.rulesmanagement.functions.TournamentStageQueries
 import riichinexus.microservices.tournament.domain.lineupmanagement.model.*

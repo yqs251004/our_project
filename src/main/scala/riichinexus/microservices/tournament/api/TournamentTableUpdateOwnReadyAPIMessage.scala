@@ -1,4 +1,7 @@
 package riichinexus.microservices.tournament.api
+import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
+
+import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
 import java.util.NoSuchElementException
 
@@ -13,6 +16,7 @@ import riichinexus.microservices.tournament.domain.recordmanagement.model.*
 import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
 import riichinexus.microservices.tournament.domain.tablemanagement.model.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
+import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.tournament.objects.tablemanagement.TableSeat
@@ -20,7 +24,6 @@ import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.*
 import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
@@ -28,7 +31,6 @@ import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.*
 import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
@@ -39,7 +41,7 @@ final case class TournamentTableUpdateOwnReadyAPIMessage(tableId: String, reques
 
   override def plan(context: ApiPlanContext): IO[TournamentTableView] =
     for
-      actor <- IO.blocking(context.principal(PlayerId(request.operatorId)))
+      actor <- IO.blocking(AuthAccessPrincipalResolver.principal(context, PlayerId(request.operatorId)))
       module = context.support.tournamentModule
       command = UpdateOwnReadyCommand(TableId(tableId), actor, request.ready, request.note)
       table <- IO.blocking {
@@ -82,7 +84,7 @@ final case class TournamentTableUpdateOwnReadyAPIMessage(tableId: String, reques
       table: Table,
       targetSeat: TableSeat
   ): Unit =
-    module.authorizationService.requirePermission(
+    AuthorizationPolicyFunctions.requirePermission(module.authorizationService, 
       actor,
       Permission.ManageTableSeatState,
       tournamentId = Some(table.tournamentId),

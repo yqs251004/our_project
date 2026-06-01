@@ -2,9 +2,9 @@ package riichinexus.microservices.club.api
 
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
-import riichinexus.microservices.club.domain.model.ClubPrivilegeRegistry
+import riichinexus.microservices.club.domain.rankprivilegemanagement.functions.ClubPrivilegeRegistry
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.objects.ClubPrivilegeDefinition
+import riichinexus.microservices.club.objects.rankprivilegemanagement.ClubPrivilegeDefinition
 import upickle.default.*
 
 final case class ClubPrivilegeDefinitionsAPIMessage() extends APIMessage[Vector[ClubPrivilegeDefinition]] derives ReadWriter:

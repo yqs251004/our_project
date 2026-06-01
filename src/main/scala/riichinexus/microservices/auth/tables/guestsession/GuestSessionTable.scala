@@ -7,6 +7,7 @@ import scala.util.Using
 
 import riichinexus.application.ports.OptimisticConcurrencyException
 import riichinexus.domain.model.GuestSessionId
+import riichinexus.microservices.auth.domain.functions.GuestAccessSessionFunctions
 import riichinexus.microservices.auth.domain.model.GuestAccessSession
 import riichinexus.infrastructure.json.JsonCodecs.given
 import upickle.default.{read, write}
@@ -25,6 +26,7 @@ object GuestSessionTable:
       |""".stripMargin
 
   private[auth] def save(connection: Connection, session: GuestAccessSession): GuestAccessSession =
+    GuestAccessSessionFunctions.validate(session)
     val persisted = session.copy(version = session.version + 1)
     val rowsUpdated = Using.resource(connection.prepareStatement(upsertSql)) { statement =>
       statement.setString(1, persisted.id.value)

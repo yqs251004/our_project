@@ -13,20 +13,13 @@ import riichinexus.infrastructure.postgres.{
 }
 import riichinexus.application.ports.*
 import riichinexus.microservices.auth.domain.*
+import riichinexus.microservices.auth.domain.functions.AuthorizationPolicyFunctions
 import riichinexus.infrastructure.events.OutboxBackedDomainEventBus
 import riichinexus.infrastructure.events.projections.SystemEventCascadeSubscriber
-import riichinexus.microservices.opsanalytics.projections.{
-  AdvancedStatsProjectionSubscriber,
-  ClubProjectionSubscriber,
-  DashboardProjectionSubscriber,
-  RatingProjectionSubscriber
-}
 import riichinexus.microservices.tournament.appeal.domain.AppealApplicationService
-import riichinexus.microservices.tournament.domain.{
-  TournamentPaifuArchiveService,
-  TournamentSettlementCoordinator,
-  TournamentStageCompletionCoordinator
-}
+import riichinexus.microservices.tournament.domain.paifumanagement.functions.TournamentPaifuArchiveService
+import riichinexus.microservices.tournament.domain.settlementmanagement.functions.TournamentSettlementCoordinator
+import riichinexus.microservices.tournament.domain.tournamentmanagement.functions.TournamentStageCompletionCoordinator
 import riichinexus.system.instrumentation.PerformanceDiagnosticsService
 
 object ApplicationAssembly:
@@ -65,7 +58,7 @@ object ApplicationAssembly:
     buildContext(
       WiringBundle(
         transactionManager = JdbcTransactionManager(connectionFactory),
-        authorizationService = AuthorizationPolicy.strict,
+        authorizationService = AuthorizationPolicyFunctions.strict,
         connectionFactory = connectionFactory,
         repositories = ApplicationRepositoryContext(
           eventCascadeRecordRepository = PostgresEventCascadeRecordRepository(connectionFactory),
@@ -141,12 +134,6 @@ object ApplicationAssembly:
       authorizationService = wiring.authorizationService
     )
     val domainEventSubscribers = Vector[DomainEventSubscriber](
-      RatingProjectionSubscriber(),
-      ClubProjectionSubscriber(),
-      DashboardProjectionSubscriber(),
-      AdvancedStatsProjectionSubscriber(
-        wiring.transactionManager
-      ),
       SystemEventCascadeSubscriber(
         repositories.eventCascadeRecordRepository
       )

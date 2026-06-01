@@ -1,5 +1,6 @@
 package riichinexus.microservices.club.objects
 
+import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.time.Instant
 
 import riichinexus.application.ports.*

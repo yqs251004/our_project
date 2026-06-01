@@ -5,6 +5,7 @@ import java.time.Instant
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.auth.domain.functions.GuestAccessSessionFunctions
 import riichinexus.microservices.auth.domain.model.GuestAccessSession
 import riichinexus.microservices.auth.objects.apiTypes.GuestSessionResponse
 import riichinexus.microservices.auth.tables.guestsession.GuestSessionTable
@@ -34,7 +35,7 @@ final case class ListGuestSessionsAuthAPIMessage(
   ): Vector[GuestAccessSession] =
     GuestSessionTable
       .findAll(context.connection)
-      .filter(session => query.activeOnly.forall(flag => !flag || session.canAuthenticate(query.asOf)))
+      .filter(session => query.activeOnly.forall(flag => !flag || GuestAccessSessionFunctions.canAuthenticate(session, query.asOf)))
       .sortBy(session => (session.createdAt, session.id.value))
 
   private def resolveQuery(asOf: Instant): ResolvedGuestSessionsQuery =

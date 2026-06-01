@@ -1,5 +1,9 @@
 package riichinexus.microservices.tournament.api
+import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
 
+import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+
+import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.util.NoSuchElementException
 
 import cats.effect.IO
@@ -15,7 +19,13 @@ import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
 import riichinexus.microservices.tournament.domain.tablemanagement.model.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.microservices.club.api.`private`.ResolveClubPrivateAPIMessage
-import riichinexus.microservices.club.domain.model.*
+import riichinexus.microservices.club.domain.Club
+import riichinexus.microservices.club.domain.clubmanagement.model.*
+import riichinexus.microservices.club.domain.membershipmanagement.model.*
+import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
+import riichinexus.microservices.club.domain.relationmanagement.model.*
+import riichinexus.microservices.club.objects.rankprivilegemanagement.ClubPrivilegeCode
+import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
 import riichinexus.microservices.auth.domain.AuthorizationFailure
 import riichinexus.infrastructure.json.JsonCodecs.given
@@ -26,7 +36,6 @@ import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.*
 import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
@@ -34,7 +43,6 @@ import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.*
 import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
@@ -45,7 +53,7 @@ final case class TournamentStageSubmitLineupAPIMessage(tournamentId: String, sta
 
   override def plan(context: ApiPlanContext): IO[TournamentMutationView] =
     for
-      actor <- IO.blocking(context.principal(PlayerId(request.operatorId)))
+      actor <- IO.blocking(AuthAccessPrincipalResolver.principal(context, PlayerId(request.operatorId)))
       module = context.support.tournamentModule
       command = SubmitStageLineupCommand(
         tournamentId = TournamentId(tournamentId),
@@ -119,7 +127,7 @@ final case class TournamentStageSubmitLineupAPIMessage(tournamentId: String, sta
     club
 
   private def ensureSubmitterMatchesActor(actor: AccessPrincipal, submission: StageLineupSubmission): Unit =
-    if !actor.isSuperAdmin && actor.playerId.exists(_ != submission.submittedBy) then
+    if !AccessPrincipalFunctions.isSuperAdmin(actor) && actor.playerId.exists(_ != submission.submittedBy) then
       throw AuthorizationFailure("Lineup submitter must match the acting principal")
 
   private def ensureClubRegistered(tournament: Tournament, command: SubmitStageLineupCommand): Unit =
@@ -158,13 +166,13 @@ final case class TournamentStageSubmitLineupAPIMessage(tournamentId: String, sta
       club: Club
   ): Unit =
     val hasBasePermission =
-      module.authorizationService.can(
+      AuthorizationPolicyFunctions.can(module.authorizationService, 
         actor,
         Permission.SubmitTournamentLineup,
         clubId = Some(club.id)
       )
     val hasDelegatedPrivilege = actor.playerId.exists { playerId =>
-      club.members.contains(playerId) && club.hasPrivilege(playerId, ClubPrivilege.PriorityLineup)
+      club.members.contains(playerId) && ClubFunctions.hasPrivilege(club, playerId, ClubPrivilegeCode.PriorityLineup)
     }
 
     if !hasBasePermission && !hasDelegatedPrivilege then

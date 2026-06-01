@@ -1,42 +1,32 @@
 package riichinexus.microservices.auth.api
+import riichinexus.microservices.auth.api.`private`.CurrentSessionViewResolver
 
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.{GuestSessionId, PlayerId}
-import riichinexus.microservices.auth.objects.apiTypes.{CurrentSessionResponse, CurrentSessionView}
+import riichinexus.microservices.auth.objects.apiTypes.CurrentSessionView
 import upickle.default.*
 
 final case class CurrentSessionAuthAPIMessage(
     operatorId: Option[String] = None,
     guestSessionId: Option[String] = None
-) extends APIMessage[CurrentSessionResponse] derives ReadWriter:
+) extends APIMessage[CurrentSessionView] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[CurrentSessionResponse] =
+  override def plan(context: ApiPlanContext): IO[CurrentSessionView] =
     for
       input <- IO.blocking(resolveInput)
       session <- IO.blocking(
-        context.resolveCurrentSessionView(
+        CurrentSessionViewResolver.resolve(context, 
         operatorId = input.operatorId,
         guestSessionId = input.guestSessionId
         )
       )
-    yield currentSessionResponse(session)
+    yield session
 
   private def resolveInput: CurrentSessionInput =
     CurrentSessionInput(
       operatorId = operatorId.filter(_.nonEmpty).map(PlayerId(_)),
       guestSessionId = guestSessionId.filter(_.nonEmpty).map(GuestSessionId(_))
-    )
-
-  private def currentSessionResponse(view: CurrentSessionView): CurrentSessionResponse =
-    CurrentSessionResponse(
-      principalKind = view.principalKind,
-      principalId = view.principalId,
-      displayName = view.displayName,
-      authenticated = view.authenticated,
-      roles = view.roles,
-      player = view.player,
-      guestSession = view.guestSession
     )
 
   private final case class CurrentSessionInput(

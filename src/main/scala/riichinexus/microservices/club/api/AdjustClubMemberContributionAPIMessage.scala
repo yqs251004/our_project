@@ -1,5 +1,7 @@
 package riichinexus.microservices.club.api
+import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
 
+import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.time.Instant
 import java.util.NoSuchElementException
 
@@ -9,12 +11,17 @@ import riichinexus.application.changes.DomainChangeInterpreter
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.club.domain.model.*
+import riichinexus.microservices.club.domain.Club
+import riichinexus.microservices.club.domain.clubmanagement.model.*
+import riichinexus.microservices.club.domain.membershipmanagement.model.*
+import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
+import riichinexus.microservices.club.domain.relationmanagement.model.*
+import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
 import riichinexus.microservices.auth.domain.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubAuthorization
-import riichinexus.microservices.club.objects.ClubView
+import riichinexus.microservices.club.objects.clubmanagement.ClubView
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import upickle.default.*
 
@@ -28,7 +35,7 @@ final case class AdjustClubMemberContributionAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
-      actor <- IO.blocking(context.principal(PlayerId(operatorId)))
+      actor <- IO.blocking(AuthAccessPrincipalResolver.principal(context, PlayerId(operatorId)))
       occurredAt <- IO.realTimeInstant
       module = context.support.clubModule
       command = AdjustClubMemberContributionCommand(
@@ -80,7 +87,7 @@ final case class AdjustClubMemberContributionAPIMessage(
       club: Club,
       command: AdjustClubMemberContributionCommand
   ): Int =
-    val nextContribution = club.contributionOf(command.playerId) + command.delta
+    val nextContribution = ClubFunctions.contributionOf(club, command.playerId) + command.delta
     require(nextContribution >= 0, s"Club member contribution for ${command.playerId.value} cannot be negative")
     nextContribution
 
@@ -95,7 +102,7 @@ final case class AdjustClubMemberContributionAPIMessage(
     DomainChangeInterpreter
       .auditOnly(module.transactionManager, module.auditEventRepository)
       .commitAudited(
-        aggregate = club.updateMemberContribution(
+        aggregate = ClubFunctions.updateMemberContribution(club,
           ClubMemberContribution(
             playerId = command.playerId,
             amount = nextContribution,
@@ -115,7 +122,7 @@ final case class AdjustClubMemberContributionAPIMessage(
             "playerId" -> command.playerId.value,
             "delta" -> command.delta.toString,
             "contribution" -> nextContribution.toString,
-            "rankCode" -> updatedClub.rankFor(command.playerId).map(_.code).getOrElse("unknown")
+            "rankCode" -> ClubFunctions.rankFor(updatedClub, command.playerId).map(_.code).getOrElse("unknown")
           ),
         note = command.note
       )

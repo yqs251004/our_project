@@ -8,9 +8,15 @@ import scala.util.Using
 
 import riichinexus.application.ports.OptimisticConcurrencyException
 import riichinexus.domain.model.*
-import riichinexus.microservices.club.domain.model.*
+import riichinexus.microservices.club.domain.Club
+import riichinexus.microservices.club.domain.clubmanagement.model.*
+import riichinexus.microservices.club.domain.membershipmanagement.model.*
+import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
+import riichinexus.microservices.club.domain.relationmanagement.model.*
+import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.opsanalytics.domain.functions.{AdvancedStatsRecomputeTaskFunctions, DashboardFunctions}
 import riichinexus.microservices.opsanalytics.objects.{
   AdvancedStatsRecomputeTask,
   AdvancedStatsRecomputeTaskStatus,
@@ -37,12 +43,13 @@ object AdvancedStatsRecomputeTaskTable:
       |""".stripMargin
 
   private[opsanalytics] def save(connection: Connection, task: AdvancedStatsRecomputeTask): AdvancedStatsRecomputeTask =
+    AdvancedStatsRecomputeTaskFunctions.validate(task)
     val persisted = task.copy(version = task.version + 1)
     val rowsUpdated = Using.resource(connection.prepareStatement(upsertSql)) { statement =>
       statement.setString(1, persisted.id.value)
-      statement.setString(2, ownerKey(persisted.owner))
-      statement.setString(3, ownerType(persisted.owner))
-      statement.setString(4, persisted.status.toString)
+      statement.setString(2, DashboardFunctions.ownerKey(persisted.owner))
+      statement.setString(3, DashboardFunctions.ownerType(persisted.owner))
+      statement.setString(4, AdvancedStatsRecomputeTaskStatus.toString(persisted.status))
       statement.setInt(5, persisted.calculatorVersion)
       statement.setTimestamp(6, Timestamp.from(persisted.requestedAt))
       statement.setString(7, write[AdvancedStatsRecomputeTask](persisted))
@@ -103,10 +110,10 @@ object AdvancedStatsRecomputeTaskTable:
       asOf: Instant = Instant.now()
   ): Vector[AdvancedStatsRecomputeTask] =
     Using.resource(connection.prepareStatement(findPendingSql)) { statement =>
-      statement.setString(1, AdvancedStatsRecomputeTaskStatus.Pending.toString)
+      statement.setString(1, AdvancedStatsRecomputeTaskStatus.toString(AdvancedStatsRecomputeTaskStatus.Pending))
       Using.resource(statement.executeQuery())(readTasks)
     }
-      .filter(_.isRunnable(asOf))
+      .filter(AdvancedStatsRecomputeTaskFunctions.isRunnable(_, asOf))
       .take(limit)
 
   private val findActiveByOwnerSql: String =
@@ -126,25 +133,15 @@ object AdvancedStatsRecomputeTaskTable:
       calculatorVersion: Int
   ): Option[AdvancedStatsRecomputeTask] =
     Using.resource(connection.prepareStatement(findActiveByOwnerSql)) { statement =>
-      statement.setString(1, ownerKey(owner))
+      statement.setString(1, DashboardFunctions.ownerKey(owner))
       statement.setInt(2, calculatorVersion)
-      statement.setString(3, AdvancedStatsRecomputeTaskStatus.Pending.toString)
-      statement.setString(4, AdvancedStatsRecomputeTaskStatus.Processing.toString)
+      statement.setString(3, AdvancedStatsRecomputeTaskStatus.toString(AdvancedStatsRecomputeTaskStatus.Pending))
+      statement.setString(4, AdvancedStatsRecomputeTaskStatus.toString(AdvancedStatsRecomputeTaskStatus.Processing))
       Using.resource(statement.executeQuery()) { resultSet =>
         if resultSet.next() then Some(readTask(resultSet))
         else None
       }
     }
-
-  private def ownerKey(owner: DashboardOwner): String =
-    owner match
-      case DashboardOwner.Player(playerId) => s"player:${playerId.value}"
-      case DashboardOwner.Club(clubId)     => s"club:${clubId.value}"
-
-  private def ownerType(owner: DashboardOwner): String =
-    owner match
-      case DashboardOwner.Player(_) => "player"
-      case DashboardOwner.Club(_)   => "club"
 
   private def readTasks(resultSet: ResultSet): Vector[AdvancedStatsRecomputeTask] =
     @tailrec

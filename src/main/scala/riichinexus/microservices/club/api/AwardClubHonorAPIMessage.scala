@@ -1,5 +1,7 @@
 package riichinexus.microservices.club.api
+import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
 
+import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.time.Instant
 import java.util.NoSuchElementException
 
@@ -9,11 +11,15 @@ import riichinexus.application.changes.DomainChangeInterpreter
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.club.domain.model.*
+import riichinexus.microservices.club.domain.Club
+import riichinexus.microservices.club.domain.clubmanagement.model.*
+import riichinexus.microservices.club.domain.membershipmanagement.model.*
+import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
+import riichinexus.microservices.club.domain.relationmanagement.model.*
 import riichinexus.microservices.auth.domain.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubAuthorization
-import riichinexus.microservices.club.objects.ClubView
+import riichinexus.microservices.club.objects.clubmanagement.ClubView
 import upickle.default.*
 
 final case class AwardClubHonorAPIMessage(
@@ -26,7 +32,7 @@ final case class AwardClubHonorAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
-      actor <- IO.blocking(context.principal(PlayerId(operatorId)))
+      actor <- IO.blocking(AuthAccessPrincipalResolver.principal(context, PlayerId(operatorId)))
       occurredAt <- IO.realTimeInstant
       module = context.support.clubModule
       command = AwardClubHonorCommand(
@@ -67,7 +73,7 @@ final case class AwardClubHonorAPIMessage(
     DomainChangeInterpreter
       .auditOnly(module.transactionManager, module.auditEventRepository)
       .commitAudited(
-        aggregate = club.addHonor(command.honor),
+        aggregate = ClubFunctions.addHonor(club, command.honor),
         persist = updatedClub => riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, updatedClub),
         aggregateType = "club",
         aggregateId = _.id.value,

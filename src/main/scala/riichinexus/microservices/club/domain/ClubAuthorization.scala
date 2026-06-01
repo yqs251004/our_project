@@ -1,10 +1,17 @@
 package riichinexus.microservices.club.domain
 
+import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+
+import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.club.domain.model.*
-import riichinexus.microservices.club.objects.ClubPrivilegeCode
+import riichinexus.microservices.club.domain.Club
+import riichinexus.microservices.club.domain.clubmanagement.model.*
+import riichinexus.microservices.club.domain.membershipmanagement.model.*
+import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
+import riichinexus.microservices.club.domain.relationmanagement.model.*
+import riichinexus.microservices.club.objects.rankprivilegemanagement.ClubPrivilegeCode
 import riichinexus.microservices.auth.domain.{AuthorizationFailure, AuthorizationPolicy}
 
 object ClubAuthorization:
@@ -56,7 +63,7 @@ object ClubAuthorization:
       permission: Permission,
       delegatedPrivileges: Set[ClubPrivilegeCode]
   ): Unit =
-    val hasBasePermission = authorizationService.can(actor, permission, clubId = Some(club.id))
+    val hasBasePermission = AuthorizationPolicyFunctions.can(authorizationService, actor, permission, clubId = Some(club.id))
     if !hasBasePermission && !hasDelegatedPrivilege(actor, club, delegatedPrivileges) then
       throw AuthorizationFailure(
         s"${actor.displayName} is not allowed to perform $permission in club ${club.id.value}"
@@ -69,11 +76,11 @@ object ClubAuthorization:
   ): Boolean =
     actor.playerId.exists { playerId =>
       club.members.contains(playerId) &&
-        delegatedPrivileges.exists(privilege => club.hasPrivilege(playerId, privilege))
+        delegatedPrivileges.exists(privilege => ClubFunctions.hasPrivilege(club, playerId, privilege))
     }
 
   def canManageClubApplications(actor: AccessPrincipal, club: Club): Boolean =
-    actor.isSuperAdmin || hasDelegatedPrivilege(actor, club, Set(ClubPrivilege.ApproveRoster)) ||
+    AccessPrincipalFunctions.isSuperAdmin(actor) || hasDelegatedPrivilege(actor, club, Set(ClubPrivilegeCode.ApproveRoster)) ||
       actor.playerId.exists(club.admins.contains)
 
   def requireClubApplicationManager(actor: AccessPrincipal, club: Club): Unit =
@@ -92,6 +99,6 @@ object ClubAuthorization:
       actor: AccessPrincipal,
       club: Club
   ): Boolean =
-    actor.isSuperAdmin ||
-      authorizationService.can(actor, Permission.SubmitTournamentLineup, clubId = Some(club.id)) ||
-      hasDelegatedPrivilege(actor, club, Set(ClubPrivilege.PriorityLineup))
+    AccessPrincipalFunctions.isSuperAdmin(actor) ||
+      AuthorizationPolicyFunctions.can(authorizationService, actor, Permission.SubmitTournamentLineup, clubId = Some(club.id)) ||
+      hasDelegatedPrivilege(actor, club, Set(ClubPrivilegeCode.PriorityLineup))

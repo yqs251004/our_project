@@ -1,4 +1,7 @@
 package riichinexus.microservices.tournament.api
+import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
+
+import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
 import java.util.NoSuchElementException
 import java.time.Instant
@@ -20,7 +23,6 @@ import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.*
 import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
@@ -28,7 +30,6 @@ import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.*
 import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
@@ -52,12 +53,12 @@ final case class TournamentTableStartAPIMessage(tableId: String, operatorId: Opt
 
   private def resolveOperatorActor(context: ApiPlanContext): AccessPrincipal =
     operatorId.filter(_.nonEmpty).map(PlayerId(_))
-      .map(context.principal)
-      .getOrElse(AccessPrincipal.system)
+      .map(AuthAccessPrincipalResolver.principal(context, _))
+      .getOrElse(AccessPrincipalFunctions.system)
 
   private def startTable(connection: java.sql.Connection, module: TournamentModuleContext, command: StartTableCommand): Option[Table] =
     riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.findById(connection, command.tableId).map { table =>
-      module.authorizationService.requirePermission(
+      AuthorizationPolicyFunctions.requirePermission(module.authorizationService, 
         command.actor,
         Permission.ManageTournamentStages,
         tournamentId = Some(table.tournamentId)

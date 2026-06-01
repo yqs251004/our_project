@@ -5,12 +5,13 @@ import java.sql.Connection
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
-import riichinexus.microservices.auth.objects.Role
-import riichinexus.microservices.player.objects.{Player, PlayerStatus}
+import riichinexus.microservices.auth.domain.model.Role
+import riichinexus.microservices.player.domain.Player
+import riichinexus.microservices.player.domain.functions.PlayerRoleFunctions
+import riichinexus.microservices.player.objects.PlayerStatus
 import riichinexus.microservices.player.objects.apiTypes.{PlayerProfileView, PlayerRoleFlagsView}
 import riichinexus.microservices.player.objects.apiTypes.PlayerListQuery
 import riichinexus.microservices.player.tables.players.PlayerTable
-import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.RankSnapshotView
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 
@@ -33,7 +34,7 @@ final case class ListPlayersAPIMessage(
   private def resolveQuery(context: ApiPlanContext): ResolvedPlayersQuery =
     val playerQuery = PlayerListQuery(
       clubId = clubId.filter(_.nonEmpty).map(ClubId(_)),
-      status = status.filter(_.nonEmpty).map(context.support.parseEnum("status", _)(PlayerStatus.valueOf)),
+      status = status.filter(_.nonEmpty).map(riichinexus.system.functions.EnumParsingFunctions.parse("status", _)(PlayerStatus.valueOf)),
       nickname = nickname.filter(_.nonEmpty)
     )
     ResolvedPlayersQuery(
@@ -50,7 +51,7 @@ final case class ListPlayersAPIMessage(
       resolved: ResolvedPlayersQuery
   ): Vector[Player] =
     ListPlayersAPIMessage.listPlayers(context.connection, resolved.query)
-      .filter(player => resolved.query.nickname.forall(context.support.containsIgnoreCase(player.nickname, _)))
+      .filter(player => resolved.query.nickname.forall(riichinexus.system.functions.TextSearchFunctions.containsIgnoreCase(player.nickname, _)))
 
   private def playerProfileView(player: Player): PlayerProfileView =
     PlayerProfileView(
@@ -58,13 +59,13 @@ final case class ListPlayersAPIMessage(
       userId = player.userId,
       nickname = player.nickname,
       registeredAt = player.registeredAt.toString,
-      currentRank = RankSnapshotView(player.currentRank.platform, player.currentRank.tier, player.currentRank.stars),
+      currentRank = player.currentRank,
       elo = player.elo,
       clubId = player.clubId.map(_.value),
       affiliatedClubIds = player.affiliatedClubIds.map(_.value),
       status = player.status.toString,
       roles = PlayerRoleFlagsView(
-        isRegisteredPlayer = player.effectiveRoleGrants.exists(_.role == Role.RegisteredPlayer),
+        isRegisteredPlayer = PlayerRoleFunctions.effectiveRoleGrants(player).exists(_.role == Role.RegisteredPlayer),
         isClubAdmin = player.roleGrants.exists(_.role == Role.ClubAdmin),
         isTournamentAdmin = player.roleGrants.exists(_.role == Role.TournamentAdmin),
         isSuperAdmin = player.roleGrants.exists(_.role == Role.SuperAdmin)

@@ -1,5 +1,9 @@
 package riichinexus.microservices.club.api
+import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
 
+import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+
+import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.time.Instant
 import java.util.NoSuchElementException
 
@@ -8,12 +12,18 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.club.domain.model.*
+import riichinexus.microservices.club.domain.Club
+import riichinexus.microservices.club.domain.clubmanagement.model.*
+import riichinexus.microservices.club.domain.membershipmanagement.model.*
+import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
+import riichinexus.microservices.club.domain.relationmanagement.model.*
+import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
+import riichinexus.microservices.player.domain.functions.PlayerRoleFunctions
 import riichinexus.microservices.auth.domain.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubAuthorization
-import riichinexus.microservices.club.objects.ClubView
+import riichinexus.microservices.club.objects.clubmanagement.ClubView
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import upickle.default.*
 
@@ -25,7 +35,7 @@ final case class AssignClubAdminAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
-      actor <- IO.blocking(context.principal(PlayerId(operatorId)))
+      actor <- IO.blocking(AuthAccessPrincipalResolver.principal(context, PlayerId(operatorId)))
       grantedAt <- IO.realTimeInstant
       module = context.support.clubModule
       command = AssignClubAdminCommand(
@@ -53,9 +63,9 @@ final case class AssignClubAdminAPIMessage(
       ensureAdminCanBeAssigned(module, club, player, command)
       CreatePlayerAPIMessage.persistPlayer(
         connection,
-        player.grantRole(RoleGrant.clubAdmin(command.clubId, command.grantedAt, command.actor.playerId))
+        PlayerRoleFunctions.grantRole(player, RoleGrantFunctions.clubAdmin(command.clubId, command.grantedAt, command.actor.playerId))
       )
-      riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, club.grantAdmin(command.playerId))
+      riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, ClubFunctions.grantAdmin(club, command.playerId))
 
   private def ensureAdminCanBeAssigned(
       module: ClubModuleContext,

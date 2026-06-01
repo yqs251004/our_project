@@ -1,4 +1,7 @@
 package riichinexus.microservices.tournament.api
+import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
+
+import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
 import java.util.NoSuchElementException
 
@@ -20,7 +23,7 @@ final case class TournamentStageCompleteAPIMessage(
     for
       completedAt <- IO.realTimeInstant
       module = context.support.tournamentModule
-      actor = operatorId.filter(_.nonEmpty).map(PlayerId(_)).map(context.principal).getOrElse(AccessPrincipal.system)
+      actor = operatorId.filter(_.nonEmpty).map(PlayerId(_)).map(AuthAccessPrincipalResolver.principal(context, _)).getOrElse(AccessPrincipalFunctions.system)
       advancement <- IO.blocking {
         module.transactionManager
           .inTransaction {

@@ -1,5 +1,7 @@
 package riichinexus.microservices.tournament.domain.paifumanagement.functions
 
+import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+
 import riichinexus.microservices.tournament.domain.lineupmanagement.functions.*
 import riichinexus.microservices.tournament.domain.paifumanagement.functions.*
 import riichinexus.microservices.tournament.domain.recordmanagement.functions.*
@@ -15,9 +17,12 @@ import riichinexus.microservices.tournament.objects.paifumanagement.{HandOutcome
 
 import java.sql.Connection
 
+import cats.effect.unsafe.implicits.global
+import riichinexus.api.ApiPlanContext
 import riichinexus.application.changes.{DomainChange, DomainChangeInterpreter}
 import riichinexus.application.ports.{AuditEventRepository, DomainEventBus, TransactionManager}
 import riichinexus.domain.model.*
+import riichinexus.microservices.opsanalytics.api.`private`.RefreshOpsAnalyticsAfterMatchArchivedPrivateAPIMessage
 import riichinexus.microservices.tournament.domain.events.MatchRecordArchived
 import riichinexus.microservices.tournament.domain.recordmanagement.functions.MatchRecordFunctions
 import riichinexus.microservices.tournament.domain.paifumanagement.functions.{PaifuFunctions, PaifuTileFunctions}
@@ -44,7 +49,7 @@ final class TournamentPaifuArchiveService(
       paifu: Paifu
   ): Option[Table] =
     riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.findById(connection, tableId).map { table =>
-      authorizationService.requirePermission(
+      AuthorizationPolicyFunctions.requirePermission(authorizationService, 
         actor,
         Permission.ManageTournamentStages,
         tournamentId = Some(table.tournamentId)
@@ -53,6 +58,7 @@ final class TournamentPaifuArchiveService(
       ensureNotArchived(connection, tableId)
 
       val archived = commitArchivedPaifu(connection, table, paifu, actor)
+      refreshOpsAnalytics(connection, archived, paifu.metadata.recordedAt)
       materializeUnlockedTables(connection, table, paifu)
       archived.table
     }
@@ -128,6 +134,16 @@ final class TournamentPaifuArchiveService(
         table.stageId,
         paifu.metadata.recordedAt
       )
+
+  private def refreshOpsAnalytics(
+      connection: Connection,
+      archived: ArchivedPaifuChange,
+      occurredAt: java.time.Instant
+  ): Unit =
+    RefreshOpsAnalyticsAfterMatchArchivedPrivateAPIMessage(
+      matchRecord = archived.matchRecord,
+      occurredAt = occurredAt
+    ).plan(ApiPlanContext(support = null, bearerToken = None, connection = connection)).unsafeRunSync()
 
   private def validatePaifu(table: Table, paifu: Paifu): Unit =
     PaifuFunctions.validate(paifu)

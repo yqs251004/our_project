@@ -1,17 +1,22 @@
 package riichinexus.microservices.club.api
+import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
 
 import java.util.NoSuchElementException
 
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
-import riichinexus.microservices.club.domain.model.*
+import riichinexus.microservices.club.domain.Club
+import riichinexus.microservices.club.domain.clubmanagement.model.*
+import riichinexus.microservices.club.domain.membershipmanagement.model.*
+import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
+import riichinexus.microservices.club.domain.relationmanagement.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.api.`private`.ClubApplicationViewAssembler
 import riichinexus.microservices.club.domain.ClubAuthorization
-import riichinexus.microservices.club.objects.ClubApplicationStatus
-import riichinexus.microservices.club.objects.apiTypes.ClubMembershipApplicationView
-import riichinexus.microservices.club.objects.apiTypes.ClubApplicationListQuery
+import riichinexus.microservices.club.objects.membershipmanagement.ClubApplicationStatus
+import riichinexus.microservices.club.objects.membershipmanagement.apiTypes.ClubMembershipApplicationView
+import riichinexus.microservices.club.objects.membershipmanagement.apiTypes.ClubApplicationListQuery
 import riichinexus.microservices.club.tables.clubs.ClubTable
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
@@ -38,7 +43,7 @@ final case class ListClubApplicationsAPIMessage(
       offset = query.offset.getOrElse(0),
       appliedFilters = Vector(
         Option(query.operatorId).filter(_.nonEmpty).map("operatorId" -> _),
-        query.status.map(status => "status" -> status.toString),
+        query.status.map(status => "status" -> ClubApplicationStatus.toString(status)),
         query.applicantUserId.filter(_.nonEmpty).map("applicantUserId" -> _),
         query.displayName.filter(_.nonEmpty).map("displayName" -> _)
       ).flatten.toMap
@@ -52,7 +57,7 @@ final case class ListClubApplicationsAPIMessage(
     val club = ClubTable
       .findById(context.connection, query.clubId)
       .getOrElse(throw NoSuchElementException(s"Club ${query.clubId.value} was not found"))
-    val actor = context.requestActor(
+    val actor = AuthAccessPrincipalResolver.requestActor(context, 
       guestSessionId = None,
       operatorId = query.operatorId
     )
@@ -61,7 +66,7 @@ final case class ListClubApplicationsAPIMessage(
     val applications = club.membershipApplications
       .filter(application => query.status.forall(_ == application.status))
       .filter(application => query.applicantUserId.forall(value => application.applicantUserId.contains(value)))
-      .filter(application => query.displayName.forall(context.support.containsIgnoreCase(application.displayName, _)))
+      .filter(application => query.displayName.forall(riichinexus.system.functions.TextSearchFunctions.containsIgnoreCase(application.displayName, _)))
       .sortBy(_.submittedAt)
       .map(application => ClubApplicationViewAssembler.applicationView(context.connection, module, club, application, actor))
     pagedResponse(applications, query)

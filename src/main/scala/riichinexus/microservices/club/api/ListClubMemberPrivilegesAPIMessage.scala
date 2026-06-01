@@ -3,11 +3,16 @@ package riichinexus.microservices.club.api
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.*
-import riichinexus.microservices.club.domain.model.*
+import riichinexus.microservices.club.domain.Club
+import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
+import riichinexus.microservices.club.domain.clubmanagement.model.*
+import riichinexus.microservices.club.domain.membershipmanagement.model.*
+import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
+import riichinexus.microservices.club.domain.relationmanagement.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.objects.ClubPrivilegeCode
-import riichinexus.microservices.club.objects.apiTypes.ClubMemberPrivilegeSnapshotView
-import riichinexus.microservices.club.objects.apiTypes.ClubMemberPrivilegeListQuery
+import riichinexus.microservices.club.objects.rankprivilegemanagement.ClubPrivilegeCode
+import riichinexus.microservices.club.objects.rankprivilegemanagement.apiTypes.ClubMemberPrivilegeSnapshotView
+import riichinexus.microservices.club.objects.rankprivilegemanagement.apiTypes.ClubMemberPrivilegeListQuery
 import riichinexus.microservices.club.tables.clubs.ClubTable
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
@@ -33,7 +38,7 @@ final case class ListClubMemberPrivilegesAPIMessage(
       offset = query.offset.getOrElse(0),
       appliedFilters = Vector(
         query.playerId.filter(_.nonEmpty).map("playerId" -> _),
-        query.privilege.map(value => "privilege" -> value.wireValue),
+        query.privilege.map(value => "privilege" -> ClubPrivilegeCode.toString(value)),
         query.rankCode.filter(_.nonEmpty).map("rankCode" -> _)
       ).flatten.toMap
     )
@@ -46,7 +51,7 @@ final case class ListClubMemberPrivilegesAPIMessage(
       .map { club =>
         if club.dissolvedAt.nonEmpty then
           throw IllegalArgumentException(s"Club ${club.id.value} has already been dissolved")
-        club.memberPrivilegeSnapshots
+        ClubFunctions.memberPrivilegeSnapshots(club)
       }
       .getOrElse(throw java.util.NoSuchElementException(s"Club ${query.clubId.value} was not found"))
       .filter(snapshot => query.playerId.forall(_ == snapshot.playerId))

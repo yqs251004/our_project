@@ -1,11 +1,14 @@
 package riichinexus.microservices.club.objects
 
+import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.time.Instant
 import java.util.NoSuchElementException
 
 import riichinexus.application.ports.*
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.*
+import riichinexus.microservices.club.domain.Club
+import riichinexus.microservices.club.domain.membershipmanagement.functions.ClubMembershipApplicationFunctions
 
 final class ClubTestMembershipApplications(
     clubRepository: ClubRepository,
@@ -36,7 +39,7 @@ final class ClubTestMembershipApplications(
 
         applicantUserId.foreach { userId =>
           if club.membershipApplications.exists(application =>
-              application.applicantUserId.contains(userId) && application.isPending
+              application.applicantUserId.contains(userId) && ClubMembershipApplicationFunctions.isPending(application)
             )
           then
             throw IllegalArgumentException(
@@ -59,7 +62,7 @@ final class ClubTestMembershipApplications(
           message = message
         )
 
-        clubRepository.save(club.submitApplication(application))
+        clubRepository.save(ClubFunctions.submitApplication(club, application))
         application
       }
     }
@@ -77,22 +80,22 @@ final class ClubTestMembershipApplications(
       clubRepository.findById(clubId).map { club =>
         ensureClubActive(club)
 
-        val application = club
-          .findApplication(applicationId)
+        val application = ClubFunctions
+          .findApplication(club, applicationId)
           .getOrElse(
             throw NoSuchElementException(
               s"Membership application ${applicationId.value} was not found in club ${clubId.value}"
             )
           )
 
-        if !application.isPending then
+        if !ClubMembershipApplicationFunctions.isPending(application) then
           throw IllegalArgumentException(
             s"Membership application ${applicationId.value} has already been reviewed"
           )
 
         requireApplicationOwnership(application, actor)
-        val updatedApplication = application.withdraw(actor.principalId, withdrawnAt, note)
-        clubRepository.save(club.reviewApplication(applicationId, _ => updatedApplication))
+        val updatedApplication = ClubMembershipApplicationFunctions.withdraw(application, actor.principalId, withdrawnAt, note)
+        clubRepository.save(ClubFunctions.reviewApplication(club, applicationId, _ => updatedApplication))
         updatedApplication
       }
     }
@@ -117,18 +120,18 @@ final class ClubTestMembershipApplications(
           actor = actor,
           club = club,
           permission = Permission.ManageClubMembership,
-          delegatedPrivileges = Set(ClubPrivilege.ApproveRoster)
+          delegatedPrivileges = Set(ClubPrivilegeCode.ApproveRoster)
         )
 
-        val application = club
-          .findApplication(applicationId)
+        val application = ClubFunctions
+          .findApplication(club, applicationId)
           .getOrElse(
             throw NoSuchElementException(
               s"Membership application ${applicationId.value} was not found in club ${clubId.value}"
             )
           )
 
-        if !application.isPending then
+        if !ClubMembershipApplicationFunctions.isPending(application) then
           throw IllegalArgumentException(
             s"Membership application ${applicationId.value} has already been reviewed"
           )
@@ -147,9 +150,10 @@ final class ClubTestMembershipApplications(
           )
 
         val reviewer = actor.playerId.getOrElse(club.creator)
-        val updatedClub = club
-          .reviewApplication(applicationId, _.approve(reviewer, approvedAt, note))
-          .addMember(playerId)
+        val updatedClub = ClubFunctions.addMember(
+          ClubFunctions.reviewApplication(club, applicationId, ClubMembershipApplicationFunctions.approve(_, reviewer, approvedAt, note)),
+          playerId
+        )
 
         val savedPlayer = playerRepository.save(player.joinClub(clubId))
         ensurePlayerDashboard(savedPlayer.id, dashboardRepository, approvedAt)
@@ -179,25 +183,25 @@ final class ClubTestMembershipApplications(
           actor = actor,
           club = club,
           permission = Permission.ManageClubMembership,
-          delegatedPrivileges = Set(ClubPrivilege.ApproveRoster)
+          delegatedPrivileges = Set(ClubPrivilegeCode.ApproveRoster)
         )
 
-        val application = club
-          .findApplication(applicationId)
+        val application = ClubFunctions
+          .findApplication(club, applicationId)
           .getOrElse(
             throw NoSuchElementException(
               s"Membership application ${applicationId.value} was not found in club ${clubId.value}"
             )
           )
 
-        if !application.isPending then
+        if !ClubMembershipApplicationFunctions.isPending(application) then
           throw IllegalArgumentException(
             s"Membership application ${applicationId.value} has already been reviewed"
           )
 
         val reviewer = actor.playerId.getOrElse(club.creator)
         clubRepository.save(
-          club.reviewApplication(applicationId, _.reject(reviewer, rejectedAt, note))
+          ClubFunctions.reviewApplication(club, applicationId, ClubMembershipApplicationFunctions.reject(_, reviewer, rejectedAt, note))
         )
       }
     }
@@ -251,7 +255,7 @@ final class ClubTestMembershipApplications(
     val hasBasePermission = authorizationService.can(actor, permission, clubId = Some(club.id))
     val hasDelegatedPrivilege = actor.playerId.exists { playerId =>
       club.members.contains(playerId) &&
-      delegatedPrivileges.exists(privilege => club.hasPrivilege(playerId, privilege))
+      delegatedPrivileges.exists(privilege => ClubFunctions.hasPrivilege(club, playerId, privilege))
     }
 
     if !hasBasePermission && !hasDelegatedPrivilege then
@@ -275,7 +279,7 @@ final class ClubTestMembershipApplications(
       dashboardRepository: DashboardRepository,
       at: Instant
   ): Club =
-    val refreshedClub = club.updatePowerRating(
+    val refreshedClub = ClubFunctions.updatePowerRating(club,
       calculateClubPowerRating(club, playerRepository, dictionarySnapshot(globalDictionaryRepository))
     )
     dashboardRepository.save(buildClubDashboard(refreshedClub, playerRepository, dashboardRepository, at))

@@ -1,5 +1,7 @@
 package riichinexus.microservices.tournament.appeal.domain
 
+import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+
 import riichinexus.microservices.tournament.objects.tablemanagement.TableStatus
 
 import java.sql.Connection
@@ -16,6 +18,7 @@ import riichinexus.microservices.tournament.domain.recordmanagement.model.*
 import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
 import riichinexus.microservices.tournament.domain.tablemanagement.model.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
+import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
 import riichinexus.microservices.auth.domain.*
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
@@ -28,7 +31,7 @@ final class AppealApplicationService(
     auditEventRepository: AuditEventRepository,
     eventBus: DomainEventBus,
     transactionManager: TransactionManager = NoOpTransactionManager,
-    authorizationService: AuthorizationPolicy = AuthorizationPolicy.permitAll
+    authorizationService: AuthorizationPolicy = AuthorizationPolicyFunctions.permitAll
 ):
   def fileAppeal(
       connection: Connection,
@@ -45,7 +48,7 @@ final class AppealApplicationService(
       TournamentGameTable.findById(connection, tableId).map { table =>
         require(description.trim.nonEmpty, "Appeal description cannot be empty")
         require(dueAt.forall(!_.isBefore(createdAt)), "Appeal dueAt cannot be earlier than createdAt")
-        authorizationService.requirePermission(
+        AuthorizationPolicyFunctions.requirePermission(authorizationService, 
           actor,
           Permission.FileAppealTicket,
           subjectPlayerId = Some(openedBy)
@@ -127,7 +130,7 @@ final class AppealApplicationService(
   ): Option[AppealTicket] =
     transactionManager.inTransaction {
       AppealTicketTable.findById(connection, ticketId).map { ticket =>
-        authorizationService.requirePermission(
+        AuthorizationPolicyFunctions.requirePermission(authorizationService, 
           actor,
           Permission.ResolveAppeal,
           tournamentId = Some(ticket.tournamentId)
@@ -217,7 +220,7 @@ final class AppealApplicationService(
   ): Option[AppealTicket] =
     transactionManager.inTransaction {
       AppealTicketTable.findById(connection, ticketId).map { ticket =>
-        authorizationService.requirePermission(
+        AuthorizationPolicyFunctions.requirePermission(authorizationService, 
           actor,
           Permission.ResolveAppeal,
           tournamentId = Some(ticket.tournamentId)
@@ -321,7 +324,7 @@ final class AppealApplicationService(
         val operatorId = actor.playerId.getOrElse(ticket.openedBy)
         if actor.playerId.contains(ticket.openedBy) then ()
         else
-          authorizationService.requirePermission(
+          AuthorizationPolicyFunctions.requirePermission(authorizationService, 
             actor,
             Permission.ResolveAppeal,
             tournamentId = Some(ticket.tournamentId)

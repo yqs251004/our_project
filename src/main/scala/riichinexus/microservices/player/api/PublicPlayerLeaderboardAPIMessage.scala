@@ -1,15 +1,17 @@
 package riichinexus.microservices.player.api
 
+import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.ClubId
 import riichinexus.domain.model.Permission
 import riichinexus.microservices.auth.domain.model.AccessPrincipal
-import riichinexus.microservices.player.domain.PlayerRankNormalizationService
-import riichinexus.microservices.player.objects.{Player, PlayerStatus}
+import riichinexus.microservices.player.domain.Player
+import riichinexus.microservices.player.domain.functions.PlayerClubBindingFunctions
+import riichinexus.microservices.player.objects.PlayerStatus
 import riichinexus.microservices.player.tables.players.PlayerTable
 import riichinexus.microservices.player.objects.apiTypes.PlayerLeaderboardEntry
-import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.RankSnapshotView
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 
@@ -29,12 +31,15 @@ final case class PublicPlayerLeaderboardAPIMessage(
     yield PagedResponse.fromItems(filteredEntries, limit, offset, query.appliedFilters)(identity)
 
   private def resolveQuery(context: ApiPlanContext): ResolvedPlayerLeaderboardQuery =
-    context.support.authorizationService
-      .requirePermission(AccessPrincipal.guest(), Permission.ViewPublicLeaderboard)
+    AuthorizationPolicyFunctions.requirePermission(
+      context.support.authorizationService,
+      AccessPrincipalFunctions.guest(),
+      Permission.ViewPublicLeaderboard
+    )
     ResolvedPlayerLeaderboardQuery(
       clubId = clubId.filter(_.nonEmpty).map(ClubId(_).value),
       status = status.filter(_.nonEmpty).map(
-        context.support.parseEnum("status", _)(PlayerStatus.valueOf)
+        riichinexus.system.functions.EnumParsingFunctions.parse("status", _)(PlayerStatus.valueOf)
       ),
       appliedFilters = Vector(
         clubId.filter(_.nonEmpty).map("clubId" -> _),
@@ -47,19 +52,15 @@ final case class PublicPlayerLeaderboardAPIMessage(
 
   private def publicPlayerLeaderboardEntries(players: Vector[Player]): Vector[PlayerLeaderboardEntry] =
     players
-      .map(player => player -> PlayerRankNormalizationService.normalize(player.currentRank))
-      .sortBy { case (player, normalizedRank) =>
-        val normalizedRankScore = normalizedRank.map(_.score).getOrElse(Int.MinValue)
-        (-player.elo, -normalizedRankScore, player.nickname)
-      }
-      .map { case (player, normalizedRank) =>
+      .sortBy(player => (-player.elo, player.nickname))
+      .map { player =>
         PlayerLeaderboardEntry(
           playerId = player.id.value,
           nickname = player.nickname,
           elo = player.elo,
-          currentRank = RankSnapshotView(player.currentRank.platform, player.currentRank.tier, player.currentRank.stars),
-          normalizedRankScore = normalizedRank.map(_.score),
-          clubIds = player.boundClubIds.map(_.value),
+          currentRank = player.currentRank,
+          normalizedRankScore = None,
+          clubIds = PlayerClubBindingFunctions.boundClubIds(player).map(_.value),
           status = player.status.toString
         )
       }

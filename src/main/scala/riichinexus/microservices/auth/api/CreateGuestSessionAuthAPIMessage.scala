@@ -8,6 +8,7 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.application.changes.{DomainChange, DomainChangeInterpreter}
 import riichinexus.bootstrap.AuthModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.auth.domain.functions.GuestAccessSessionFunctions
 import riichinexus.microservices.auth.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.auth.objects.apiTypes.GuestSessionResponse
@@ -41,7 +42,7 @@ final case class CreateGuestSessionAuthAPIMessage(
       module: AuthModuleContext,
       command: CreateGuestSessionCommand
   ): GuestAccessSession =
-    val session = GuestAccessSession.create(
+    val session = GuestAccessSessionFunctions.create(
       id = IdGenerator.guestSessionId(),
       createdAt = command.createdAt,
       displayName = command.input.displayName,

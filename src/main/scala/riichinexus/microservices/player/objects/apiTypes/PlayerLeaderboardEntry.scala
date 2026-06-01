@@ -1,13 +1,14 @@
 package riichinexus.microservices.player.objects.apiTypes
 
-import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.RankSnapshotView
+import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.player.objects.RankSnapshot
 import upickle.default.*
 
 final case class PlayerLeaderboardEntry(
     playerId: String,
     nickname: String,
     elo: Int,
-    currentRank: RankSnapshotView,
+    currentRank: RankSnapshot,
     normalizedRankScore: Option[Int],
     clubIds: Vector[String],
     status: String

@@ -1,4 +1,5 @@
 package riichinexus.microservices.auth.api
+import riichinexus.microservices.auth.api.`private`.CurrentSessionViewResolver
 
 import java.time.Instant
 
@@ -7,10 +8,12 @@ import cats.effect.unsafe.implicits.global
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.AuthModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
-import riichinexus.microservices.auth.objects.{AccountCredential, AuthenticatedSession}
-import riichinexus.microservices.auth.objects.apiTypes.AuthSuccessResponse
-import riichinexus.microservices.auth.security.AuthPasswordHasher
+import riichinexus.microservices.auth.domain.functions.{AccountCredentialFunctions, AuthenticatedSessionFunctions, PasswordHashFunctions}
+import riichinexus.microservices.auth.domain.model.{AccountCredential, AuthenticatedSession}
+import riichinexus.microservices.auth.objects.apiTypes.AuthSuccessView
+import riichinexus.microservices.auth.security.PasswordSaltGenerator
 import riichinexus.microservices.auth.tables.accountcredential.AccountCredentialTable
 import riichinexus.microservices.auth.tables.authenticatedsession.AuthenticatedSessionTable
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
@@ -20,17 +23,17 @@ final case class RegisterAuthAPIMessage(
     username: String,
     password: String,
     displayName: String
-) extends APIMessage[AuthSuccessResponse] derives ReadWriter:
+) extends APIMessage[AuthSuccessView] derives ReadWriter:
 
   private val DefaultRank = RankSnapshot(RankPlatform.Custom, "Unranked")
   private val SessionTtl = java.time.Duration.ofDays(30)
 
-  override def plan(context: ApiPlanContext): IO[AuthSuccessResponse] =
+  override def plan(context: ApiPlanContext): IO[AuthSuccessView] =
     for
       registeredAt <- IO.realTimeInstant
       module = context.support.authModule
       command = RegisterAuthCommand(
-        username = AccountCredential.normalizeUsername(username),
+        username = AccountCredentialFunctions.normalizeUsername(username),
         password = password,
         displayName = normalizeDisplayName(displayName),
         registeredAt = registeredAt
@@ -40,12 +43,12 @@ final case class RegisterAuthAPIMessage(
           register(context, module, command)
         }
       }
-    yield AuthSuccessResponse(
+    yield AuthSuccessView(
       userId = result.player.id.value,
       username = result.username,
       displayName = result.player.nickname,
       token = result.session.token,
-      roles = context.support.registeredRoleFlags(result.player)
+      roles = CurrentSessionViewResolver.registeredRoleFlags(result.player)
     )
 
   private def register(context: ApiPlanContext, module: AuthModuleContext, command: RegisterAuthCommand): RegisterAuthResult =
@@ -59,7 +62,7 @@ final case class RegisterAuthAPIMessage(
     saveCredential(connection, command, player)
     val session = AuthenticatedSessionTable.save(
       connection,
-      AuthenticatedSession.create(
+      AuthenticatedSessionFunctions.create(
         username = command.username,
         playerId = player.id,
         createdAt = command.registeredAt,
@@ -92,7 +95,7 @@ final case class RegisterAuthAPIMessage(
       command: RegisterAuthCommand,
       player: Player
   ): AccountCredential =
-    val passwordDigest = AuthPasswordHasher.hash(command.password)
+    val passwordDigest = PasswordHashFunctions.digest(command.password, PasswordSaltGenerator.nextSalt())
     AccountCredentialTable.save(
       connection,
       AccountCredential(

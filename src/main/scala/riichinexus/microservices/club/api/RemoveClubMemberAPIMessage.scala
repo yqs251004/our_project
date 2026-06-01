@@ -1,5 +1,9 @@
 package riichinexus.microservices.club.api
+import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
 
+import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+
+import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.time.Instant
 import java.util.NoSuchElementException
 
@@ -8,12 +12,19 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.club.domain.model.*
+import riichinexus.microservices.club.domain.Club
+import riichinexus.microservices.club.domain.clubmanagement.model.*
+import riichinexus.microservices.club.domain.membershipmanagement.model.*
+import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
+import riichinexus.microservices.club.domain.relationmanagement.model.*
+import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
+import riichinexus.microservices.player.domain.functions.{PlayerClubBindingFunctions, PlayerRoleFunctions}
 import riichinexus.microservices.auth.domain.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.{ClubAuthorization, ClubProjectionRefresher}
-import riichinexus.microservices.club.objects.ClubView
+import riichinexus.microservices.club.objects.rankprivilegemanagement.ClubPrivilegeCode
+import riichinexus.microservices.club.objects.clubmanagement.ClubView
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import upickle.default.*
 
@@ -45,8 +56,8 @@ final case class RemoveClubMemberAPIMessage(
 
   private def resolveOperatorActor(context: ApiPlanContext): AccessPrincipal =
     operatorId.filter(_.nonEmpty)
-      .map(id => context.principal(PlayerId(id)))
-      .getOrElse(AccessPrincipal.system)
+      .map(id => AuthAccessPrincipalResolver.principal(context, PlayerId(id)))
+      .getOrElse(AccessPrincipalFunctions.system)
 
   private def removeClubMember(
       connection: java.sql.Connection,
@@ -64,18 +75,24 @@ final case class RemoveClubMemberAPIMessage(
         actor = command.actor,
         club = club,
         permission = Permission.ManageClubMembership,
-        delegatedPrivileges = Set(ClubPrivilege.ApproveRoster)
+        delegatedPrivileges = Set(ClubPrivilegeCode.ApproveRoster)
       )
       ensureMemberCanBeRemoved(club, command.clubId, command.playerId)
 
       CreatePlayerAPIMessage.persistPlayer(
         connection,
-        player
-          .leaveClub(command.clubId)
-          .revokeClubAdmin(command.clubId)
+        PlayerRoleFunctions.revokeClubAdmin(
+          PlayerClubBindingFunctions.leaveClub(player, command.clubId),
+          command.clubId
+        )
       )
       riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, 
-        ClubProjectionRefresher.refreshClubProjection(connection, module, club.removeMember(command.playerId), command.occurredAt)
+        ClubProjectionRefresher.refreshClubProjection(
+          connection,
+          module,
+          ClubFunctions.removeMember(club, command.playerId),
+          command.occurredAt
+        )
       )
 
   private def ensureMemberCanBeRemoved(club: Club, clubId: ClubId, playerId: PlayerId): Unit =

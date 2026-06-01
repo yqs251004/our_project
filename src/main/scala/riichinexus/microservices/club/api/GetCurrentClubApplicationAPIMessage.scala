@@ -1,4 +1,5 @@
 package riichinexus.microservices.club.api
+import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
 
 import java.util.NoSuchElementException
 
@@ -7,10 +8,15 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.club.domain.model.*
+import riichinexus.microservices.club.domain.Club
+import riichinexus.microservices.club.domain.clubmanagement.model.*
+import riichinexus.microservices.club.domain.membershipmanagement.functions.ClubMembershipApplicationFunctions
+import riichinexus.microservices.club.domain.membershipmanagement.model.*
+import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
+import riichinexus.microservices.club.domain.relationmanagement.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.api.`private`.ClubApplicationViewAssembler
-import riichinexus.microservices.club.objects.apiTypes.ClubMembershipApplicationView
+import riichinexus.microservices.club.objects.membershipmanagement.apiTypes.ClubMembershipApplicationView
 import riichinexus.microservices.club.tables.clubs.ClubTable
 import upickle.default.*
 
@@ -42,7 +48,7 @@ final case class GetCurrentClubApplicationAPIMessage(
       context: ApiPlanContext,
       input: CurrentClubApplicationInput
   ): AccessPrincipal =
-    context.requestActor(input.guestSessionId, input.operatorId)
+    AuthAccessPrincipalResolver.requestActor(context, input.guestSessionId, input.operatorId)
 
   private def getCurrentApplicationView(
       context: ApiPlanContext,
@@ -54,7 +60,7 @@ final case class GetCurrentClubApplicationAPIMessage(
       .findById(context.connection, input.clubId)
       .getOrElse(throw NoSuchElementException(s"Club ${input.clubId.value} was not found"))
     val application = club.membershipApplications
-      .filter(application => application.isPending && ClubApplicationViewAssembler.ownsClubApplication(context.connection, module, actor, application))
+      .filter(application => ClubMembershipApplicationFunctions.isPending(application) && ClubApplicationViewAssembler.ownsClubApplication(context.connection, module, actor, application))
       .maxByOption(_.submittedAt)
       .getOrElse(throw NoSuchElementException("Resource not found"))
     ClubApplicationViewAssembler.applicationView(context.connection, module, club, application, actor)

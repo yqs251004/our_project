@@ -1,7 +1,7 @@
 import cats.effect.{IO, IOApp, Resource}
 import org.http4s.server.Server
 import org.typelevel.log4cats.slf4j.Slf4jLogger
-import riichinexus.api.{ApiRuntimeContext, ApiServer, ApiServerConfig}
+import riichinexus.api.functions.{ApiRuntimeContextFunctions, ApiServerConfigFunctions, ApiServerFunctions}
 import riichinexus.bootstrap.DatabaseSession
 
 object Main extends IOApp.Simple:
@@ -13,11 +13,11 @@ object Main extends IOApp.Simple:
       normalizedEnv <- Resource.eval(IO.blocking(DatabaseSession.normalizedEnvironment(sys.env)))
       _ <- Resource.eval(DatabaseSession.initialize(normalizedEnv))
       app <- Resource.eval(IO.blocking(DatabaseSession.applicationContext(normalizedEnv)))
-      config = ApiServerConfig.fromEnv(normalizedEnv).copy(
+      config = ApiServerConfigFunctions.fromEnv(normalizedEnv).copy(
         storageLabel = DatabaseSession.storageLabel(normalizedEnv)
       )
-      runtime = ApiRuntimeContext.fromApplication(app, config)
-      server <- ApiServer.resource(runtime, config)
+      runtime = ApiRuntimeContextFunctions.fromApplication(app, config)
+      server <- ApiServerFunctions.resource(runtime, config)
     yield server
 
   override def run: IO[Unit] =

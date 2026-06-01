@@ -6,6 +6,7 @@ import java.time.Instant
 import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.domain.model.ClubId
 import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.microservices.opsanalytics.domain.functions.AdvancedStatsBoardFunctions
 import riichinexus.microservices.opsanalytics.objects.{AdvancedStatsBoard, DashboardOwner}
 import riichinexus.microservices.opsanalytics.tables.advancedstatsboard.AdvancedStatsBoardTable
 import upickle.default.*
@@ -21,7 +22,7 @@ final case class ResetClubAdvancedStatsBoardAPIMessage(
         val owner = DashboardOwner.Club(clubId)
         AdvancedStatsBoardTable.save(
           context.connection,
-          AdvancedStatsBoard.empty(owner, at).copy(
+          AdvancedStatsBoardFunctions.empty(owner, at).copy(
             version = AdvancedStatsBoardTable.findByOwner(context.connection, owner).map(_.version).getOrElse(0)
           )
         )

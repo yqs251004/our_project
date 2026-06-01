@@ -1,5 +1,7 @@
 package riichinexus.microservices.club.api.`private`
 
+import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+
 import java.sql.Connection
 
 import riichinexus.bootstrap.ClubModuleContext
@@ -11,10 +13,16 @@ import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
 import riichinexus.microservices.tournament.domain.tablemanagement.model.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.microservices.club.domain.ClubAuthorization
-import riichinexus.microservices.club.domain.model.*
-import riichinexus.microservices.club.objects.apiTypes.{ClubMembershipApplicantView, ClubMembershipApplicationView}
+import riichinexus.microservices.club.domain.Club
+import riichinexus.microservices.club.domain.clubmanagement.model.*
+import riichinexus.microservices.club.domain.membershipmanagement.functions.ClubMembershipApplicationFunctions
+import riichinexus.microservices.club.domain.membershipmanagement.model.*
+import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
+import riichinexus.microservices.club.domain.relationmanagement.model.*
+import riichinexus.microservices.club.objects.membershipmanagement.ClubApplicationStatus
+import riichinexus.microservices.club.objects.membershipmanagement.apiTypes.{ClubMembershipApplicantView, ClubMembershipApplicationView}
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
-import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.RankSnapshotView
+import riichinexus.microservices.player.domain.functions.PlayerClubBindingFunctions
 
 object ClubApplicationViewAssembler:
   def canManageClubApplications(actor: AccessPrincipal, club: Club): Boolean =
@@ -26,7 +34,7 @@ object ClubApplicationViewAssembler:
       actor: AccessPrincipal,
       application: ClubMembershipApplication
   ): Boolean =
-    val ownedByGuest = actor.isGuest && application.applicantUserId.contains(s"guest:${actor.principalId}")
+    val ownedByGuest = AccessPrincipalFunctions.isGuest(actor) && application.applicantUserId.contains(s"guest:${actor.principalId}")
     val ownedByRegisteredPlayer =
       actor.playerId.flatMap(GetPlayerAPIMessage.findPlayer(connection, _)).exists(player =>
         application.applicantUserId.contains(player.userId)
@@ -39,7 +47,7 @@ object ClubApplicationViewAssembler:
       actor: AccessPrincipal,
       application: ClubMembershipApplication
   ): Boolean =
-    actor.isSuperAdmin || ownsClubApplication(connection, module, actor, application)
+    AccessPrincipalFunctions.isSuperAdmin(actor) || ownsClubApplication(connection, module, actor, application)
 
   def applicationView(
       connection: Connection,
@@ -58,18 +66,18 @@ object ClubApplicationViewAssembler:
         applicantUserId = application.applicantUserId,
         displayName = application.displayName,
         playerStatus = applicantPlayer.map(_.status.toString),
-        currentRank = applicantPlayer.map(player => RankSnapshotView.fromDomain(player.currentRank)),
+        currentRank = applicantPlayer.map(_.currentRank),
         elo = applicantPlayer.map(_.elo),
-        clubIds = applicantPlayer.map(_.boundClubIds.map(_.value)).getOrElse(Vector.empty)
+        clubIds = applicantPlayer.map(player => PlayerClubBindingFunctions.boundClubIds(player).map(_.value)).getOrElse(Vector.empty)
       ),
       submittedAt = application.submittedAt.toString,
       message = application.message,
-      status = application.status.toString,
+      status = ClubApplicationStatus.toString(application.status),
       reviewedBy = application.reviewedBy.map(_.value),
       reviewedByDisplayName = application.reviewedBy.flatMap(playerId => GetPlayerAPIMessage.findPlayer(connection, playerId).map(_.nickname)),
       reviewedAt = application.reviewedAt.map(_.toString),
       reviewNote = application.reviewNote,
       withdrawnByPrincipalId = application.withdrawnByPrincipalId,
-      canReview = application.isPending && canManageClubApplications(actor, club),
-      canWithdraw = application.isPending && canWithdrawClubApplication(connection, module, actor, application)
+      canReview = ClubMembershipApplicationFunctions.isPending(application) && canManageClubApplications(actor, club),
+      canWithdraw = ClubMembershipApplicationFunctions.isPending(application) && canWithdrawClubApplication(connection, module, actor, application)
     )

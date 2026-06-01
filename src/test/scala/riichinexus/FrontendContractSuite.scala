@@ -1,5 +1,6 @@
 package riichinexus
 
+import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -8,7 +9,8 @@ import java.time.{Duration, Instant}
 
 import munit.FunSuite
 
-import riichinexus.api.{ApiRuntimeContext, ApiServerConfig, RiichiNexusApiServer}
+import riichinexus.api.ApiServerConfig
+import riichinexus.api.functions.{ApiRuntimeContextFunctions, ApiServerFunctions}
 import riichinexus.bootstrap.ApplicationContext
 import riichinexus.domain.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
@@ -38,29 +40,6 @@ import upickle.default.*
 
 class FrontendContractSuite extends FunSuite with TestApplicationAccess:
   private val client = HttpClient.newHttpClient()
-
-  test("openapi and swagger endpoints expose frontend contract docs") {
-    val app = ApplicationContext.inMemory()
-
-    withServer(app) { baseUrl =>
-      val openApiResponse = get(s"$baseUrl/openapi.json")
-      assertEquals(openApiResponse.statusCode(), 200)
-      val openApi = ujson.read(openApiResponse.body())
-      val paths = openApi("paths").obj.keySet
-      assert(paths.contains("/api/currentsessionauthapi"))
-      assert(paths.contains("/api/getcurrentplayerapi"))
-      assert(paths.contains("/api/listclubapplicationsapi"))
-      assert(paths.contains("/api/listclubtournamentsapi"))
-      assert(!paths.contains("/tournaments/{id}"))
-      assert(paths.contains("/api/getpublictournamentapi"))
-      assert(paths.contains("/api/getpublicclubapi"))
-
-      val swaggerResponse = get(s"$baseUrl/swagger")
-      assertEquals(swaggerResponse.statusCode(), 200)
-      assert(swaggerResponse.body().contains("/openapi.json"))
-      assert(swaggerResponse.body().toLowerCase.contains("swagger-ui"))
-    }
-  }
 
   test("session endpoints expose registered, guest and anonymous session views") {
     val app = ApplicationContext.inMemory()
@@ -650,23 +629,11 @@ class FrontendContractSuite extends FunSuite with TestApplicationAccess:
 
   private def withServer[A](app: ApplicationContext)(f: String => A): A =
     val config = ApiServerConfig(host = "127.0.0.1", port = 0, storageLabel = "memory")
-    val server = RiichiNexusApiServer(
-      ApiRuntimeContext.fromApplication(app, config),
-      config
-    )
+    val server = ApiServerFunctions.state(ApiRuntimeContextFunctions.fromApplication(app, config), config)
 
-    server.start()
-    try f(s"http://127.0.0.1:${server.port}")
-    finally server.stop()
-
-  private def get(url: String): HttpResponse[String] =
-    client.send(
-      HttpRequest
-        .newBuilder(URI.create(url))
-        .GET()
-        .build(),
-      HttpResponse.BodyHandlers.ofString()
-    )
+    ApiServerFunctions.start(server)
+    try f(s"http://127.0.0.1:${ApiServerFunctions.port(server)}")
+    finally ApiServerFunctions.stop(server)
 
   private def postJson(url: String, body: String): HttpResponse[String] =
     client.send(

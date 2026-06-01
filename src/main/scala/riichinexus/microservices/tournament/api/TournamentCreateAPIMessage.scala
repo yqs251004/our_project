@@ -1,5 +1,7 @@
 package riichinexus.microservices.tournament.api
 
+import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+
 import java.time.Instant
 import java.util.NoSuchElementException
 
@@ -14,6 +16,8 @@ import riichinexus.microservices.tournament.domain.recordmanagement.model.*
 import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
 import riichinexus.microservices.tournament.domain.tablemanagement.model.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
+import riichinexus.microservices.player.domain.functions.PlayerRoleFunctions
+import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
@@ -25,7 +29,6 @@ import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.*
 import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
@@ -183,8 +186,9 @@ final case class TournamentCreateAPIMessage(
     adminPlayer.foreach { player =>
       CreatePlayerAPIMessage.persistPlayer(
         connection,
-        player.grantRole(
-          RoleGrant.tournamentAdmin(tournament.id, input.startsAt, AccessPrincipal.system.playerId)
+        PlayerRoleFunctions.grantRole(
+          player,
+          RoleGrantFunctions.tournamentAdmin(tournament.id, input.startsAt, AccessPrincipalFunctions.system.playerId)
         )
       )
     }

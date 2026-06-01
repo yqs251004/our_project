@@ -1,4 +1,5 @@
 package riichinexus.microservices.opsanalytics.api
+import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
 
 import cats.effect.unsafe.implicits.global
 import riichinexus.api.ApiPlanContext
@@ -16,10 +17,16 @@ import riichinexus.microservices.tournament.domain.recordmanagement.model.*
 import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
 import riichinexus.microservices.tournament.domain.tablemanagement.model.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
-import riichinexus.microservices.club.domain.model.*
+import riichinexus.microservices.club.domain.Club
+import riichinexus.microservices.club.domain.clubmanagement.model.*
+import riichinexus.microservices.club.domain.membershipmanagement.model.*
+import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
+import riichinexus.microservices.club.domain.relationmanagement.model.*
 import riichinexus.microservices.club.api.`private`.{ListClubsPrivateAPIMessage, ResolveClubPrivateAPIMessage, ResolveClubsPrivateAPIMessage, SaveClubPrivateAPIMessage}
+import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
-import riichinexus.microservices.opsanalytics.domain.AdvancedStatsRoundAnalysis.*
+import riichinexus.microservices.opsanalytics.domain.functions.AdvancedStatsBoardFunctions
+import riichinexus.microservices.opsanalytics.domain.functions.AdvancedStatsRecomputeTaskFunctions
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.opsanalytics.objects.*
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
@@ -34,11 +41,10 @@ final case class OpsAnalyticsProcessAdvancedStatsAPIMessage(
     limit: Int = 50
 ) extends APIMessage[Vector[AdvancedStatsRecomputeTask]] derives ReadWriter:
 
-  require(limit > 0, "Advanced stats task processing limit must be positive")
-
   override def plan(context: ApiPlanContext): IO[Vector[AdvancedStatsRecomputeTask]] =
     for
-      operator <- IO.blocking(context.principal(operatorId))
+      _ <- IO.blocking(validateLimit())
+      operator <- IO.blocking(AuthAccessPrincipalResolver.principal(context, operatorId))
       processedAt <- IO.realTimeInstant
       module = context.support.opsAnalyticsModule
       command = ProcessAdvancedStatsCommand(operator, limit, processedAt)
@@ -47,7 +53,10 @@ final case class OpsAnalyticsProcessAdvancedStatsAPIMessage(
     yield tasks
 
   private def requireOpsAdmin(context: ApiPlanContext, operator: AccessPrincipal): Unit =
-    context.support.requirePermission(operator, Permission.ManagePlatformOperations)
+    riichinexus.microservices.auth.domain.functions.AuthorizationPolicyFunctions.requirePermission(context.support.authorizationService, operator, Permission.ManagePlatformOperations)
+
+  private def validateLimit(): Unit =
+    if limit <= 0 then throw IllegalArgumentException("Advanced stats task processing limit must be positive")
 
   private val retryDelay = Duration.ofMinutes(5)
   private val maxAttempts = 3
@@ -59,7 +68,13 @@ final case class OpsAnalyticsProcessAdvancedStatsAPIMessage(
   ): Vector[AdvancedStatsRecomputeTask] =
     riichinexus.microservices.opsanalytics.tables.advancedstatsrecomputetask.AdvancedStatsRecomputeTaskTable.findPending(connection, command.limit, command.processedAt).flatMap { task =>
       val maybeProcessing =
-        try Some(riichinexus.microservices.opsanalytics.tables.advancedstatsrecomputetask.AdvancedStatsRecomputeTaskTable.save(connection, task.markProcessing(command.processedAt)))
+        try
+          Some(
+            riichinexus.microservices.opsanalytics.tables.advancedstatsrecomputetask.AdvancedStatsRecomputeTaskTable.save(
+              connection,
+              AdvancedStatsRecomputeTaskFunctions.markProcessing(task, command.processedAt)
+            )
+          )
         catch
           case _: OptimisticConcurrencyException =>
             None
@@ -75,7 +90,11 @@ final case class OpsAnalyticsProcessAdvancedStatsAPIMessage(
               )
               riichinexus.microservices.opsanalytics.tables.advancedstatsboard.AdvancedStatsBoardTable.save(connection, rebuildClubBoard(connection, module, club, command.processedAt))
 
-          try riichinexus.microservices.opsanalytics.tables.advancedstatsrecomputetask.AdvancedStatsRecomputeTaskTable.save(connection, processing.markCompleted(command.processedAt))
+          try
+            riichinexus.microservices.opsanalytics.tables.advancedstatsrecomputetask.AdvancedStatsRecomputeTaskTable.save(
+              connection,
+              AdvancedStatsRecomputeTaskFunctions.markCompleted(processing, command.processedAt)
+            )
           catch
             case _: OptimisticConcurrencyException =>
               riichinexus.microservices.opsanalytics.tables.advancedstatsrecomputetask.AdvancedStatsRecomputeTaskTable.findById(connection, processing.id).getOrElse(processing)
@@ -85,11 +104,19 @@ final case class OpsAnalyticsProcessAdvancedStatsAPIMessage(
           case error: Throwable =>
             val errorMessage = Option(error.getMessage).getOrElse(error.getClass.getSimpleName)
             if processing.attempts >= maxAttempts then
-              riichinexus.microservices.opsanalytics.tables.advancedstatsrecomputetask.AdvancedStatsRecomputeTaskTable.save(connection, processing.markDeadLetter(errorMessage, command.processedAt))
+              riichinexus.microservices.opsanalytics.tables.advancedstatsrecomputetask.AdvancedStatsRecomputeTaskTable.save(
+                connection,
+                AdvancedStatsRecomputeTaskFunctions.markDeadLetter(processing, errorMessage, command.processedAt)
+              )
             else
               val retryAt = command.processedAt.plus(retryDelay)
               riichinexus.microservices.opsanalytics.tables.advancedstatsrecomputetask.AdvancedStatsRecomputeTaskTable.save(connection, 
-                processing.markRetryScheduled(errorMessage, command.processedAt, retryAt)
+                AdvancedStatsRecomputeTaskFunctions.markRetryScheduled(
+                  processing,
+                  errorMessage,
+                  command.processedAt,
+                  retryAt
+                )
               )
       }
     }
@@ -108,7 +135,7 @@ final case class OpsAnalyticsProcessAdvancedStatsAPIMessage(
       .unsafeRunSync()
     val existingVersion =
       riichinexus.microservices.opsanalytics.tables.advancedstatsboard.AdvancedStatsBoardTable.findByOwner(connection, DashboardOwner.Player(playerId)).map(_.version).getOrElse(0)
-    buildPlayerBoard(playerId, records, paifus, at).copy(version = existingVersion)
+    AdvancedStatsBoardFunctions.buildPlayerBoard(playerId, records, paifus, at, existingVersion)
 
   private def rebuildClubBoard(
       connection: java.sql.Connection,
@@ -123,7 +150,7 @@ final case class OpsAnalyticsProcessAdvancedStatsAPIMessage(
     }
     val existingVersion =
       riichinexus.microservices.opsanalytics.tables.advancedstatsboard.AdvancedStatsBoardTable.findByOwner(connection, DashboardOwner.Club(club.id)).map(_.version).getOrElse(0)
-    buildClubBoard(club, memberBoards, at).copy(version = existingVersion)
+    AdvancedStatsBoardFunctions.buildClubBoard(club, memberBoards, at, existingVersion)
 
   private final case class ProcessAdvancedStatsCommand(
       operator: AccessPrincipal,

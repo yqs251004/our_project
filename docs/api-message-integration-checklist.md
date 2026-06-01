@@ -199,7 +199,7 @@ sbt compile
 - `microservices/shared` 不是业务微服务，不按 API class 迁移顺序处理。
 - `shared/api/responses` 里的 `PagedResponse`、`ErrorResponse`、`HealthResponse` 是跨模块公共 response contract，可继续被业务 API class 复用。
 - `shared/api/requests/OperatorRequest` 是旧接口风格的共享 request。后续迁移各业务模块时，应把这类字段逐步展开进具体 `XxxAPIMessage`，避免继续扩大共享 request。
-- `shared/api/docs` 是 OpenAPI/Swagger 文档基础设施。业务模块迁移完成后，单独迁出 `microservices` 命名空间，目标可为 `riichinexus.api.docs`。
+- OpenAPI/Swagger 文档基础设施已从运行源码移除；前后端通信以各微服务 `objects/apiTypes` 和 `POST /api/<api-message-name>` 为准。
 - 主迁移完成后，再统一评估 `shared/api/responses` 是否迁到 `riichinexus.api.responses` 或 `riichinexus.api.contracts.responses`。
 
 ## 风险点

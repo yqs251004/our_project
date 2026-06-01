@@ -1,4 +1,5 @@
 package riichinexus.microservices.tournament.appeal.api
+import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
 
 import java.time.Instant
 import java.util.NoSuchElementException
@@ -29,7 +30,7 @@ final case class AppealResolveAPIMessage(
   override def plan(context: ApiPlanContext): IO[AppealTicketView] =
     for
       resolved <- IO.blocking(resolveInput)
-      actor <- IO.blocking(context.principal(PlayerId(resolved.operatorId)))
+      actor <- IO.blocking(AuthAccessPrincipalResolver.principal(context, PlayerId(resolved.operatorId)))
       resolvedAt <- IO.realTimeInstant
       module = context.support.tournamentAppealModule
       command = ResolveAppealCommand(AppealTicketId(appealId), resolved, actor, resolvedAt)

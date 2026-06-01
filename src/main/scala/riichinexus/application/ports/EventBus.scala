@@ -31,6 +31,19 @@ trait DomainEventSubscriber:
   def handle(event: DomainEvent): Unit =
     throw IllegalStateException("Domain event subscriber handling requires an active database connection")
 
+object DomainEventSubscriber:
+  def apply(
+      id: String,
+      strategy: DomainEventSubscriberPartitionStrategy = DomainEventSubscriberPartitionStrategy.Global
+  )(
+      handler: (Connection, DomainEvent) => Unit
+  ): DomainEventSubscriber =
+    new DomainEventSubscriber:
+      override def subscriberId: String = id
+      override def partitionStrategy: DomainEventSubscriberPartitionStrategy = strategy
+      override def handle(connection: Connection, event: DomainEvent): Unit =
+        handler(connection, event)
+
 trait DomainEventBus:
   def publish(event: DomainEvent): Unit
   def register(subscriber: DomainEventSubscriber): Unit

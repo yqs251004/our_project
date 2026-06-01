@@ -1,5 +1,7 @@
 package riichinexus.microservices.club.api
+import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
 
+import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.time.Instant
 import java.util.NoSuchElementException
 
@@ -9,12 +11,16 @@ import riichinexus.application.changes.DomainChangeInterpreter
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.club.domain.model.*
+import riichinexus.microservices.club.domain.Club
+import riichinexus.microservices.club.domain.clubmanagement.model.*
+import riichinexus.microservices.club.domain.membershipmanagement.model.*
+import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
+import riichinexus.microservices.club.domain.relationmanagement.model.*
 import riichinexus.microservices.auth.domain.*
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.club.objects.ClubRelationKind
+import riichinexus.microservices.club.objects.relationmanagement.ClubRelationKind
 import riichinexus.microservices.club.domain.ClubAuthorization
-import riichinexus.microservices.club.objects.ClubView
+import riichinexus.microservices.club.objects.clubmanagement.ClubView
 import upickle.default.*
 
 final case class UpdateClubRelationAPIMessage(
@@ -27,7 +33,7 @@ final case class UpdateClubRelationAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
-      actor <- IO.blocking(context.principal(PlayerId(operatorId)))
+      actor <- IO.blocking(AuthAccessPrincipalResolver.principal(context, PlayerId(operatorId)))
       relationUpdatedAt <- IO.realTimeInstant
       occurredAt <- IO.realTimeInstant
       module = context.support.clubModule
@@ -98,8 +104,8 @@ final case class UpdateClubRelationAPIMessage(
   ): Club =
     val sourceClub =
       if command.relation.relation == ClubRelationKind.Neutral then
-        club.removeRelation(command.relation.targetClubId)
-      else club.upsertRelation(command.relation)
+        ClubFunctions.removeRelation(club, command.relation.targetClubId)
+      else ClubFunctions.upsertRelation(club, command.relation)
 
     DomainChangeInterpreter
       .auditOnly(module.transactionManager, module.auditEventRepository)
@@ -108,10 +114,11 @@ final case class UpdateClubRelationAPIMessage(
         persist = source =>
           val savedSource = riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, source)
           if command.relation.relation == ClubRelationKind.Neutral then
-            riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, targetClub.removeRelation(command.clubId))
+            riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, ClubFunctions.removeRelation(targetClub, command.clubId))
           else
             riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, 
-              targetClub.upsertRelation(
+              ClubFunctions.upsertRelation(
+                targetClub,
                 command.relation.copy(targetClubId = command.clubId)
               )
             )
@@ -124,7 +131,7 @@ final case class UpdateClubRelationAPIMessage(
         details = _ =>
           Map(
             "targetClubId" -> command.relation.targetClubId.value,
-            "relation" -> command.relation.relation.toString
+            "relation" -> ClubRelationKind.toString(command.relation.relation)
           ),
         note = command.relation.note
       )

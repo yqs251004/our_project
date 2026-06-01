@@ -8,15 +8,15 @@ Base URL examples assume:
 http://localhost:8080
 ```
 
-## 0. Generated Contract Docs
+## 0. API Message Contract
 
-### GET `/openapi.json`
+Frontend-facing backend interfaces are exposed through APIMessage endpoints:
 
-Returns the generated OpenAPI 3.1 contract for the frontend-facing backend interfaces covered in this document.
+```text
+POST /api/<api-message-name>
+```
 
-### GET `/swagger`
-
-Returns a Swagger UI page that loads `/openapi.json` for interactive inspection during integration and review.
+The API message request and response types under each microservice `objects/apiTypes` directory are the source of truth for frontend communication.
 
 ## 1. Session
 

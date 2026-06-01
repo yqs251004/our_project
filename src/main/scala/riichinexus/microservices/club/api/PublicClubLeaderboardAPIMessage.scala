@@ -1,12 +1,14 @@
 package riichinexus.microservices.club.api
 
+import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
-import riichinexus.domain.model.Permission
+import riichinexus.domain.model.{ClubId, Permission}
 import riichinexus.microservices.auth.domain.model.AccessPrincipal
-import riichinexus.microservices.club.domain.model.Club
+import riichinexus.microservices.club.domain.Club
 import riichinexus.microservices.club.tables.clubs.ClubTable
-import riichinexus.microservices.club.objects.apiTypes.ClubLeaderboardEntry
+import riichinexus.microservices.club.objects.clubmanagement.apiTypes.ClubLeaderboardEntry
 import riichinexus.system.objects.PagedResponse
 import upickle.default.*
 
@@ -25,8 +27,11 @@ final case class PublicClubLeaderboardAPIMessage(
     yield PagedResponse.fromItems(filteredEntries, limit, offset, query.appliedFilters)(identity)
 
   private def resolveQuery(context: ApiPlanContext): ResolvedClubLeaderboardQuery =
-    context.support.authorizationService
-      .requirePermission(AccessPrincipal.guest(), Permission.ViewPublicLeaderboard)
+    AuthorizationPolicyFunctions.requirePermission(
+      context.support.authorizationService,
+      AccessPrincipalFunctions.guest(),
+      Permission.ViewPublicLeaderboard
+    )
     ResolvedClubLeaderboardQuery(
       name = name.filter(_.nonEmpty),
       appliedFilters = Vector(name.filter(_.nonEmpty).map("name" -> _)).flatten.toMap
@@ -39,7 +44,7 @@ final case class PublicClubLeaderboardAPIMessage(
 
   private def publicClubLeaderboardEntries(clubs: Vector[Club]): Vector[ClubLeaderboardEntry] =
     clubs.map { club =>
-      ClubLeaderboardEntry(
+      clubLeaderboardEntry(
         clubId = club.id,
         name = club.name,
         powerRating = round2(club.powerRating),
@@ -48,13 +53,28 @@ final case class PublicClubLeaderboardAPIMessage(
       )
     }
 
+  private def clubLeaderboardEntry(
+      clubId: ClubId,
+      name: String,
+      powerRating: Double,
+      totalPoints: Int,
+      memberCount: Int
+  ): ClubLeaderboardEntry =
+    ClubLeaderboardEntry(
+      clubId = clubId.value,
+      name = name,
+      powerRating = powerRating,
+      totalPoints = totalPoints,
+      memberCount = memberCount
+    )
+
   private def filterPublicClubLeaderboardEntries(
       context: ApiPlanContext,
       entries: Vector[ClubLeaderboardEntry],
       query: ResolvedClubLeaderboardQuery
   ): Vector[ClubLeaderboardEntry] =
     entries
-      .filter(entry => query.name.forall(context.support.containsIgnoreCase(entry.name, _)))
+      .filter(entry => query.name.forall(riichinexus.system.functions.TextSearchFunctions.containsIgnoreCase(entry.name, _)))
 
   private def round2(value: Double): Double =
     BigDecimal(value).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble

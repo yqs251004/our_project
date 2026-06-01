@@ -1,8 +1,13 @@
 package riichinexus.microservices.club.domain
 
 import riichinexus.domain.model.*
-import riichinexus.microservices.club.domain.model.*
-import riichinexus.microservices.player.objects.{Player, PlayerStatus}
+import riichinexus.microservices.club.domain.Club
+import riichinexus.microservices.club.domain.clubmanagement.model.*
+import riichinexus.microservices.club.domain.membershipmanagement.model.*
+import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
+import riichinexus.microservices.club.domain.relationmanagement.model.*
+import riichinexus.microservices.player.domain.Player
+import riichinexus.microservices.player.objects.PlayerStatus
 
 object ClubPowerRatingService:
   final case class Config(

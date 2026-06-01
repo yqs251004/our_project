@@ -1,5 +1,9 @@
 package riichinexus.microservices.club.api
+import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
 
+import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+
+import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.time.Instant
 import java.util.NoSuchElementException
 
@@ -8,11 +12,16 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.club.domain.model.*
+import riichinexus.microservices.club.domain.Club
+import riichinexus.microservices.club.domain.clubmanagement.model.*
+import riichinexus.microservices.club.domain.membershipmanagement.functions.ClubMembershipApplicationFunctions
+import riichinexus.microservices.club.domain.membershipmanagement.model.*
+import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
+import riichinexus.microservices.club.domain.relationmanagement.model.*
 import riichinexus.microservices.auth.domain.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubAuthorization
-import riichinexus.microservices.club.objects.apiTypes.ClubMembershipApplicationResponse
+import riichinexus.microservices.club.objects.membershipmanagement.apiTypes.ClubMembershipApplicationResponse
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import upickle.default.*
 
@@ -44,7 +53,7 @@ final case class WithdrawClubApplicationAPIMessage(
     yield ClubMembershipApplicationResponse.fromDomain(application)
 
   private def resolveActor(context: ApiPlanContext): AccessPrincipal =
-    context.requestActor(
+    AuthAccessPrincipalResolver.requestActor(context, 
       guestSessionId.filter(_.nonEmpty).map(GuestSessionId(_)),
       operatorId.filter(_.nonEmpty).map(PlayerId(_))
     )
@@ -54,14 +63,17 @@ final case class WithdrawClubApplicationAPIMessage(
       module: ClubModuleContext,
       command: WithdrawClubApplicationCommand
   ): Option[ClubMembershipApplication] =
-    module.authorizationService.requirePermission(command.actor, Permission.WithdrawClubApplication)
+    AuthorizationPolicyFunctions.requirePermission(module.authorizationService, command.actor, Permission.WithdrawClubApplication)
     riichinexus.microservices.club.tables.clubs.ClubTable.findById(connection, command.clubId).map { club =>
       ClubAuthorization.ensureClubActive(club)
       val application = resolveApplication(club, command)
       ensureApplicationPending(application, command.membershipId)
       requireApplicationOwnership(connection, application, command.actor)
-      val updatedApplication = application.withdraw(command.actor.principalId, command.withdrawnAt, command.note)
-      riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, club.reviewApplication(command.membershipId, _ => updatedApplication))
+      val updatedApplication = ClubMembershipApplicationFunctions.withdraw(application, command.actor.principalId, command.withdrawnAt, command.note)
+      riichinexus.microservices.club.tables.clubs.ClubTable.save(
+        connection,
+        ClubFunctions.reviewApplication(club, command.membershipId, _ => updatedApplication)
+      )
       updatedApplication
     }
 
@@ -69,8 +81,8 @@ final case class WithdrawClubApplicationAPIMessage(
       club: Club,
       command: WithdrawClubApplicationCommand
   ): ClubMembershipApplication =
-    club
-      .findApplication(command.membershipId)
+    ClubFunctions
+      .findApplication(club, command.membershipId)
       .getOrElse(
         throw NoSuchElementException(
           s"Membership application ${command.membershipId.value} was not found in club ${command.clubId.value}"
@@ -81,7 +93,7 @@ final case class WithdrawClubApplicationAPIMessage(
       application: ClubMembershipApplication,
       membershipId: MembershipApplicationId
   ): Unit =
-    if !application.isPending then
+    if !ClubMembershipApplicationFunctions.isPending(application) then
       throw IllegalArgumentException(
         s"Membership application ${membershipId.value} has already been reviewed"
       )
@@ -92,7 +104,7 @@ final case class WithdrawClubApplicationAPIMessage(
       actor: AccessPrincipal
   ): Unit =
     val ownedByGuest =
-      actor.isGuest && application.applicantUserId.contains(s"guest:${actor.principalId}")
+      AccessPrincipalFunctions.isGuest(actor) && application.applicantUserId.contains(s"guest:${actor.principalId}")
 
     val ownedByRegisteredPlayer =
       actor.playerId.flatMap(playerId =>
@@ -101,7 +113,7 @@ final case class WithdrawClubApplicationAPIMessage(
         application.applicantUserId.contains(player.userId)
       )
 
-    if !ownedByGuest && !ownedByRegisteredPlayer && !actor.isSuperAdmin then
+    if !ownedByGuest && !ownedByRegisteredPlayer && !AccessPrincipalFunctions.isSuperAdmin(actor) then
       throw AuthorizationFailure(
         s"${actor.displayName} cannot withdraw membership application ${application.id.value}"
       )

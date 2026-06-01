@@ -9,7 +9,8 @@ import org.postgresql.util.PSQLException
 import riichinexus.application.ports.OptimisticConcurrencyException
 import riichinexus.domain.model.PlayerId
 import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.auth.objects.AccountCredential
+import riichinexus.microservices.auth.domain.functions.AccountCredentialFunctions
+import riichinexus.microservices.auth.domain.model.AccountCredential
 import upickle.default.{read, write}
 
 object AccountCredentialTable:
@@ -25,6 +26,8 @@ object AccountCredentialTable:
       |""".stripMargin
 
   private[auth] def save(connection: Connection, credential: AccountCredential): AccountCredential =
+    AccountCredentialFunctions.validate(credential)
+
     def persist(candidate: AccountCredential): AccountCredential =
       val persisted = candidate.copy(version = candidate.version + 1)
       val rowsUpdated = Using.resource(connection.prepareStatement(upsertSql)) { statement =>
@@ -57,7 +60,7 @@ object AccountCredentialTable:
 
   private[auth] def findByUsername(connection: Connection, username: String): Option[AccountCredential] =
     Using.resource(connection.prepareStatement(findByUsernameSql)) { statement =>
-      statement.setString(1, AccountCredential.normalizeUsername(username))
+      statement.setString(1, AccountCredentialFunctions.normalizeUsername(username))
       Using.resource(statement.executeQuery()) { resultSet =>
         if resultSet.next() then Some(readCredential(resultSet))
         else None

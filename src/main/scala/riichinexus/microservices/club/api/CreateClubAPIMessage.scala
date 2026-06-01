@@ -1,5 +1,9 @@
 package riichinexus.microservices.club.api
+import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
 
+import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+
+import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.time.Instant
 import java.util.NoSuchElementException
 
@@ -8,12 +12,18 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.bootstrap.ClubModuleContext
 import riichinexus.domain.model.*
 import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.club.domain.model.*
+import riichinexus.microservices.club.domain.Club
+import riichinexus.microservices.club.domain.clubmanagement.model.*
+import riichinexus.microservices.club.domain.membershipmanagement.model.*
+import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
+import riichinexus.microservices.club.domain.relationmanagement.model.*
+import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
+import riichinexus.microservices.player.domain.functions.{PlayerClubBindingFunctions, PlayerRoleFunctions}
 import riichinexus.microservices.auth.domain.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.{ClubAuthorization, ClubProjectionRefresher}
-import riichinexus.microservices.club.objects.ClubView
+import riichinexus.microservices.club.objects.clubmanagement.ClubView
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import upickle.default.*
 
@@ -25,7 +35,7 @@ final case class CreateClubAPIMessage(
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
       parsedCreatorId <- IO.blocking(PlayerId(creatorId))
-      actor <- IO.blocking(context.principal(parsedCreatorId))
+      actor <- IO.blocking(AuthAccessPrincipalResolver.principal(context, parsedCreatorId))
       createdAt <- IO.realTimeInstant
       module = context.support.clubModule
       command = CreateClubCommand(
@@ -51,9 +61,10 @@ final case class CreateClubAPIMessage(
     ensureCreatorCanCreateClub(command.actor, command.creatorId)
 
     val club = resolveClubToCreate(connection, normalizedName, command.creatorId, command.createdAt)
-    val updatedCreator = creator
-      .joinClub(club.id)
-      .grantRole(RoleGrant.clubAdmin(club.id, command.createdAt, command.actor.playerId))
+    val updatedCreator = PlayerRoleFunctions.grantRole(
+      PlayerClubBindingFunctions.joinClub(creator, club.id),
+      RoleGrantFunctions.clubAdmin(club.id, command.createdAt, command.actor.playerId)
+    )
 
     val savedCreator = CreatePlayerAPIMessage.persistPlayer(connection, updatedCreator)
     ClubProjectionRefresher.ensurePlayerDashboard(connection, savedCreator.id, command.createdAt)
@@ -68,9 +79,10 @@ final case class CreateClubAPIMessage(
     riichinexus.microservices.club.tables.clubs.ClubTable.findByName(connection, normalizedName) match
       case Some(existing) =>
         ClubAuthorization.ensureClubActive(existing)
-        existing
-          .addMember(creatorId)
-          .grantAdmin(creatorId)
+        ClubFunctions.grantAdmin(
+          ClubFunctions.addMember(existing, creatorId),
+          creatorId
+        )
       case None =>
         Club(
           id = IdGenerator.clubId(),
@@ -82,7 +94,7 @@ final case class CreateClubAPIMessage(
         )
 
   private def ensureCreatorCanCreateClub(actor: AccessPrincipal, creatorId: PlayerId): Unit =
-    if !actor.isSuperAdmin && actor.playerId.exists(_ != creatorId) then
+    if !AccessPrincipalFunctions.isSuperAdmin(actor) && actor.playerId.exists(_ != creatorId) then
       throw AuthorizationFailure("Only the creator or a super admin can create the club")
 
   private def requireActivePlayer(player: Player, context: String): Unit =

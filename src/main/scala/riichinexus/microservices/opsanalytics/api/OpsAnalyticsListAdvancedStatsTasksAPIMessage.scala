@@ -1,4 +1,5 @@
 package riichinexus.microservices.opsanalytics.api
+import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
 
 import cats.effect.IO
 import riichinexus.api.{APIMessage, ApiPlanContext}
@@ -27,7 +28,7 @@ final case class OpsAnalyticsListAdvancedStatsTasksAPIMessage(
   private def resolveQuery: AdvancedStatsTasksQuery =
     AdvancedStatsTasksQuery(
       status = status,
-      appliedFilters = Map.from(status.map(value => "status" -> value.toString))
+      appliedFilters = Map.from(status.map(value => "status" -> AdvancedStatsRecomputeTaskStatus.toString(value)))
     )
 
   private def listTasks(
@@ -39,8 +40,8 @@ final case class OpsAnalyticsListAdvancedStatsTasksAPIMessage(
       .filter(task => query.status.forall(_ == task.status))
 
   private def requireOpsAdmin(context: ApiPlanContext, operatorId: PlayerId): AccessPrincipal =
-    val operator = context.principal(operatorId)
-    context.support.requirePermission(operator, Permission.ManagePlatformOperations)
+    val operator = AuthAccessPrincipalResolver.principal(context, operatorId)
+    riichinexus.microservices.auth.domain.functions.AuthorizationPolicyFunctions.requirePermission(context.support.authorizationService, operator, Permission.ManagePlatformOperations)
     operator
 
   private def paged(
@@ -49,8 +50,8 @@ final case class OpsAnalyticsListAdvancedStatsTasksAPIMessage(
   ): PagedResponse[AdvancedStatsRecomputeTask] =
     val resolvedLimit = limit.getOrElse(20)
     val resolvedOffset = offset.getOrElse(0)
-    require(resolvedLimit > 0, "Input field limit must be positive")
-    require(resolvedOffset >= 0, "Input field offset must be non-negative")
+    if resolvedLimit <= 0 then throw IllegalArgumentException("Input field limit must be positive")
+    if resolvedOffset < 0 then throw IllegalArgumentException("Input field offset must be non-negative")
     val boundedLimit = math.min(resolvedLimit, 100)
     val page = items.slice(resolvedOffset, resolvedOffset + boundedLimit)
     PagedResponse(page, items.size, boundedLimit, resolvedOffset, resolvedOffset + page.size < items.size, query.appliedFilters)

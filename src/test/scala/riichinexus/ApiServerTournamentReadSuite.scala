@@ -1,5 +1,6 @@
 package riichinexus
 
+import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest

@@ -1,4 +1,7 @@
 package riichinexus.microservices.tournament.api
+import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
+
+import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
 import java.util.NoSuchElementException
 import java.time.Instant
@@ -14,6 +17,8 @@ import riichinexus.microservices.tournament.domain.recordmanagement.model.*
 import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
 import riichinexus.microservices.tournament.domain.tablemanagement.model.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
+import riichinexus.microservices.player.domain.functions.PlayerRoleFunctions
+import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
@@ -21,7 +26,6 @@ import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.*
 import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
@@ -29,7 +33,6 @@ import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.apiTypes.*
 import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
@@ -58,8 +61,8 @@ final case class TournamentRevokeAdminAPIMessage(tournamentId: String, playerId:
 
   private def resolveOperatorActor(context: ApiPlanContext): AccessPrincipal =
     operatorId.map(PlayerId(_))
-      .map(context.principal)
-      .getOrElse(AccessPrincipal.system)
+      .map(AuthAccessPrincipalResolver.principal(context, _))
+      .getOrElse(AccessPrincipalFunctions.system)
 
   private def revokeAdmin(
       connection: java.sql.Connection,
@@ -78,7 +81,7 @@ final case class TournamentRevokeAdminAPIMessage(tournamentId: String, playerId:
       tournament: Tournament,
       command: RevokeTournamentAdminCommand
   ): Unit =
-    module.authorizationService.requirePermission(
+    AuthorizationPolicyFunctions.requirePermission(module.authorizationService, 
       command.actor,
       Permission.AssignTournamentAdmin,
       tournamentId = Some(command.tournamentId)
@@ -104,7 +107,7 @@ final case class TournamentRevokeAdminAPIMessage(tournamentId: String, playerId:
       .commitAudited(
         aggregate = tournament.copy(admins = tournament.admins.filterNot(_ == command.playerId)),
         persist = nextTournament =>
-          CreatePlayerAPIMessage.persistPlayer(connection, player.revokeTournamentAdmin(command.tournamentId))
+          CreatePlayerAPIMessage.persistPlayer(connection, PlayerRoleFunctions.revokeTournamentAdmin(player, command.tournamentId))
           riichinexus.microservices.tournament.tables.tournaments.TournamentTable.save(connection, nextTournament),
         aggregateType = "tournament",
         aggregateId = _.id.value,

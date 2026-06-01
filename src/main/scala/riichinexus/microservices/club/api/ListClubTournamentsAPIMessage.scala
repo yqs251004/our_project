@@ -1,4 +1,7 @@
 package riichinexus.microservices.club.api
+import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
+
+import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
 import java.time.{Duration, Instant}
 import java.util.NoSuchElementException
@@ -13,12 +16,21 @@ import riichinexus.microservices.tournament.domain.recordmanagement.model.*
 import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
 import riichinexus.microservices.tournament.domain.tablemanagement.model.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
-import riichinexus.microservices.club.domain.model.*
+import riichinexus.microservices.club.domain.Club
+import riichinexus.microservices.club.domain.clubmanagement.model.*
+import riichinexus.microservices.club.domain.membershipmanagement.model.*
+import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
+import riichinexus.microservices.club.domain.relationmanagement.model.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubAuthorization
-import riichinexus.microservices.club.objects.ClubTournamentParticipationStatus
-import riichinexus.microservices.club.objects.apiTypes.ClubTournamentParticipationView
-import riichinexus.microservices.club.objects.apiTypes.*
+import riichinexus.microservices.club.objects.tournamentparticipation.ClubTournamentParticipationStatus
+import riichinexus.microservices.club.objects.tournamentparticipation.apiTypes.ClubTournamentParticipationView
+import riichinexus.microservices.club.objects.clubmanagement.apiTypes.*
+import riichinexus.microservices.club.objects.membershipmanagement.apiTypes.*
+import riichinexus.microservices.club.objects.rankprivilegemanagement.apiTypes.*
+import riichinexus.microservices.club.objects.relationmanagement.apiTypes.*
+import riichinexus.microservices.club.objects.tournamentparticipation.apiTypes.*
+import riichinexus.microservices.club.objects.auditreadmodel.apiTypes.*
 import riichinexus.microservices.tournament.objects.tournamentmanagement.{StageStatus, TournamentStatus}
 import riichinexus.microservices.club.tables.clubs.ClubTable
 import riichinexus.microservices.tournament.api.`private`.ListClubTournamentsPrivateAPIMessage
@@ -48,7 +60,7 @@ final case class ListClubTournamentsAPIMessage(
     ClubTournamentQuery(
       clubId = ClubId(clubId),
       scope = scope.filter(_.nonEmpty).getOrElse("recent"),
-      viewerPrincipal = parsedViewer.map(context.principal).getOrElse(AccessPrincipal.guest()),
+      viewerPrincipal = parsedViewer.map(AuthAccessPrincipalResolver.principal(context, _)).getOrElse(AccessPrincipalFunctions.guest()),
       limit = limit.getOrElse(20),
       offset = offset.getOrElse(0),
       recentThreshold = now.minus(recentTournamentWindow),
@@ -133,8 +145,8 @@ final case class ListClubTournamentsAPIMessage(
           name = tournament.name,
           status = tournament.status.toString,
           clubParticipationStatus =
-            if isParticipating then ClubTournamentParticipationStatus.Participating.toString
-            else ClubTournamentParticipationStatus.Invited.toString,
+            if isParticipating then ClubTournamentParticipationStatus.toString(ClubTournamentParticipationStatus.Participating)
+            else ClubTournamentParticipationStatus.toString(ClubTournamentParticipationStatus.Invited),
           stageName = stageName,
           startsAt = tournament.startsAt.toString,
           endsAt = tournament.endsAt.toString,

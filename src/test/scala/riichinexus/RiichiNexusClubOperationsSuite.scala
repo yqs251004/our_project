@@ -1,5 +1,6 @@
 package riichinexus
 
+import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.time.Instant
 
 import munit.FunSuite

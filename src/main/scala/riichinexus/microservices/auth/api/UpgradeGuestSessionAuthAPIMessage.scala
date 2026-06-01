@@ -10,9 +10,16 @@ import riichinexus.api.{APIMessage, ApiPlanContext}
 import riichinexus.application.changes.{DomainChange, DomainChangeInterpreter}
 import riichinexus.bootstrap.AuthModuleContext
 import riichinexus.domain.model.*
+import riichinexus.microservices.auth.domain.functions.GuestAccessSessionFunctions
 import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.club.domain.model.*
+import riichinexus.microservices.club.domain.Club
+import riichinexus.microservices.club.domain.clubmanagement.model.*
+import riichinexus.microservices.club.domain.membershipmanagement.functions.ClubMembershipApplicationFunctions
+import riichinexus.microservices.club.domain.membershipmanagement.model.*
+import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
+import riichinexus.microservices.club.domain.relationmanagement.model.*
 import riichinexus.microservices.club.api.`private`.{ListClubsPrivateAPIMessage, ResolveClubPrivateAPIMessage, ResolveClubsPrivateAPIMessage, SaveClubPrivateAPIMessage}
+import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
 import riichinexus.infrastructure.json.JsonCodecs.given
 import riichinexus.microservices.auth.objects.apiTypes.GuestSessionResponse
@@ -60,7 +67,7 @@ final case class UpgradeGuestSessionAuthAPIMessage(
       .auditOnly(module.transactionManager, module.auditEventRepository)
       .commitWithinTransaction(
         DomainChange(
-          aggregate = session.upgrade(command.playerId, command.upgradedAt),
+          aggregate = GuestAccessSessionFunctions.upgrade(session, command.playerId, command.upgradedAt),
           persist = upgradedSession =>
             val savedSession = GuestSessionTable.save(connection, upgradedSession)
             reconcileGuestApplications(connection, command.sessionId, player)
@@ -89,8 +96,8 @@ final case class UpgradeGuestSessionAuthAPIMessage(
     val guestApplicantId = s"guest:${sessionId.value}"
     ListClubsPrivateAPIMessage().plan(ApiPlanContext(support = null, bearerToken = None, connection = connection)).unsafeRunSync().foreach { club =>
       val updatedApplications = club.membershipApplications.map { application =>
-        if application.isPending && application.applicantUserId.contains(guestApplicantId) then
-          application.bindRegisteredApplicant(player.userId, player.nickname)
+        if ClubMembershipApplicationFunctions.isPending(application) && application.applicantUserId.contains(guestApplicantId) then
+          ClubMembershipApplicationFunctions.bindRegisteredApplicant(application, player.userId, player.nickname)
         else application
       }
 
