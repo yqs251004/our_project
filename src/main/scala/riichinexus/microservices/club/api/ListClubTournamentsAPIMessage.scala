@@ -1,5 +1,6 @@
 package riichinexus.microservices.club.api
-import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
+import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
+import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
 
 import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
@@ -7,9 +8,27 @@ import java.time.{Duration, Instant}
 import java.util.NoSuchElementException
 
 import cats.effect.IO
-import riichinexus.api.{APIMessage, ApiPlanContext}
-import riichinexus.bootstrap.ClubModuleContext
-import riichinexus.domain.model.*
+import riichinexus.system.api.{APIMessage, ApiPlanContext}
+import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
+import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.club.domain.functions.ClubIdGenerator
+import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
+import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
+import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
+import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
+import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
+import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
+import riichinexus.microservices.tournament.objects.tablemanagement.TableId
+import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
+import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
+import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
+import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
+import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
+import riichinexus.microservices.audit.domain.auditevent.AuditEventId
+import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
+import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
 import riichinexus.microservices.tournament.domain.recordmanagement.model.*
@@ -21,7 +40,7 @@ import riichinexus.microservices.club.domain.clubmanagement.model.*
 import riichinexus.microservices.club.domain.membershipmanagement.model.*
 import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
 import riichinexus.microservices.club.domain.relationmanagement.model.*
-import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubAuthorization
 import riichinexus.microservices.club.objects.tournamentparticipation.ClubTournamentParticipationStatus
 import riichinexus.microservices.club.objects.tournamentparticipation.apiTypes.ClubTournamentParticipationView
@@ -49,10 +68,9 @@ final case class ListClubTournamentsAPIMessage(
   override def plan(context: ApiPlanContext): IO[PagedResponse[ClubTournamentParticipationView]] =
     for
       now <- IO.realTimeInstant
-      module = context.support.clubModule
       query <- IO.blocking(resolveQuery(context, now))
       tournaments <- ListClubTournamentsPrivateAPIMessage(query.clubId).plan(context)
-      items <- IO.blocking(listTournaments(context.connection, module, query, tournaments))
+      items <- IO.blocking(listTournaments(context.connection, query, tournaments))
     yield pagedResponse(items, query)
 
   private def resolveQuery(context: ApiPlanContext, now: Instant): ClubTournamentQuery =
@@ -60,7 +78,7 @@ final case class ListClubTournamentsAPIMessage(
     ClubTournamentQuery(
       clubId = ClubId(clubId),
       scope = scope.filter(_.nonEmpty).getOrElse("recent"),
-      viewerPrincipal = parsedViewer.map(AuthAccessPrincipalResolver.principal(context, _)).getOrElse(AccessPrincipalFunctions.guest()),
+      viewerPrincipal = parsedViewer.map(ResolveAccessPrincipal(_).resolve(context.connection)).getOrElse(AccessPrincipalFunctions.guest()),
       limit = limit.getOrElse(20),
       offset = offset.getOrElse(0),
       recentThreshold = now.minus(recentTournamentWindow),
@@ -72,7 +90,6 @@ final case class ListClubTournamentsAPIMessage(
 
   private def listTournaments(
       connection: java.sql.Connection,
-      module: ClubModuleContext,
       query: ClubTournamentQuery,
       tournaments: Vector[Tournament]
   ): Vector[ClubTournamentParticipationView] =
@@ -80,7 +97,7 @@ final case class ListClubTournamentsAPIMessage(
       .findById(connection, query.clubId)
       .getOrElse(throw NoSuchElementException(s"Club ${query.clubId.value} was not found"))
     val allItems = tournaments
-      .flatMap(tournament => buildClubTournamentParticipationView(connection, module, query.clubId, tournament, query.viewerPrincipal))
+      .flatMap(tournament => buildClubTournamentParticipationView(connection, query.clubId, tournament, query.viewerPrincipal))
     filterByScope(allItems, query)
 
   private def filterByScope(
@@ -121,14 +138,13 @@ final case class ListClubTournamentsAPIMessage(
 
   private def buildClubTournamentParticipationView(
       connection: java.sql.Connection,
-      module: ClubModuleContext,
       clubId: ClubId,
       tournament: Tournament,
       viewer: AccessPrincipal
   ): Option[ClubTournamentParticipationView] =
     val club = ClubTable.findById(connection, clubId)
     val clubVisibleToViewer =
-      club.exists(currentClub => ClubAuthorization.canManageClubTournamentParticipation(module, viewer, currentClub))
+      club.exists(currentClub => ClubAuthorization.canManageClubTournamentParticipation(AuthorizationPolicyFunctions.strict, viewer, currentClub))
     val isWhitelisted = tournament.whitelist.exists(_.clubId.contains(clubId))
     val isParticipating = tournament.participatingClubs.contains(clubId)
     if !isWhitelisted && !isParticipating then None

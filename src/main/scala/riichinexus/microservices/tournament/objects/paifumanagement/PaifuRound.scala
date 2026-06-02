@@ -5,4 +5,4 @@ final case class PaifuRound(
     players: Vector[PaifuRoundPlayer],
     timeline: PaifuTimeline,
     result: AgariResult
-) derives CanEqual
+)

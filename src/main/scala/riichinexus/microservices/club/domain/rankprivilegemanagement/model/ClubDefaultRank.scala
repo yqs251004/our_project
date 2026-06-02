@@ -4,7 +4,7 @@ enum ClubDefaultRank(
     val code: String,
     val label: String,
     val minimumContribution: Int
-) derives CanEqual:
+):
   case Rookie extends ClubDefaultRank("rookie", "萌新", 0)
   case Member extends ClubDefaultRank("member", "同伴", 500)
   case Core extends ClubDefaultRank("core", "主力", 1500)

@@ -1,5 +1,9 @@
 package riichinexus.microservices.platformadmin.api
-import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
+import riichinexus.microservices.audit.domain.auditevent.AuditEvent
+import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
+import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPIMessage
+import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
+import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
 
 import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
@@ -8,17 +12,34 @@ import cats.effect.IO
 import java.time.Instant
 import java.util.NoSuchElementException
 
-import riichinexus.api.{APIMessage, ApiPlanContext}
-import riichinexus.application.changes.{DomainChange, DomainChangeInterpreter}
-import riichinexus.bootstrap.PlatformAdminModuleContext
-import riichinexus.domain.model.*
+import riichinexus.system.api.{APIMessage, ApiPlanContext}
+import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
+import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.club.domain.functions.ClubIdGenerator
+import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
+import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
+import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
+import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
+import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
+import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
+import riichinexus.microservices.tournament.objects.tablemanagement.TableId
+import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
+import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
+import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
+import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
+import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
+import riichinexus.microservices.audit.domain.auditevent.AuditEventId
+import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
+import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.auth.domain.model.Role
+import riichinexus.microservices.auth.objects.Role
 import riichinexus.microservices.player.domain.functions.{PlayerClubBindingFunctions, PlayerRoleFunctions}
 import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
 import riichinexus.microservices.auth.domain.AuthorizationFailure
-import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import riichinexus.microservices.platformadmin.objects.apiTypes.PlatformAdminPlayerView
 import riichinexus.microservices.platformadmin.objects.apiTypes.*
@@ -31,8 +52,7 @@ final case class PlatformAdminGrantSuperAdminAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[PlatformAdminPlayerView] =
     for
-      actor <- IO.blocking(AuthAccessPrincipalResolver.principal(context, operatorId))
-      module = context.support.platformAdminModule
+      actor <- IO.blocking(ResolveAccessPrincipal(operatorId).resolve(context.connection))
       request = GrantSuperAdminRequest(operatorId = operatorId)
       grantedAt <- IO.realTimeInstant
       command = GrantSuperAdminCommand(
@@ -40,44 +60,41 @@ final case class PlatformAdminGrantSuperAdminAPIMessage(
         actor = actor,
         grantedAt = grantedAt
       )
-      player <- IO.blocking {
-        module.transactionManager
-          .inTransaction {
-            grantSuperAdmin(context.connection, module, command)
+      savedPlayer <- IO.blocking {
+        {
+            grantSuperAdmin(context.connection, command)
           }
           .getOrElse(throw NoSuchElementException(s"Player ${command.playerId.value} was not found"))
       }
-    yield platformAdminPlayerView(player)
+      _ <- RecordAuditEventsPrivateAPIMessage(grantSuperAdminAudit(command)).plan(context)
+    yield platformAdminPlayerView(savedPlayer)
 
   private def grantSuperAdmin(
       connection: java.sql.Connection,
-      module: PlatformAdminModuleContext,
     command: GrantSuperAdminCommand
   ): Option[Player] =
     ensureSuperAdmin(command.actor)
-    GetPlayerAPIMessage.findPlayer(connection, command.playerId).map { player =>
-      DomainChangeInterpreter
-        .auditOnly(module.transactionManager, module.auditEventRepository)
-        .commitWithinTransaction(
-          DomainChange(
-            aggregate = PlayerRoleFunctions.grantRole(player, RoleGrantFunctions.superAdmin(command.grantedAt, command.actor.playerId)),
-            persist = nextPlayer => CreatePlayerAPIMessage.persistPlayer(connection, nextPlayer),
-            auditEntries = _ =>
-              Vector(
-                AuditEventEntry(
-                  id = IdGenerator.auditEventId(),
-                  aggregateType = "player",
-                  aggregateId = command.playerId.value,
-                  eventType = "SuperAdminGranted",
-                  occurredAt = command.grantedAt,
-                  actorId = command.actor.playerId,
-                  details = Map("playerId" -> command.playerId.value),
-                  note = Some(s"Granted super admin access to ${command.playerId.value}")
-                )
-              )
-          )
-        )
+    PlayerPersistenceFunctions.findPlayer(connection, command.playerId).map { player =>
+      val savedPlayer = PlayerPersistenceFunctions.savePlayer(
+        connection,
+        PlayerRoleFunctions.grantRole(player, RoleGrantFunctions.superAdmin(command.grantedAt, command.actor.playerId))
+      )
+      savedPlayer
     }
+
+  private def grantSuperAdminAudit(command: GrantSuperAdminCommand): Vector[AuditEvent] =
+    Vector(
+      AuditEvent(
+        id = AuditIdGenerator.auditEventId(),
+        aggregateType = "player",
+        aggregateId = command.playerId.value,
+        eventType = "SuperAdminGranted",
+        occurredAt = command.grantedAt,
+        actorId = command.actor.playerId,
+        details = Map("playerId" -> command.playerId.value),
+        note = Some(s"Granted super admin access to ${command.playerId.value}")
+      )
+    )
 
   private def ensureSuperAdmin(actor: AccessPrincipal): Unit =
     if !AccessPrincipalFunctions.isSuperAdmin(actor) then

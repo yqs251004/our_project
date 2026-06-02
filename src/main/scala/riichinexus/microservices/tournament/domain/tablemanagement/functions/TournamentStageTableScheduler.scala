@@ -1,4 +1,5 @@
 package riichinexus.microservices.tournament.domain.tablemanagement.functions
+import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
 
 import riichinexus.microservices.tournament.domain.lineupmanagement.functions.*
 import riichinexus.microservices.tournament.domain.paifumanagement.functions.*
@@ -12,12 +13,30 @@ import riichinexus.microservices.tournament.domain.settlementmanagement.function
 import riichinexus.microservices.tournament.domain.tablemanagement.functions.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.functions.*
 import cats.effect.unsafe.implicits.global
-import riichinexus.api.ApiPlanContext
+import riichinexus.system.api.ApiPlanContext
 import java.sql.Connection
 import java.util.NoSuchElementException
 
-import riichinexus.bootstrap.TournamentModuleContext
-import riichinexus.domain.model.*
+import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
+import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.club.domain.functions.ClubIdGenerator
+import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
+import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
+import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
+import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
+import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
+import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
+import riichinexus.microservices.tournament.objects.tablemanagement.TableId
+import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
+import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
+import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
+import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
+import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
+import riichinexus.microservices.audit.domain.auditevent.AuditEventId
+import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
+import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.tournament.domain.tournamentmanagement.functions.{TournamentFunctions, TournamentStageFunctions}
 import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
 import riichinexus.microservices.tournament.domain.recordmanagement.model.*
@@ -42,7 +61,6 @@ import riichinexus.microservices.tournament.objects.tournamentmanagement.{Tourna
 object TournamentStageTableScheduler:
   def schedule(
       connection: Connection,
-      module: TournamentModuleContext,
       tournamentId: TournamentId,
       stageId: TournamentStageId
   ): Vector[Table] =
@@ -65,20 +83,19 @@ object TournamentStageTableScheduler:
         stage.advancementRule.ruleType == AdvancementRuleType.KnockoutElimination
 
     if isKnockoutStage then
-      KnockoutStageCoordinator.materializeUnlockedTables(connection, module.transactionManager, tournamentId, stageId)
+      KnockoutStageCoordinator.materializeUnlockedTables(connection, tournamentId, stageId)
       riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.findByTournamentAndStage(connection, tournamentId, stageId).sortBy(table =>
         (table.stageRoundNumber, table.tableNo, table.id.value)
       )
     else
-      scheduleNonKnockoutStage(connection, module, tournament, stage)
+      scheduleNonKnockoutStage(connection, tournament, stage)
 
   private def scheduleNonKnockoutStage(
       connection: Connection,
-      module: TournamentModuleContext,
       tournament: Tournament,
       stage: TournamentStage
   ): Vector[Table] =
-    val tournamentPlayers = resolveParticipants(connection, module, tournament, stage)
+    val tournamentPlayers = resolveParticipants(connection, tournament, stage)
     if tournamentPlayers.size < 4 then
       throw IllegalArgumentException(
         s"Stage ${stage.id.value} needs at least four active players before scheduling"
@@ -92,7 +109,6 @@ object TournamentStageTableScheduler:
     val preparedTournament =
       prepareNonKnockoutRoundIfNeeded(
         connection = connection,
-        module = module,
         tournament = tournament,
         stage = stage,
         participants = tournamentPlayers,
@@ -110,7 +126,7 @@ object TournamentStageTableScheduler:
         val createdTables = plansToMaterialize.map { plan =>
           riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.save(connection, 
             Table(
-              id = IdGenerator.tableId(),
+              id = TournamentIdGenerator.tableId(),
               tableNo = plan.tableNo,
               tournamentId = tournament.id,
               stageId = stage.id,
@@ -140,7 +156,6 @@ object TournamentStageTableScheduler:
 
   private def resolveParticipants(
       connection: Connection,
-      module: TournamentModuleContext,
       tournament: Tournament,
       stage: TournamentStage
   ): Vector[Player] =
@@ -162,7 +177,7 @@ object TournamentStageTableScheduler:
 
       (tournament.participatingPlayers ++ whitelistedPlayers ++ registeredClubMembers ++ whitelistedClubMembers).distinct
 
-    val playersById = ListPlayersAPIMessage.findPlayersByIds(connection, (stage.lineupSubmissions.flatMap(_.seats.map(_.playerId)) ++ fallbackPlayerIds).distinct)
+    val playersById = PlayerPersistenceFunctions.findPlayersByIds(connection, (stage.lineupSubmissions.flatMap(_.seats.map(_.playerId)) ++ fallbackPlayerIds).distinct)
       .map(player => player.id -> player)
       .toMap
     val stagePlayerIds = StageLineupResolver.resolveEligiblePlayers(stage, playersById.get)
@@ -176,7 +191,6 @@ object TournamentStageTableScheduler:
 
   private def prepareNonKnockoutRoundIfNeeded(
       connection: Connection,
-      module: TournamentModuleContext,
       tournament: Tournament,
       stage: TournamentStage,
       participants: Vector[Player],
@@ -209,7 +223,6 @@ object TournamentStageTableScheduler:
           val startingTableNo = existingTables.map(_.tableNo).foldLeft(0)(math.max)
           val plans = plannedTablesForStage(
             connection = connection,
-            module = module,
             tournament = tournament,
             stage = planningStage,
             participants = participants,
@@ -233,7 +246,6 @@ object TournamentStageTableScheduler:
 
   private def plannedTablesForStage(
       connection: Connection,
-      module: TournamentModuleContext,
       tournament: Tournament,
       stage: TournamentStage,
       participants: Vector[Player],
@@ -247,7 +259,7 @@ object TournamentStageTableScheduler:
       case TournamentFormat.RoundRobin =>
         buildRoundRobinTables(participants, stage, roundNumber)
       case TournamentFormat.Custom =>
-        val selectedPlayers = selectCustomStageParticipants(module, tournament, stage, participants, history, roundNumber)
+        val selectedPlayers = selectCustomStageParticipants(tournament, stage, participants, history, roundNumber)
         SeatingPolicy.planTables(selectedPlayers, stage, roundNumber, history, clubRelations)
       case _ =>
         SeatingPolicy.planTables(participants, stage, roundNumber, history, clubRelations)
@@ -274,7 +286,6 @@ object TournamentStageTableScheduler:
       .toMap
 
   private def selectCustomStageParticipants(
-      module: TournamentModuleContext,
       tournament: Tournament,
       stage: TournamentStage,
       participants: Vector[Player],

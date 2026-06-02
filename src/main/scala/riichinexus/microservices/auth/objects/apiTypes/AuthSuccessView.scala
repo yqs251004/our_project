@@ -1,6 +1,6 @@
 package riichinexus.microservices.auth.objects.apiTypes
 
-import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.system.json.JsonCodecs.given
 import upickle.default.*
 
 final case class AuthSuccessView(
@@ -9,7 +9,7 @@ final case class AuthSuccessView(
     displayName: String,
     token: String,
     roles: CurrentSessionRoleFlags
-) derives CanEqual
+)
 
 object AuthSuccessView:
   given ReadWriter[AuthSuccessView] = macroRW

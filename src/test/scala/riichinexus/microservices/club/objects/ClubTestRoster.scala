@@ -1,4 +1,6 @@
 package riichinexus.microservices.club.objects
+import riichinexus.microservices.audit.domain.auditevent.AuditEvent
+import riichinexus.microservices.auth.objects.Permission
 
 import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.time.Instant
@@ -242,7 +244,7 @@ final class ClubTestRoster(
           )
         )
         auditEventRepository.save(
-          AuditEventEntry(
+          AuditEvent(
             id = IdGenerator.auditEventId(),
             aggregateType = "club",
             aggregateId = clubId.value,
@@ -289,7 +291,7 @@ final class ClubTestRoster(
 
         val updatedClub = clubRepository.save(ClubFunctions.clearInternalTitle(club, playerId))
         auditEventRepository.save(
-          AuditEventEntry(
+          AuditEvent(
             id = IdGenerator.auditEventId(),
             aggregateType = "club",
             aggregateId = clubId.value,

@@ -1,5 +1,7 @@
 package riichinexus.microservices.tournament.api
-import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
+import riichinexus.microservices.auth.objects.Permission
+import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
+import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
 
 import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
@@ -10,9 +12,27 @@ import java.util.NoSuchElementException
 import java.time.Instant
 
 import cats.effect.IO
-import riichinexus.api.{APIMessage, ApiPlanContext}
-import riichinexus.bootstrap.TournamentModuleContext
-import riichinexus.domain.model.*
+import riichinexus.system.api.{APIMessage, ApiPlanContext}
+import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
+import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.club.domain.functions.ClubIdGenerator
+import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
+import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
+import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
+import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
+import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
+import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
+import riichinexus.microservices.tournament.objects.tablemanagement.TableId
+import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
+import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
+import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
+import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
+import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
+import riichinexus.microservices.audit.domain.auditevent.AuditEventId
+import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
+import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.tournament.domain.rulesmanagement.functions.knockout.KnockoutStageCoordinator
 import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
@@ -20,7 +40,7 @@ import riichinexus.microservices.tournament.domain.recordmanagement.model.*
 import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
 import riichinexus.microservices.tournament.domain.tablemanagement.model.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
-import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.tournament.domain.tablemanagement.model.Table
 import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
@@ -36,9 +56,8 @@ final case class TournamentStageAdvanceAPIMessage(tournamentId: String, stageId:
 
   override def plan(context: ApiPlanContext): IO[Vector[TournamentTableView]] =
     for
-      actor <- IO.blocking(operatorId.filter(_.nonEmpty).map(PlayerId(_)).map(AuthAccessPrincipalResolver.principal(context, _)).getOrElse(AccessPrincipalFunctions.system))
+      actor <- IO.blocking(operatorId.filter(_.nonEmpty).map(PlayerId(_)).map(ResolveAccessPrincipal(_).resolve(context.connection)).getOrElse(AccessPrincipalFunctions.system))
       at <- IO.realTimeInstant
-      module = context.support.tournamentModule
       command = AdvanceKnockoutStageCommand(
         tournamentId = TournamentId(tournamentId),
         stageId = TournamentStageId(stageId),
@@ -46,15 +65,14 @@ final case class TournamentStageAdvanceAPIMessage(tournamentId: String, stageId:
         at = at
       )
       tables <- IO.blocking {
-        module.transactionManager.inTransaction {
-          advanceStage(context.connection, module, command)
+        {
+          advanceStage(context.connection, command)
         }
       }
     yield tables.map(TournamentTableView.fromDomain)
 
   private def advanceStage(
       connection: java.sql.Connection,
-      module: TournamentModuleContext,
       command: AdvanceKnockoutStageCommand
   ): Vector[Table] =
     val tournament = riichinexus.microservices.tournament.tables.tournaments.TournamentTable
@@ -63,7 +81,7 @@ final case class TournamentStageAdvanceAPIMessage(tournamentId: String, stageId:
     val stage = tournament.stages
       .find(_.id == command.stageId)
       .getOrElse(throw NoSuchElementException(s"Stage ${command.stageId.value} was not found"))
-    AuthorizationPolicyFunctions.requirePermission(module.authorizationService, 
+    AuthorizationPolicyFunctions.requirePermission(AuthorizationPolicyFunctions.strict, 
       command.actor,
       Permission.ManageTournamentStages,
       tournamentId = Some(command.tournamentId)
@@ -71,7 +89,6 @@ final case class TournamentStageAdvanceAPIMessage(tournamentId: String, stageId:
     ensureKnockoutStage(stage, command.stageId)
     KnockoutStageCoordinator.materializeUnlockedTables(
       connection,
-      module.transactionManager,
       command.tournamentId,
       command.stageId,
       command.at

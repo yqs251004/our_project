@@ -3,7 +3,7 @@ package riichinexus.microservices.tournament.appeal.objects
 import riichinexus.microservices.tournament.appeal.domain.model.{AppealAttachmentMediaKind as DomainAppealAttachmentMediaKind}
 import upickle.default.*
 
-enum AppealAttachmentMediaKind derives CanEqual:
+enum AppealAttachmentMediaKind:
   case Image
   case Video
   case Document

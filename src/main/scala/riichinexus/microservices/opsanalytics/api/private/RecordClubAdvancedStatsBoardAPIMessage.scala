@@ -1,10 +1,11 @@
 package riichinexus.microservices.opsanalytics.api.`private`
+import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
 
 import cats.effect.IO
 import java.time.Instant
 
-import riichinexus.api.{APIMessage, ApiPlanContext}
-import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.system.api.{APIMessage, ApiPlanContext}
+import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.Club
 import riichinexus.microservices.opsanalytics.domain.functions.AdvancedStatsBoardFunctions
 import riichinexus.microservices.opsanalytics.objects.{AdvancedStatsBoard, DashboardOwner}
@@ -22,7 +23,7 @@ final case class RecordClubAdvancedStatsBoardAPIMessage(
     for
       activeMemberIds <- IO.blocking {
         club.members.filter { playerId =>
-          GetPlayerAPIMessage.findPlayer(context.connection, playerId).exists(_.status == PlayerStatus.Active)
+          PlayerPersistenceFunctions.findPlayer(context.connection, playerId).exists(_.status == PlayerStatus.Active)
         }
       }
       memberBoards <- activeMemberIds.foldLeft(IO.pure(Vector.empty[AdvancedStatsBoard])) { (previous, playerId) =>

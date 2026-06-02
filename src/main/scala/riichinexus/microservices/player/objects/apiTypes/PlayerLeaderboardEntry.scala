@@ -1,6 +1,6 @@
 package riichinexus.microservices.player.objects.apiTypes
 
-import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.player.objects.RankSnapshot
 import upickle.default.*
 
@@ -12,7 +12,7 @@ final case class PlayerLeaderboardEntry(
     normalizedRankScore: Option[Int],
     clubIds: Vector[String],
     status: String
-) derives CanEqual
+)
 
 object PlayerLeaderboardEntry:
   given ReadWriter[PlayerLeaderboardEntry] = macroRW

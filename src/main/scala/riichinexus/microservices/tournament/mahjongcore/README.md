@@ -1,70 +1,80 @@
 # mahjongcore 子微服务规范
 
-`mahjongcore` 是 `tournament` 微服务下的赛事对局计算引擎子微服务。它的职责是承载对局计算、牌谱解析、局结果推导、分数与状态变更等与赛事对局核心规则相关的后端能力。
+`mahjongcore` 是 `tournament` 微服务下的麻将对局计算子微服务。它负责和麻将核心规则直接相关的后端能力，例如牌谱解析、牌局状态推进、局结果计算、分数变化、和种识别、对局归档前校验等。
 
-当前目录只建立结构与规范，不放具体实现。新增代码时保持现有后端风格：一个 API 一个文件，一个 object/api type 一个文件，API 只做请求到领域的边界转换，领域流程放在 domain，数据库访问放在 tables。
+当前目录主要是结构规范。后续新增代码时，应贴近现版本后端的重构方向：类型和纯函数分开，前端镜像类型和后端领域类型分开，按业务语义拆目录，跨微服务协作走 API。
 
-## 目录边界
+## 总体边界
 
-- `api/`
-  - 放 APIMessage。
-  - APIMessage 负责解析 API request、解析 actor、构造 domain command/query、开启必要事务、调用 domain service/coordinator、把 domain 结果转成 API view。
-  - 不写牌理、番种、结算、状态机等领域规则。
-  - 不新增 support/builder 类来转发主流程。
+- `objects/` 放前端需要镜像的类型，以及 API request、query、response、view、对外 enum。
+- `domain/` 放只有后端自己使用的领域类型、内部状态、领域异常、纯函数和领域流程。
+- `api/` 放 `APIMessage`，每个 API 一个文件，主链路写在 `plan` 中。
+- `tables/` 放 SQL/JDBC 表访问代码，每个 SQL 语句对应一个函数。
+- `router/` 放 API 注册入口，只登记 API，不写业务逻辑。
 
-- `domain/`
-  - 放麻将计算引擎的领域模型、命令、服务、coordinator、规则算法与领域异常。
-  - 不 import `objects.apiTypes.*`。
-  - 不知道 API request/response 的名字。
-  - 可以直接接收 domain command/query 和 repository/table 查询结果。
+## 语义目录
 
-- `objects/`
-  - 放 API 边界对象、view、request、response、query、API enum。
-  - DTO 与 domain model 的转换方法也放这里，例如 `fromDomain` / `toDomain`。
-  - 不写业务流程，不访问数据库。
+类型不要堆在根目录下。按照业务语义拆分，例如：
 
-- `router/`
-  - 放该子微服务 APIMessage 的注册入口。
-  - 只负责声明 API registry，保持名称、success status、token requirement 与 APIMessage 一一对应。
+- `roundmanagement`
+- `scoremanagement`
+- `paifumanagement`
+- `handanalysis`
+- `yakuanalysis`
+- `gamestate`
+- `settlementmanagement`
 
-- `tables/`
-  - 放 JDBC table mapper 与 SQL。
-  - 每个数据库表一个子目录或一个明确的 table object。
-  - table 方法只做 SQL、行映射、乐观锁版本处理。
-  - 调用 tables 时直接调用对应 table object，不通过无意义的中间函数转发。
+同一个语义下面可以同时有：
 
-## 跨层依赖方向
+- `objects/<semantic>/...`：前端需要镜像的类型。
+- `domain/<semantic>/model/...`：后端内部领域类型。
+- `domain/<semantic>/functions/...`：围绕该语义的纯函数。
+- `tables/<table>/...`：该语义对应的持久化表。
 
-允许方向：
+## 依赖方向
 
-- `api -> domain`
+允许：
+
 - `api -> objects`
+- `api -> domain`
 - `api -> tables`
-- `domain -> tables`，仅当领域服务确实需要读取/保存持久化数据
-- `objects -> domain`，仅限边界转换
+- `domain -> tables`，仅限后端领域流程确实需要读写本服务表。
+- `objects -> domain`，仅限 `fromDomain` / `toDomain` 这类边界转换。
 - `router -> api`
 
-禁止方向：
+禁止：
 
 - `domain -> api`
 - `domain -> objects.apiTypes`
-- `tables -> api/domain service/objects.apiTypes`
+- `tables -> api`
+- `tables -> objects.apiTypes`
 - `objects -> tables`
-- `router -> domain/tables`
+- 其它微服务直接调用 `mahjongcore.tables`
 
-## IO 与事务
+其它微服务如果需要读取或更新 `mahjongcore` 数据，必须调用 `mahjongcore` 暴露的 public/private API。
 
-- API 中所有同步数据库、事务、JSON 编解码、大对象序列化都必须放在 `IO.blocking` 边界内。
-- 普通 `IO(...)` / `IO { ... }` 不用于 JDBC、文件、网络、事务、同步仓储、重计算。
-- 事务开启位置通常在 APIMessage 的 plan 中，或者由明确的 domain coordinator/service 管理；不要在 table 层开启事务。
-- domain service 如果已经假设在事务内运行，命名和 README/注释中要说清楚。
+## 类型和函数
+
+- case class、enum、value object 只表达数据结构，不挂业务方法。
+- 领域模型的方法拆到 `domain/<semantic>/functions`。
+- API view/request 到 domain 的转换，如果只有单个 API 使用，收到 API 文件内；如果多个 API 复用，可以挂在对应 `objects` 类型的 companion 上，统一命名 `fromDomain` / `toDomain`。
+- enum 只保留 `toString` / `fromString` 这类边界形式，不在 enum 内混入业务判断。
+- ID 类型如果前端需要镜像，放 `objects/<semantic>`；ID 生成器属于后端函数，放 `domain/functions` 或对应语义的 `domain/<semantic>/functions`。
+
+## Tables 规则
+
+- 一个 SQL 语句对应一个 table 函数。
+- table 函数设为 `private[mahjongcore]`，避免跨微服务直接读表。
+- table 函数只做 SQL、参数绑定、ResultSet 映射、乐观锁版本处理。
+- 不在 tables 里开事务，不做权限校验，不组装 API view，不写麻将规则计算。
+- 复杂流程放在 API plan 或 domain coordinator/function 中串起来。
 
 ## 命名
 
 - API 文件：`XxxAPIMessage.scala`
-- Request/query/view：放 `objects/apiTypes` 或 `objects` 下，按现有模块实际边界保持一致。
-- Table 文件：`XxxTable.scala`
-- Domain command：`XxxCommand.scala`
-- Domain coordinator/service：`XxxCoordinator.scala` / `XxxService.scala`
+- API 类型：`objects/<semantic>/apiTypes/XxxRequest.scala`、`XxxView.scala`、`XxxQuery.scala`
+- 领域类型：`domain/<semantic>/model/Xxx.scala`
+- 领域函数：`domain/<semantic>/functions/XxxFunctions.scala`
+- Table 文件：`tables/<table>/XxxTable.scala`
 
-Scala package 使用 `riichinexus.microservices.tournament.mahjongcore` 这一类无连字符路径，保持 IDE、编译器和目录结构一致。
+不要新增 `package.scala` 或 package object。

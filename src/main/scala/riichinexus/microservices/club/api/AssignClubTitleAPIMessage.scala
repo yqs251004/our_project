@@ -1,15 +1,37 @@
 package riichinexus.microservices.club.api
-import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
+import riichinexus.microservices.audit.domain.auditevent.AuditEvent
+import riichinexus.microservices.auth.objects.Permission
+import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
+import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPIMessage
+import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
+import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
 
 import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.time.Instant
 import java.util.NoSuchElementException
 
 import cats.effect.IO
-import riichinexus.api.{APIMessage, ApiPlanContext}
-import riichinexus.application.changes.DomainChangeInterpreter
-import riichinexus.bootstrap.ClubModuleContext
-import riichinexus.domain.model.*
+import riichinexus.system.api.{APIMessage, ApiPlanContext}
+import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
+import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.club.domain.functions.ClubIdGenerator
+import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
+import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
+import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
+import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
+import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
+import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
+import riichinexus.microservices.tournament.objects.tablemanagement.TableId
+import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
+import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
+import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
+import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
+import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
+import riichinexus.microservices.audit.domain.auditevent.AuditEventId
+import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
+import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.club.domain.Club
 import riichinexus.microservices.club.domain.clubmanagement.model.*
@@ -19,7 +41,7 @@ import riichinexus.microservices.club.domain.relationmanagement.model.*
 import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
 import riichinexus.microservices.auth.domain.*
-import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubAuthorization
 import riichinexus.microservices.club.objects.clubmanagement.ClubView
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
@@ -35,9 +57,8 @@ final case class AssignClubTitleAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
-      actor <- IO.blocking(AuthAccessPrincipalResolver.principal(context, PlayerId(operatorId)))
+      actor <- IO.blocking(ResolveAccessPrincipal(PlayerId(operatorId)).resolve(context.connection))
       assignedAt <- IO.realTimeInstant
-      module = context.support.clubModule
       command = AssignClubTitleCommand(
         clubId = ClubId(clubId),
         playerId = PlayerId(playerId),
@@ -46,27 +67,26 @@ final case class AssignClubTitleAPIMessage(
         note = note,
         assignedAt = assignedAt
       )
-      club <- IO.blocking {
-        module.transactionManager.inTransaction {
-          assignTitle(context.connection, module, command)
+      savedClub <- IO.blocking {
+        {
+          assignTitle(context.connection, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
-    yield ClubView.fromDomain(club)
+      _ <- RecordAuditEventsPrivateAPIMessage(assignTitleAudit(command)).plan(context)
+    yield ClubView.fromDomain(savedClub)
 
   private def assignTitle(
       connection: java.sql.Connection,
-      module: ClubModuleContext,
       command: AssignClubTitleCommand
   ): Option[Club] =
     for
       club <- riichinexus.microservices.club.tables.clubs.ClubTable.findById(connection, command.clubId)
-      player <- GetPlayerAPIMessage.findPlayer(connection, command.playerId)
+      player <- PlayerPersistenceFunctions.findPlayer(connection, command.playerId)
     yield
-      ensureTitleCanBeAssigned(module, club, player, command)
-      commitTitleAssignment(connection, module, club, command, assignedBy = command.actor.playerId.getOrElse(club.creator))
+      ensureTitleCanBeAssigned(club, player, command)
+      commitTitleAssignment(connection, club, command, assignedBy = command.actor.playerId.getOrElse(club.creator))
 
   private def ensureTitleCanBeAssigned(
-      module: ClubModuleContext,
       club: Club,
       player: Player,
       command: AssignClubTitleCommand
@@ -74,24 +94,20 @@ final case class AssignClubTitleAPIMessage(
     ClubAuthorization.ensureClubActive(club)
     requireActivePlayer(player, s"Player ${command.playerId.value} cannot receive club title")
     ClubAuthorization.requireClubMember(club, command.playerId, "set internal title")
-    ClubAuthorization.requireClubAdmin(
-      module = module,
-      actor = command.actor,
+    ClubAuthorization.requireClubAdmin(actor = command.actor,
       club = club,
       permission = Permission.SetClubTitle
     )
 
   private def commitTitleAssignment(
       connection: java.sql.Connection,
-      module: ClubModuleContext,
       club: Club,
       command: AssignClubTitleCommand,
       assignedBy: PlayerId
   ): Club =
-    DomainChangeInterpreter
-      .auditOnly(module.transactionManager, module.auditEventRepository)
-      .commitAudited(
-        aggregate = ClubFunctions.setInternalTitle(club,
+    riichinexus.microservices.club.tables.clubs.ClubTable.save(
+      connection,
+      ClubFunctions.setInternalTitle(club,
           ClubTitleAssignment(
             playerId = command.playerId,
             title = command.title,
@@ -99,20 +115,25 @@ final case class AssignClubTitleAPIMessage(
             assignedAt = command.assignedAt,
             note = command.note
           )
-        ),
-        persist = updatedClub => riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, updatedClub),
+        )
+    )
+
+  private def assignTitleAudit(command: AssignClubTitleCommand): Vector[AuditEvent] =
+    Vector(
+      AuditEvent(
+        id = AuditIdGenerator.auditEventId(),
         aggregateType = "club",
-        aggregateId = _.id.value,
+        aggregateId = command.clubId.value,
         eventType = "ClubTitleAssigned",
         occurredAt = command.assignedAt,
         actorId = command.actor.playerId,
-        details = _ =>
-          Map(
-            "playerId" -> command.playerId.value,
-            "title" -> command.title
-          ),
+        details = Map(
+          "playerId" -> command.playerId.value,
+          "title" -> command.title
+        ),
         note = command.note
       )
+    )
 
   private def requireActivePlayer(player: Player, context: String): Unit =
     if player.status != PlayerStatus.Active then

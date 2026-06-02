@@ -7,7 +7,7 @@ final case class ClubApplicationPolicyView(
     requirementsText: Option[String],
     expectedReviewSlaHours: Option[Int],
     pendingApplicationCount: Int
-) derives CanEqual
+)
 
 object ClubApplicationPolicyView:
   given ReadWriter[ClubApplicationPolicyView] = macroRW

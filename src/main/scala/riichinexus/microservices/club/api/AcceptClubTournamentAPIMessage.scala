@@ -1,13 +1,33 @@
 package riichinexus.microservices.club.api
-import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
+import riichinexus.microservices.auth.objects.Permission
+import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
+import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
 
 import java.util.NoSuchElementException
 
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
-import riichinexus.api.{APIMessage, ApiPlanContext}
-import riichinexus.bootstrap.TournamentModuleContext
-import riichinexus.domain.model.*
+import riichinexus.system.api.{APIMessage, ApiPlanContext}
+import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
+import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.club.domain.functions.ClubIdGenerator
+import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
+import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
+import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
+import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
+import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
+import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
+import riichinexus.microservices.tournament.objects.tablemanagement.TableId
+import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
+import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
+import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
+import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
+import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
+import riichinexus.microservices.audit.domain.auditevent.AuditEventId
+import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
+import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
 import riichinexus.microservices.tournament.domain.recordmanagement.model.*
@@ -20,7 +40,7 @@ import riichinexus.microservices.club.domain.membershipmanagement.model.*
 import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
 import riichinexus.microservices.club.domain.relationmanagement.model.*
 import riichinexus.microservices.club.objects.rankprivilegemanagement.ClubPrivilegeCode
-import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubAuthorization
 import riichinexus.microservices.tournament.api.`private`.AcceptClubTournamentPrivateAPIMessage
 import riichinexus.microservices.tournament.api.`private`.TournamentOperationViewAssembler
@@ -42,35 +62,33 @@ final case class AcceptClubTournamentAPIMessage(
   override def plan(context: ApiPlanContext): IO[TournamentMutationView] =
     for
       actor <- IO.blocking(resolveOperatorActor(context))
-      module = context.support.clubModule.tournamentModule
       command = AcceptClubTournamentCommand(
         clubId = ClubId(clubId),
         tournamentId = TournamentId(tournamentId),
         actor = actor
       )
       _ <- IO.blocking {
-        module.transactionManager.inTransaction {
-          acceptTournament(context.connection, module, command)
+        {
+          acceptTournament(context.connection, command)
         }
       }
       view <- IO.blocking {
-        TournamentOperationViewAssembler.mutationView(context.connection, module, command.tournamentId, Vector.empty)
+        TournamentOperationViewAssembler.mutationView(context.connection, command.tournamentId, Vector.empty)
         .getOrElse(throw NoSuchElementException("Resource not found"))
       }
     yield view
 
   private def resolveOperatorActor(context: ApiPlanContext): AccessPrincipal =
     operatorId.filter(_.nonEmpty)
-      .map(id => AuthAccessPrincipalResolver.principal(context, PlayerId(id)))
+      .map(id => ResolveAccessPrincipal(PlayerId(id)).resolve(context.connection))
       .getOrElse(throw IllegalArgumentException("operatorId is required"))
 
   private def acceptTournament(
       connection: java.sql.Connection,
-      module: TournamentModuleContext,
       command: AcceptClubTournamentCommand
   ): Unit =
     val club = resolveActiveClub(connection, command.clubId)
-    requireClubLineupCapability(module, command.actor, club)
+    requireClubLineupCapability(command.actor, club)
     AcceptClubTournamentPrivateAPIMessage(command.tournamentId, command.clubId)
       .plan(ApiPlanContext(support = null, bearerToken = None, connection = connection))
       .unsafeRunSync()
@@ -85,12 +103,10 @@ final case class AcceptClubTournamentAPIMessage(
       .getOrElse(throw NoSuchElementException(s"Club ${clubId.value} was not found"))
 
   private def requireClubLineupCapability(
-      module: TournamentModuleContext,
       actor: AccessPrincipal,
       club: Club
   ): Unit =
     ClubAuthorization.requireClubCapability(
-      authorizationService = module.authorizationService,
       actor = actor,
       club = club,
       permission = Permission.SubmitTournamentLineup,

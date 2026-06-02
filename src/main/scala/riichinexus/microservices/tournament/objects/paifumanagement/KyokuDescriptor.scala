@@ -6,4 +6,4 @@ final case class KyokuDescriptor(
     roundWind: SeatWind,
     handNumber: Int,
     honba: Int = 0
-) derives CanEqual
+)

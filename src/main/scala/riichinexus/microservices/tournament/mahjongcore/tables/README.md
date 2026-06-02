@@ -1,31 +1,52 @@
 # tables 目录规范
 
-`tables` 放数据库表访问代码。这里是 JDBC/SQL 边界，不是领域服务层。
+`tables` 是 `mahjongcore` 的 SQL/JDBC 边界。它只负责本子微服务自己的表访问，不对其它微服务开放直接读写入口。
 
-## 应该放在 tables 的内容
+## 核心规则
+
+- 一个数据库表一个子目录。
+- 一个 SQL 语句对应一个函数。
+- 每个 table 函数设为 `private[mahjongcore]`。
+- 其它微服务如果要读取或更新 `mahjongcore` 数据，调用 `mahjongcore` 的 API，不直接调用 table。
+
+## 函数粒度
+
+推荐：
+
+```scala
+private[mahjongcore] def findById(connection: Connection, id: PaifuId): Option[PaifuRecord]
+private[mahjongcore] def insert(connection: Connection, record: PaifuRecord): Unit
+private[mahjongcore] def updateStatus(connection: Connection, id: PaifuId, status: PaifuStatus, expectedVersion: Long): Unit
+```
+
+不推荐：
+
+```scala
+def archivePaifuAndRecomputeEverything(...)
+def findOrCreateAndPublishView(...)
+def runMahjongSettlementWorkflow(...)
+```
+
+后一类是领域流程，应该放在 API plan 或 domain functions/coordinator 中。
+
+## table 函数只做这些事
 
 - SQL 字符串。
-- JDBC prepare statement / result set 映射。
-- `findById`、`findAll`、`findByXxx`、`save`、`delete` 等表级操作。
-- 乐观锁版本读取与冲突抛出。
-- 数据库 row 与持久化 model 的转换。
+- PreparedStatement 参数绑定。
+- ResultSet 到持久化类型的映射。
+- insert/update/delete/select。
+- 乐观锁版本检查和抛出系统级并发异常。
 
-## 文件组织
+## table 函数不做这些事
 
-- 一个数据库表一个子目录或一个 table object。
-- table object 命名为 `XxxTable`。
-- 表相关 SQL 与 mapper 留在同一个 table object 附近。
+- 不开事务。
+- 不校验 token、session、permission。
+- 不组装 API view。
+- 不 import `api`。
+- 不 import `objects.apiTypes`。
+- 不执行麻将规则计算。
+- 不调用其它微服务 API。
 
-## 调用规范
+## 跨微服务边界
 
-- API 或 domain 需要读写某张表时，直接调用对应 table object。
-- 不新增只做转发的 repository/helper，例如一个方法内部只是调用 `XxxTable.findById`。
-- 如果需要组合多张表并承载业务规则，把流程放进 domain service/coordinator，而不是 tables。
-
-## 禁止内容
-
-- 不开启事务；事务由 APIMessage 或 domain service/coordinator 管理。
-- 不处理权限。
-- 不处理 API request/response/view。
-- 不 import `api` 或 `objects.apiTypes`。
-- 不做麻将规则计算；最多做数据读取、保存和行映射。
+`private[mahjongcore]` 是强约束：tables 是本子微服务内部实现。其它微服务读取牌谱、对局结果、统计输入或状态时，应通过 `mahjongcore/api/public` 或 `mahjongcore/api/private` 暴露的 APIMessage 完成。

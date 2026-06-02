@@ -1,6 +1,6 @@
 package riichinexus.microservices.tournament.appeal.domain.model
 
-enum AppealStatus derives CanEqual:
+enum AppealStatus:
   case Open
   case UnderReview
   case Resolved

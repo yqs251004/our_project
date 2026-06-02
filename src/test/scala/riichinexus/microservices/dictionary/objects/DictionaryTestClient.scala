@@ -1,4 +1,6 @@
 package riichinexus.microservices.dictionary.objects
+import riichinexus.microservices.audit.domain.auditevent.AuditEvent
+import riichinexus.microservices.auth.objects.Permission
 
 import java.time.{Duration, Instant}
 
@@ -75,7 +77,7 @@ final class DictionaryTestClient(module: DictionaryModuleContext):
             )
           )
           module.auditEventRepository.save(
-            AuditEventEntry(
+            AuditEvent(
               id = IdGenerator.auditEventId(),
               aggregateType = "dictionary-namespace",
               aggregateId = normalizedPrefix,
@@ -113,7 +115,7 @@ final class DictionaryTestClient(module: DictionaryModuleContext):
 
         module.dictionaryNamespaceRepository.save(reviewed)
         module.auditEventRepository.save(
-          AuditEventEntry(
+          AuditEvent(
             id = IdGenerator.auditEventId(),
             aggregateType = "dictionary-namespace",
             aggregateId = normalizedPrefix,
@@ -161,7 +163,7 @@ final class DictionaryTestClient(module: DictionaryModuleContext):
         val updated = existing.updateCollaborators(normalizedCoOwners, normalizedEditors, reviewer, updatedAt, note)
         module.dictionaryNamespaceRepository.save(updated)
         module.auditEventRepository.save(
-          AuditEventEntry(
+          AuditEvent(
             id = IdGenerator.auditEventId(),
             aggregateType = "dictionary-namespace",
             aggregateId = normalizedPrefix,
@@ -204,7 +206,7 @@ final class DictionaryTestClient(module: DictionaryModuleContext):
         val transferred = existing.transferOwnership(newOwnerId, reviewer, transferredAt, note)
         module.dictionaryNamespaceRepository.save(transferred)
         module.auditEventRepository.save(
-          AuditEventEntry(
+          AuditEvent(
             id = IdGenerator.auditEventId(),
             aggregateType = "dictionary-namespace",
             aggregateId = normalizedPrefix,
@@ -247,7 +249,7 @@ final class DictionaryTestClient(module: DictionaryModuleContext):
         val updated = existing.updateContextClub(normalizedContextClubId, reviewer, updatedAt, note)
         module.dictionaryNamespaceRepository.save(updated)
         module.auditEventRepository.save(
-          AuditEventEntry(
+          AuditEvent(
             id = IdGenerator.auditEventId(),
             aggregateType = "dictionary-namespace",
             aggregateId = normalizedPrefix,
@@ -282,7 +284,7 @@ final class DictionaryTestClient(module: DictionaryModuleContext):
         val revoked = existing.revoke(reviewer, revokedAt, note)
         module.dictionaryNamespaceRepository.save(revoked)
         module.auditEventRepository.save(
-          AuditEventEntry(
+          AuditEvent(
             id = IdGenerator.auditEventId(),
             aggregateType = "dictionary-namespace",
             aggregateId = normalizedPrefix,
@@ -361,7 +363,7 @@ final class DictionaryTestClient(module: DictionaryModuleContext):
               val updated = registration.markReminderSent(asOf)
               module.dictionaryNamespaceRepository.save(updated)
               module.auditEventRepository.save(
-                AuditEventEntry(
+                AuditEvent(
                   id = IdGenerator.auditEventId(),
                   aggregateType = "dictionary-namespace",
                   aggregateId = registration.namespacePrefix,
@@ -434,7 +436,7 @@ final class DictionaryTestClient(module: DictionaryModuleContext):
 
       val saved = module.globalDictionaryRepository.save(entry)
       module.auditEventRepository.save(
-        AuditEventEntry(
+        AuditEvent(
           id = IdGenerator.auditEventId(),
           aggregateType = "dictionary",
           aggregateId = key,

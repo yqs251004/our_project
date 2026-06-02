@@ -2,7 +2,7 @@ package riichinexus.microservices.tournament.objects.tournamentmanagement
 
 import upickle.default.*
 
-enum TournamentParticipantKind derives CanEqual:
+enum TournamentParticipantKind:
   case Club
   case Player
 

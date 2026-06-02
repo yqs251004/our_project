@@ -1,6 +1,6 @@
 package riichinexus.microservices.tournament.appeal.domain.model
 
-enum AppealPriority derives CanEqual:
+enum AppealPriority:
   case Low
   case Normal
   case High

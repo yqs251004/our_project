@@ -1,6 +1,6 @@
 package riichinexus.microservices.tournament.objects.tablemanagement.apiTypes
 
-import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.tournament.domain.tablemanagement.model.Table
 import riichinexus.microservices.tournament.objects.tablemanagement.TableSeat
 import riichinexus.microservices.tournament.objects.tablemanagement.TableStatus
@@ -23,7 +23,7 @@ final case class TournamentTableView(
     matchRecordId: Option[String],
     appealTicketIds: Vector[String],
     resetCount: Int
-) derives CanEqual
+)
 
 object TournamentTableView:
   def fromDomain(table: Table): TournamentTableView =

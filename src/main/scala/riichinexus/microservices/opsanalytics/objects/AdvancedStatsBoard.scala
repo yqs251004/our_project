@@ -19,4 +19,4 @@ final case class AdvancedStatsBoard(
     exactDefenseSampleRate: Double,
     lastUpdatedAt: Instant,
     version: Int = 0
-) derives CanEqual
+)

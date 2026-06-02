@@ -1,11 +1,28 @@
 package riichinexus.microservices.player.api
 
-import java.sql.Connection
-
 import cats.effect.IO
-import riichinexus.api.{APIMessage, ApiPlanContext}
-import riichinexus.domain.model.*
-import riichinexus.microservices.auth.domain.model.Role
+import riichinexus.system.api.{APIMessage, ApiPlanContext}
+import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
+import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.club.domain.functions.ClubIdGenerator
+import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
+import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
+import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
+import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
+import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
+import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
+import riichinexus.microservices.tournament.objects.tablemanagement.TableId
+import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
+import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
+import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
+import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
+import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
+import riichinexus.microservices.audit.domain.auditevent.AuditEventId
+import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
+import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
+import riichinexus.microservices.auth.objects.Role
 import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.domain.functions.PlayerRoleFunctions
 import riichinexus.microservices.player.objects.PlayerStatus
@@ -34,7 +51,7 @@ final case class ListPlayersAPIMessage(
   private def resolveQuery(context: ApiPlanContext): ResolvedPlayersQuery =
     val playerQuery = PlayerListQuery(
       clubId = clubId.filter(_.nonEmpty).map(ClubId(_)),
-      status = status.filter(_.nonEmpty).map(riichinexus.system.functions.EnumParsingFunctions.parse("status", _)(PlayerStatus.valueOf)),
+      status = status.filter(_.nonEmpty).map(riichinexus.system.EnumParsing.parse("status", _)(PlayerStatus.valueOf)),
       nickname = nickname.filter(_.nonEmpty)
     )
     ResolvedPlayersQuery(
@@ -50,8 +67,8 @@ final case class ListPlayersAPIMessage(
       context: ApiPlanContext,
       resolved: ResolvedPlayersQuery
   ): Vector[Player] =
-    ListPlayersAPIMessage.listPlayers(context.connection, resolved.query)
-      .filter(player => resolved.query.nickname.forall(riichinexus.system.functions.TextSearchFunctions.containsIgnoreCase(player.nickname, _)))
+    PlayerTable.list(context.connection, resolved.query)
+      .filter(player => resolved.query.nickname.forall(riichinexus.system.TextSearch.containsIgnoreCase(player.nickname, _)))
 
   private def playerProfileView(player: Player): PlayerProfileView =
     PlayerProfileView(
@@ -77,16 +94,3 @@ final case class ListPlayersAPIMessage(
       query: PlayerListQuery,
       appliedFilters: Map[String, String]
   )
-
-object ListPlayersAPIMessage:
-  def listPlayers(connection: Connection, query: PlayerListQuery): Vector[Player] =
-    PlayerTable.list(connection, query)
-
-  def findPlayersByIds(connection: Connection, playerIds: Vector[PlayerId]): Vector[Player] =
-    PlayerTable.findByIds(connection, playerIds)
-
-  def findPlayersByClub(connection: Connection, clubId: ClubId): Vector[Player] =
-    PlayerTable.findByClub(connection, clubId)
-
-  def findAllPlayers(connection: Connection): Vector[Player] =
-    PlayerTable.findAll(connection)

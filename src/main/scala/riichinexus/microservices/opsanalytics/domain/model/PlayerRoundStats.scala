@@ -16,4 +16,4 @@ final case class PlayerRoundStats(
     exactSafeDefenseCount: Int,
     exactFoldCount: Int,
     strictTileTrackable: Boolean
-) derives CanEqual
+)

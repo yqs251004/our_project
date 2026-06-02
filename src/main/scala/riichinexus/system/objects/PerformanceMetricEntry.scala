@@ -2,7 +2,7 @@ package riichinexus.system.objects
 
 import java.time.Instant
 
-import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.system.json.JsonCodecs.given
 import upickle.default.*
 
 final case class PerformanceMetricEntry(
@@ -14,7 +14,7 @@ final case class PerformanceMetricEntry(
     lastMillis: Double,
     lastUpdatedAt: Instant,
     statusCounts: Vector[PerformanceStatusCount] = Vector.empty
-) derives CanEqual
+)
 
 object PerformanceMetricEntry:
   given ReadWriter[PerformanceMetricEntry] = macroRW

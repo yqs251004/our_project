@@ -1,12 +1,31 @@
 package riichinexus.microservices.club.api
-import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
+import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
+import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
 
 import java.util.NoSuchElementException
 
 import cats.effect.IO
-import riichinexus.api.{APIMessage, ApiPlanContext}
-import riichinexus.bootstrap.ClubModuleContext
-import riichinexus.domain.model.*
+import riichinexus.system.api.{APIMessage, ApiPlanContext}
+import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
+import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.club.domain.functions.ClubIdGenerator
+import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
+import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
+import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
+import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
+import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
+import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
+import riichinexus.microservices.tournament.objects.tablemanagement.TableId
+import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
+import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
+import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
+import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
+import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
+import riichinexus.microservices.audit.domain.auditevent.AuditEventId
+import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
+import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.club.domain.Club
 import riichinexus.microservices.club.domain.clubmanagement.model.*
@@ -14,7 +33,7 @@ import riichinexus.microservices.club.domain.membershipmanagement.functions.Club
 import riichinexus.microservices.club.domain.membershipmanagement.model.*
 import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
 import riichinexus.microservices.club.domain.relationmanagement.model.*
-import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.club.api.`private`.ClubApplicationViewAssembler
 import riichinexus.microservices.club.objects.membershipmanagement.apiTypes.ClubMembershipApplicationView
 import riichinexus.microservices.club.tables.clubs.ClubTable
@@ -29,7 +48,7 @@ final case class GetCurrentClubApplicationAPIMessage(
   override def plan(context: ApiPlanContext): IO[ClubMembershipApplicationView] =
     for
       input <- IO.blocking(resolveInput)
-      actor <- IO.blocking(resolveActor(context, input))
+      actor <- resolveActor(context, input)
       view <- IO.blocking(getCurrentApplicationView(context, input, actor))
     yield view
 
@@ -47,23 +66,22 @@ final case class GetCurrentClubApplicationAPIMessage(
   private def resolveActor(
       context: ApiPlanContext,
       input: CurrentClubApplicationInput
-  ): AccessPrincipal =
-    AuthAccessPrincipalResolver.requestActor(context, input.guestSessionId, input.operatorId)
+  ): IO[AccessPrincipal] =
+    ResolveRequestActor(input.guestSessionId, input.operatorId).plan(context)
 
   private def getCurrentApplicationView(
       context: ApiPlanContext,
       input: CurrentClubApplicationInput,
       actor: AccessPrincipal
   ): ClubMembershipApplicationView =
-    val module = context.support.clubModule
     val club = ClubTable
       .findById(context.connection, input.clubId)
       .getOrElse(throw NoSuchElementException(s"Club ${input.clubId.value} was not found"))
     val application = club.membershipApplications
-      .filter(application => ClubMembershipApplicationFunctions.isPending(application) && ClubApplicationViewAssembler.ownsClubApplication(context.connection, module, actor, application))
+      .filter(application => ClubMembershipApplicationFunctions.isPending(application) && ClubApplicationViewAssembler.ownsClubApplication(context.connection, actor, application))
       .maxByOption(_.submittedAt)
       .getOrElse(throw NoSuchElementException("Resource not found"))
-    ClubApplicationViewAssembler.applicationView(context.connection, module, club, application, actor)
+    ClubApplicationViewAssembler.applicationView(context.connection, club, application, actor)
 
   private final case class CurrentClubApplicationInput(
       clubId: ClubId,

@@ -1,4 +1,6 @@
 package riichinexus.microservices.tournament.domain.settlementmanagement.functions
+import riichinexus.microservices.auth.objects.Permission
+import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
 
 import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
@@ -24,9 +26,26 @@ import java.sql.Connection
 import java.time.Instant
 import java.util.NoSuchElementException
 
-import riichinexus.application.changes.{DomainChange, DomainChangeInterpreter}
-import riichinexus.application.ports.{AuditEventRepository, DomainEventBus, TransactionManager}
-import riichinexus.domain.model.*
+import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
+import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.club.domain.functions.ClubIdGenerator
+import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
+import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
+import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
+import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
+import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
+import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
+import riichinexus.microservices.tournament.objects.tablemanagement.TableId
+import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
+import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
+import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
+import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
+import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
+import riichinexus.microservices.audit.domain.auditevent.AuditEventId
+import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
+import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.auth.domain.AuthorizationPolicy
 import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.club.domain.Club
@@ -36,7 +55,6 @@ import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
 import riichinexus.microservices.club.domain.relationmanagement.model.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.functions.TournamentFunctions
 import riichinexus.microservices.tournament.domain.settlementmanagement.functions.TournamentSettlementSnapshotFunctions
-import riichinexus.microservices.tournament.domain.events.TournamentSettlementRecorded
 import riichinexus.microservices.player.domain.functions.PlayerClubBindingFunctions
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
@@ -46,9 +64,6 @@ import riichinexus.microservices.tournament.domain.tablemanagement.model.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 
 final class TournamentSettlementCoordinator(
-    auditEventRepository: AuditEventRepository,
-    eventBus: DomainEventBus,
-    transactionManager: TransactionManager,
     authorizationService: AuthorizationPolicy
 ):
   def settleTournament(
@@ -225,7 +240,7 @@ final class TournamentSettlementCoordinator(
     val revision = previousSnapshot.map(_.revision + 1).getOrElse(1)
 
     TournamentSettlementSnapshot(
-      id = IdGenerator.settlementSnapshotId(),
+      id = TournamentIdGenerator.settlementSnapshotId(),
       tournamentId = settlement.tournamentId,
       stageId = settlement.finalStageId,
       revision = revision,
@@ -273,7 +288,7 @@ final class TournamentSettlementCoordinator(
       val deductionAmount =
         adjustmentsByPlayer.getOrElse(playerId, Vector.empty).filter(_.amount < 0L).map(adjustment => math.abs(adjustment.amount)).sum
       val netAwardAmount = baseAwards.lift(index).getOrElse(0L) + adjustmentAmount - deductionAmount
-      val clubId = GetPlayerAPIMessage.findPlayer(connection, playerId)
+      val clubId = PlayerPersistenceFunctions.findPlayer(connection, playerId)
         .flatMap(player => PlayerClubBindingFunctions.boundClubIds(player).headOption)
       val clubShareAmount =
         if clubId.nonEmpty then math.floor(netAwardAmount.toDouble * settlement.clubShareRatio).toLong
@@ -298,38 +313,7 @@ final class TournamentSettlementCoordinator(
       settlement: SettlementInput,
       snapshot: TournamentSettlementSnapshot
   ): TournamentSettlementSnapshot =
-    DomainChangeInterpreter
-      .auditAndEvents(transactionManager, auditEventRepository, eventBus)
-      .commitWithinTransaction(
-        DomainChange(
-          aggregate = snapshot,
-          persist = savedSnapshot => riichinexus.microservices.tournament.tables.settlement.TournamentSettlementTable.save(connection, savedSnapshot),
-          auditEntries = savedSnapshot =>
-            Vector(
-              AuditEventEntry(
-                id = IdGenerator.auditEventId(),
-                aggregateType = "tournament",
-                aggregateId = settlement.tournamentId.value,
-                eventType = "TournamentSettlementRecorded",
-                occurredAt = settlement.settledAt,
-                actorId = settlement.actor.playerId,
-                details = Map(
-                  "stageId" -> settlement.finalStageId.value,
-                  "championId" -> savedSnapshot.championId.value,
-                  "prizePool" -> settlement.prizePool.toString,
-                  "netPrizePool" -> savedSnapshot.netPrizePool.toString,
-                  "houseFeeAmount" -> settlement.houseFeeAmount.toString,
-                  "clubShareRatio" -> settlement.clubShareRatio.toString,
-                  "revision" -> savedSnapshot.revision.toString,
-                  "status" -> savedSnapshot.status.toString
-                ),
-                note = settlement.note.orElse(Some(savedSnapshot.summary))
-              )
-            ),
-          domainEvents = savedSnapshot =>
-            Vector(TournamentSettlementRecorded(savedSnapshot, settlement.settledAt))
-        )
-      )
+    riichinexus.microservices.tournament.tables.settlement.TournamentSettlementTable.save(connection, snapshot)
 
   private def isKnockoutStage(stage: TournamentStage): Boolean =
     stage.format == TournamentFormat.Knockout ||

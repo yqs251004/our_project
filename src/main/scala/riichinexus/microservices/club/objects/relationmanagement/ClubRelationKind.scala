@@ -2,7 +2,7 @@ package riichinexus.microservices.club.objects.relationmanagement
 
 import upickle.default.*
 
-enum ClubRelationKind derives CanEqual:
+enum ClubRelationKind:
   case Alliance
   case Rivalry
   case Neutral

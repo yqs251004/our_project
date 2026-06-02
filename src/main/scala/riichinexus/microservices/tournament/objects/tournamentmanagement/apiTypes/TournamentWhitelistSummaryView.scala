@@ -8,7 +8,7 @@ final case class TournamentWhitelistSummaryView(
     playerCount: Int,
     clubIds: Vector[String],
     playerIds: Vector[String]
-) derives CanEqual
+)
 
 object TournamentWhitelistSummaryView:
   given ReadWriter[TournamentWhitelistSummaryView] = macroRW

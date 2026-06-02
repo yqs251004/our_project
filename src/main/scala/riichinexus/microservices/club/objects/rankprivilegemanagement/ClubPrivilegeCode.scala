@@ -2,7 +2,7 @@ package riichinexus.microservices.club.objects.rankprivilegemanagement
 
 import upickle.default.*
 
-enum ClubPrivilegeCode(private val serialized: String) derives CanEqual:
+enum ClubPrivilegeCode(private val serialized: String):
   case PriorityLineup extends ClubPrivilegeCode("priority-lineup")
   case ApproveRoster extends ClubPrivilegeCode("approve-roster")
   case ManageBank extends ClubPrivilegeCode("manage-bank")

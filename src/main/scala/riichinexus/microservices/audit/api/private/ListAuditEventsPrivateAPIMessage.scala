@@ -1,0 +1,47 @@
+package riichinexus.microservices.audit.api.`private`
+
+import cats.effect.IO
+import riichinexus.system.api.{APIMessage, ApiPlanContext}
+import riichinexus.microservices.audit.domain.auditevent.AuditEvent
+import riichinexus.microservices.audit.tables.auditevent.AuditEventTable
+import riichinexus.system.json.JsonCodecs.given
+import upickle.default.*
+
+final case class ListAuditEventsPrivateAPIMessage(
+    aggregateType: Option[String] = None,
+    aggregateId: Option[String] = None,
+    eventType: Option[String] = None,
+    oldestFirst: Boolean = false
+) extends APIMessage[Vector[AuditEvent]] derives ReadWriter:
+
+  override def plan(context: ApiPlanContext): IO[Vector[AuditEvent]] =
+    for
+      events <- IO.blocking(listAuditEvents(context))
+    yield events
+
+  private def listAuditEvents(context: ApiPlanContext): Vector[AuditEvent] =
+    (aggregateType, aggregateId, eventType, oldestFirst) match
+      case (Some(actualAggregateType), Some(actualAggregateId), Some(actualEventType), true) =>
+        AuditEventTable.findByAggregateAndEventTypeOldestFirst(
+          context.connection,
+          actualAggregateType,
+          actualAggregateId,
+          actualEventType
+        )
+      case (Some(actualAggregateType), Some(actualAggregateId), Some(actualEventType), false) =>
+        AuditEventTable.findByAggregateAndEventType(
+          context.connection,
+          actualAggregateType,
+          actualAggregateId,
+          actualEventType
+        )
+      case (Some(actualAggregateType), Some(actualAggregateId), None, true) =>
+        AuditEventTable.findByAggregateOldestFirst(context.connection, actualAggregateType, actualAggregateId)
+      case (Some(actualAggregateType), Some(actualAggregateId), None, false) =>
+        AuditEventTable.findByAggregate(context.connection, actualAggregateType, actualAggregateId)
+      case (None, None, None, true) =>
+        AuditEventTable.findAllOldestFirst(context.connection)
+      case (None, None, None, false) =>
+        AuditEventTable.findAll(context.connection)
+      case _ =>
+        throw IllegalArgumentException("Unsupported audit event query filters")

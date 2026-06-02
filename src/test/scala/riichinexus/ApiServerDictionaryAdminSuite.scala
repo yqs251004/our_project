@@ -1,4 +1,5 @@
 package riichinexus
+import riichinexus.microservices.audit.domain.auditevent.AuditEvent
 
 import java.net.URI
 import java.net.http.HttpClient
@@ -111,7 +112,7 @@ class ApiServerDictionaryAdminSuite extends FunSuite with ApiServerSuiteSupport:
         )
       )
       assertEquals(auditResponse.statusCode(), 200)
-      val auditEntries = readPage[AuditEventEntry](auditResponse.body())
+      val auditEntries = readPage[AuditEvent](auditResponse.body())
       assertEquals(auditEntries.total, 1)
       assertEquals(auditEntries.items.head.aggregateId, dictionaryEntry.key)
       assertEquals(auditEntries.items.head.eventType, "GlobalDictionaryUpserted")

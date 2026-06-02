@@ -1,5 +1,8 @@
 package riichinexus.microservices.club.api
-import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
+import riichinexus.microservices.auth.objects.Permission
+import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
+import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
+import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
 
 import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
@@ -8,9 +11,27 @@ import java.time.Instant
 import java.util.NoSuchElementException
 
 import cats.effect.IO
-import riichinexus.api.{APIMessage, ApiPlanContext}
-import riichinexus.bootstrap.ClubModuleContext
-import riichinexus.domain.model.*
+import riichinexus.system.api.{APIMessage, ApiPlanContext}
+import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
+import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.club.domain.functions.ClubIdGenerator
+import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
+import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
+import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
+import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
+import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
+import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
+import riichinexus.microservices.tournament.objects.tablemanagement.TableId
+import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
+import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
+import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
+import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
+import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
+import riichinexus.microservices.audit.domain.auditevent.AuditEventId
+import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
+import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.club.domain.Club
 import riichinexus.microservices.club.domain.clubmanagement.model.*
@@ -19,7 +40,7 @@ import riichinexus.microservices.club.domain.membershipmanagement.model.*
 import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
 import riichinexus.microservices.club.domain.relationmanagement.model.*
 import riichinexus.microservices.auth.domain.*
-import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubAuthorization
 import riichinexus.microservices.club.objects.membershipmanagement.apiTypes.ClubMembershipApplicationResponse
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
@@ -35,9 +56,8 @@ final case class WithdrawClubApplicationAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubMembershipApplicationResponse] =
     for
-      actor <- IO.blocking(resolveActor(context))
+      actor <- resolveActor(context)
       withdrawnAt <- IO.realTimeInstant
-      module = context.support.clubModule
       command = WithdrawClubApplicationCommand(
         clubId = ClubId(clubId),
         membershipId = MembershipApplicationId(membershipId),
@@ -46,24 +66,23 @@ final case class WithdrawClubApplicationAPIMessage(
         withdrawnAt = withdrawnAt
       )
       application <- IO.blocking {
-        module.transactionManager.inTransaction {
-          withdrawApplication(context.connection, module, command)
+        {
+          withdrawApplication(context.connection, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
     yield ClubMembershipApplicationResponse.fromDomain(application)
 
-  private def resolveActor(context: ApiPlanContext): AccessPrincipal =
-    AuthAccessPrincipalResolver.requestActor(context, 
+  private def resolveActor(context: ApiPlanContext): IO[AccessPrincipal] =
+    ResolveRequestActor(
       guestSessionId.filter(_.nonEmpty).map(GuestSessionId(_)),
       operatorId.filter(_.nonEmpty).map(PlayerId(_))
-    )
+    ).plan(context)
 
   private def withdrawApplication(
       connection: java.sql.Connection,
-      module: ClubModuleContext,
       command: WithdrawClubApplicationCommand
   ): Option[ClubMembershipApplication] =
-    AuthorizationPolicyFunctions.requirePermission(module.authorizationService, command.actor, Permission.WithdrawClubApplication)
+    AuthorizationPolicyFunctions.requirePermission(AuthorizationPolicyFunctions.strict, command.actor, Permission.WithdrawClubApplication)
     riichinexus.microservices.club.tables.clubs.ClubTable.findById(connection, command.clubId).map { club =>
       ClubAuthorization.ensureClubActive(club)
       val application = resolveApplication(club, command)
@@ -108,7 +127,7 @@ final case class WithdrawClubApplicationAPIMessage(
 
     val ownedByRegisteredPlayer =
       actor.playerId.flatMap(playerId =>
-        GetPlayerAPIMessage.findPlayer(connection, playerId)
+        PlayerPersistenceFunctions.findPlayer(connection, playerId)
       ).exists(player =>
         application.applicantUserId.contains(player.userId)
       )

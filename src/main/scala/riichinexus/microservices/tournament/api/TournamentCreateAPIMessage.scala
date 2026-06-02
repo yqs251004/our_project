@@ -1,4 +1,5 @@
 package riichinexus.microservices.tournament.api
+import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
 
 import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
@@ -6,8 +7,27 @@ import java.time.Instant
 import java.util.NoSuchElementException
 
 import cats.effect.IO
-import riichinexus.api.{APIMessage, ApiPlanContext}
-import riichinexus.domain.model.*
+import riichinexus.system.api.{APIMessage, ApiPlanContext}
+import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
+import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.club.domain.functions.ClubIdGenerator
+import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
+import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
+import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
+import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
+import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
+import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
+import riichinexus.microservices.tournament.objects.tablemanagement.TableId
+import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
+import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
+import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
+import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
+import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
+import riichinexus.microservices.audit.domain.auditevent.AuditEventId
+import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
+import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.tournament.domain.rulesmanagement.functions.stageprogression.AdvancementRuleFunctions
 import riichinexus.microservices.tournament.domain.tournamentmanagement.functions.{TournamentDefaultsFunctions, TournamentFunctions}
@@ -19,7 +39,7 @@ import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.microservices.player.domain.functions.PlayerRoleFunctions
 import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
-import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import riichinexus.microservices.tournament.domain.tournamentmanagement.functions.TournamentRuntimeDefaults
 import riichinexus.microservices.tournament.objects.rulesmanagement.stageprogression.{AdvancementRule, AdvancementRuleType}
@@ -42,9 +62,8 @@ final case class TournamentCreateAPIMessage(
   override def plan(context: ApiPlanContext): IO[TournamentSummaryView] =
     for
       input <- IO.blocking(resolveInput)
-      module = context.support.tournamentModule
       tournament <- IO.blocking {
-        module.transactionManager.inTransaction {
+        {
           createTournament(context.connection, input)
         }
       }
@@ -62,7 +81,7 @@ final case class TournamentCreateAPIMessage(
 
   private def tournamentStage(request: CreateTournamentStageRequest): TournamentStage =
     TournamentStage(
-      id = request.id.map(TournamentStageId(_)).getOrElse(IdGenerator.stageId()),
+      id = request.id.map(TournamentStageId(_)).getOrElse(TournamentIdGenerator.stageId()),
       name = request.name,
       format = request.format,
       order = request.order,
@@ -142,7 +161,7 @@ final case class TournamentCreateAPIMessage(
       admin: Option[PlayerId]
   ): Option[Player] =
     admin.map { targetAdminId =>
-      val player = GetPlayerAPIMessage.findPlayer(connection, targetAdminId)
+      val player = PlayerPersistenceFunctions.findPlayer(connection, targetAdminId)
         .getOrElse(throw NoSuchElementException(s"Player ${targetAdminId.value} was not found"))
       requireActivePlayer(player, s"Player ${targetAdminId.value} cannot administer tournaments")
       player
@@ -165,7 +184,7 @@ final case class TournamentCreateAPIMessage(
       normalizedStages: Vector[TournamentStage]
   ): Tournament =
     Tournament(
-      id = IdGenerator.tournamentId(),
+      id = TournamentIdGenerator.tournamentId(),
       name = input.name,
       organizer = input.organizer,
       startsAt = input.startsAt,
@@ -184,7 +203,7 @@ final case class TournamentCreateAPIMessage(
       adminPlayer: Option[Player]
   ): Unit =
     adminPlayer.foreach { player =>
-      CreatePlayerAPIMessage.persistPlayer(
+      PlayerPersistenceFunctions.savePlayer(
         connection,
         PlayerRoleFunctions.grantRole(
           player,

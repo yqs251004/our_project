@@ -1,6 +1,6 @@
 package riichinexus.microservices.tournament.objects.paifumanagement.apiTypes
 
-import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.tournament.objects.paifumanagement.FinalStanding
 import upickle.default.*
 
@@ -16,4 +16,4 @@ final case class PaifuSummary(
     playerIds: Vector[String],
     finalStandings: Vector[FinalStanding],
     roundScoreChanges: Vector[PaifuRoundScoreChanges]
-) derives CanEqual, ReadWriter
+) derives ReadWriter

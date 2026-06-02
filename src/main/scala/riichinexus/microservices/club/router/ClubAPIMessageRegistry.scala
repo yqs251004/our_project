@@ -1,8 +1,7 @@
 package riichinexus.microservices.club.router
-import riichinexus.api.functions.RegisteredAPIMessageFunctions
+import riichinexus.system.api.RegisteredAPIMessage
 
-import riichinexus.api.RegisteredAPIMessage
-import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.club.api.*
 import riichinexus.microservices.club.objects.clubmanagement.*
 import riichinexus.microservices.club.objects.membershipmanagement.*
@@ -29,40 +28,40 @@ object ClubAPIMessageRegistry:
 
   val apiMessages: Vector[RegisteredAPIMessage] =
     Vector(
-      RegisteredAPIMessageFunctions.api[ClubPrivilegeDefinitionsAPIMessage, Vector[ClubPrivilegeDefinition]],
-      RegisteredAPIMessageFunctions.api[ListClubsAPIMessage, PagedResponse[ClubView]],
-      RegisteredAPIMessageFunctions.api[GetClubAPIMessage, ClubView],
-      RegisteredAPIMessageFunctions.api[ListPublicClubsAPIMessage, PagedResponse[PublicClubDirectoryEntry]],
-      RegisteredAPIMessageFunctions.api[GetPublicClubAPIMessage, PublicClubDetailView],
-      RegisteredAPIMessageFunctions.api[PublicClubLeaderboardAPIMessage, PagedResponse[ClubLeaderboardEntry]],
-      RegisteredAPIMessageFunctions.created[CreateClubAPIMessage, ClubView],
-      RegisteredAPIMessageFunctions.api[ListClubTournamentsAPIMessage, PagedResponse[ClubTournamentParticipationView]],
-      RegisteredAPIMessageFunctions.api[ListClubMembersAPIMessage, PagedResponse[PlayerProfileView]],
-      RegisteredAPIMessageFunctions.api[ListClubMemberPrivilegesAPIMessage, PagedResponse[ClubMemberPrivilegeSnapshotView]],
-      RegisteredAPIMessageFunctions.api[GetClubMemberPrivilegeAPIMessage, ClubMemberPrivilegeSnapshotView],
-      RegisteredAPIMessageFunctions.api[ListClubContributionAuditsAPIMessage, PagedResponse[ClubContributionAuditEntry]],
-      RegisteredAPIMessageFunctions.api[AddClubMemberAPIMessage, ClubView],
-      RegisteredAPIMessageFunctions.api[RemoveClubMemberAPIMessage, ClubView],
-      RegisteredAPIMessageFunctions.api[AssignClubAdminAPIMessage, ClubView],
-      RegisteredAPIMessageFunctions.api[RevokeClubAdminAPIMessage, ClubView],
-      RegisteredAPIMessageFunctions.api[AssignClubTitleAPIMessage, ClubView],
-      RegisteredAPIMessageFunctions.api[ClearClubTitleAPIMessage, ClubView],
-      RegisteredAPIMessageFunctions.api[AdjustClubTreasuryAPIMessage, ClubView],
-      RegisteredAPIMessageFunctions.api[AdjustClubPointPoolAPIMessage, ClubView],
-      RegisteredAPIMessageFunctions.api[AdjustClubMemberContributionAPIMessage, ClubView],
-      RegisteredAPIMessageFunctions.api[UpdateClubRankTreeAPIMessage, ClubView],
-      RegisteredAPIMessageFunctions.api[AwardClubHonorAPIMessage, ClubView],
-      RegisteredAPIMessageFunctions.api[RevokeClubHonorAPIMessage, ClubView],
-      RegisteredAPIMessageFunctions.api[UpdateClubRecruitmentPolicyAPIMessage, ClubView],
-      RegisteredAPIMessageFunctions.api[UpdateClubRelationAPIMessage, ClubView],
-      RegisteredAPIMessageFunctions.api[ListClubApplicationsAPIMessage, PagedResponse[ClubMembershipApplicationView]],
-      RegisteredAPIMessageFunctions.api[GetCurrentClubApplicationAPIMessage, ClubMembershipApplicationView],
-      RegisteredAPIMessageFunctions.api[GetClubApplicationAPIMessage, ClubMembershipApplicationView],
-      RegisteredAPIMessageFunctions.api[SubmitClubApplicationAPIMessage, ClubMembershipApplicationResponse],
-      RegisteredAPIMessageFunctions.api[WithdrawClubApplicationAPIMessage, ClubMembershipApplicationResponse],
-      RegisteredAPIMessageFunctions.api[ReviewClubApplicationAPIMessage, ClubMembershipApplicationView],
-      RegisteredAPIMessageFunctions.api[ApproveClubApplicationAPIMessage, ClubView],
-      RegisteredAPIMessageFunctions.api[RejectClubApplicationAPIMessage, ClubView],
-      RegisteredAPIMessageFunctions.api[AcceptClubTournamentAPIMessage, TournamentMutationView],
-      RegisteredAPIMessageFunctions.api[DeclineClubTournamentAPIMessage, TournamentMutationView]
+      RegisteredAPIMessage.api[ClubPrivilegeDefinitionsAPIMessage, Vector[ClubPrivilegeDefinition]],
+      RegisteredAPIMessage.api[ListClubsAPIMessage, PagedResponse[ClubView]],
+      RegisteredAPIMessage.api[GetClubAPIMessage, ClubView],
+      RegisteredAPIMessage.api[ListPublicClubsAPIMessage, PagedResponse[PublicClubDirectoryEntry]],
+      RegisteredAPIMessage.api[GetPublicClubAPIMessage, PublicClubDetailView],
+      RegisteredAPIMessage.api[PublicClubLeaderboardAPIMessage, PagedResponse[ClubLeaderboardEntry]],
+      RegisteredAPIMessage.created[CreateClubAPIMessage, ClubView],
+      RegisteredAPIMessage.api[ListClubTournamentsAPIMessage, PagedResponse[ClubTournamentParticipationView]],
+      RegisteredAPIMessage.api[ListClubMembersAPIMessage, PagedResponse[PlayerProfileView]],
+      RegisteredAPIMessage.api[ListClubMemberPrivilegesAPIMessage, PagedResponse[ClubMemberPrivilegeSnapshotView]],
+      RegisteredAPIMessage.api[GetClubMemberPrivilegeAPIMessage, ClubMemberPrivilegeSnapshotView],
+      RegisteredAPIMessage.api[ListClubContributionAuditsAPIMessage, PagedResponse[ClubContributionAuditEntry]],
+      RegisteredAPIMessage.api[AddClubMemberAPIMessage, ClubView],
+      RegisteredAPIMessage.api[RemoveClubMemberAPIMessage, ClubView],
+      RegisteredAPIMessage.api[AssignClubAdminAPIMessage, ClubView],
+      RegisteredAPIMessage.api[RevokeClubAdminAPIMessage, ClubView],
+      RegisteredAPIMessage.api[AssignClubTitleAPIMessage, ClubView],
+      RegisteredAPIMessage.api[ClearClubTitleAPIMessage, ClubView],
+      RegisteredAPIMessage.api[AdjustClubTreasuryAPIMessage, ClubView],
+      RegisteredAPIMessage.api[AdjustClubPointPoolAPIMessage, ClubView],
+      RegisteredAPIMessage.api[AdjustClubMemberContributionAPIMessage, ClubView],
+      RegisteredAPIMessage.api[UpdateClubRankTreeAPIMessage, ClubView],
+      RegisteredAPIMessage.api[AwardClubHonorAPIMessage, ClubView],
+      RegisteredAPIMessage.api[RevokeClubHonorAPIMessage, ClubView],
+      RegisteredAPIMessage.api[UpdateClubRecruitmentPolicyAPIMessage, ClubView],
+      RegisteredAPIMessage.api[UpdateClubRelationAPIMessage, ClubView],
+      RegisteredAPIMessage.api[ListClubApplicationsAPIMessage, PagedResponse[ClubMembershipApplicationView]],
+      RegisteredAPIMessage.api[GetCurrentClubApplicationAPIMessage, ClubMembershipApplicationView],
+      RegisteredAPIMessage.api[GetClubApplicationAPIMessage, ClubMembershipApplicationView],
+      RegisteredAPIMessage.api[SubmitClubApplicationAPIMessage, ClubMembershipApplicationResponse],
+      RegisteredAPIMessage.api[WithdrawClubApplicationAPIMessage, ClubMembershipApplicationResponse],
+      RegisteredAPIMessage.api[ReviewClubApplicationAPIMessage, ClubMembershipApplicationView],
+      RegisteredAPIMessage.api[ApproveClubApplicationAPIMessage, ClubView],
+      RegisteredAPIMessage.api[RejectClubApplicationAPIMessage, ClubView],
+      RegisteredAPIMessage.api[AcceptClubTournamentAPIMessage, TournamentMutationView],
+      RegisteredAPIMessage.api[DeclineClubTournamentAPIMessage, TournamentMutationView]
     )

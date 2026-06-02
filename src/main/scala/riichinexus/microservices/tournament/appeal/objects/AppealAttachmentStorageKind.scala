@@ -3,7 +3,7 @@ package riichinexus.microservices.tournament.appeal.objects
 import riichinexus.microservices.tournament.appeal.domain.model.{AppealAttachmentStorageKind as DomainAppealAttachmentStorageKind}
 import upickle.default.*
 
-enum AppealAttachmentStorageKind derives CanEqual:
+enum AppealAttachmentStorageKind:
   case ExternalUrl
   case ObjectStore
   case SignedUrl

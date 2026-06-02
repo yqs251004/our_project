@@ -3,7 +3,7 @@ package riichinexus.microservices.tournament.appeal.objects
 import riichinexus.microservices.tournament.appeal.domain.model.{AppealDecisionType as DomainAppealDecisionType}
 import upickle.default.*
 
-enum AppealDecisionType derives CanEqual:
+enum AppealDecisionType:
   case Resolve
   case Reject
   case Escalate

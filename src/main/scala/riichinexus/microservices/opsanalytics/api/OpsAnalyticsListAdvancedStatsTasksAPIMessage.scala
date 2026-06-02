@@ -1,11 +1,33 @@
 package riichinexus.microservices.opsanalytics.api
-import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
+import riichinexus.microservices.auth.objects.Permission
+import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
+import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
 
 import cats.effect.IO
-import riichinexus.api.{APIMessage, ApiPlanContext}
-import riichinexus.domain.model.*
+import riichinexus.system.api.{APIMessage, ApiPlanContext}
+import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
+import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.club.domain.functions.ClubIdGenerator
+import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
+import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
+import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
+import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
+import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
+import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
+import riichinexus.microservices.tournament.objects.tablemanagement.TableId
+import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
+import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
+import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
+import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
+import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
+import riichinexus.microservices.audit.domain.auditevent.AuditEventId
+import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
+import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
+import riichinexus.microservices.auth.domain.AuthorizationFailure
 import riichinexus.microservices.auth.domain.model.*
-import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.opsanalytics.objects.{AdvancedStatsRecomputeTask, AdvancedStatsRecomputeTaskStatus}
 import riichinexus.microservices.opsanalytics.tables.advancedstatsrecomputetask.AdvancedStatsRecomputeTaskTable
 import riichinexus.system.objects.PagedResponse
@@ -20,7 +42,8 @@ final case class OpsAnalyticsListAdvancedStatsTasksAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[AdvancedStatsRecomputeTask]] =
     for
-      _ <- IO.blocking(requireOpsAdmin(context, operatorId))
+      operator <- IO.blocking(ResolveAccessPrincipal(operatorId).resolve(context.connection))
+      _ <- requireOpsAdmin(context, operator)
       query = resolveQuery
       tasks <- IO.blocking(listTasks(context, query))
     yield paged(tasks, query)
@@ -39,10 +62,14 @@ final case class OpsAnalyticsListAdvancedStatsTasksAPIMessage(
       .findAll(context.connection)
       .filter(task => query.status.forall(_ == task.status))
 
-  private def requireOpsAdmin(context: ApiPlanContext, operatorId: PlayerId): AccessPrincipal =
-    val operator = AuthAccessPrincipalResolver.principal(context, operatorId)
-    riichinexus.microservices.auth.domain.functions.AuthorizationPolicyFunctions.requirePermission(context.support.authorizationService, operator, Permission.ManagePlatformOperations)
-    operator
+  private def requireOpsAdmin(context: ApiPlanContext, operator: AccessPrincipal): IO[Unit] =
+    AuthCheckPermissionAPIMessage(
+      principal = Some(operator),
+      permission = Permission.ManagePlatformOperations
+    ).plan(context).flatMap { allowed =>
+      if allowed then IO.unit
+      else IO.raiseError(AuthorizationFailure(s"${operator.displayName} is not allowed to manage platform operations"))
+    }
 
   private def paged(
       items: Vector[AdvancedStatsRecomputeTask],

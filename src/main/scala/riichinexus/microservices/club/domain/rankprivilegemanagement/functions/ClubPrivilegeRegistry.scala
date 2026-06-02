@@ -1,6 +1,6 @@
 package riichinexus.microservices.club.domain.rankprivilegemanagement.functions
 
-import riichinexus.domain.model.Permission
+import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.club.objects.rankprivilegemanagement.{ClubPrivilegeCode, ClubPrivilegeDefinition}
 
 object ClubPrivilegeRegistry:

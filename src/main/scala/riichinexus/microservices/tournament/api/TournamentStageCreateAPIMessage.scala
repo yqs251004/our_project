@@ -1,5 +1,7 @@
 package riichinexus.microservices.tournament.api
-import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
+import riichinexus.microservices.auth.objects.Permission
+import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
+import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
 
 import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
@@ -11,9 +13,27 @@ import riichinexus.microservices.tournament.objects.tournamentmanagement.Tournam
 import java.util.NoSuchElementException
 
 import cats.effect.IO
-import riichinexus.api.{APIMessage, ApiPlanContext}
-import riichinexus.bootstrap.TournamentModuleContext
-import riichinexus.domain.model.*
+import riichinexus.system.api.{APIMessage, ApiPlanContext}
+import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
+import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.club.domain.functions.ClubIdGenerator
+import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
+import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
+import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
+import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
+import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
+import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
+import riichinexus.microservices.tournament.objects.tablemanagement.TableId
+import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
+import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
+import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
+import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
+import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
+import riichinexus.microservices.audit.domain.auditevent.AuditEventId
+import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
+import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.tournament.domain.rulesmanagement.functions.stageprogression.AdvancementRuleFunctions
 import riichinexus.microservices.tournament.domain.tournamentmanagement.functions.TournamentFunctions
@@ -22,15 +42,8 @@ import riichinexus.microservices.tournament.domain.recordmanagement.model.*
 import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
 import riichinexus.microservices.tournament.domain.tablemanagement.model.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
-import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.tournament.domain.tournamentmanagement.functions.TournamentRuntimeDefaults
-import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
@@ -45,32 +58,29 @@ final case class TournamentStageCreateAPIMessage(tournamentId: String, request: 
 
   override def plan(context: ApiPlanContext): IO[TournamentSummaryView] =
     for
-      actor <- IO.blocking(request.operatorId.map(PlayerId(_)).map(AuthAccessPrincipalResolver.principal(context, _)).getOrElse(AccessPrincipalFunctions.system))
-      module = context.support.tournamentModule
+      actor <- IO.blocking(request.operatorId.map(PlayerId(_)).map(ResolveAccessPrincipal(_).resolve(context.connection)).getOrElse(AccessPrincipalFunctions.system))
       command = CreateStageCommand(
         tournamentId = TournamentId(tournamentId),
         actor = actor,
         stage = tournamentStage(request)
       )
       tournament <- IO.blocking {
-        module.transactionManager.inTransaction {
-          createStage(context.connection, module, command)
+        {
+          createStage(context.connection, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
     yield TournamentSummaryView.fromDomain(tournament)
 
   private def createStage(
       connection: java.sql.Connection,
-      module: TournamentModuleContext,
       command: CreateStageCommand
   ): Option[Tournament] =
     riichinexus.microservices.tournament.tables.tournaments.TournamentTable.findById(connection, command.tournamentId).map { tournament =>
-      ensureStageCanBeAdded(module, tournament, command)
+      ensureStageCanBeAdded(tournament, command)
       riichinexus.microservices.tournament.tables.tournaments.TournamentTable.save(connection, TournamentFunctions.addStage(tournament, TournamentRuntimeDefaults.normalizeStage(command.stage)))
     }
 
   private def ensureStageCanBeAdded(
-      module: TournamentModuleContext,
       tournament: Tournament,
       command: CreateStageCommand
   ): Unit =
@@ -78,7 +88,7 @@ final case class TournamentStageCreateAPIMessage(tournamentId: String, request: 
       throw IllegalArgumentException(
         s"Cannot add stages to tournament ${command.tournamentId.value} in status ${tournament.status}"
       )
-    AuthorizationPolicyFunctions.requirePermission(module.authorizationService, 
+    AuthorizationPolicyFunctions.requirePermission(AuthorizationPolicyFunctions.strict, 
       command.actor,
       Permission.ManageTournamentStages,
       tournamentId = Some(command.tournamentId)
@@ -92,7 +102,7 @@ final case class TournamentStageCreateAPIMessage(tournamentId: String, request: 
 
   private def tournamentStage(request: CreateTournamentStageRequest): TournamentStage =
     TournamentStage(
-      id = request.id.map(TournamentStageId(_)).getOrElse(IdGenerator.stageId()),
+      id = request.id.map(TournamentStageId(_)).getOrElse(TournamentIdGenerator.stageId()),
       name = request.name,
       format = request.format,
       order = request.order,

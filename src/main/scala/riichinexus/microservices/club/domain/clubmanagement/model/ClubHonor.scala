@@ -6,4 +6,4 @@ final case class ClubHonor(
     title: String,
     achievedAt: Instant,
     note: Option[String] = None
-) derives CanEqual
+)

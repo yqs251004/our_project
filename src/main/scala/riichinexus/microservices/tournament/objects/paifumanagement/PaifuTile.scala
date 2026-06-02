@@ -2,7 +2,7 @@ package riichinexus.microservices.tournament.objects.paifumanagement
 
 import upickle.default.*
 
-final case class PaifuTile(value: String) derives CanEqual
+final case class PaifuTile(value: String)
 
 object PaifuTile:
   given ReadWriter[PaifuTile] =

@@ -2,7 +2,7 @@ package riichinexus.microservices.club.objects.membershipmanagement.apiTypes
 
 import upickle.default.*
 
-enum ClubApplicationReviewDecision derives CanEqual:
+enum ClubApplicationReviewDecision:
   case Approve
   case Reject
 

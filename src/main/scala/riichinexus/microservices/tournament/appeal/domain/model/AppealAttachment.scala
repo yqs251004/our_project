@@ -13,7 +13,7 @@ final case class AppealAttachment(
     sizeBytes: Option[Long] = None,
     uploadedAt: Option[Instant] = None,
     retentionUntil: Option[Instant] = None
-) derives CanEqual:
+):
   require(name.trim.nonEmpty, "Appeal attachment name cannot be empty")
   require(uri.trim.nonEmpty, "Appeal attachment uri cannot be empty")
   require(sizeBytes.forall(_ > 0L), "Appeal attachment sizeBytes must be positive when provided")

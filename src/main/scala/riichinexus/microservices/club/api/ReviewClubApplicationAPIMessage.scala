@@ -1,14 +1,34 @@
 package riichinexus.microservices.club.api
-import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
+import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
+import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
+import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
 
 import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.time.Instant
 import java.util.NoSuchElementException
 
 import cats.effect.IO
-import riichinexus.api.{APIMessage, ApiPlanContext}
-import riichinexus.bootstrap.ClubModuleContext
-import riichinexus.domain.model.*
+import riichinexus.system.api.{APIMessage, ApiPlanContext}
+import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
+import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.club.domain.functions.ClubIdGenerator
+import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
+import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
+import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
+import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
+import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
+import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
+import riichinexus.microservices.tournament.objects.tablemanagement.TableId
+import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
+import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
+import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
+import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
+import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
+import riichinexus.microservices.audit.domain.auditevent.AuditEventId
+import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
+import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.club.domain.Club
 import riichinexus.microservices.club.domain.clubmanagement.model.*
@@ -17,7 +37,7 @@ import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
 import riichinexus.microservices.club.domain.relationmanagement.model.*
 import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
-import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.club.api.`private`.ClubApplicationViewAssembler
 import riichinexus.microservices.club.domain.ClubApplicationReviewer
 import riichinexus.microservices.club.objects.membershipmanagement.apiTypes.ClubMembershipApplicationView
@@ -35,9 +55,8 @@ final case class ReviewClubApplicationAPIMessage(
   override def plan(context: ApiPlanContext): IO[ClubMembershipApplicationView] =
     for
       decision <- IO.blocking(resolveDecision(request.decision))
-      actor <- IO.blocking(AuthAccessPrincipalResolver.principal(context, PlayerId(request.operatorId)))
+      actor <- IO.blocking(ResolveAccessPrincipal(PlayerId(request.operatorId)).resolve(context.connection))
       reviewedAt <- IO.realTimeInstant
-      module = context.support.clubModule
       command = ReviewClubApplicationCommand(
         clubId = ClubId(clubId),
         membershipId = MembershipApplicationId(membershipId),
@@ -47,10 +66,9 @@ final case class ReviewClubApplicationAPIMessage(
         note = request.note,
         reviewedAt = reviewedAt
       )
-      result <- IO.blocking(reviewApplication(context.connection, module, command))
+      result <- IO.blocking(reviewApplication(context.connection, command))
     yield ClubApplicationViewAssembler.applicationView(
       context.connection,
-      module,
       result.club,
       result.application,
       command.actor
@@ -58,10 +76,9 @@ final case class ReviewClubApplicationAPIMessage(
 
   private def reviewApplication(
       connection: java.sql.Connection,
-      module: ClubModuleContext,
       command: ReviewClubApplicationCommand
   ): ReviewClubApplicationResult =
-    val reviewedClub = submitReview(connection, module, command)
+    val reviewedClub = submitReview(connection, command)
       .getOrElse(throw NoSuchElementException(s"Club ${command.clubId.value} was not found"))
     val reviewedApplication = ClubFunctions.findApplication(reviewedClub, command.membershipId).getOrElse(
       throw NoSuchElementException(
@@ -72,16 +89,13 @@ final case class ReviewClubApplicationAPIMessage(
 
   private def submitReview(
       connection: java.sql.Connection,
-      module: ClubModuleContext,
       command: ReviewClubApplicationCommand
   ): Option[Club] =
     command.decision match
       case ApplicationReviewDecision.Approve =>
-        val player = resolveApprovedPlayer(connection, module, command)
+        val player = resolveApprovedPlayer(connection, command)
         ClubApplicationReviewer.approve(
-          connection = connection,
-          module = module,
-          parsedClubId = command.clubId,
+          connection = connection,          parsedClubId = command.clubId,
           parsedMembershipId = command.membershipId,
           parsedPlayerId = player.id,
           actor = command.actor,
@@ -90,9 +104,7 @@ final case class ReviewClubApplicationAPIMessage(
         )
       case ApplicationReviewDecision.Reject =>
         ClubApplicationReviewer.reject(
-          connection = connection,
-          module = module,
-          parsedClubId = command.clubId,
+          connection = connection,          parsedClubId = command.clubId,
           parsedMembershipId = command.membershipId,
           actor = command.actor,
           note = command.note,
@@ -101,7 +113,6 @@ final case class ReviewClubApplicationAPIMessage(
 
   private def resolveApprovedPlayer(
       connection: java.sql.Connection,
-      module: ClubModuleContext,
       command: ReviewClubApplicationCommand
   ): Player =
     val club = ClubTable
@@ -113,11 +124,11 @@ final case class ReviewClubApplicationAPIMessage(
       )
     )
     command.requestedPlayerId
-      .flatMap(GetPlayerAPIMessage.findPlayer(connection, _))
+      .flatMap(PlayerPersistenceFunctions.findPlayer(connection, _))
       .orElse(
         application.applicantUserId
           .filterNot(_.startsWith("guest:"))
-          .flatMap(CreatePlayerAPIMessage.findPlayerByUserId(connection, _))
+          .flatMap(PlayerPersistenceFunctions.findPlayerByUserId(connection, _))
       )
       .getOrElse(
         throw IllegalArgumentException(

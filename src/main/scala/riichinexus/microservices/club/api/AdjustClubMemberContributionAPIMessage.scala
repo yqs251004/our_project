@@ -1,15 +1,37 @@
 package riichinexus.microservices.club.api
-import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
+import riichinexus.microservices.audit.domain.auditevent.AuditEvent
+import riichinexus.microservices.auth.objects.Permission
+import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
+import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPIMessage
+import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
+import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
 
 import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.time.Instant
 import java.util.NoSuchElementException
 
 import cats.effect.IO
-import riichinexus.api.{APIMessage, ApiPlanContext}
-import riichinexus.application.changes.DomainChangeInterpreter
-import riichinexus.bootstrap.ClubModuleContext
-import riichinexus.domain.model.*
+import riichinexus.system.api.{APIMessage, ApiPlanContext}
+import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
+import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.club.domain.functions.ClubIdGenerator
+import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
+import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
+import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
+import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
+import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
+import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
+import riichinexus.microservices.tournament.objects.tablemanagement.TableId
+import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
+import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
+import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
+import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
+import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
+import riichinexus.microservices.audit.domain.auditevent.AuditEventId
+import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
+import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.club.domain.Club
 import riichinexus.microservices.club.domain.clubmanagement.model.*
@@ -19,7 +41,7 @@ import riichinexus.microservices.club.domain.relationmanagement.model.*
 import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
 import riichinexus.microservices.auth.domain.*
-import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubAuthorization
 import riichinexus.microservices.club.objects.clubmanagement.ClubView
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
@@ -35,9 +57,8 @@ final case class AdjustClubMemberContributionAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
-      actor <- IO.blocking(AuthAccessPrincipalResolver.principal(context, PlayerId(operatorId)))
+      actor <- IO.blocking(ResolveAccessPrincipal(PlayerId(operatorId)).resolve(context.connection))
       occurredAt <- IO.realTimeInstant
-      module = context.support.clubModule
       command = AdjustClubMemberContributionCommand(
         clubId = ClubId(clubId),
         playerId = PlayerId(playerId),
@@ -46,29 +67,28 @@ final case class AdjustClubMemberContributionAPIMessage(
         note = note,
         occurredAt = occurredAt
       )
-      club <- IO.blocking {
-        module.transactionManager.inTransaction {
-          adjustMemberContribution(context.connection, module, command)
+      savedClub <- IO.blocking {
+        {
+          adjustMemberContribution(context.connection, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
-    yield ClubView.fromDomain(club)
+      _ <- RecordAuditEventsPrivateAPIMessage(adjustMemberContributionAudit(savedClub, command)).plan(context)
+    yield ClubView.fromDomain(savedClub)
 
   private def adjustMemberContribution(
       connection: java.sql.Connection,
-      module: ClubModuleContext,
       command: AdjustClubMemberContributionCommand
   ): Option[Club] =
     for
       club <- riichinexus.microservices.club.tables.clubs.ClubTable.findById(connection, command.clubId)
-      player <- GetPlayerAPIMessage.findPlayer(connection, command.playerId)
+      player <- PlayerPersistenceFunctions.findPlayer(connection, command.playerId)
     yield
-      ensureContributionCanBeAdjusted(module, club, player, command)
+      ensureContributionCanBeAdjusted(club, player, command)
       val nextContribution = resolveNextContribution(club, command)
       val updatedBy = command.actor.playerId.getOrElse(club.creator)
-      commitContributionAdjustment(connection, module, club, command, nextContribution, updatedBy)
+      commitContributionAdjustment(connection, club, command, nextContribution, updatedBy)
 
   private def ensureContributionCanBeAdjusted(
-      module: ClubModuleContext,
       club: Club,
       player: Player,
       command: AdjustClubMemberContributionCommand
@@ -76,9 +96,7 @@ final case class AdjustClubMemberContributionAPIMessage(
     ClubAuthorization.ensureClubActive(club)
     requireActivePlayer(player, s"Player ${command.playerId.value} cannot receive club contribution updates")
     ClubAuthorization.requireClubMember(club, command.playerId, "adjust contribution")
-    ClubAuthorization.requireClubAdmin(
-      module = module,
-      actor = command.actor,
+    ClubAuthorization.requireClubAdmin(actor = command.actor,
       club = club,
       permission = Permission.ManageClubOperations
     )
@@ -93,16 +111,14 @@ final case class AdjustClubMemberContributionAPIMessage(
 
   private def commitContributionAdjustment(
       connection: java.sql.Connection,
-      module: ClubModuleContext,
       club: Club,
       command: AdjustClubMemberContributionCommand,
       nextContribution: Int,
       updatedBy: PlayerId
   ): Club =
-    DomainChangeInterpreter
-      .auditOnly(module.transactionManager, module.auditEventRepository)
-      .commitAudited(
-        aggregate = ClubFunctions.updateMemberContribution(club,
+    riichinexus.microservices.club.tables.clubs.ClubTable.save(
+      connection,
+      ClubFunctions.updateMemberContribution(club,
           ClubMemberContribution(
             playerId = command.playerId,
             amount = nextContribution,
@@ -110,22 +126,30 @@ final case class AdjustClubMemberContributionAPIMessage(
             updatedBy = updatedBy,
             note = command.note
           )
-        ),
-        persist = updatedClub => riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, updatedClub),
+        )
+    )
+
+  private def adjustMemberContributionAudit(
+      updatedClub: Club,
+      command: AdjustClubMemberContributionCommand
+  ): Vector[AuditEvent] =
+    Vector(
+      AuditEvent(
+        id = AuditIdGenerator.auditEventId(),
         aggregateType = "club",
-        aggregateId = _.id.value,
+        aggregateId = updatedClub.id.value,
         eventType = "ClubMemberContributionAdjusted",
         occurredAt = command.occurredAt,
         actorId = command.actor.playerId,
-        details = updatedClub =>
-          Map(
-            "playerId" -> command.playerId.value,
-            "delta" -> command.delta.toString,
-            "contribution" -> nextContribution.toString,
-            "rankCode" -> ClubFunctions.rankFor(updatedClub, command.playerId).map(_.code).getOrElse("unknown")
-          ),
+        details = Map(
+          "playerId" -> command.playerId.value,
+          "delta" -> command.delta.toString,
+          "contribution" -> ClubFunctions.contributionOf(updatedClub, command.playerId).toString,
+          "rankCode" -> ClubFunctions.rankFor(updatedClub, command.playerId).map(_.code).getOrElse("unknown")
+        ),
         note = command.note
       )
+    )
 
   private def requireActivePlayer(player: Player, context: String): Unit =
     if player.status != PlayerStatus.Active then

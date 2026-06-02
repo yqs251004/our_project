@@ -1,5 +1,8 @@
 package riichinexus.microservices.club.api
-import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
+import riichinexus.microservices.auth.objects.Permission
+import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
+import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
+import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
 
 import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
@@ -8,9 +11,27 @@ import java.time.Instant
 import java.util.NoSuchElementException
 
 import cats.effect.IO
-import riichinexus.api.{APIMessage, ApiPlanContext}
-import riichinexus.bootstrap.ClubModuleContext
-import riichinexus.domain.model.*
+import riichinexus.system.api.{APIMessage, ApiPlanContext}
+import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
+import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.club.domain.functions.ClubIdGenerator
+import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
+import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
+import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
+import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
+import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
+import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
+import riichinexus.microservices.tournament.objects.tablemanagement.TableId
+import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
+import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
+import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
+import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
+import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
+import riichinexus.microservices.audit.domain.auditevent.AuditEventId
+import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
+import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.club.domain.Club
 import riichinexus.microservices.club.domain.clubmanagement.model.*
@@ -22,7 +43,7 @@ import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
 import riichinexus.microservices.player.domain.functions.PlayerClubBindingFunctions
 import riichinexus.microservices.auth.domain.*
-import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubAuthorization
 import riichinexus.microservices.club.objects.membershipmanagement.apiTypes.{ClubMembershipApplicationResponse, ClubMembershipApplicationRequest}
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
@@ -35,11 +56,10 @@ final case class SubmitClubApplicationAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubMembershipApplicationResponse] =
     for
-      actor <- IO.blocking(AuthAccessPrincipalResolver.requestActor(context, request.guestSessionId.map(GuestSessionId(_)), request.operatorId.map(PlayerId(_))))
-      module = context.support.clubModule
+      actor <- ResolveRequestActor(request.guestSessionId.map(GuestSessionId(_)), request.operatorId.map(PlayerId(_))).plan(context)
       parsedClubId = ClubId(clubId)
       submittedAt <- IO.realTimeInstant
-      resolvedInput <- IO.blocking(resolveApplicantInput(context.connection, module, actor, request))
+      resolvedInput <- IO.blocking(resolveApplicantInput(context.connection, actor, request))
       command = SubmitClubApplicationCommand(
         actor = actor,
         clubId = parsedClubId,
@@ -48,20 +68,19 @@ final case class SubmitClubApplicationAPIMessage(
         message = request.message
       )
       application <- IO.blocking {
-        module.transactionManager.inTransaction {
-          submitApplication(context.connection, module, command)
+        {
+          submitApplication(context.connection, command)
         }
       }
     yield ClubMembershipApplicationResponse.fromDomain(application)
 
   private def resolveApplicantInput(
       connection: java.sql.Connection,
-      module: ClubModuleContext,
       actor: AccessPrincipal,
       request: ClubMembershipApplicationRequest
   ): ResolvedClubApplicationInput =
     val operatorPlayer = request.operatorId.filter(_.nonEmpty)
-      .flatMap(id => GetPlayerAPIMessage.findPlayer(connection, PlayerId(id)))
+      .flatMap(id => PlayerPersistenceFunctions.findPlayer(connection, PlayerId(id)))
     val applicantUserId = request.applicantUserId
       .orElse(request.guestSessionId.filter(_.nonEmpty).map(session => s"guest:$session"))
       .orElse(operatorPlayer.map(_.userId))
@@ -75,20 +94,18 @@ final case class SubmitClubApplicationAPIMessage(
 
   private def submitApplication(
       connection: java.sql.Connection,
-      module: ClubModuleContext,
       command: SubmitClubApplicationCommand
   ): ClubMembershipApplication =
-    AuthorizationPolicyFunctions.requirePermission(module.authorizationService, command.actor, Permission.SubmitClubApplication)
+    AuthorizationPolicyFunctions.requirePermission(AuthorizationPolicyFunctions.strict, command.actor, Permission.SubmitClubApplication)
     val club = riichinexus.microservices.club.tables.clubs.ClubTable.findById(connection, command.clubId)
       .getOrElse(throw NoSuchElementException("Resource not found"))
-    validateSubmission(connection, module, club, command)
+    validateSubmission(connection, club, command)
     val application = createApplication(command)
     riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, ClubFunctions.submitApplication(club, application))
     application
 
   private def validateSubmission(
       connection: java.sql.Connection,
-      module: ClubModuleContext,
       club: Club,
       command: SubmitClubApplicationCommand
   ): Unit =
@@ -122,7 +139,7 @@ final case class SubmitClubApplicationAPIMessage(
       command: SubmitClubApplicationCommand
   ): Unit =
     command.input.applicantUserId.foreach { userId =>
-      CreatePlayerAPIMessage.findPlayerByUserId(connection, userId).foreach { existingPlayer =>
+      PlayerPersistenceFunctions.findPlayerByUserId(connection, userId).foreach { existingPlayer =>
         if PlayerClubBindingFunctions.boundClubIds(existingPlayer).contains(command.clubId) then
           throw IllegalArgumentException(
             s"Player ${existingPlayer.id.value} is already a member of club ${command.clubId.value}"
@@ -132,7 +149,7 @@ final case class SubmitClubApplicationAPIMessage(
 
   private def createApplication(command: SubmitClubApplicationCommand): ClubMembershipApplication =
     ClubMembershipApplication(
-      id = IdGenerator.membershipApplicationId(),
+      id = ClubIdGenerator.membershipApplicationId(),
       applicantUserId = command.input.applicantUserId,
       displayName = command.input.displayName,
       submittedAt = command.submittedAt,

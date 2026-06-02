@@ -1,10 +1,33 @@
 package riichinexus.microservices.club.api
+import riichinexus.microservices.auth.objects.Permission
+import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
 
+import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
 import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
 import cats.effect.IO
-import riichinexus.api.{APIMessage, ApiPlanContext}
-import riichinexus.domain.model.{ClubId, Permission, PlayerId}
+import riichinexus.system.api.{APIMessage, ApiPlanContext}
+import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
+import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.club.domain.functions.ClubIdGenerator
+import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
+import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
+import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
+import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
+import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
+import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
+import riichinexus.microservices.tournament.objects.tablemanagement.TableId
+import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
+import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
+import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
+import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
+import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
+import riichinexus.microservices.audit.domain.auditevent.AuditEventId
+import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
+import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
+import riichinexus.microservices.auth.domain.AuthorizationFailure
 import riichinexus.microservices.auth.domain.model.AccessPrincipal
 import riichinexus.microservices.club.domain.Club
 import riichinexus.microservices.club.domain.clubmanagement.model.*
@@ -29,6 +52,7 @@ final case class ListPublicClubsAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[PublicClubDirectoryEntry]] =
     for
+      _ <- requirePublicDirectoryPermission(context)
       query <- IO.blocking(resolveQuery(context))
       clubs <- IO.blocking(publicClubs(context))
       playersById <- IO.blocking(publicClubPlayersById(context, clubs))
@@ -37,12 +61,17 @@ final case class ListPublicClubsAPIMessage(
       filteredEntries <- IO.blocking(filterPublicClubDirectoryEntries(context, entries, query))
     yield PagedResponse.fromItems(filteredEntries, limit, offset, query.appliedFilters)(identity)
 
+  private def requirePublicDirectoryPermission(context: ApiPlanContext): IO[Unit] =
+    val guest = AccessPrincipalFunctions.guest()
+    AuthCheckPermissionAPIMessage(
+      principal = Some(guest),
+      permission = Permission.ViewClubDirectory
+    ).plan(context).flatMap { allowed =>
+      if allowed then IO.unit
+      else IO.raiseError(AuthorizationFailure(s"${guest.displayName} is not allowed to view club directory"))
+    }
+
   private def resolveQuery(context: ApiPlanContext): ResolvedClubDirectoryQuery =
-    AuthorizationPolicyFunctions.requirePermission(
-      context.support.authorizationService,
-      AccessPrincipalFunctions.guest(),
-      Permission.ViewClubDirectory
-    )
     ResolvedClubDirectoryQuery(
       name = name.filter(_.nonEmpty),
       relation = relation,
@@ -59,7 +88,7 @@ final case class ListPublicClubsAPIMessage(
       context: ApiPlanContext,
       clubs: Vector[Club]
   ): Map[PlayerId, Player] =
-    ListPlayersAPIMessage.findPlayersByIds(context.connection, clubs.flatMap(_.members).distinct)
+    PlayerPersistenceFunctions.findPlayersByIds(context.connection, clubs.flatMap(_.members).distinct)
       .map(player => player.id -> player)
       .toMap
 
@@ -152,7 +181,7 @@ final case class ListPublicClubsAPIMessage(
       query: ResolvedClubDirectoryQuery
   ): Vector[PublicClubDirectoryEntry] =
     entries
-      .filter(club => query.name.forall(riichinexus.system.functions.TextSearchFunctions.containsIgnoreCase(club.name, _)))
+      .filter(club => query.name.forall(riichinexus.system.TextSearch.containsIgnoreCase(club.name, _)))
       .filter(club => query.relation.forall(relationKind => club.relations.exists(_.relation == relationKind)))
       .sortBy(_.name)
 

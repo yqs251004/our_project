@@ -1,16 +1,36 @@
 package riichinexus.microservices.club.api
 
 import cats.effect.IO
-import riichinexus.api.{APIMessage, ApiPlanContext}
-import riichinexus.domain.model.*
+import riichinexus.system.api.{APIMessage, ApiPlanContext}
+import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
+import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.club.domain.functions.ClubIdGenerator
+import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
+import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
+import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
+import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
+import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
+import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
+import riichinexus.microservices.tournament.objects.tablemanagement.TableId
+import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
+import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
+import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
+import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
+import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
+import riichinexus.microservices.audit.domain.auditevent.AuditEventId
+import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
+import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.club.domain.Club
 import riichinexus.microservices.club.domain.clubmanagement.model.*
 import riichinexus.microservices.club.domain.membershipmanagement.model.*
 import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
 import riichinexus.microservices.club.domain.relationmanagement.model.*
-import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.auth.domain.model.Role
+import riichinexus.system.json.JsonCodecs.given
+import riichinexus.microservices.auth.objects.Role
 import riichinexus.microservices.player.domain.Player
+import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
 import riichinexus.microservices.player.domain.functions.PlayerRoleFunctions
 import riichinexus.microservices.player.objects.PlayerStatus
 import riichinexus.microservices.player.objects.apiTypes.{PlayerProfileView, PlayerRoleFlagsView}
@@ -35,7 +55,7 @@ final case class ListClubMembersAPIMessage(
   private def resolveQuery(context: ApiPlanContext): ResolvedClubMembersQuery =
     ResolvedClubMembersQuery(
       clubId = ClubId(clubId),
-      status = status.filter(_.nonEmpty).map(riichinexus.system.functions.EnumParsingFunctions.parse("status", _)(PlayerStatus.valueOf)),
+      status = status.filter(_.nonEmpty).map(riichinexus.system.EnumParsing.parse("status", _)(PlayerStatus.valueOf)),
       nickname = nickname.filter(_.nonEmpty),
       limit = limit.getOrElse(20),
       offset = offset.getOrElse(0),
@@ -49,10 +69,10 @@ final case class ListClubMembersAPIMessage(
       context: ApiPlanContext,
       query: ResolvedClubMembersQuery
   ): Vector[PlayerProfileView] =
-    ListPlayersAPIMessage
+    PlayerPersistenceFunctions
       .findPlayersByClub(context.connection, query.clubId)
       .filter(player => query.status.forall(_ == player.status))
-      .filter(player => query.nickname.forall(riichinexus.system.functions.TextSearchFunctions.containsIgnoreCase(player.nickname, _)))
+      .filter(player => query.nickname.forall(riichinexus.system.TextSearch.containsIgnoreCase(player.nickname, _)))
       .sortBy(player => (player.nickname, player.id.value))
       .map(playerProfileView)
 

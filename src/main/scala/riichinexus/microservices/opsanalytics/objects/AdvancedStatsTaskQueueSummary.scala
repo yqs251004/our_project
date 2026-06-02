@@ -13,4 +13,4 @@ final case class AdvancedStatsTaskQueueSummary(
     oldestRunnableRequestedAt: Option[Instant],
     nextScheduledRetryAt: Option[Instant],
     newestCompletedAt: Option[Instant]
-) derives CanEqual
+)

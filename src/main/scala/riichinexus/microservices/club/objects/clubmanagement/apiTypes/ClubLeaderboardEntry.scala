@@ -8,7 +8,7 @@ final case class ClubLeaderboardEntry(
     powerRating: Double,
     totalPoints: Int,
     memberCount: Int
-) derives CanEqual
+)
 
 object ClubLeaderboardEntry:
   given ReadWriter[ClubLeaderboardEntry] = macroRW

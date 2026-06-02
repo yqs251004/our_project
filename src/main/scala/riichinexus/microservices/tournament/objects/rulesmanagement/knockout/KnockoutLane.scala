@@ -2,7 +2,7 @@ package riichinexus.microservices.tournament.objects.rulesmanagement.knockout
 
 import upickle.default.*
 
-enum KnockoutLane derives CanEqual:
+enum KnockoutLane:
   case Championship
   case Bronze
   case Repechage

@@ -4,4 +4,4 @@ final case class RoundSettlement(
     riichiSticksDelta: Int = 0,
     honbaPayment: Int = 0,
     notes: Vector[String] = Vector.empty
-) derives CanEqual
+)

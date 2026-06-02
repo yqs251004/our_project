@@ -1,17 +1,38 @@
 package riichinexus.microservices.club.api
-import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
+import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
+import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
 
 import java.util.NoSuchElementException
 
 import cats.effect.IO
-import riichinexus.api.{APIMessage, ApiPlanContext}
-import riichinexus.domain.model.*
+import riichinexus.system.api.{APIMessage, ApiPlanContext}
+import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
+import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.club.domain.functions.ClubIdGenerator
+import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
+import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
+import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
+import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
+import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
+import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
+import riichinexus.microservices.tournament.objects.tablemanagement.TableId
+import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
+import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
+import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
+import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
+import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
+import riichinexus.microservices.audit.domain.auditevent.AuditEventId
+import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
+import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
+import riichinexus.microservices.auth.domain.model.AccessPrincipal
 import riichinexus.microservices.club.domain.Club
 import riichinexus.microservices.club.domain.clubmanagement.model.*
 import riichinexus.microservices.club.domain.membershipmanagement.model.*
 import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
 import riichinexus.microservices.club.domain.relationmanagement.model.*
-import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.club.api.`private`.ClubApplicationViewAssembler
 import riichinexus.microservices.club.domain.ClubAuthorization
 import riichinexus.microservices.club.objects.membershipmanagement.ClubApplicationStatus
@@ -29,7 +50,8 @@ final case class ListClubApplicationsAPIMessage(
   override def plan(context: ApiPlanContext): IO[PagedResponse[ClubMembershipApplicationView]] =
     for
       resolved <- IO.blocking(resolveQuery(context))
-      page <- IO.blocking(listApplications(context, resolved))
+      actor <- ResolveRequestActor(guestSessionId = None, operatorId = resolved.operatorId).plan(context)
+      page <- IO.blocking(listApplications(context, resolved, actor))
     yield page
 
   private def resolveQuery(context: ApiPlanContext): ResolvedClubApplicationListQuery =
@@ -51,24 +73,20 @@ final case class ListClubApplicationsAPIMessage(
 
   private def listApplications(
       context: ApiPlanContext,
-      query: ResolvedClubApplicationListQuery
+      query: ResolvedClubApplicationListQuery,
+      actor: AccessPrincipal
   ): PagedResponse[ClubMembershipApplicationView] =
-    val module = context.support.clubModule
     val club = ClubTable
       .findById(context.connection, query.clubId)
       .getOrElse(throw NoSuchElementException(s"Club ${query.clubId.value} was not found"))
-    val actor = AuthAccessPrincipalResolver.requestActor(context, 
-      guestSessionId = None,
-      operatorId = query.operatorId
-    )
     ClubAuthorization.requireClubApplicationManager(actor, club)
 
     val applications = club.membershipApplications
       .filter(application => query.status.forall(_ == application.status))
       .filter(application => query.applicantUserId.forall(value => application.applicantUserId.contains(value)))
-      .filter(application => query.displayName.forall(riichinexus.system.functions.TextSearchFunctions.containsIgnoreCase(application.displayName, _)))
+      .filter(application => query.displayName.forall(riichinexus.system.TextSearch.containsIgnoreCase(application.displayName, _)))
       .sortBy(_.submittedAt)
-      .map(application => ClubApplicationViewAssembler.applicationView(context.connection, module, club, application, actor))
+      .map(application => ClubApplicationViewAssembler.applicationView(context.connection, club, application, actor))
     pagedResponse(applications, query)
 
   private def pagedResponse(

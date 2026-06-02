@@ -10,7 +10,7 @@ final case class PublicClubRecentMatchSeatView(
     placement: Int,
     scoreDelta: Int,
     finalPoints: Int
-) derives CanEqual
+)
 
 object PublicClubRecentMatchSeatView:
   given ReadWriter[PublicClubRecentMatchSeatView] = macroRW

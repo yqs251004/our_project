@@ -1,6 +1,6 @@
 package riichinexus.microservices.club.objects.clubmanagement
 
-import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.{Club as DomainClub}
 import riichinexus.microservices.club.objects.rankprivilegemanagement.ClubRankNode
 import riichinexus.microservices.club.objects.relationmanagement.ClubRelationView

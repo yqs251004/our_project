@@ -2,7 +2,7 @@ package riichinexus.microservices.tournament.objects.rulesmanagement.swiss
 
 import upickle.default.*
 
-enum SwissPairingMethod derives CanEqual:
+enum SwissPairingMethod:
   case BalancedElo
   case Snake
 

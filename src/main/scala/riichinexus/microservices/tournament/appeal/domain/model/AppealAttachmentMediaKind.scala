@@ -1,6 +1,6 @@
 package riichinexus.microservices.tournament.appeal.domain.model
 
-enum AppealAttachmentMediaKind derives CanEqual:
+enum AppealAttachmentMediaKind:
   case Image
   case Video
   case Document

@@ -1,6 +1,6 @@
 package riichinexus.microservices.tournament.appeal.domain.model
 
-enum AppealDecisionType derives CanEqual:
+enum AppealDecisionType:
   case Resolve
   case Reject
   case Escalate

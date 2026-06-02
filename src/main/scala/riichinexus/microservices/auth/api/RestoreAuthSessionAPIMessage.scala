@@ -1,17 +1,17 @@
 package riichinexus.microservices.auth.api
-import riichinexus.api.functions.ApiPlanContextFunctions
-import riichinexus.microservices.auth.api.`private`.CurrentSessionViewResolver
+import riichinexus.system.api.ApiPlanContext
+import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
 
 import java.time.Instant
 
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
-import riichinexus.api.{APIWithTokenMessage, ApiPlanContext}
-import riichinexus.bootstrap.AuthModuleContext
-import riichinexus.domain.service.AuthenticationFailure
+import riichinexus.system.api.{APIWithTokenMessage, ApiPlanContext}
+import riichinexus.microservices.auth.domain.AuthenticationFailure
 import riichinexus.microservices.auth.domain.functions.AuthenticatedSessionFunctions
 import riichinexus.microservices.auth.domain.model.AuthenticatedSession
-import riichinexus.microservices.auth.objects.apiTypes.AuthSessionView
+import riichinexus.microservices.auth.objects.Role
+import riichinexus.microservices.auth.objects.apiTypes.{AuthSessionView, CurrentSessionRoleFlags}
 import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.PlayerStatus
 import riichinexus.microservices.auth.tables.authenticatedsession.AuthenticatedSessionTable
@@ -22,13 +22,12 @@ final case class RestoreAuthSessionAPIMessage() extends APIWithTokenMessage[Auth
 
   override def plan(context: ApiPlanContext): IO[AuthSessionView] =
     for
-      token <- IO.blocking(ApiPlanContextFunctions.requireBearerToken(context))
-      module = context.support.authModule
+      token <- IO.blocking(ApiPlanContext.requireBearerToken(context))
       asOf <- IO.realTimeInstant
       command = RestoreSessionCommand(token, asOf)
       result <- IO.blocking {
-        module.transactionManager.inTransaction {
-          restoreSession(context, module, command)
+        {
+          restoreSession(context, command)
         }
       }
     yield AuthSessionView(
@@ -36,12 +35,11 @@ final case class RestoreAuthSessionAPIMessage() extends APIWithTokenMessage[Auth
       username = result.session.username,
       displayName = result.player.nickname,
       authenticated = true,
-      roles = CurrentSessionViewResolver.registeredRoleFlags(result.player)
+      roles = registeredRoleFlags(result.player)
     )
 
   private def restoreSession(
       context: ApiPlanContext,
-      module: AuthModuleContext,
       command: RestoreSessionCommand
   ): RestoreSessionResult =
     val connection = context.connection
@@ -51,7 +49,7 @@ final case class RestoreAuthSessionAPIMessage() extends APIWithTokenMessage[Auth
       throw AuthenticationFailure("Session is invalid or expired", "invalid_session")
 
     val touched = AuthenticatedSessionTable.save(connection, AuthenticatedSessionFunctions.touch(session, command.asOf))
-    val player = GetPlayerAPIMessage.findPlayer(context.connection, touched.playerId)
+    val player = PlayerPersistenceFunctions.findPlayer(context.connection, touched.playerId)
       .getOrElse(throw AuthenticationFailure(s"Player ${touched.playerId.value} was not found", "invalid_session"))
     if player.status != PlayerStatus.Active then
       throw AuthenticationFailure(s"Player ${player.id.value} is not active", "inactive_account")
@@ -66,3 +64,12 @@ final case class RestoreAuthSessionAPIMessage() extends APIWithTokenMessage[Auth
       session: AuthenticatedSession,
       player: Player
   )
+
+  private def registeredRoleFlags(player: Player): CurrentSessionRoleFlags =
+    CurrentSessionRoleFlags(
+      isGuest = false,
+      isRegisteredPlayer = true,
+      isClubAdmin = player.roleGrants.exists(_.role == Role.ClubAdmin),
+      isTournamentAdmin = player.roleGrants.exists(_.role == Role.TournamentAdmin),
+      isSuperAdmin = player.roleGrants.exists(_.role == Role.SuperAdmin)
+    )

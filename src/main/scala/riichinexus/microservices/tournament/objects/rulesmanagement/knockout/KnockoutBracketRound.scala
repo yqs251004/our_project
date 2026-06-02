@@ -6,4 +6,4 @@ final case class KnockoutBracketRound(
     roundNumber: Int,
     label: String,
     matches: Vector[KnockoutBracketMatch]
-) derives CanEqual, ReadWriter
+) derives ReadWriter

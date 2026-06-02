@@ -1,6 +1,6 @@
 package riichinexus.microservices.club.objects.membershipmanagement.apiTypes
 
-import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.player.objects.RankSnapshot
 import upickle.default.*
 

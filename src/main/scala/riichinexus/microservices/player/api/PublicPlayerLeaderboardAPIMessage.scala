@@ -1,11 +1,32 @@
 package riichinexus.microservices.player.api
 
+import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
 import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
 import cats.effect.IO
-import riichinexus.api.{APIMessage, ApiPlanContext}
-import riichinexus.domain.model.ClubId
-import riichinexus.domain.model.Permission
+import riichinexus.system.api.{APIMessage, ApiPlanContext}
+import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
+import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.club.domain.functions.ClubIdGenerator
+import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
+import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
+import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
+import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
+import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
+import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
+import riichinexus.microservices.tournament.objects.tablemanagement.TableId
+import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
+import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
+import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
+import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
+import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
+import riichinexus.microservices.audit.domain.auditevent.AuditEventId
+import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
+import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
+import riichinexus.microservices.auth.objects.Permission
+import riichinexus.microservices.auth.domain.AuthorizationFailure
 import riichinexus.microservices.auth.domain.model.AccessPrincipal
 import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.domain.functions.PlayerClubBindingFunctions
@@ -24,22 +45,28 @@ final case class PublicPlayerLeaderboardAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[PlayerLeaderboardEntry]] =
     for
+      _ <- requirePublicLeaderboardPermission(context)
       query <- IO.blocking(resolveQuery(context))
       players <- IO.blocking(publicPlayers(context))
       entries <- IO.blocking(publicPlayerLeaderboardEntries(players))
       filteredEntries <- IO.blocking(filterPublicPlayerLeaderboardEntries(entries, query))
     yield PagedResponse.fromItems(filteredEntries, limit, offset, query.appliedFilters)(identity)
 
+  private def requirePublicLeaderboardPermission(context: ApiPlanContext): IO[Unit] =
+    val guest = AccessPrincipalFunctions.guest()
+    AuthCheckPermissionAPIMessage(
+      principal = Some(guest),
+      permission = Permission.ViewPublicLeaderboard
+    ).plan(context).flatMap { allowed =>
+      if allowed then IO.unit
+      else IO.raiseError(AuthorizationFailure(s"${guest.displayName} is not allowed to view public leaderboard"))
+    }
+
   private def resolveQuery(context: ApiPlanContext): ResolvedPlayerLeaderboardQuery =
-    AuthorizationPolicyFunctions.requirePermission(
-      context.support.authorizationService,
-      AccessPrincipalFunctions.guest(),
-      Permission.ViewPublicLeaderboard
-    )
     ResolvedPlayerLeaderboardQuery(
       clubId = clubId.filter(_.nonEmpty).map(ClubId(_).value),
       status = status.filter(_.nonEmpty).map(
-        riichinexus.system.functions.EnumParsingFunctions.parse("status", _)(PlayerStatus.valueOf)
+        riichinexus.system.EnumParsing.parse("status", _)(PlayerStatus.valueOf)
       ),
       appliedFilters = Vector(
         clubId.filter(_.nonEmpty).map("clubId" -> _),

@@ -3,7 +3,7 @@ package riichinexus.microservices.tournament.appeal.objects
 import riichinexus.microservices.tournament.appeal.domain.model.{AppealTableResolution as DomainAppealTableResolution}
 import upickle.default.*
 
-enum AppealTableResolution derives CanEqual:
+enum AppealTableResolution:
   case RestorePriorState
   case ArchiveTable
   case ResumeScoring

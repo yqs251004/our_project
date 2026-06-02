@@ -2,7 +2,7 @@ package riichinexus.microservices.tournament.objects.tournamentmanagement
 
 import upickle.default.*
 
-enum StageStatus derives CanEqual:
+enum StageStatus:
   case Pending
   case Ready
   case Active

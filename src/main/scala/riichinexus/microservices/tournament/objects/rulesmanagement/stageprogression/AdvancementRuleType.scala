@@ -2,7 +2,7 @@ package riichinexus.microservices.tournament.objects.rulesmanagement.stageprogre
 
 import upickle.default.*
 
-enum AdvancementRuleType derives CanEqual:
+enum AdvancementRuleType:
   case SwissCut
   case KnockoutElimination
   case ScoreThreshold

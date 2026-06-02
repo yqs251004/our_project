@@ -5,8 +5,8 @@ import java.sql.{Connection, ResultSet, Timestamp}
 import scala.annotation.tailrec
 import scala.util.Using
 
-import riichinexus.application.ports.OptimisticConcurrencyException
-import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.system.errors.OptimisticConcurrencyException
+import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.auth.domain.functions.AuthenticatedSessionFunctions
 import riichinexus.microservices.auth.domain.model.AuthenticatedSession
 import upickle.default.{read, write}

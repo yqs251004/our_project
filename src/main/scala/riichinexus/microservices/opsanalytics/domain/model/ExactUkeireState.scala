@@ -5,4 +5,4 @@ private[opsanalytics] final case class ExactUkeireState(
     visibleKnown: Vector[Int],
     samples: Vector[Int],
     trackable: Boolean
-) derives CanEqual
+)

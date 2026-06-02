@@ -1,15 +1,36 @@
 package riichinexus.microservices.club.api
-import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
+import riichinexus.microservices.audit.domain.auditevent.AuditEvent
+import riichinexus.microservices.auth.objects.Permission
+import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
+import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPIMessage
+import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
 
 import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.time.Instant
 import java.util.NoSuchElementException
 
 import cats.effect.IO
-import riichinexus.api.{APIMessage, ApiPlanContext}
-import riichinexus.application.changes.DomainChangeInterpreter
-import riichinexus.bootstrap.ClubModuleContext
-import riichinexus.domain.model.*
+import riichinexus.system.api.{APIMessage, ApiPlanContext}
+import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
+import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.club.domain.functions.ClubIdGenerator
+import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
+import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
+import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
+import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
+import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
+import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
+import riichinexus.microservices.tournament.objects.tablemanagement.TableId
+import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
+import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
+import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
+import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
+import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
+import riichinexus.microservices.audit.domain.auditevent.AuditEventId
+import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
+import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.club.domain.Club
 import riichinexus.microservices.club.domain.clubmanagement.model.*
@@ -17,7 +38,7 @@ import riichinexus.microservices.club.domain.membershipmanagement.model.*
 import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
 import riichinexus.microservices.club.domain.relationmanagement.model.*
 import riichinexus.microservices.auth.domain.*
-import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.club.objects.relationmanagement.ClubRelationKind
 import riichinexus.microservices.club.domain.ClubAuthorization
 import riichinexus.microservices.club.objects.clubmanagement.ClubView
@@ -33,10 +54,9 @@ final case class UpdateClubRelationAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
-      actor <- IO.blocking(AuthAccessPrincipalResolver.principal(context, PlayerId(operatorId)))
+      actor <- IO.blocking(ResolveAccessPrincipal(PlayerId(operatorId)).resolve(context.connection))
       relationUpdatedAt <- IO.realTimeInstant
       occurredAt <- IO.realTimeInstant
-      module = context.support.clubModule
       command = UpdateClubRelationCommand(
         clubId = ClubId(clubId),
         actor = actor,
@@ -48,33 +68,30 @@ final case class UpdateClubRelationAPIMessage(
         ),
         occurredAt = occurredAt
       )
-      club <- IO.blocking {
-        module.transactionManager.inTransaction {
-          updateRelation(context.connection, module, command)
+      savedClub <- IO.blocking {
+        {
+          updateRelation(context.connection, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
-    yield ClubView.fromDomain(club)
+      _ <- RecordAuditEventsPrivateAPIMessage(updateRelationAudit(command)).plan(context)
+    yield ClubView.fromDomain(savedClub)
 
   private def updateRelation(
       connection: java.sql.Connection,
-      module: ClubModuleContext,
       command: UpdateClubRelationCommand
   ): Option[Club] =
     riichinexus.microservices.club.tables.clubs.ClubTable.findById(connection, command.clubId).map { club =>
-      ensureRelationCanBeUpdated(module, club, command)
+      ensureRelationCanBeUpdated(club, command)
       val targetClub = resolveTargetClub(connection, command)
-      commitRelationUpdate(connection, module, club, targetClub, command)
+      commitRelationUpdate(connection, club, targetClub, command)
     }
 
   private def ensureRelationCanBeUpdated(
-      module: ClubModuleContext,
       club: Club,
       command: UpdateClubRelationCommand
   ): Unit =
     ClubAuthorization.ensureClubActive(club)
-    ClubAuthorization.requireClubAdmin(
-      module = module,
-      actor = command.actor,
+    ClubAuthorization.requireClubAdmin(actor = command.actor,
       club = club,
       permission = Permission.SetClubTitle
     )
@@ -97,7 +114,6 @@ final case class UpdateClubRelationAPIMessage(
 
   private def commitRelationUpdate(
       connection: java.sql.Connection,
-      module: ClubModuleContext,
       club: Club,
       targetClub: Club,
       command: UpdateClubRelationCommand
@@ -107,34 +123,35 @@ final case class UpdateClubRelationAPIMessage(
         ClubFunctions.removeRelation(club, command.relation.targetClubId)
       else ClubFunctions.upsertRelation(club, command.relation)
 
-    DomainChangeInterpreter
-      .auditOnly(module.transactionManager, module.auditEventRepository)
-      .commitAudited(
-        aggregate = sourceClub,
-        persist = source =>
-          val savedSource = riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, source)
-          if command.relation.relation == ClubRelationKind.Neutral then
-            riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, ClubFunctions.removeRelation(targetClub, command.clubId))
-          else
-            riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, 
-              ClubFunctions.upsertRelation(
-                targetClub,
-                command.relation.copy(targetClubId = command.clubId)
-              )
-            )
-          savedSource,
+    val savedSource = riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, sourceClub)
+    if command.relation.relation == ClubRelationKind.Neutral then
+      riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, ClubFunctions.removeRelation(targetClub, command.clubId))
+    else
+      riichinexus.microservices.club.tables.clubs.ClubTable.save(
+        connection,
+        ClubFunctions.upsertRelation(
+          targetClub,
+          command.relation.copy(targetClubId = command.clubId)
+        )
+      )
+    savedSource
+
+  private def updateRelationAudit(command: UpdateClubRelationCommand): Vector[AuditEvent] =
+    Vector(
+      AuditEvent(
+        id = AuditIdGenerator.auditEventId(),
         aggregateType = "club",
-        aggregateId = _.id.value,
+        aggregateId = command.clubId.value,
         eventType = "ClubRelationUpdated",
         occurredAt = command.occurredAt,
         actorId = command.actor.playerId,
-        details = _ =>
-          Map(
-            "targetClubId" -> command.relation.targetClubId.value,
-            "relation" -> ClubRelationKind.toString(command.relation.relation)
-          ),
+        details = Map(
+          "targetClubId" -> command.relation.targetClubId.value,
+          "relation" -> ClubRelationKind.toString(command.relation.relation)
+        ),
         note = command.relation.note
       )
+    )
 
   private final case class UpdateClubRelationCommand(
       clubId: ClubId,

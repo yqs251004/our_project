@@ -7,4 +7,4 @@ final case class AdvancementRule(
     targetTableCount: Option[Int] = None,
     templateKey: Option[String] = None,
     note: Option[String] = None
-) derives CanEqual
+)

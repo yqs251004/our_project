@@ -1,4 +1,6 @@
 package riichinexus.microservices.club.objects
+import riichinexus.microservices.audit.domain.auditevent.AuditEvent
+import riichinexus.microservices.auth.objects.Permission
 
 import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.time.Instant
@@ -36,7 +38,7 @@ final class ClubTestOperations(
 
         val updatedClub = clubRepository.save(ClubFunctions.adjustTreasury(club, delta))
         auditEventRepository.save(
-          AuditEventEntry(
+          AuditEvent(
             id = IdGenerator.auditEventId(),
             aggregateType = "club",
             aggregateId = clubId.value,
@@ -74,7 +76,7 @@ final class ClubTestOperations(
 
         val updatedClub = clubRepository.save(ClubFunctions.adjustPointPool(club, delta))
         auditEventRepository.save(
-          AuditEventEntry(
+          AuditEvent(
             id = IdGenerator.auditEventId(),
             aggregateType = "club",
             aggregateId = clubId.value,
@@ -110,7 +112,7 @@ final class ClubTestOperations(
 
         val updatedClub = clubRepository.save(ClubFunctions.updateRankTree(club, rankTree))
         auditEventRepository.save(
-          AuditEventEntry(
+          AuditEvent(
             id = IdGenerator.auditEventId(),
             aggregateType = "club",
             aggregateId = clubId.value,
@@ -163,7 +165,7 @@ final class ClubTestOperations(
           )
         )
         auditEventRepository.save(
-          AuditEventEntry(
+          AuditEvent(
             id = IdGenerator.auditEventId(),
             aggregateType = "club",
             aggregateId = clubId.value,
@@ -199,7 +201,7 @@ final class ClubTestOperations(
 
         val updatedClub = clubRepository.save(ClubFunctions.addHonor(club, honor))
         auditEventRepository.save(
-          AuditEventEntry(
+          AuditEvent(
             id = IdGenerator.auditEventId(),
             aggregateType = "club",
             aggregateId = clubId.value,
@@ -236,7 +238,7 @@ final class ClubTestOperations(
 
         val updatedClub = clubRepository.save(ClubFunctions.removeHonor(club, title))
         auditEventRepository.save(
-          AuditEventEntry(
+          AuditEvent(
             id = IdGenerator.auditEventId(),
             aggregateType = "club",
             aggregateId = clubId.value,
@@ -271,7 +273,7 @@ final class ClubTestOperations(
 
         val updatedClub = clubRepository.save(ClubFunctions.updateRecruitmentPolicy(club, policy))
         auditEventRepository.save(
-          AuditEventEntry(
+          AuditEvent(
             id = IdGenerator.auditEventId(),
             aggregateType = "club",
             aggregateId = clubId.value,
@@ -334,7 +336,7 @@ final class ClubTestOperations(
           )
 
         auditEventRepository.save(
-          AuditEventEntry(
+          AuditEvent(
             id = IdGenerator.auditEventId(),
             aggregateType = "club",
             aggregateId = clubId.value,

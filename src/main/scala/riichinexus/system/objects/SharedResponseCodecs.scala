@@ -1,6 +1,6 @@
 package riichinexus.system.objects
 
-import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.system.json.JsonCodecs.given
 import upickle.default.*
 
 object SharedResponseCodecs:

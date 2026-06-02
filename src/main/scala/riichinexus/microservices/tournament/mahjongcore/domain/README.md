@@ -1,30 +1,38 @@
 # domain 目录规范
 
-`domain` 放麻将对局计算引擎的领域逻辑。这里是规则和流程的中心，不是 API DTO 的延伸。
+`domain` 放 `mahjongcore` 后端内部领域模型和领域函数。这里描述“后端怎么计算”，不描述“前端看到什么”。
 
 ## 应该放在 domain 的内容
 
-- 对局计算 command/query。
-- 牌谱解析、局结果推导、分数计算、番种判断。
-- 对局状态机、结算流程、校验规则。
-- coordinator/service，用于组织一段完整领域流程。
-- domain model、domain enum、domain exception。
+- 后端内部对局状态、局内事件、结算上下文、牌型分析上下文。
+- 只被后端使用的 domain enum、domain exception、domain command/query。
+- 麻将规则计算、状态推进、牌谱解析、分数计算、和种判断。
+- 领域流程函数或 coordinator，例如“归档牌谱并生成计算结果”。
 
-## 边界要求
+## model 和 functions
 
-- 不 import `api`。
-- 不 import `objects.apiTypes.*`。
-- 不知道 API request/response/view 的名字。
-- 不返回前端专用 DTO。
-- 不处理 HTTP、token、session、分页 envelope。
+- `model/` 只放数据类型，不在类型里挂业务方法。
+- `functions/` 放围绕领域类型的纯函数。
+- 按语义拆目录，不要把全部函数塞进一个宽泛的 `MahjongCoreFunctions.scala`。
+- 函数命名要表达业务语义，例如 `HandAnalysisFunctions`、`RoundSettlementFunctions`、`GameStateTransitionFunctions`。
 
-## service/coordinator 写法
+## 和 objects 的边界
 
-- coordinator 负责领域主流程，适合放“计算一局并提交结果”“归档牌谱并生成 match record”这类用例。
-- service 负责较小的领域能力，适合放“解析牌谱”“计算得分”“校验和牌形”等能力。
-- 方法入参优先使用 domain command/query，不直接接收 API request。
-- 如果方法需要事务，明确约定由调用方开启，或者由 service 自己通过 transaction manager 管理；不要两边都隐式开启。
+- 前端需要镜像的类型放 `objects`，不要放 `domain`。
+- 只有后端内部使用的类型放 `domain`。
+- `domain` 不 import `objects.apiTypes.*`。
+- `domain` 不返回 API view、response、paged response。
+- `domain` 可以接收 API 转好的 command/query，但不知道 API request 的名字。
 
-## 与 tables 的关系
+## 和 tables 的关系
 
-domain 可以直接调用 tables 执行必要的持久化读写，但不能把 table 调用伪装成一层无意义转发。需要读数据库时，直接调用对应 table object；需要业务流程时，流程留在 domain 方法里。
+domain 可以调用 `mahjongcore.tables`，但只限本子微服务内部流程。其它微服务不能直接调用这些 table 函数。
+
+如果领域流程需要多步读写表，可以在 domain 函数或 coordinator 中组织流程，但 SQL 本身仍留在 tables 中。不要新增只做转发的 repository/helper。
+
+## 事务和 IO
+
+- 事务通常由 API plan 打开。
+- 如果 domain 函数要求在事务内调用，要在函数命名或注释中说清楚。
+- 纯计算函数不做 JDBC、文件、网络、时间读取、随机数生成。
+- 需要生成 ID 或当前时间时，由 API 或专门后端函数传入结果。

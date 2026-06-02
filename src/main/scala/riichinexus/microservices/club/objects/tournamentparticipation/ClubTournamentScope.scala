@@ -2,7 +2,7 @@ package riichinexus.microservices.club.objects.tournamentparticipation
 
 import upickle.default.*
 
-enum ClubTournamentScope derives CanEqual:
+enum ClubTournamentScope:
   case Recent
   case Active
   case All

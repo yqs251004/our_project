@@ -1,16 +1,35 @@
 package riichinexus.microservices.auth.api
+import riichinexus.microservices.audit.domain.auditevent.AuditEvent
+import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPIMessage
 
 import java.time.Instant
 import java.util.NoSuchElementException
 
 import cats.effect.IO
-import riichinexus.api.{APIMessage, ApiPlanContext}
-import riichinexus.application.changes.{DomainChange, DomainChangeInterpreter}
-import riichinexus.bootstrap.AuthModuleContext
-import riichinexus.domain.model.*
+import riichinexus.system.api.{APIMessage, ApiPlanContext}
+import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
+import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.club.domain.functions.ClubIdGenerator
+import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
+import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
+import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
+import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
+import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
+import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
+import riichinexus.microservices.tournament.objects.tablemanagement.TableId
+import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
+import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
+import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
+import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
+import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
+import riichinexus.microservices.audit.domain.auditevent.AuditEventId
+import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
+import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.auth.domain.functions.GuestAccessSessionFunctions
 import riichinexus.microservices.auth.domain.model.*
-import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.auth.objects.apiTypes.GuestSessionResponse
 import riichinexus.microservices.auth.tables.guestsession.GuestSessionTable
 import upickle.default.*
@@ -23,47 +42,46 @@ final case class RevokeGuestSessionAuthAPIMessage(
   override def plan(context: ApiPlanContext): IO[GuestSessionResponse] =
     for
       revokedAt <- IO.realTimeInstant
-      module = context.support.authModule
       input = resolveInput
       command = RevokeGuestSessionCommand(
         input = input,
         revokedAt = revokedAt
       )
-      session <- IO.blocking {
-        module.transactionManager.inTransaction {
-          revokeGuestSession(context.connection, module, command)
+      updated <- IO.blocking {
+        {
+          revokeGuestSession(context.connection, command)
         }
       }
-    yield guestSessionResponse(session)
+      _ <- RecordAuditEventsPrivateAPIMessage(revokeGuestSessionAudit(updated, command)).plan(context)
+    yield guestSessionResponse(updated)
 
   private def revokeGuestSession(
       connection: java.sql.Connection,
-      module: AuthModuleContext,
       command: RevokeGuestSessionCommand
   ): GuestAccessSession =
     val session = GuestSessionTable.findById(connection, command.input.sessionId)
       .getOrElse(throw NoSuchElementException(s"Guest session ${command.input.sessionId.value} was not found"))
-    DomainChangeInterpreter
-      .auditOnly(module.transactionManager, module.auditEventRepository)
-      .commitWithinTransaction(
-        DomainChange(
-          aggregate = GuestAccessSessionFunctions.revoke(session, command.input.reason, command.revokedAt),
-          persist = GuestSessionTable.save(connection, _),
-          auditEntries = updated =>
-            Vector(
-              AuditEventEntry(
-                id = IdGenerator.auditEventId(),
-                aggregateType = "guest-session",
-                aggregateId = updated.id.value,
-                eventType = "GuestSessionRevoked",
-                occurredAt = command.revokedAt,
-                actorId = None,
-                details = Map("reason" -> updated.revokedReason.getOrElse(command.input.reason)),
-                note = None
-              )
-            )
-        )
+    GuestSessionTable.save(
+      connection,
+      GuestAccessSessionFunctions.revoke(session, command.input.reason, command.revokedAt)
+    )
+
+  private def revokeGuestSessionAudit(
+      updated: GuestAccessSession,
+      command: RevokeGuestSessionCommand
+  ): Vector[AuditEvent] =
+    Vector(
+      AuditEvent(
+        id = AuditIdGenerator.auditEventId(),
+        aggregateType = "guest-session",
+        aggregateId = updated.id.value,
+        eventType = "GuestSessionRevoked",
+        occurredAt = command.revokedAt,
+        actorId = None,
+        details = Map("reason" -> updated.revokedReason.getOrElse(command.input.reason)),
+        note = None
       )
+    )
 
   private def resolveInput: ResolvedRevokeGuestSessionInput =
     ResolvedRevokeGuestSessionInput(

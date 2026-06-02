@@ -3,7 +3,7 @@ package riichinexus.microservices.tournament.appeal.objects
 import riichinexus.microservices.tournament.appeal.domain.model.{AppealStatus as DomainAppealStatus}
 import upickle.default.*
 
-enum AppealStatus derives CanEqual:
+enum AppealStatus:
   case Open
   case UnderReview
   case Resolved

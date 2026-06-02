@@ -11,7 +11,7 @@ final case class PublicClubRecentMatchView(
     tableId: String,
     generatedAt: String,
     seats: Vector[PublicClubRecentMatchSeatView]
-) derives CanEqual
+)
 
 object PublicClubRecentMatchView:
   given ReadWriter[PublicClubRecentMatchView] = macroRW

@@ -5,4 +5,4 @@ final case class EloRatingConfig(
     placementWeight: Double = 0.6,
     scoreWeight: Double = 0.3,
     umaWeight: Double = 0.1
-) derives CanEqual
+)

@@ -2,7 +2,7 @@ package riichinexus.microservices.tournament.objects.rulesmanagement.knockout
 
 import upickle.default.*
 
-enum KnockoutSeedingPolicy derives CanEqual:
+enum KnockoutSeedingPolicy:
   case Rating
   case Elo
   case Ranking

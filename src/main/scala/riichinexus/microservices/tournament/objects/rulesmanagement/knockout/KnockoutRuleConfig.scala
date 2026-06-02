@@ -5,4 +5,4 @@ final case class KnockoutRuleConfig(
     thirdPlaceMatch: Boolean = false,
     seedingPolicy: String = "rating",
     repechageEnabled: Boolean = false
-) derives CanEqual
+)

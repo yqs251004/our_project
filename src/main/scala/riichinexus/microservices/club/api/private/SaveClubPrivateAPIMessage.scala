@@ -1,8 +1,8 @@
 package riichinexus.microservices.club.api.`private`
 
 import cats.effect.IO
-import riichinexus.api.{APIMessage, ApiPlanContext}
-import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.system.api.{APIMessage, ApiPlanContext}
+import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.Club
 import riichinexus.microservices.club.tables.clubs.ClubTable
 import upickle.default.*

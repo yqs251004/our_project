@@ -3,7 +3,7 @@ package riichinexus.microservices.tournament.appeal.objects
 import riichinexus.microservices.tournament.appeal.domain.model.{AppealPriority as DomainAppealPriority}
 import upickle.default.*
 
-enum AppealPriority derives CanEqual:
+enum AppealPriority:
   case Low
   case Normal
   case High

@@ -1,5 +1,10 @@
 package riichinexus.microservices.platformadmin.api
-import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
+import riichinexus.microservices.audit.domain.auditevent.AuditEvent
+import riichinexus.microservices.auth.objects.Permission
+import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
+import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPIMessage
+import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
+import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
 
 import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
@@ -10,19 +15,40 @@ import cats.effect.IO
 import java.time.Instant
 import java.util.NoSuchElementException
 
-import riichinexus.api.{APIMessage, ApiPlanContext}
-import riichinexus.application.changes.{DomainChange, DomainChangeInterpreter}
-import riichinexus.bootstrap.PlatformAdminModuleContext
-import riichinexus.domain.model.*
+import riichinexus.system.api.{APIMessage, ApiPlanContext}
+import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
+import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.club.domain.functions.ClubIdGenerator
+import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
+import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
+import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
+import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
+import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
+import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
+import riichinexus.microservices.tournament.objects.tablemanagement.TableId
+import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
+import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
+import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
+import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
+import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
+import riichinexus.microservices.audit.domain.auditevent.AuditEventId
+import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
+import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
+import riichinexus.microservices.auth.domain.AuthorizationFailure
 import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.club.domain.clubmanagement.model.ClubDissolved
 import riichinexus.microservices.club.domain.Club
 import riichinexus.microservices.club.domain.clubmanagement.model.*
 import riichinexus.microservices.club.domain.membershipmanagement.model.*
 import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
 import riichinexus.microservices.club.domain.relationmanagement.model.*
 import riichinexus.microservices.club.api.`private`.{ListClubsPrivateAPIMessage, ResolveClubPrivateAPIMessage, ResolveClubsPrivateAPIMessage, SaveClubPrivateAPIMessage}
-import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.system.json.JsonCodecs.given
+import riichinexus.microservices.opsanalytics.api.`private`.{
+  ResetClubAdvancedStatsBoardAPIMessage,
+  ResetClubDashboardAPIMessage
+}
 import riichinexus.microservices.player.domain.functions.{PlayerClubBindingFunctions, PlayerRoleFunctions}
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import riichinexus.microservices.platformadmin.objects.apiTypes.PlatformAdminClubView
@@ -36,8 +62,8 @@ final case class PlatformAdminDissolveClubAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[PlatformAdminClubView] =
     for
-      actor <- IO.blocking(AuthAccessPrincipalResolver.principal(context, operatorId))
-      module = context.support.platformAdminModule
+      actor <- IO.blocking(ResolveAccessPrincipal(operatorId).resolve(context.connection))
+      _ <- requireDissolveClubPermission(context, actor)
       request = DissolveClubRequest(operatorId = operatorId)
       dissolvedAt <- IO.realTimeInstant
       command = DissolveClubCommand(
@@ -45,26 +71,35 @@ final case class PlatformAdminDissolveClubAPIMessage(
         actor = actor,
         dissolvedAt = dissolvedAt
       )
-      club <- IO.blocking {
-        module.transactionManager
-          .inTransaction {
-            dissolveClub(context.connection, module, command)
+      dissolvedClub <- IO.blocking {
+        {
+            dissolveClub(context.connection, command)
           }
           .getOrElse(throw NoSuchElementException(s"Club ${command.clubId.value} was not found"))
       }
-    yield platformAdminClubView(club)
+      _ <- RecordAuditEventsPrivateAPIMessage(dissolveClubAudit(dissolvedClub, command)).plan(context)
+      _ <- ResetClubDashboardAPIMessage(command.clubId, command.dissolvedAt).plan(context)
+      _ <- ResetClubAdvancedStatsBoardAPIMessage(command.clubId, command.dissolvedAt).plan(context)
+    yield platformAdminClubView(dissolvedClub)
+
+  private def requireDissolveClubPermission(context: ApiPlanContext, actor: AccessPrincipal): IO[Unit] =
+    AuthCheckPermissionAPIMessage(
+      principal = Some(actor),
+      permission = Permission.DissolveClub
+    ).plan(context).flatMap { allowed =>
+      if allowed then IO.unit
+      else IO.raiseError(AuthorizationFailure(s"${actor.displayName} is not allowed to dissolve club"))
+    }
 
   private def dissolveClub(
       connection: java.sql.Connection,
-      module: PlatformAdminModuleContext,
       command: DissolveClubCommand
   ): Option[Club] =
-    AuthorizationPolicyFunctions.requirePermission(module.authorizationService, command.actor, Permission.DissolveClub)
     ResolveClubPrivateAPIMessage(command.clubId).plan(ApiPlanContext(support = null, bearerToken = None, connection = connection)).unsafeRunSync().map { club =>
       ensureClubCanDissolve(club, command.clubId)
       removeMembersFromClub(connection, club, command.clubId)
       removeRelationsToClub(connection, command.clubId)
-      commitDissolvedClub(connection, module, club, command)
+      commitDissolvedClub(connection, club, command)
     }
 
   private def ensureClubCanDissolve(club: Club, clubId: ClubId): Unit =
@@ -73,8 +108,8 @@ final case class PlatformAdminDissolveClubAPIMessage(
 
   private def removeMembersFromClub(connection: java.sql.Connection, club: Club, clubId: ClubId): Unit =
     club.members.foreach { memberId =>
-      GetPlayerAPIMessage.findPlayer(connection, memberId).foreach { player =>
-        CreatePlayerAPIMessage.persistPlayer(
+      PlayerPersistenceFunctions.findPlayer(connection, memberId).foreach { player =>
+        PlayerPersistenceFunctions.savePlayer(
           connection,
           PlayerRoleFunctions.revokeClubAdmin(
             PlayerClubBindingFunctions.leaveClub(player, clubId),
@@ -96,32 +131,26 @@ final case class PlatformAdminDissolveClubAPIMessage(
 
   private def commitDissolvedClub(
       connection: java.sql.Connection,
-      module: PlatformAdminModuleContext,
       club: Club,
       command: DissolveClubCommand
   ): Club =
-    DomainChangeInterpreter
-      .auditAndEvents(module.transactionManager, module.auditEventRepository, module.eventBus)
-      .commitWithinTransaction(
-        DomainChange(
-          aggregate = ClubFunctions.dissolve(club, command.actor.playerId.getOrElse(club.creator), command.dissolvedAt),
-          persist = updatedClub => SaveClubPrivateAPIMessage(updatedClub).plan(ApiPlanContext(support = null, bearerToken = None, connection = connection)).unsafeRunSync(),
-          auditEntries = _ =>
-            Vector(
-              AuditEventEntry(
-                id = IdGenerator.auditEventId(),
-                aggregateType = "club",
-                aggregateId = command.clubId.value,
-                eventType = "ClubDissolved",
-                occurredAt = command.dissolvedAt,
-                actorId = command.actor.playerId,
-                details = Map("memberCount" -> club.members.size.toString),
-                note = Some(s"Club ${command.clubId.value} dissolved")
-              )
-            ),
-          domainEvents = _ => Vector(ClubDissolved(command.clubId, command.dissolvedAt))
-        )
+    SaveClubPrivateAPIMessage(
+      ClubFunctions.dissolve(club, command.actor.playerId.getOrElse(club.creator), command.dissolvedAt)
+    ).plan(ApiPlanContext(support = null, bearerToken = None, connection = connection)).unsafeRunSync()
+
+  private def dissolveClubAudit(club: Club, command: DissolveClubCommand): Vector[AuditEvent] =
+    Vector(
+      AuditEvent(
+        id = AuditIdGenerator.auditEventId(),
+        aggregateType = "club",
+        aggregateId = command.clubId.value,
+        eventType = "ClubDissolved",
+        occurredAt = command.dissolvedAt,
+        actorId = command.actor.playerId,
+        details = Map("memberCount" -> club.members.size.toString),
+        note = Some(s"Club ${command.clubId.value} dissolved")
       )
+    )
 
   private def platformAdminClubView(club: Club): PlatformAdminClubView =
     PlatformAdminClubView(

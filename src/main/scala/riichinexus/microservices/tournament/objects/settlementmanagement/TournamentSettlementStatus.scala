@@ -2,7 +2,7 @@ package riichinexus.microservices.tournament.objects.settlementmanagement
 
 import upickle.default.*
 
-enum TournamentSettlementStatus derives CanEqual:
+enum TournamentSettlementStatus:
   case Draft
   case Finalized
   case Superseded

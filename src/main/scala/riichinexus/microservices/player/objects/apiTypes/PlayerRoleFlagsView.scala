@@ -1,6 +1,6 @@
 package riichinexus.microservices.player.objects.apiTypes
 
-import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.system.json.JsonCodecs.given
 import upickle.default.*
 
 final case class PlayerRoleFlagsView(
@@ -8,7 +8,7 @@ final case class PlayerRoleFlagsView(
     isClubAdmin: Boolean,
     isTournamentAdmin: Boolean,
     isSuperAdmin: Boolean
-) derives CanEqual
+)
 
 object PlayerRoleFlagsView:
   given ReadWriter[PlayerRoleFlagsView] = macroRW

@@ -1,6 +1,6 @@
 package riichinexus.microservices.platformadmin.objects.apiTypes
 
-import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.system.json.JsonCodecs.given
 import upickle.default.*
 
 final case class PlatformAdminClubView(
@@ -14,7 +14,7 @@ final case class PlatformAdminClubView(
     powerRating: Double,
     dissolvedAt: Option[String],
     dissolvedBy: Option[String]
-) derives CanEqual
+)
 
 object PlatformAdminClubView:
   given ReadWriter[PlatformAdminClubView] = macroRW

@@ -4,4 +4,4 @@ final case class PasswordDigest(
     hash: String,
     salt: String,
     iterations: Int
-) derives CanEqual
+)

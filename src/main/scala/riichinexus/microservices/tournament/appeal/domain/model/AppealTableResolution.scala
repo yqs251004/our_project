@@ -1,6 +1,6 @@
 package riichinexus.microservices.tournament.appeal.domain.model
 
-enum AppealTableResolution derives CanEqual:
+enum AppealTableResolution:
   case RestorePriorState
   case ArchiveTable
   case ResumeScoring

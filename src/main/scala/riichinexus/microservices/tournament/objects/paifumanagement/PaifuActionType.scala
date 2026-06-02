@@ -2,7 +2,7 @@ package riichinexus.microservices.tournament.objects.paifumanagement
 
 import upickle.default.*
 
-enum PaifuActionType derives CanEqual:
+enum PaifuActionType:
   case Draw
   case Discard
   case Chi

@@ -1,5 +1,8 @@
 package riichinexus.microservices.club.api
-import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
+import riichinexus.microservices.auth.objects.Permission
+import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
+import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
+import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
 
 import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
@@ -7,9 +10,27 @@ import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFuncti
 import java.util.NoSuchElementException
 
 import cats.effect.IO
-import riichinexus.api.{APIMessage, ApiPlanContext}
-import riichinexus.bootstrap.ClubModuleContext
-import riichinexus.domain.model.*
+import riichinexus.system.api.{APIMessage, ApiPlanContext}
+import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
+import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.club.domain.functions.ClubIdGenerator
+import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
+import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
+import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
+import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
+import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
+import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
+import riichinexus.microservices.tournament.objects.tablemanagement.TableId
+import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
+import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
+import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
+import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
+import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
+import riichinexus.microservices.audit.domain.auditevent.AuditEventId
+import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
+import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.club.domain.Club
 import riichinexus.microservices.club.domain.clubmanagement.model.*
@@ -20,7 +41,7 @@ import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
 import riichinexus.microservices.player.domain.functions.PlayerRoleFunctions
 import riichinexus.microservices.auth.domain.*
-import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubAuthorization
 import riichinexus.microservices.club.objects.clubmanagement.ClubView
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
@@ -35,47 +56,42 @@ final case class RevokeClubAdminAPIMessage(
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
       actor <- IO.blocking(resolveOperatorActor(context))
-      module = context.support.clubModule
       command = RevokeClubAdminCommand(
         clubId = ClubId(clubId),
         playerId = PlayerId(playerId),
         actor = actor
       )
       club <- IO.blocking {
-        module.transactionManager.inTransaction {
-          revokeAdmin(context.connection, module, command)
+        {
+          revokeAdmin(context.connection, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
     yield ClubView.fromDomain(club)
 
   private def resolveOperatorActor(context: ApiPlanContext): AccessPrincipal =
     operatorId.filter(_.nonEmpty)
-      .map(id => AuthAccessPrincipalResolver.principal(context, PlayerId(id)))
+      .map(id => ResolveAccessPrincipal(PlayerId(id)).resolve(context.connection))
       .getOrElse(AccessPrincipalFunctions.system)
 
   private def revokeAdmin(
       connection: java.sql.Connection,
-      module: ClubModuleContext,
       command: RevokeClubAdminCommand
   ): Option[Club] =
     for
       club <- riichinexus.microservices.club.tables.clubs.ClubTable.findById(connection, command.clubId)
-      player <- GetPlayerAPIMessage.findPlayer(connection, command.playerId)
+      player <- PlayerPersistenceFunctions.findPlayer(connection, command.playerId)
     yield
-      ensureAdminCanBeRevoked(module, club, command)
-      CreatePlayerAPIMessage.persistPlayer(connection, PlayerRoleFunctions.revokeClubAdmin(player, command.clubId))
+      ensureAdminCanBeRevoked(club, command)
+      PlayerPersistenceFunctions.savePlayer(connection, PlayerRoleFunctions.revokeClubAdmin(player, command.clubId))
       riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, ClubFunctions.revokeAdmin(club, command.playerId))
 
   private def ensureAdminCanBeRevoked(
-      module: ClubModuleContext,
       club: Club,
       command: RevokeClubAdminCommand
   ): Unit =
     ClubAuthorization.ensureClubActive(club)
     ClubAuthorization.requireClubMember(club, command.playerId, "revoke club admin")
-    ClubAuthorization.requireClubAdmin(
-      module = module,
-      actor = command.actor,
+    ClubAuthorization.requireClubAdmin(actor = command.actor,
       club = club,
       permission = Permission.AssignClubAdmin
     )

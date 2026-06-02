@@ -2,7 +2,7 @@ package riichinexus.microservices.tournament.objects.tablemanagement
 
 import upickle.default.*
 
-enum TableStatus derives CanEqual:
+enum TableStatus:
   case WaitingPreparation
   case InProgress
   case Scoring

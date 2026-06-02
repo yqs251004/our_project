@@ -1,4 +1,5 @@
 package riichinexus.microservices.club.objects
+import riichinexus.microservices.auth.objects.Permission
 
 import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.time.Instant

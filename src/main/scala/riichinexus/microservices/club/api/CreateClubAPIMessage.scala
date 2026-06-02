@@ -1,5 +1,7 @@
 package riichinexus.microservices.club.api
-import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
+import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
+import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
+import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
 
 import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
@@ -8,9 +10,27 @@ import java.time.Instant
 import java.util.NoSuchElementException
 
 import cats.effect.IO
-import riichinexus.api.{APIMessage, ApiPlanContext}
-import riichinexus.bootstrap.ClubModuleContext
-import riichinexus.domain.model.*
+import riichinexus.system.api.{APIMessage, ApiPlanContext}
+import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
+import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.club.domain.functions.ClubIdGenerator
+import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
+import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
+import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
+import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
+import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
+import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
+import riichinexus.microservices.tournament.objects.tablemanagement.TableId
+import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
+import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
+import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
+import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
+import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
+import riichinexus.microservices.audit.domain.auditevent.AuditEventId
+import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
+import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.club.domain.Club
 import riichinexus.microservices.club.domain.clubmanagement.model.*
@@ -21,7 +41,7 @@ import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
 import riichinexus.microservices.player.domain.functions.{PlayerClubBindingFunctions, PlayerRoleFunctions}
 import riichinexus.microservices.auth.domain.*
-import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.{ClubAuthorization, ClubProjectionRefresher}
 import riichinexus.microservices.club.objects.clubmanagement.ClubView
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
@@ -35,9 +55,8 @@ final case class CreateClubAPIMessage(
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
       parsedCreatorId <- IO.blocking(PlayerId(creatorId))
-      actor <- IO.blocking(AuthAccessPrincipalResolver.principal(context, parsedCreatorId))
+      actor <- IO.blocking(ResolveAccessPrincipal(parsedCreatorId).resolve(context.connection))
       createdAt <- IO.realTimeInstant
-      module = context.support.clubModule
       command = CreateClubCommand(
         name = name,
         creatorId = parsedCreatorId,
@@ -45,17 +64,17 @@ final case class CreateClubAPIMessage(
         createdAt = createdAt
       )
       club <- IO.blocking {
-        module.transactionManager.inTransaction {
-          createClub(context.connection, module, command)
+        {
+          createClub(context.connection, command)
         }
       }
     yield ClubView.fromDomain(club)
 
-  private def createClub(connection: java.sql.Connection, module: ClubModuleContext, command: CreateClubCommand): Club =
+  private def createClub(connection: java.sql.Connection, command: CreateClubCommand): Club =
     val normalizedName = command.name.trim
     require(normalizedName.nonEmpty, "Club name cannot be empty")
 
-    val creator = GetPlayerAPIMessage.findPlayer(connection, command.creatorId)
+    val creator = PlayerPersistenceFunctions.findPlayer(connection, command.creatorId)
       .getOrElse(throw NoSuchElementException(s"Player ${command.creatorId.value} was not found"))
     requireActivePlayer(creator, s"Player ${command.creatorId.value} cannot create a club")
     ensureCreatorCanCreateClub(command.actor, command.creatorId)
@@ -66,9 +85,9 @@ final case class CreateClubAPIMessage(
       RoleGrantFunctions.clubAdmin(club.id, command.createdAt, command.actor.playerId)
     )
 
-    val savedCreator = CreatePlayerAPIMessage.persistPlayer(connection, updatedCreator)
+    val savedCreator = PlayerPersistenceFunctions.savePlayer(connection, updatedCreator)
     ClubProjectionRefresher.ensurePlayerDashboard(connection, savedCreator.id, command.createdAt)
-    riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, ClubProjectionRefresher.refreshClubProjection(connection, module, club, command.createdAt))
+    riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, ClubProjectionRefresher.refreshClubProjection(connection, club, command.createdAt))
 
   private def resolveClubToCreate(
       connection: java.sql.Connection,
@@ -85,7 +104,7 @@ final case class CreateClubAPIMessage(
         )
       case None =>
         Club(
-          id = IdGenerator.clubId(),
+          id = ClubIdGenerator.clubId(),
           name = normalizedName,
           creator = creatorId,
           createdAt = createdAt,

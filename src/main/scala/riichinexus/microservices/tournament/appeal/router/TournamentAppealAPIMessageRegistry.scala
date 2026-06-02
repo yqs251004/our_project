@@ -1,8 +1,7 @@
 package riichinexus.microservices.tournament.appeal.router
-import riichinexus.api.functions.RegisteredAPIMessageFunctions
+import riichinexus.system.api.RegisteredAPIMessage
 
-import riichinexus.api.RegisteredAPIMessage
-import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.tournament.appeal.api.*
 import riichinexus.microservices.tournament.appeal.objects.apiTypes.*
 import riichinexus.system.objects.PagedResponse
@@ -11,11 +10,11 @@ object TournamentAppealAPIMessageRegistry:
 
   val apiMessages: Vector[RegisteredAPIMessage] =
     Vector(
-      RegisteredAPIMessageFunctions.api[AppealFileAPIMessage, AppealTicketView],
-      RegisteredAPIMessageFunctions.api[AppealListAPIMessage, PagedResponse[AppealTicketView]],
-      RegisteredAPIMessageFunctions.api[AppealGetAPIMessage, AppealTicketView],
-      RegisteredAPIMessageFunctions.api[AppealResolveAPIMessage, AppealTicketView],
-      RegisteredAPIMessageFunctions.api[AppealAdjudicateAPIMessage, AppealTicketView],
-      RegisteredAPIMessageFunctions.api[AppealUpdateWorkflowAPIMessage, AppealTicketView],
-      RegisteredAPIMessageFunctions.api[AppealReopenAPIMessage, AppealTicketView]
+      RegisteredAPIMessage.api[AppealFileAPIMessage, AppealTicketView],
+      RegisteredAPIMessage.api[AppealListAPIMessage, PagedResponse[AppealTicketView]],
+      RegisteredAPIMessage.api[AppealGetAPIMessage, AppealTicketView],
+      RegisteredAPIMessage.api[AppealResolveAPIMessage, AppealTicketView],
+      RegisteredAPIMessage.api[AppealAdjudicateAPIMessage, AppealTicketView],
+      RegisteredAPIMessage.api[AppealUpdateWorkflowAPIMessage, AppealTicketView],
+      RegisteredAPIMessage.api[AppealReopenAPIMessage, AppealTicketView]
     )

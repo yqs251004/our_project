@@ -6,4 +6,4 @@ private[opsanalytics] final case class ExactRoundStats(
     postRiichiDiscardCount: Int,
     safePostRiichiDiscardCount: Int,
     foldDiscardCount: Int
-) derives CanEqual
+)

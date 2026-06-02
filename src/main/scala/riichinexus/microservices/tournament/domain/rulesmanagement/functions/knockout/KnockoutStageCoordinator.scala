@@ -1,4 +1,5 @@
 package riichinexus.microservices.tournament.domain.rulesmanagement.functions.knockout
+import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
 
 import riichinexus.microservices.tournament.domain.lineupmanagement.functions.*
 import riichinexus.microservices.tournament.domain.paifumanagement.functions.*
@@ -16,8 +17,27 @@ import java.time.Instant
 import java.util.NoSuchElementException
 
 import cats.effect.unsafe.implicits.global
-import riichinexus.api.ApiPlanContext
-import riichinexus.domain.model.*
+import riichinexus.system.api.ApiPlanContext
+import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
+import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.club.domain.functions.ClubIdGenerator
+import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
+import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
+import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
+import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
+import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
+import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
+import riichinexus.microservices.tournament.objects.tablemanagement.TableId
+import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
+import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
+import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
+import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
+import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
+import riichinexus.microservices.audit.domain.auditevent.AuditEventId
+import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
+import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.club.api.`private`.ResolveClubsPrivateAPIMessage
 import riichinexus.microservices.tournament.domain.tablemanagement.functions.TableFunctions
 import riichinexus.microservices.tournament.domain.tournamentmanagement.functions.{TournamentFunctions, TournamentStageFunctions}
@@ -33,7 +53,6 @@ import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
 import riichinexus.microservices.club.domain.relationmanagement.model.*
 import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
-import riichinexus.application.ports.TransactionManager
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import riichinexus.microservices.tournament.objects.rulesmanagement.knockout.KnockoutBracketSnapshot
 import riichinexus.microservices.tournament.objects.tablemanagement.{SeatWind, TableSeat, TableStatus}
@@ -97,12 +116,11 @@ object KnockoutStageCoordinator:
 
   def materializeUnlockedTables(
       connection: Connection,
-      transactionManager: TransactionManager,
       tournamentId: TournamentId,
       stageId: TournamentStageId,
       at: Instant = Instant.now()
   ): Vector[Table] =
-    transactionManager.inTransaction {
+    {
       val tournament = TournamentTable
         .findById(connection, tournamentId)
         .getOrElse(throw NoSuchElementException(s"Tournament ${tournamentId.value} was not found"))
@@ -140,7 +158,7 @@ object KnockoutStageCoordinator:
 
           TableFunctions.bindKnockoutMatch(
             Table(
-              id = IdGenerator.tableId(),
+              id = TournamentIdGenerator.tableId(),
               tableNo = startingTableNo + index + 1,
               tournamentId = tournamentId,
               stageId = stageId,
@@ -174,15 +192,14 @@ object KnockoutStageCoordinator:
 
   def reconcileAfterMatchMutation(
       connection: Connection,
-      transactionManager: TransactionManager,
       tournamentId: TournamentId,
       stageId: TournamentStageId,
       mutatedMatchId: String,
       at: Instant = Instant.now()
   ): Vector[Table] =
-    transactionManager.inTransaction {
+    {
       pruneDependentTables(connection, tournamentId, stageId, mutatedMatchId)
-      materializeUnlockedTables(connection, transactionManager, tournamentId, stageId, at)
+      materializeUnlockedTables(connection, tournamentId, stageId, at)
     }
 
   private def requireStage(
@@ -223,7 +240,7 @@ object KnockoutStageCoordinator:
 
       (tournament.participatingPlayers ++ whitelistedPlayers ++ registeredClubMembers ++ whitelistedClubMembers).distinct
 
-    val playersById = ListPlayersAPIMessage.findPlayersByIds(connection, (stage.lineupSubmissions.flatMap(_.seats.map(_.playerId)) ++ fallbackPlayerIds).distinct)
+    val playersById = PlayerPersistenceFunctions.findPlayersByIds(connection, (stage.lineupSubmissions.flatMap(_.seats.map(_.playerId)) ++ fallbackPlayerIds).distinct)
       .map(player => player.id -> player)
       .toMap
     val stagePlayerIds = StageLineupResolver.resolveEligiblePlayers(stage, playersById.get)

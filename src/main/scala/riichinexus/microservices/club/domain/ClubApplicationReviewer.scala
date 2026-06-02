@@ -1,12 +1,32 @@
 package riichinexus.microservices.club.domain
+import riichinexus.microservices.auth.objects.Permission
+import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
 
 import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.sql.Connection
 import java.time.Instant
 import java.util.NoSuchElementException
 
-import riichinexus.bootstrap.ClubModuleContext
-import riichinexus.domain.model.*
+import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
+import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.club.domain.functions.ClubIdGenerator
+import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
+import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
+import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
+import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
+import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
+import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
+import riichinexus.microservices.tournament.objects.tablemanagement.TableId
+import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
+import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
+import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
+import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
+import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
+import riichinexus.microservices.audit.domain.auditevent.AuditEventId
+import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
+import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.club.domain.Club
 import riichinexus.microservices.club.domain.clubmanagement.model.*
@@ -23,7 +43,6 @@ import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAP
 object ClubApplicationReviewer:
   def approve(
       connection: Connection,
-      module: ClubModuleContext,
       parsedClubId: ClubId,
       parsedMembershipId: MembershipApplicationId,
       parsedPlayerId: PlayerId,
@@ -31,16 +50,14 @@ object ClubApplicationReviewer:
       note: Option[String],
       approvedAt: Instant
   ): Option[Club] =
-    module.transactionManager.inTransaction {
+    {
       for
         club <- riichinexus.microservices.club.tables.clubs.ClubTable.findById(connection, parsedClubId)
-        player <- GetPlayerAPIMessage.findPlayer(connection, parsedPlayerId)
+        player <- PlayerPersistenceFunctions.findPlayer(connection, parsedPlayerId)
       yield
         ClubAuthorization.ensureClubActive(club)
         requireActivePlayer(player, s"Player ${parsedPlayerId.value} cannot be approved into a club")
-        ClubAuthorization.requireClubCapability(
-          module = module,
-          actor = actor,
+        ClubAuthorization.requireClubCapability(          actor = actor,
           club = club,
           permission = Permission.ManageClubMembership,
           delegatedPrivileges = Set(ClubPrivilegeCode.ApproveRoster)
@@ -77,26 +94,23 @@ object ClubApplicationReviewer:
           parsedPlayerId
         )
 
-        val savedPlayer = CreatePlayerAPIMessage.persistPlayer(connection, PlayerClubBindingFunctions.joinClub(player, parsedClubId))
+        val savedPlayer = PlayerPersistenceFunctions.savePlayer(connection, PlayerClubBindingFunctions.joinClub(player, parsedClubId))
         ClubProjectionRefresher.ensurePlayerDashboard(connection, savedPlayer.id, approvedAt)
-        riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, ClubProjectionRefresher.refreshClubProjection(connection, module, updatedClub, approvedAt))
+        riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, ClubProjectionRefresher.refreshClubProjection(connection, updatedClub, approvedAt))
     }
 
   def reject(
       connection: Connection,
-      module: ClubModuleContext,
       parsedClubId: ClubId,
       parsedMembershipId: MembershipApplicationId,
       actor: AccessPrincipal,
       note: Option[String],
       rejectedAt: Instant
   ): Option[Club] =
-    module.transactionManager.inTransaction {
+    {
       riichinexus.microservices.club.tables.clubs.ClubTable.findById(connection, parsedClubId).map { club =>
         ClubAuthorization.ensureClubActive(club)
-        ClubAuthorization.requireClubCapability(
-          module = module,
-          actor = actor,
+        ClubAuthorization.requireClubCapability(          actor = actor,
           club = club,
           permission = Permission.ManageClubMembership,
           delegatedPrivileges = Set(ClubPrivilegeCode.ApproveRoster)

@@ -1,5 +1,9 @@
 package riichinexus.microservices.tournament.api
-import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
+import riichinexus.microservices.audit.domain.auditevent.AuditEvent
+import riichinexus.microservices.auth.objects.Permission
+import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
+import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPIMessage
+import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
 
 import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
@@ -9,10 +13,27 @@ import java.util.NoSuchElementException
 import java.time.Instant
 
 import cats.effect.IO
-import riichinexus.api.{APIMessage, ApiPlanContext}
-import riichinexus.application.changes.DomainChangeInterpreter
-import riichinexus.bootstrap.TournamentModuleContext
-import riichinexus.domain.model.*
+import riichinexus.system.api.{APIMessage, ApiPlanContext}
+import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
+import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.club.domain.functions.ClubIdGenerator
+import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
+import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
+import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
+import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
+import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
+import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
+import riichinexus.microservices.tournament.objects.tablemanagement.TableId
+import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
+import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
+import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
+import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
+import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
+import riichinexus.microservices.audit.domain.auditevent.AuditEventId
+import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
+import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.tournament.domain.settlementmanagement.functions.TournamentSettlementSnapshotFunctions
 import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
@@ -20,14 +41,7 @@ import riichinexus.microservices.tournament.domain.recordmanagement.model.*
 import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
 import riichinexus.microservices.tournament.domain.tablemanagement.model.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
-import riichinexus.infrastructure.json.JsonCodecs.given
-import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
+import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
@@ -42,9 +56,8 @@ final case class TournamentSettlementFinalizeAPIMessage(tournamentId: String, se
 
   override def plan(context: ApiPlanContext): IO[TournamentSettlementView] =
     for
-      actor <- IO.blocking(AuthAccessPrincipalResolver.principal(context, PlayerId(request.operatorId)))
+      actor <- IO.blocking(ResolveAccessPrincipal(PlayerId(request.operatorId)).resolve(context.connection))
       finalizedAt <- IO.realTimeInstant
-      module = context.support.tournamentModule
       command = FinalizeSettlementCommand(
         tournamentId = TournamentId(tournamentId),
         settlementId = SettlementSnapshotId(settlementId),
@@ -52,29 +65,28 @@ final case class TournamentSettlementFinalizeAPIMessage(tournamentId: String, se
         note = request.note,
         finalizedAt = finalizedAt
       )
-      settlement <- IO.blocking {
-        module.transactionManager.inTransaction {
-          finalizeSettlement(context.connection, module, command)
+      finalized <- IO.blocking {
+        {
+          finalizeSettlement(context.connection, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
-    yield TournamentSettlementView.fromDomain(settlement)
+      _ <- RecordAuditEventsPrivateAPIMessage(finalizeSettlementAudit(finalized, command)).plan(context)
+    yield TournamentSettlementView.fromDomain(finalized)
 
   private def finalizeSettlement(
       connection: java.sql.Connection,
-      module: TournamentModuleContext,
       command: FinalizeSettlementCommand
   ): Option[TournamentSettlementSnapshot] =
-    requireFinalizePermission(module, command)
+    requireFinalizePermission(command)
     riichinexus.microservices.tournament.tables.settlement.TournamentSettlementTable
       .findById(connection, command.settlementId)
       .filter(_.tournamentId == command.tournamentId)
-      .map(settlement => commitFinalizedSettlement(connection, module, command, settlement))
+      .map(settlement => commitFinalizedSettlement(connection, command, settlement))
 
   private def requireFinalizePermission(
-      module: TournamentModuleContext,
       command: FinalizeSettlementCommand
   ): Unit =
-    AuthorizationPolicyFunctions.requirePermission(module.authorizationService, 
+    AuthorizationPolicyFunctions.requirePermission(AuthorizationPolicyFunctions.strict, 
       command.actor,
       Permission.ManageTournamentStages,
       tournamentId = Some(command.tournamentId)
@@ -82,32 +94,35 @@ final case class TournamentSettlementFinalizeAPIMessage(tournamentId: String, se
 
   private def commitFinalizedSettlement(
       connection: java.sql.Connection,
-      module: TournamentModuleContext,
       command: FinalizeSettlementCommand,
       settlement: TournamentSettlementSnapshot
   ): TournamentSettlementSnapshot =
-    DomainChangeInterpreter
-      .auditOnly(module.transactionManager, module.auditEventRepository)
-      .commitAudited(
-        aggregate =
-          if settlement.status == riichinexus.microservices.tournament.objects.settlementmanagement.TournamentSettlementStatus.Finalized then settlement
-          else TournamentSettlementSnapshotFunctions.finalize(settlement, command.finalizedAt),
-        persist = finalized =>
-          if settlement.status == riichinexus.microservices.tournament.objects.settlementmanagement.TournamentSettlementStatus.Finalized then finalized
-          else riichinexus.microservices.tournament.tables.settlement.TournamentSettlementTable.save(connection, finalized),
+    val finalized =
+      if settlement.status == riichinexus.microservices.tournament.objects.settlementmanagement.TournamentSettlementStatus.Finalized then settlement
+      else TournamentSettlementSnapshotFunctions.finalize(settlement, command.finalizedAt)
+    if settlement.status == riichinexus.microservices.tournament.objects.settlementmanagement.TournamentSettlementStatus.Finalized then finalized
+    else riichinexus.microservices.tournament.tables.settlement.TournamentSettlementTable.save(connection, finalized)
+
+  private def finalizeSettlementAudit(
+      finalized: TournamentSettlementSnapshot,
+      command: FinalizeSettlementCommand
+  ): Vector[AuditEvent] =
+    Vector(
+      AuditEvent(
+        id = AuditIdGenerator.auditEventId(),
         aggregateType = "tournament",
-        aggregateId = _.tournamentId.value,
+        aggregateId = finalized.tournamentId.value,
         eventType = "TournamentSettlementFinalized",
         occurredAt = command.finalizedAt,
         actorId = command.actor.playerId,
-        details = finalized =>
-          Map(
-            "stageId" -> finalized.stageId.value,
-            "settlementId" -> finalized.id.value,
-            "revision" -> finalized.revision.toString
-          ),
-        note = command.note.orElse(Some(s"Finalized settlement ${settlement.id.value}"))
+        details = Map(
+          "stageId" -> finalized.stageId.value,
+          "settlementId" -> finalized.id.value,
+          "revision" -> finalized.revision.toString
+        ),
+        note = command.note.orElse(Some(s"Finalized settlement ${finalized.id.value}"))
       )
+    )
 
   private final case class FinalizeSettlementCommand(
       tournamentId: TournamentId,

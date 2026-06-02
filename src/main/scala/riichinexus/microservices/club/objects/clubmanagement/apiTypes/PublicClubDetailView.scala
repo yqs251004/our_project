@@ -21,7 +21,7 @@ final case class PublicClubDetailView(
     applicationPolicy: ClubApplicationPolicyView,
     currentLineup: Vector[PublicClubLineupMemberView],
     recentMatches: Vector[PublicClubRecentMatchView]
-) derives CanEqual
+)
 
 object PublicClubDetailView:
   given ReadWriter[PublicClubDetailView] = macroRW

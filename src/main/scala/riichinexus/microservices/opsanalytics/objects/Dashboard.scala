@@ -13,4 +13,4 @@ final case class Dashboard(
     topFinishRate: Double,
     lastUpdatedAt: Instant,
     version: Int = 0
-) derives CanEqual
+)

@@ -1,10 +1,29 @@
 package riichinexus.microservices.club.domain
+import riichinexus.microservices.auth.objects.Permission
 
 import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
 import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
-import riichinexus.bootstrap.ClubModuleContext
-import riichinexus.domain.model.*
+import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
+import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.club.domain.functions.ClubIdGenerator
+import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
+import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
+import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
+import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
+import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
+import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
+import riichinexus.microservices.tournament.objects.tablemanagement.TableId
+import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
+import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
+import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
+import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
+import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
+import riichinexus.microservices.audit.domain.auditevent.AuditEventId
+import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
+import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.club.domain.Club
 import riichinexus.microservices.club.domain.clubmanagement.model.*
@@ -26,12 +45,11 @@ object ClubAuthorization:
       )
 
   def requireClubAdmin(
-      module: ClubModuleContext,
       actor: AccessPrincipal,
       club: Club,
       permission: Permission
   ): Unit =
-    requireClubAdmin(module.authorizationService, actor, club, permission)
+    requireClubAdmin(AuthorizationPolicyFunctions.strict, actor, club, permission)
 
   def requireClubAdmin(
       authorizationService: AuthorizationPolicy,
@@ -48,13 +66,12 @@ object ClubAuthorization:
     )
 
   def requireClubCapability(
-      module: ClubModuleContext,
       actor: AccessPrincipal,
       club: Club,
       permission: Permission,
       delegatedPrivileges: Set[ClubPrivilegeCode] = Set.empty
   ): Unit =
-    requireClubCapability(module.authorizationService, actor, club, permission, delegatedPrivileges)
+    requireClubCapability(AuthorizationPolicyFunctions.strict, actor, club, permission, delegatedPrivileges)
 
   def requireClubCapability(
       authorizationService: AuthorizationPolicy,
@@ -88,11 +105,10 @@ object ClubAuthorization:
       throw AuthorizationFailure(s"${actor.displayName} cannot manage membership applications for club ${club.id.value}")
 
   def canManageClubTournamentParticipation(
-      module: ClubModuleContext,
       actor: AccessPrincipal,
       club: Club
   ): Boolean =
-    canManageClubTournamentParticipation(module.authorizationService, actor, club)
+    canManageClubTournamentParticipation(AuthorizationPolicyFunctions.strict, actor, club)
 
   def canManageClubTournamentParticipation(
       authorizationService: AuthorizationPolicy,

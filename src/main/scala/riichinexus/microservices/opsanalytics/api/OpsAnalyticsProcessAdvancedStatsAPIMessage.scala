@@ -1,16 +1,38 @@
 package riichinexus.microservices.opsanalytics.api
-import riichinexus.microservices.auth.api.`private`.AuthAccessPrincipalResolver
+import riichinexus.microservices.auth.objects.Permission
+import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
+import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
+import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
 
 import cats.effect.unsafe.implicits.global
-import riichinexus.api.ApiPlanContext
+import riichinexus.system.api.ApiPlanContext
 import java.time.{Duration, Instant}
 import java.util.NoSuchElementException
 
 import cats.effect.IO
-import riichinexus.api.{APIMessage, ApiPlanContext}
-import riichinexus.application.ports.OptimisticConcurrencyException
-import riichinexus.bootstrap.OpsAnalyticsModuleContext
-import riichinexus.domain.model.*
+import riichinexus.system.api.{APIMessage, ApiPlanContext}
+import riichinexus.system.errors.OptimisticConcurrencyException
+import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
+import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.club.domain.functions.ClubIdGenerator
+import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
+import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
+import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
+import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
+import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
+import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
+import riichinexus.microservices.tournament.objects.tablemanagement.TableId
+import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
+import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
+import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
+import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
+import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
+import riichinexus.microservices.audit.domain.auditevent.AuditEventId
+import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
+import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
+import riichinexus.microservices.auth.domain.AuthorizationFailure
 import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
 import riichinexus.microservices.tournament.domain.recordmanagement.model.*
@@ -27,7 +49,7 @@ import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
 import riichinexus.microservices.opsanalytics.domain.functions.AdvancedStatsBoardFunctions
 import riichinexus.microservices.opsanalytics.domain.functions.AdvancedStatsRecomputeTaskFunctions
-import riichinexus.infrastructure.json.JsonCodecs.given
+import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.opsanalytics.objects.*
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import riichinexus.microservices.tournament.api.`private`.{
@@ -44,16 +66,21 @@ final case class OpsAnalyticsProcessAdvancedStatsAPIMessage(
   override def plan(context: ApiPlanContext): IO[Vector[AdvancedStatsRecomputeTask]] =
     for
       _ <- IO.blocking(validateLimit())
-      operator <- IO.blocking(AuthAccessPrincipalResolver.principal(context, operatorId))
+      operator <- IO.blocking(ResolveAccessPrincipal(operatorId).resolve(context.connection))
       processedAt <- IO.realTimeInstant
-      module = context.support.opsAnalyticsModule
       command = ProcessAdvancedStatsCommand(operator, limit, processedAt)
-      _ <- IO.blocking(requireOpsAdmin(context, command.operator))
-      tasks <- IO.blocking(processPending(context.connection, module, command))
+      _ <- requireOpsAdmin(context, command.operator)
+      tasks <- IO.blocking(processPending(context.connection, command))
     yield tasks
 
-  private def requireOpsAdmin(context: ApiPlanContext, operator: AccessPrincipal): Unit =
-    riichinexus.microservices.auth.domain.functions.AuthorizationPolicyFunctions.requirePermission(context.support.authorizationService, operator, Permission.ManagePlatformOperations)
+  private def requireOpsAdmin(context: ApiPlanContext, operator: AccessPrincipal): IO[Unit] =
+    AuthCheckPermissionAPIMessage(
+      principal = Some(operator),
+      permission = Permission.ManagePlatformOperations
+    ).plan(context).flatMap { allowed =>
+      if allowed then IO.unit
+      else IO.raiseError(AuthorizationFailure(s"${operator.displayName} is not allowed to manage platform operations"))
+    }
 
   private def validateLimit(): Unit =
     if limit <= 0 then throw IllegalArgumentException("Advanced stats task processing limit must be positive")
@@ -63,7 +90,6 @@ final case class OpsAnalyticsProcessAdvancedStatsAPIMessage(
 
   private def processPending(
       connection: java.sql.Connection,
-      module: OpsAnalyticsModuleContext,
       command: ProcessAdvancedStatsCommand
   ): Vector[AdvancedStatsRecomputeTask] =
     riichinexus.microservices.opsanalytics.tables.advancedstatsrecomputetask.AdvancedStatsRecomputeTaskTable.findPending(connection, command.limit, command.processedAt).flatMap { task =>
@@ -83,12 +109,12 @@ final case class OpsAnalyticsProcessAdvancedStatsAPIMessage(
         try
           processing.owner match
             case DashboardOwner.Player(playerId) =>
-              riichinexus.microservices.opsanalytics.tables.advancedstatsboard.AdvancedStatsBoardTable.save(connection, rebuildPlayerBoard(connection, module, playerId, command.processedAt))
+              riichinexus.microservices.opsanalytics.tables.advancedstatsboard.AdvancedStatsBoardTable.save(connection, rebuildPlayerBoard(connection, playerId, command.processedAt))
             case DashboardOwner.Club(clubId) =>
               val club = ResolveClubPrivateAPIMessage(clubId).plan(ApiPlanContext(support = null, bearerToken = None, connection = connection)).unsafeRunSync().getOrElse(
                 throw NoSuchElementException(s"Club ${clubId.value} was not found")
               )
-              riichinexus.microservices.opsanalytics.tables.advancedstatsboard.AdvancedStatsBoardTable.save(connection, rebuildClubBoard(connection, module, club, command.processedAt))
+              riichinexus.microservices.opsanalytics.tables.advancedstatsboard.AdvancedStatsBoardTable.save(connection, rebuildClubBoard(connection, club, command.processedAt))
 
           try
             riichinexus.microservices.opsanalytics.tables.advancedstatsrecomputetask.AdvancedStatsRecomputeTaskTable.save(
@@ -123,7 +149,6 @@ final case class OpsAnalyticsProcessAdvancedStatsAPIMessage(
 
   private def rebuildPlayerBoard(
       connection: java.sql.Connection,
-      module: OpsAnalyticsModuleContext,
       playerId: PlayerId,
       at: Instant
   ): AdvancedStatsBoard =
@@ -139,14 +164,13 @@ final case class OpsAnalyticsProcessAdvancedStatsAPIMessage(
 
   private def rebuildClubBoard(
       connection: java.sql.Connection,
-      module: OpsAnalyticsModuleContext,
       club: Club,
       at: Instant
   ): AdvancedStatsBoard =
     val memberBoards = club.members.flatMap { playerId =>
-      GetPlayerAPIMessage.findPlayer(connection, playerId)
+      PlayerPersistenceFunctions.findPlayer(connection, playerId)
         .filter(_.status == PlayerStatus.Active)
-        .map(_ => rebuildPlayerBoard(connection, module, playerId, at))
+        .map(_ => rebuildPlayerBoard(connection, playerId, at))
     }
     val existingVersion =
       riichinexus.microservices.opsanalytics.tables.advancedstatsboard.AdvancedStatsBoardTable.findByOwner(connection, DashboardOwner.Club(club.id)).map(_.version).getOrElse(0)

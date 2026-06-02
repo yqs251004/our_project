@@ -7,4 +7,4 @@ final case class ClubRankNode(
     label: String,
     minimumContribution: Int,
     privileges: Vector[ClubPrivilegeCode] = Vector.empty
-) derives CanEqual, ReadWriter
+) derives ReadWriter

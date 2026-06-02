@@ -19,7 +19,7 @@ final case class PublicClubDirectoryEntry(
     strongestRivalPower: Option[Double],
     honorTitles: Vector[String],
     relations: Vector[ClubRelationView]
-) derives CanEqual
+)
 
 object PublicClubDirectoryEntry:
   given ReadWriter[PublicClubDirectoryEntry] = macroRW

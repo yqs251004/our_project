@@ -1,18 +1,38 @@
 package riichinexus.microservices.auth.api
-import riichinexus.microservices.auth.api.`private`.CurrentSessionViewResolver
+import riichinexus.microservices.auth.domain.AuthenticationFailure
+import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
 
 import java.time.Instant
 
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
-import riichinexus.api.{APIMessage, ApiPlanContext}
-import riichinexus.bootstrap.AuthModuleContext
-import riichinexus.domain.model.*
+import riichinexus.system.api.{APIMessage, ApiPlanContext}
+import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
+import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.club.domain.functions.ClubIdGenerator
+import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
+import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
+import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
+import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
+import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
+import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
+import riichinexus.microservices.tournament.objects.tablemanagement.TableId
+import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
+import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
+import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
+import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
+import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
+import riichinexus.microservices.audit.domain.auditevent.AuditEventId
+import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
+import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
 import riichinexus.microservices.auth.domain.functions.{AccountCredentialFunctions, AuthenticatedSessionFunctions, PasswordHashFunctions}
 import riichinexus.microservices.auth.domain.model.{AccountCredential, AuthenticatedSession}
-import riichinexus.microservices.auth.objects.apiTypes.AuthSuccessView
+import riichinexus.microservices.auth.objects.Role
+import riichinexus.microservices.auth.objects.apiTypes.{AuthSuccessView, CurrentSessionRoleFlags}
 import riichinexus.microservices.auth.security.PasswordSaltGenerator
 import riichinexus.microservices.auth.tables.accountcredential.AccountCredentialTable
 import riichinexus.microservices.auth.tables.authenticatedsession.AuthenticatedSessionTable
@@ -31,7 +51,6 @@ final case class RegisterAuthAPIMessage(
   override def plan(context: ApiPlanContext): IO[AuthSuccessView] =
     for
       registeredAt <- IO.realTimeInstant
-      module = context.support.authModule
       command = RegisterAuthCommand(
         username = AccountCredentialFunctions.normalizeUsername(username),
         password = password,
@@ -39,8 +58,8 @@ final case class RegisterAuthAPIMessage(
         registeredAt = registeredAt
       )
       result <- IO.blocking {
-        module.transactionManager.inTransaction {
-          register(context, module, command)
+        {
+          register(context, command)
         }
       }
     yield AuthSuccessView(
@@ -48,10 +67,10 @@ final case class RegisterAuthAPIMessage(
       username = result.username,
       displayName = result.player.nickname,
       token = result.session.token,
-      roles = CurrentSessionViewResolver.registeredRoleFlags(result.player)
+      roles = registeredRoleFlags(result.player)
     )
 
-  private def register(context: ApiPlanContext, module: AuthModuleContext, command: RegisterAuthCommand): RegisterAuthResult =
+  private def register(context: ApiPlanContext, command: RegisterAuthCommand): RegisterAuthResult =
     val connection = context.connection
     validatePassword(command.password)
     if AccountCredentialTable.findByUsername(connection, command.username).nonEmpty then
@@ -75,13 +94,13 @@ final case class RegisterAuthAPIMessage(
       context: ApiPlanContext,
       command: RegisterAuthCommand
   ): Player =
-    ListPlayersAPIMessage.findAllPlayers(context.connection).find(_.userId.equalsIgnoreCase(command.username)) match
+    PlayerPersistenceFunctions.findAllPlayers(context.connection).find(_.userId.equalsIgnoreCase(command.username)) match
       case Some(existing) if existing.nickname == command.displayName =>
         existing
       case Some(existing) =>
-        CreatePlayerAPIMessage.persistPlayer(context.connection, existing.copy(nickname = command.displayName))
+        PlayerPersistenceFunctions.savePlayer(context.connection, existing.copy(nickname = command.displayName))
       case None =>
-        CreatePlayerAPIMessage.createPlayer(
+        PlayerPersistenceFunctions.createPlayer(
           connection = context.connection,
           userId = command.username,
           nickname = command.displayName,
@@ -120,10 +139,19 @@ final case class RegisterAuthAPIMessage(
 
   private def ensureActivePlayer(player: Player): Unit =
     if player.status != PlayerStatus.Active then
-      throw riichinexus.domain.service.AuthenticationFailure(
+      throw AuthenticationFailure(
         s"Player ${player.id.value} is not active",
         "inactive_account"
       )
+
+  private def registeredRoleFlags(player: Player): CurrentSessionRoleFlags =
+    CurrentSessionRoleFlags(
+      isGuest = false,
+      isRegisteredPlayer = true,
+      isClubAdmin = player.roleGrants.exists(_.role == Role.ClubAdmin),
+      isTournamentAdmin = player.roleGrants.exists(_.role == Role.TournamentAdmin),
+      isSuperAdmin = player.roleGrants.exists(_.role == Role.SuperAdmin)
+    )
 
   private final case class RegisterAuthCommand(
       username: String,

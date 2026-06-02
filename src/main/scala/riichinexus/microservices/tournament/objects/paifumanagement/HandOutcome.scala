@@ -2,7 +2,7 @@ package riichinexus.microservices.tournament.objects.paifumanagement
 
 import upickle.default.*
 
-enum HandOutcome derives CanEqual:
+enum HandOutcome:
   case Tsumo
   case Ron
   case ExhaustiveDraw

@@ -1,4 +1,5 @@
 package riichinexus.microservices.tournament.domain.paifumanagement.functions
+import riichinexus.microservices.auth.objects.Permission
 
 import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
@@ -18,12 +19,28 @@ import riichinexus.microservices.tournament.objects.paifumanagement.{HandOutcome
 import java.sql.Connection
 
 import cats.effect.unsafe.implicits.global
-import riichinexus.api.ApiPlanContext
-import riichinexus.application.changes.{DomainChange, DomainChangeInterpreter}
-import riichinexus.application.ports.{AuditEventRepository, DomainEventBus, TransactionManager}
-import riichinexus.domain.model.*
+import riichinexus.system.api.ApiPlanContext
+import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
+import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.club.domain.functions.ClubIdGenerator
+import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
+import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
+import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
+import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
+import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
+import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
+import riichinexus.microservices.tournament.objects.tablemanagement.TableId
+import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
+import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
+import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
+import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
+import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
+import riichinexus.microservices.audit.domain.auditevent.AuditEventId
+import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
+import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.opsanalytics.api.`private`.RefreshOpsAnalyticsAfterMatchArchivedPrivateAPIMessage
-import riichinexus.microservices.tournament.domain.events.MatchRecordArchived
 import riichinexus.microservices.tournament.domain.recordmanagement.functions.MatchRecordFunctions
 import riichinexus.microservices.tournament.domain.paifumanagement.functions.{PaifuFunctions, PaifuTileFunctions}
 import riichinexus.microservices.tournament.domain.tablemanagement.functions.TableFunctions
@@ -37,9 +54,6 @@ import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.microservices.tournament.domain.tablemanagement.model.Table
 
 final class TournamentPaifuArchiveService(
-    auditEventRepository: AuditEventRepository,
-    eventBus: DomainEventBus,
-    transactionManager: TransactionManager,
     authorizationService: AuthorizationPolicy
 ):
   def archivePaifu(
@@ -57,10 +71,10 @@ final class TournamentPaifuArchiveService(
       validatePaifu(table, paifu)
       ensureNotArchived(connection, tableId)
 
-      val archived = commitArchivedPaifu(connection, table, paifu, actor)
-      refreshOpsAnalytics(connection, archived, paifu.metadata.recordedAt)
+      val commit = commitArchivedPaifu(connection, table, paifu, actor)
+      refreshOpsAnalytics(connection, commit, paifu.metadata.recordedAt)
       materializeUnlockedTables(connection, table, paifu)
-      archived.table
+      commit.table
     }
 
   private def ensureNotArchived(connection: Connection, id: TableId): Unit =
@@ -79,47 +93,23 @@ final class TournamentPaifuArchiveService(
       metadata = paifu.metadata.copy(matchRecordId = Some(provisionalRecord.id))
     )
 
-    DomainChangeInterpreter
-      .auditAndEvents(transactionManager, auditEventRepository, eventBus)
-      .commitWithinTransaction(
-        DomainChange(
-          aggregate = ArchivedPaifuChange(
-            table = TableFunctions.archive(
-              TableFunctions.enterScoring(table, paifu.metadata.recordedAt),
-              provisionalRecord.id,
-              linkedPaifu.id,
-              paifu.metadata.recordedAt
-            ),
-            matchRecord = provisionalRecord.copy(paifuId = Some(linkedPaifu.id)),
-            paifu = linkedPaifu
-          ),
-          persist = change =>
-            val storedPaifu = riichinexus.microservices.tournament.tables.paifu.PaifuTable.save(connection, change.paifu)
-            val storedRecord =
-              riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTable.save(connection, change.matchRecord.copy(paifuId = Some(storedPaifu.id)))
-            val archivedTable = riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.save(
-              connection,
-              TableFunctions.archive(
-                TableFunctions.enterScoring(table, paifu.metadata.recordedAt),
-                storedRecord.id,
-                storedPaifu.id,
-                paifu.metadata.recordedAt
-              )
-            )
-            change.copy(table = archivedTable, matchRecord = storedRecord, paifu = storedPaifu),
-          domainEvents = change =>
-            Vector(
-              MatchRecordArchived(
-                tableId = table.id,
-                tournamentId = table.tournamentId,
-                stageId = table.stageId,
-                matchRecord = change.matchRecord,
-                paifu = Some(change.paifu),
-                occurredAt = paifu.metadata.recordedAt
-              )
-            )
-        )
+    val storedPaifu = riichinexus.microservices.tournament.tables.paifu.PaifuTable.save(connection, linkedPaifu)
+    val storedRecord =
+      riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTable.save(connection, provisionalRecord.copy(paifuId = Some(storedPaifu.id)))
+    val archivedTable = riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.save(
+      connection,
+      TableFunctions.archive(
+        TableFunctions.enterScoring(table, paifu.metadata.recordedAt),
+        storedRecord.id,
+        storedPaifu.id,
+        paifu.metadata.recordedAt
       )
+    )
+    ArchivedPaifuChange(
+      table = archivedTable,
+      matchRecord = storedRecord,
+      paifu = storedPaifu
+    )
 
   private def materializeUnlockedTables(
       connection: Connection,
@@ -129,7 +119,6 @@ final class TournamentPaifuArchiveService(
     if table.bracketMatchId.nonEmpty then
       KnockoutStageCoordinator.materializeUnlockedTables(
         connection,
-        transactionManager,
         table.tournamentId,
         table.stageId,
         paifu.metadata.recordedAt

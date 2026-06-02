@@ -1,4 +1,6 @@
 package riichinexus.microservices.tournament.appeal.domain
+import riichinexus.microservices.auth.objects.Permission
+import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
 
 import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
@@ -8,9 +10,26 @@ import java.sql.Connection
 import java.time.Instant
 import java.util.NoSuchElementException
 
-import riichinexus.application.changes.{DomainChange, DomainChangeInterpreter}
-import riichinexus.application.ports.*
-import riichinexus.domain.model.*
+import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
+import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.club.domain.functions.ClubIdGenerator
+import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
+import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
+import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
+import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
+import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
+import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
+import riichinexus.microservices.tournament.objects.tablemanagement.TableId
+import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
+import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
+import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
+import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
+import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
+import riichinexus.microservices.audit.domain.auditevent.AuditEventId
+import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
+import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.tournament.appeal.domain.model.*
 import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
@@ -28,9 +47,6 @@ import riichinexus.microservices.tournament.appeal.tables.appealticket.AppealTic
 import riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable
 
 final class AppealApplicationService(
-    auditEventRepository: AuditEventRepository,
-    eventBus: DomainEventBus,
-    transactionManager: TransactionManager = NoOpTransactionManager,
     authorizationService: AuthorizationPolicy = AuthorizationPolicyFunctions.permitAll
 ):
   def fileAppeal(
@@ -44,7 +60,7 @@ final class AppealApplicationService(
       actor: AccessPrincipal,
       createdAt: Instant = Instant.now()
   ): Option[AppealTicket] =
-    transactionManager.inTransaction {
+    {
       TournamentGameTable.findById(connection, tableId).map { table =>
         require(description.trim.nonEmpty, "Appeal description cannot be empty")
         require(dueAt.forall(!_.isBefore(createdAt)), "Appeal dueAt cannot be earlier than createdAt")
@@ -71,7 +87,7 @@ final class AppealApplicationService(
 
         val validatedAttachments = AppealAttachmentPolicy.validate(attachments, createdAt)
         val ticket = AppealTicket(
-          id = IdGenerator.appealTicketId(),
+          id = AppealIdGenerator.appealTicketId(),
           tableId = table.id,
           tournamentId = table.tournamentId,
           stageId = table.stageId,
@@ -84,35 +100,9 @@ final class AppealApplicationService(
           updatedAt = createdAt
         )
 
-        DomainChangeInterpreter
-          .auditAndEvents(transactionManager, auditEventRepository, eventBus)
-          .commitWithinTransaction(
-            DomainChange(
-              aggregate = ticket,
-              persist = nextTicket =>
-                val savedTicket = AppealTicketTable.save(connection, nextTicket)
-                TournamentGameTable.save(connection, TableFunctions.flagAppeal(table, savedTicket.id, Some(description)))
-                savedTicket,
-              auditEntries = savedTicket =>
-                Vector(
-                  AuditEventEntry(
-                    id = IdGenerator.auditEventId(),
-                    aggregateType = "appeal",
-                    aggregateId = savedTicket.id.value,
-                    eventType = "AppealTicketFiled",
-                    occurredAt = createdAt,
-                    actorId = Some(openedBy),
-                    details = Map(
-                      "tableId" -> tableId.value,
-                      "attachmentCount" -> savedTicket.attachments.size.toString,
-                      "attachmentStorageKinds" -> savedTicket.attachments.map(_.storageKind.toString).distinct.sorted.mkString(","),
-                      "attachmentMediaKinds" -> savedTicket.attachments.map(_.mediaKind.toString).distinct.sorted.mkString(",")
-                    )
-                  )
-                ),
-              domainEvents = savedTicket => Vector(AppealTicketFiled(savedTicket, createdAt))
-            )
-          )
+        val savedTicket = AppealTicketTable.save(connection, ticket)
+        TournamentGameTable.save(connection, TableFunctions.flagAppeal(table, savedTicket.id, Some(description)))
+        savedTicket
       }
     }
 
@@ -128,7 +118,7 @@ final class AppealApplicationService(
       updatedAt: Instant = Instant.now(),
       note: Option[String] = None
   ): Option[AppealTicket] =
-    transactionManager.inTransaction {
+    {
       AppealTicketTable.findById(connection, ticketId).map { ticket =>
         AuthorizationPolicyFunctions.requirePermission(authorizationService, 
           actor,
@@ -158,34 +148,7 @@ final class AppealApplicationService(
             reassignedTicket.reprioritize(operatorId, nextPriority, nextDueAt, updatedAt, note)
           else reassignedTicket
 
-        DomainChangeInterpreter
-          .auditAndEvents(transactionManager, auditEventRepository, eventBus)
-          .commitWithinTransaction(
-            DomainChange(
-              aggregate = triagedTicket.copy(updatedAt = updatedAt),
-              persist = nextTicket => AppealTicketTable.save(connection, nextTicket),
-              auditEntries = savedTicket =>
-                Vector(
-                  AuditEventEntry(
-                    id = IdGenerator.auditEventId(),
-                    aggregateType = "appeal",
-                    aggregateId = ticketId.value,
-                    eventType = "AppealTicketWorkflowUpdated",
-                    occurredAt = updatedAt,
-                    actorId = actor.playerId,
-                    details = Map(
-                      "tournamentId" -> ticket.tournamentId.value,
-                      "tableId" -> ticket.tableId.value,
-                      "assigneeId" -> savedTicket.assigneeId.map(_.value).getOrElse("none"),
-                      "priority" -> savedTicket.priority.toString,
-                      "dueAt" -> savedTicket.dueAt.map(_.toString).getOrElse("none")
-                    ),
-                    note = note
-                  )
-                ),
-              domainEvents = savedTicket => Vector(AppealTicketWorkflowUpdated(savedTicket, updatedAt))
-            )
-          )
+        AppealTicketTable.save(connection, triagedTicket.copy(updatedAt = updatedAt))
       }
     }
 
@@ -218,7 +181,7 @@ final class AppealApplicationService(
       tableResolution: Option[AppealTableResolution] = None,
       note: Option[String] = None
   ): Option[AppealTicket] =
-    transactionManager.inTransaction {
+    {
       AppealTicketTable.findById(connection, ticketId).map { ticket =>
         AuthorizationPolicyFunctions.requirePermission(authorizationService, 
           actor,
@@ -240,74 +203,34 @@ final class AppealApplicationService(
             case AppealDecisionType.Escalate =>
               reviewedTicket.escalate(operatorId, verdict, adjudicatedAt, note)
 
-        DomainChangeInterpreter
-          .auditAndEvents(transactionManager, auditEventRepository, eventBus)
-          .commitWithinTransaction(
-            DomainChange(
-              aggregate = adjudicatedTicket,
-              persist = nextTicket =>
-                val savedTicket = AppealTicketTable.save(connection, nextTicket)
+        val savedTicket = AppealTicketTable.save(connection, adjudicatedTicket)
 
-                if decision != AppealDecisionType.Escalate then
-                  TournamentGameTable.findById(connection, ticket.tableId).foreach { table =>
-                    val updatedTable =
-                      tableResolution.getOrElse(AppealTableResolution.RestorePriorState) match
-                        case AppealTableResolution.ForceReset =>
-                          TableFunctions.forceReset(
-                            table,
-                            note.getOrElse(s"Appeal ${ticketId.value} adjudication requested reset"),
-                            adjudicatedAt
-                          )
-                        case resolution =>
-                          TableFunctions.resolveAppeal(table, resolution, note)
-
-                    TournamentGameTable.save(connection, updatedTable)
-
-                    if updatedTable.bracketMatchId.nonEmpty && updatedTable.status != TableStatus.Archived then
-                      KnockoutStageCoordinator.reconcileAfterMatchMutation(
-                        connection,
-                        transactionManager,
-                        updatedTable.tournamentId,
-                        updatedTable.stageId,
-                        updatedTable.bracketMatchId.get,
-                        adjudicatedAt
-                      )
-                  }
-
-                savedTicket,
-              auditEntries = _ =>
-                Vector(
-                  AuditEventEntry(
-                    id = IdGenerator.auditEventId(),
-                    aggregateType = "appeal",
-                    aggregateId = ticketId.value,
-                    eventType = "AppealTicketAdjudicated",
-                    occurredAt = adjudicatedAt,
-                    actorId = actor.playerId,
-                    details = Map(
-                      "decision" -> decision.toString,
-                      "tournamentId" -> ticket.tournamentId.value,
-                      "tableId" -> ticket.tableId.value,
-                      "tableResolution" -> tableResolution.map(_.toString).getOrElse("none")
-                    ),
-                    note = note.orElse(Some(verdict))
+        if decision != AppealDecisionType.Escalate then
+          TournamentGameTable.findById(connection, ticket.tableId).foreach { table =>
+            val updatedTable =
+              tableResolution.getOrElse(AppealTableResolution.RestorePriorState) match
+                case AppealTableResolution.ForceReset =>
+                  TableFunctions.forceReset(
+                    table,
+                    note.getOrElse(s"Appeal ${ticketId.value} adjudication requested reset"),
+                    adjudicatedAt
                   )
-                ),
-              domainEvents = savedTicket =>
-                val resolvedEvents =
-                  if decision == AppealDecisionType.Resolve then
-                    Vector(AppealTicketResolved(savedTicket, adjudicatedAt))
-                  else Vector.empty
-                resolvedEvents :+ AppealTicketAdjudicated(
-                  ticket = savedTicket,
-                  decision = decision,
-                  tableResolution =
-                    if decision == AppealDecisionType.Escalate then None
-                    else tableResolution.orElse(Some(AppealTableResolution.RestorePriorState)),
-                  occurredAt = adjudicatedAt
-                )
-            )
-          )
+                case resolution =>
+                  TableFunctions.resolveAppeal(table, resolution, note)
+
+            TournamentGameTable.save(connection, updatedTable)
+
+            if updatedTable.bracketMatchId.nonEmpty && updatedTable.status != TableStatus.Archived then
+              KnockoutStageCoordinator.reconcileAfterMatchMutation(
+                connection,
+                updatedTable.tournamentId,
+                updatedTable.stageId,
+                updatedTable.bracketMatchId.get,
+                adjudicatedAt
+              )
+          }
+
+        savedTicket
       }
     }
 
@@ -319,7 +242,7 @@ final class AppealApplicationService(
       reopenedAt: Instant = Instant.now(),
       note: Option[String] = None
   ): Option[AppealTicket] =
-    transactionManager.inTransaction {
+    {
       AppealTicketTable.findById(connection, ticketId).map { ticket =>
         val operatorId = actor.playerId.getOrElse(ticket.openedBy)
         if actor.playerId.contains(ticket.openedBy) then ()
@@ -330,43 +253,17 @@ final class AppealApplicationService(
             tournamentId = Some(ticket.tournamentId)
           )
 
-        DomainChangeInterpreter
-          .auditAndEvents(transactionManager, auditEventRepository, eventBus)
-          .commitWithinTransaction(
-            DomainChange(
-              aggregate = ticket.reopen(operatorId, reason, reopenedAt, note),
-              persist = nextTicket =>
-                val reopenedTicket = AppealTicketTable.save(connection, nextTicket)
-                TournamentGameTable.findById(connection, ticket.tableId).foreach { table =>
-                  if table.status != TableStatus.Archived then
-                    TournamentGameTable.save(connection, TableFunctions.flagAppeal(table, ticket.id, note.orElse(Some(s"Appeal ${ticket.id.value} reopened"))))
-                }
-                reopenedTicket,
-              auditEntries = reopenedTicket =>
-                Vector(
-                  AuditEventEntry(
-                    id = IdGenerator.auditEventId(),
-                    aggregateType = "appeal",
-                    aggregateId = ticketId.value,
-                    eventType = "AppealTicketReopened",
-                    occurredAt = reopenedAt,
-                    actorId = actor.playerId,
-                    details = Map(
-                      "tournamentId" -> ticket.tournamentId.value,
-                      "tableId" -> ticket.tableId.value,
-                      "reopenCount" -> reopenedTicket.reopenCount.toString
-                    ),
-                    note = note.orElse(Some(reason))
-                  )
-                ),
-              domainEvents = reopenedTicket => Vector(AppealTicketReopened(reopenedTicket, reopenedAt))
-            )
-          )
+        val reopenedTicket = AppealTicketTable.save(connection, ticket.reopen(operatorId, reason, reopenedAt, note))
+        TournamentGameTable.findById(connection, ticket.tableId).foreach { table =>
+          if table.status != TableStatus.Archived then
+            TournamentGameTable.save(connection, TableFunctions.flagAppeal(table, ticket.id, note.orElse(Some(s"Appeal ${ticket.id.value} reopened"))))
+        }
+        reopenedTicket
       }
     }
 
   private def requireActiveAppealOperator(connection: Connection, playerId: PlayerId, context: String): Unit =
-    val player = GetPlayerAPIMessage.findPlayer(connection, playerId)
+    val player = PlayerPersistenceFunctions.findPlayer(connection, playerId)
       .getOrElse(throw NoSuchElementException(s"Player ${playerId.value} was not found"))
     if player.status != PlayerStatus.Active then
       throw IllegalArgumentException(context)
