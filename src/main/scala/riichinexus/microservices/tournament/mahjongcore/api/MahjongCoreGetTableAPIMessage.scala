@@ -1,17 +1,29 @@
 package riichinexus.microservices.tournament.mahjongcore.api
 
 import cats.effect.IO
-import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.MahjongTableView
+import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.tournament.mahjongcore.domain.gamestate.functions.MahjongGameStateTransitionFunctions
+import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.{MahjongRuleset, MahjongTableView}
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.apiTypes.MahjongTableQuery
+import riichinexus.microservices.tournament.mahjongcore.tables.tablestate.MahjongTableStateTable
+import riichinexus.microservices.tournament.objects.tablemanagement.TableId
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.*
 
-/** 查询 tableId 对应比赛桌的实时麻将桌面视图；具体读取和权限裁剪后续接入。 */
+/** 查询 tableId 对应比赛桌的实时麻将桌面视图。 */
 final case class MahjongCoreGetTableAPIMessage(
     tableId: String,
     query: MahjongTableQuery = MahjongTableQuery()
 ) extends APIMessage[MahjongTableView] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[MahjongTableView] =
-    IO.raiseError(new NotImplementedError("Mahjong table read flow is not implemented yet"))
+    IO.blocking {
+      val id = TableId(tableId)
+      val state = MahjongTableStateTable.findById(context.connection, id).getOrElse(MahjongGameStateTransitionFunctions.notStartedTable(id, MahjongRuleset()))
+      MahjongGameStateTransitionFunctions.toView(
+        state,
+        viewerPlayerId = query.viewerPlayerId.map(PlayerId(_)),
+        includeLegalActions = query.includeLegalActions
+      )
+    }

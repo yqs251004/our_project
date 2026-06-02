@@ -1,17 +1,39 @@
 package riichinexus.microservices.tournament.mahjongcore.api
 
+import java.time.Instant
+
 import cats.effect.IO
+import riichinexus.microservices.tournament.mahjongcore.domain.gamestate.functions.MahjongGameStateTransitionFunctions
+import riichinexus.microservices.tournament.mahjongcore.domain.paifumanagement.functions.MahjongTableArchiveFunctions
 import riichinexus.microservices.tournament.mahjongcore.objects.action.apiTypes.MahjongActionResponse
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.apiTypes.ArchiveMahjongTableRequest
+import riichinexus.microservices.tournament.mahjongcore.tables.tablestate.MahjongTableStateTable
+import riichinexus.microservices.tournament.objects.tablemanagement.TableId
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.*
 
-/** 将已完成的实时麻将桌归档成现有 Paifu；具体构建和归档流程后续接入。 */
+/** 将已完成的实时麻将桌归档为 Paifu 和 MatchRecord。 */
 final case class MahjongCoreArchiveTableAPIMessage(
     tableId: String,
     request: ArchiveMahjongTableRequest
 ) extends APIMessage[MahjongActionResponse] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[MahjongActionResponse] =
-    IO.raiseError(new NotImplementedError("Mahjong table archive flow is not implemented yet"))
+    IO.blocking {
+      val id = TableId(tableId)
+      val current = MahjongTableStateTable.findById(context.connection, id)
+        .getOrElse(throw IllegalArgumentException(s"Mahjong table ${tableId} is not started"))
+      val archived = MahjongTableArchiveFunctions.archive(context.connection, current, Instant.now())
+      val storedState = MahjongTableStateTable.save(
+        context.connection,
+        archived.tableState.copy(version = archived.tableState.version + 1),
+        archivedPaifuId = Some(archived.paifu.id),
+        archivedMatchRecordId = Some(archived.matchRecord.id)
+      )
+      MahjongActionResponse(
+        table = MahjongGameStateTransitionFunctions.toView(storedState, viewerPlayerId = None, includeLegalActions = false),
+        acceptedEvent = None,
+        archivedPaifuId = Some(archived.paifu.id)
+      )
+    }

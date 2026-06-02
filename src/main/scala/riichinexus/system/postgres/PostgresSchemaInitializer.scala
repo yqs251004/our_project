@@ -15,6 +15,7 @@ import riichinexus.microservices.audit.tables.auditevent.AuditEventTableInitiali
 import riichinexus.microservices.opsanalytics.tables.dashboard.DashboardTableInitializer
 import riichinexus.microservices.player.tables.players.PlayerTableInitializer
 import riichinexus.microservices.tournament.appeal.tables.appealticket.AppealTicketTableInitializer
+import riichinexus.microservices.tournament.mahjongcore.tables.tablestate.MahjongTableStateTableInitializer
 import riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTableInitializer
 import riichinexus.microservices.tournament.tables.paifu.PaifuTableInitializer
 import riichinexus.microservices.tournament.tables.settlement.TournamentSettlementTableInitializer
@@ -41,6 +42,7 @@ final class PostgresSchemaInitializer(connectionFactory: JdbcConnectionFactory):
       TournamentGameTableInitializer.initialize(connection)
       PaifuTableInitializer.initialize(connection)
       MatchRecordTableInitializer.initialize(connection)
+      MahjongTableStateTableInitializer.initialize(connection)
       AppealTicketTableInitializer.initialize(connection)
       TournamentSettlementTableInitializer.initialize(connection)
     }
