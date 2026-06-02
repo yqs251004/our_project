@@ -51,6 +51,7 @@ import riichinexus.microservices.player.objects.*
 import riichinexus.microservices.auth.domain.AuthorizationFailure
 import riichinexus.microservices.notification.api.`private`.CreateBulkNotificationsPrivateAPIMessage
 import riichinexus.microservices.notification.objects.apiTypes.CreateNotificationRequest
+import riichinexus.system.realtime.objects.RealtimeEvent
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import riichinexus.microservices.tournament.api.`private`.TournamentOperationViewAssembler
@@ -81,12 +82,30 @@ final case class TournamentStageSubmitLineupAPIMessage(tournamentId: String, sta
           submitLineup(context.connection, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
+      _ <- publishLineupSubmitted(context, command)
       _ <- CreateBulkNotificationsPrivateAPIMessage(lineupSelectedNotifications(savedTournament, command)).plan(context)
       view <- IO.blocking {
         TournamentOperationViewAssembler.mutationView(context.connection, command.tournamentId, Vector.empty)
         .getOrElse(throw NoSuchElementException("Resource not found"))
       }
     yield view
+
+  private def publishLineupSubmitted(
+      context: ApiPlanContext,
+      command: SubmitStageLineupCommand
+  ): IO[Unit] =
+    context.realtimeEventBus.publish(
+      RealtimeEvent(
+        id = command.submission.id.value,
+        eventType = "TournamentChanged",
+        aggregateType = "tournament",
+        aggregateId = command.tournamentId.value,
+        occurredAt = command.submission.submittedAt,
+        sourceEventType = "TournamentLineupSubmitted",
+        actorId = Some(command.submission.submittedBy.value),
+        actionUrl = Some(s"/public/tournaments/${command.tournamentId.value}")
+      )
+    )
 
   private def submitLineup(
       connection: java.sql.Connection,

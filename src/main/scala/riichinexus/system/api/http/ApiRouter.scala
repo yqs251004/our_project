@@ -10,7 +10,8 @@ object ApiRouter:
   def httpApp(routeContext: RouteContext): HttpApp[IO] =
     val support = RouteSupport.fromRouteContext(routeContext)
     (
-      RealtimeRouter.routes(routeContext) <+>
+      CorsPreflightRouter.routes(routeContext) <+>
+        RealtimeRouter.routes(routeContext) <+>
         APIMessageRouter.routes(support) <+>
         HealthRouter.routes(RouteContext.storageLabel(routeContext))
     ).orNotFound

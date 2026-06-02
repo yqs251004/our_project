@@ -109,6 +109,91 @@ object MahjongGameStateTransitionFunctions:
       version = 0
     )
 
+  def normalizeCurrentRoundState(state: MahjongTableState): MahjongTableState =
+    state.currentRound match
+      case None => state
+      case Some(round) =>
+        val riichiDiscardKeys = round.events.collect {
+          case MahjongEvent.RiichiDeclared(sequenceNo, playerId, _) => (sequenceNo + 1, playerId)
+        }.toSet
+        val initialSeats = state.seats.map { seat =>
+          seat.copy(
+            handTiles = round.initialHands.getOrElse(seat.playerId, seat.handTiles),
+            drawTile = None,
+            melds = Vector.empty,
+            river = Vector.empty,
+            riichi = false,
+            ippatsu = false,
+            furiten = false
+          )
+        }
+        val rebuilt = round.events.foldLeft(state.copy(seats = initialSeats)) {
+          case (current, MahjongEvent.TileDrawn(_, playerId, tile)) =>
+            val seat = seatByPlayerId(current, playerId)
+            current.copy(seats = replaceSeat(current.seats, seat.copy(drawTile = Some(tile))))
+
+          case (current, MahjongEvent.TileDiscarded(sequenceNo, playerId, tile, tsumogiri)) =>
+            val seat = seatByPlayerId(current, playerId)
+            val normalizedTile = MahjongTileFunctions.normalize(tile)
+            val updatedSeatWithoutDiscard =
+              if tsumogiri then seat.copy(drawTile = None)
+              else
+                val updatedHand = MahjongTileFunctions.removeTiles(seat.handTiles, Vector(normalizedTile)).getOrElse(seat.handTiles)
+                seat.copy(handTiles = sortTiles(updatedHand ++ seat.drawTile.toVector), drawTile = None)
+            val riichiDeclared = riichiDiscardKeys.contains((sequenceNo, playerId))
+            val discardView = MahjongDiscard(sequenceNo, playerId, normalizedTile, tsumogiri = tsumogiri, riichiDeclared = riichiDeclared)
+            val discardedSeat = updatedSeatWithoutDiscard.copy(
+              river = updatedSeatWithoutDiscard.river :+ discardView,
+              riichi = updatedSeatWithoutDiscard.riichi || riichiDeclared,
+              ippatsu = updatedSeatWithoutDiscard.ippatsu || riichiDeclared
+            )
+            current.copy(seats = replaceSeat(current.seats, discardedSeat))
+
+          case (current, MahjongEvent.MeldCalled(_, playerId, meld)) =>
+            applyMeldEvent(current, playerId, meld)
+
+          case (current, MahjongEvent.KanDeclared(_, playerId, meld)) =>
+            applyMeldEvent(current, playerId, meld)
+
+          case (current, MahjongEvent.RiichiDeclared(_, playerId, _)) =>
+            val seat = seatByPlayerId(current, playerId)
+            current.copy(seats = replaceSeat(current.seats, seat.copy(riichi = true, ippatsu = true)))
+
+          case (current, _) => current
+        }
+
+        state.copy(seats = rebuilt.seats)
+
+  def advanceRound(state: MahjongTableState): MahjongTableState =
+    val normalized = normalizeCurrentRoundState(state)
+    normalized.currentRound.filter(_.result.nonEmpty) match
+      case None => normalized
+      case Some(round) if normalized.status != MahjongTableStatus.RoundEnded => normalized
+      case Some(round) =>
+        val result = round.result.get
+        val eastPlayerId = normalized.seats.find(_.seat == SeatWind.East).map(_.playerId)
+        val dealerContinues =
+          result.outcome match
+            case HandOutcome.Ron | HandOutcome.Tsumo => result.winner.exists(winner => eastPlayerId.contains(winner))
+            case HandOutcome.ExhaustiveDraw => eastPlayerId.exists(east => result.tenpaiPlayerIds.exists(_.contains(east)))
+            case HandOutcome.AbortiveDraw => true
+        val nextDescriptor =
+          if dealerContinues then round.descriptor.copy(honba = round.descriptor.honba + 1)
+          else nextDescriptorAfterDealerPass(round.descriptor, result.outcome)
+        val nextSeats =
+          if dealerContinues then normalized.seats
+          else rotateSeatsForNextDealer(normalized.seats)
+        val nextRoundState = dealRound(
+          state = normalized,
+          descriptor = nextDescriptor,
+          seatsForRound = nextSeats,
+          seed = s"mahjongcore:${normalized.tableId.value}:${normalized.version + 1}:${SeatWind.toString(nextDescriptor.roundWind)}:${nextDescriptor.handNumber}:${nextDescriptor.honba}"
+        )
+        nextRoundState.copy(
+          finishedRounds = normalized.finishedRounds :+ finishedRoundFromState(normalized, round),
+          version = normalized.version + 1
+        )
+
   def submitAction(
       state: MahjongTableState,
       action: MahjongSubmittedAction
@@ -213,7 +298,7 @@ object MahjongGameStateTransitionFunctions:
       else
         val updatedHand = MahjongTileFunctions.removeTiles(seat.handTiles, Vector(normalizedTile))
           .getOrElse(throw IllegalArgumentException(s"Player ${playerId.value} does not have tile ${tile.value}"))
-        seat.copy(handTiles = sortTiles(updatedHand), drawTile = None)
+        seat.copy(handTiles = sortTiles(updatedHand ++ seat.drawTile.toVector), drawTile = None)
 
     val baseSequence = nextSequenceNo(round)
     val riichiEvent = Option.when(riichiDeclared)(MahjongEvent.RiichiDeclared(baseSequence, playerId, normalizedTile))
@@ -567,6 +652,102 @@ object MahjongGameStateTransitionFunctions:
   private def canDeclareRiichi(seat: MahjongSeatState): Boolean =
     !seat.riichi && seat.points >= 1000 && seat.melds.forall(_.closed)
 
+  private def dealRound(
+      state: MahjongTableState,
+      descriptor: KyokuDescriptor,
+      seatsForRound: Vector[MahjongSeatState],
+      seed: String
+  ): MahjongTableState =
+    val orderedSeats = SeatWind.all.flatMap(wind => seatsForRound.find(_.seat == wind))
+    val shuffled = MahjongTileFunctions.shuffledWall(seed, state.ruleset)
+    val deadSource = shuffled.takeRight(14)
+    val deadWall = deadSource.take(4) ++ deadSource.slice(4, 9)
+    val uraDora = deadSource.slice(9, 14)
+    val liveWall = shuffled.dropRight(14)
+    val playerIds = orderedSeats.map(_.playerId)
+    var cursor = 0
+    val initialHands = Array.fill(4)(Vector.empty[PaifuTile])
+    (0 until 13).foreach { _ =>
+      (0 until 4).foreach { seatIndex =>
+        initialHands(seatIndex) = initialHands(seatIndex) :+ liveWall(cursor)
+        cursor += 1
+      }
+    }
+    val eastDraw = liveWall(cursor)
+    cursor += 1
+    val nextSequence = state.currentRound.flatMap(_.events.lastOption.map(sequenceNoOf)).getOrElse(0) + 1
+    val seats = orderedSeats.zipWithIndex.map { case (seat, index) =>
+      seat.copy(
+        handTiles = sortTiles(initialHands(index)),
+        drawTile = if seat.seat == SeatWind.East then Some(eastDraw) else None,
+        melds = Vector.empty,
+        river = Vector.empty,
+        riichi = false,
+        ippatsu = false,
+        furiten = false
+      )
+    }
+    val round = MahjongRoundState(
+      descriptor = descriptor,
+      phase = MahjongRoundPhase.PlayerTurn,
+      roundStartSticks = MahjongTableSticks(honba = descriptor.honba, riichi = state.sticks.riichi),
+      wall = liveWall.drop(cursor),
+      deadWall = deadWall,
+      doraIndicators = Vector(deadSource(4)),
+      uraDoraIndicators = uraDora,
+      initialHands = orderedSeats.zipWithIndex.map { case (seat, index) => seat.playerId -> sortTiles(initialHands(index)) }.toMap,
+      turnPlayerId = playerIds.head,
+      pendingCall = None,
+      events = Vector(
+        MahjongEvent.RoundStarted(nextSequence, descriptor),
+        MahjongEvent.TileDrawn(nextSequence + 1, playerIds.head, eastDraw)
+      ),
+      result = None
+    )
+    state.copy(
+      status = MahjongTableStatus.WaitingPlayerAction,
+      seats = seats,
+      currentRound = Some(round),
+      sticks = MahjongTableSticks(honba = descriptor.honba, riichi = state.sticks.riichi)
+    )
+
+  private def rotateSeatsForNextDealer(seats: Vector[MahjongSeatState]): Vector[MahjongSeatState] =
+    seats.map { seat =>
+      seat.copy(seat = previousSeatWind(seat.seat))
+    }
+
+  private def previousSeatWind(seat: SeatWind): SeatWind =
+    val index = SeatWind.all.indexOf(seat)
+    SeatWind.all((index - 1 + SeatWind.all.size) % SeatWind.all.size)
+
+  private def nextDescriptorAfterDealerPass(descriptor: KyokuDescriptor, outcome: HandOutcome): KyokuDescriptor =
+    val nextHand = descriptor.handNumber + 1
+    val honba = if outcome == HandOutcome.ExhaustiveDraw then descriptor.honba + 1 else 0
+    if nextHand <= 4 then descriptor.copy(handNumber = nextHand, honba = honba)
+    else
+      val nextRoundWind = nextSeatWind(descriptor.roundWind)
+      KyokuDescriptor(nextRoundWind, handNumber = 1, honba = honba)
+
+  private def nextSeatWind(seat: SeatWind): SeatWind =
+    SeatWind.all((SeatWind.all.indexOf(seat) + 1) % SeatWind.all.size)
+
+  private def finishedRoundFromState(state: MahjongTableState, round: MahjongRoundState): PaifuRound =
+    val timeline = PaifuTimeline(Vector.empty)
+    val players = state.seats.map { seat =>
+      PaifuRoundPlayer(
+        playerId = seat.playerId,
+        seat = seat.seat,
+        initialHand = PaifuHand(round.initialHands.getOrElse(seat.playerId, seat.handTiles)),
+        track = PaifuPlayerTrack(Vector.empty)
+      )
+    }
+    PaifuRound(
+      descriptor = round.descriptor,
+      players = players,
+      timeline = timeline,
+      result = round.result.get
+    )
+
   private def leavesTenpaiAfterDiscard(seat: MahjongSeatState, discardTile: PaifuTile): Boolean =
     val source = seat.handTiles ++ seat.drawTile.toVector
     MahjongTileFunctions.removeTiles(source, Vector(discardTile)).exists { remaining =>
@@ -575,6 +756,60 @@ object MahjongGameStateTransitionFunctions:
 
   private def isWinningOwnDiscard(seat: MahjongSeatState, discardTile: PaifuTile): Boolean =
     MahjongHandAnalysisFunctions.isWinning(seat.handTiles :+ discardTile, seat.melds.size, allowSpecialHands = seat.melds.isEmpty)
+
+  private def applyMeldEvent(
+      state: MahjongTableState,
+      playerId: PlayerId,
+      meld: MahjongMeld
+  ): MahjongTableState =
+    val caller = seatByPlayerId(state, playerId)
+    val sourceTiles = caller.handTiles ++ caller.drawTile.toVector
+    val tilesToRemove =
+      if meld.closed then meld.tiles
+      else meld.calledTile match
+        case Some(calledTile) => removeOneByIndex(meld.tiles, indexOf(calledTile))
+        case None => Vector.empty
+    val handAfterMeld = MahjongTileFunctions.removeTiles(sourceTiles, tilesToRemove).getOrElse(caller.handTiles)
+    val nextMelds =
+      if meld.meldType == MahjongMeldType.AddedKan then
+        val ponIndex = caller.melds.indexWhere(existing =>
+          existing.meldType == MahjongMeldType.Pon &&
+            existing.tiles.headOption.exists(tile =>
+              meld.tiles.headOption.exists(upgraded => indexOf(tile) == indexOf(upgraded))
+            )
+        )
+        if ponIndex >= 0 then caller.melds.updated(ponIndex, meld) else caller.melds :+ meld
+      else caller.melds :+ meld
+    val callerAfterMeld = caller.copy(
+      handTiles = sortTiles(handAfterMeld),
+      drawTile = None,
+      melds = nextMelds,
+      ippatsu = false
+    )
+    val seatsWithCalledDiscard =
+      (meld.fromPlayer, meld.calledTile) match
+        case (Some(fromPlayer), Some(calledTile)) => markLatestDiscardCalledBy(state.seats, fromPlayer, calledTile, playerId)
+        case _ => state.seats
+    state.copy(seats = replaceSeat(seatsWithCalledDiscard.map(_.copy(ippatsu = false)), callerAfterMeld))
+
+  private def markLatestDiscardCalledBy(
+      seats: Vector[MahjongSeatState],
+      discardPlayerId: PlayerId,
+      calledTile: PaifuTile,
+      calledBy: PlayerId
+  ): Vector[MahjongSeatState] =
+    seats.map { seat =>
+      if seat.playerId != discardPlayerId then seat
+      else
+        val targetIndex = seat.river.lastIndexWhere(discard =>
+          discard.calledBy.isEmpty && indexOf(discard.tile) == indexOf(calledTile)
+        )
+        if targetIndex < 0 then seat
+        else
+          seat.copy(river = seat.river.zipWithIndex.map { case (discard, index) =>
+            if index == targetIndex then discard.copy(calledBy = Some(calledBy)) else discard
+          })
+    }
 
   private def winContext(
       state: MahjongTableState,

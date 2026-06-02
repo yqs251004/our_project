@@ -20,7 +20,10 @@ final case class MahjongCoreGetTableAPIMessage(
   override def plan(context: ApiPlanContext): IO[MahjongTableView] =
     IO.blocking {
       val id = TableId(tableId)
-      val state = MahjongTableStateTable.findById(context.connection, id).getOrElse(MahjongGameStateTransitionFunctions.notStartedTable(id, MahjongRuleset()))
+      val state = MahjongTableStateTable.findById(context.connection, id) match
+        case Some(current) =>
+          MahjongTableStateTable.save(context.connection, MahjongGameStateTransitionFunctions.normalizeCurrentRoundState(current))
+        case None => MahjongGameStateTransitionFunctions.notStartedTable(id, MahjongRuleset())
       MahjongGameStateTransitionFunctions.toView(
         state,
         viewerPlayerId = query.viewerPlayerId.map(PlayerId(_)),

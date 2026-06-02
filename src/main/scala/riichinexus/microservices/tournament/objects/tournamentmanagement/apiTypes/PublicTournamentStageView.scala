@@ -4,6 +4,7 @@ import riichinexus.microservices.tournament.objects.rulesmanagement.stageprogres
 import riichinexus.microservices.tournament.objects.rulesmanagement.knockout.KnockoutRuleConfig
 import riichinexus.microservices.tournament.objects.tournamentmanagement.{StageStatus, TournamentFormat}
 import riichinexus.microservices.tournament.objects.rulesmanagement.swiss.SwissRuleConfig
+import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.TournamentLineupSubmissionView
 
 import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
@@ -51,7 +52,8 @@ final case class PublicTournamentStageView(
     bracket: Option[KnockoutBracketSnapshot],
     advancementRule: AdvancementRule = AdvancementRule(AdvancementRuleType.Custom, note = Some("unconfigured")),
     swissRule: Option[SwissRuleConfig] = None,
-    knockoutRule: Option[KnockoutRuleConfig] = None
+    knockoutRule: Option[KnockoutRuleConfig] = None,
+    lineupSubmissions: Vector[TournamentLineupSubmissionView] = Vector.empty
 )
 
 object PublicTournamentStageView:
@@ -73,7 +75,8 @@ object PublicTournamentStageView:
       bracket: Option[KnockoutBracketSnapshot],
       advancementRule: AdvancementRule,
       swissRule: Option[SwissRuleConfig],
-      knockoutRule: Option[KnockoutRuleConfig]
+      knockoutRule: Option[KnockoutRuleConfig],
+      lineupSubmissions: Vector[TournamentLineupSubmissionView]
   ): PublicTournamentStageView =
     PublicTournamentStageView(
       stageId = stageId.value,
@@ -91,5 +94,6 @@ object PublicTournamentStageView:
       bracket = bracket,
       advancementRule = advancementRule,
       swissRule = swissRule,
-      knockoutRule = knockoutRule
+      knockoutRule = knockoutRule,
+      lineupSubmissions = lineupSubmissions
     )

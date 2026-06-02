@@ -31,6 +31,8 @@ import riichinexus.microservices.audit.domain.auditevent.AuditEventId
 import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
 import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.auth.domain.model.*
+import riichinexus.microservices.tournament.mahjongcore.api.MahjongCoreStartTableAPIMessage
+import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.apiTypes.StartMahjongTableRequest
 import riichinexus.microservices.tournament.domain.tablemanagement.functions.TableFunctions
 import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
 import riichinexus.microservices.tournament.domain.recordmanagement.model.*
@@ -75,7 +77,13 @@ final case class TournamentTableStartAPIMessage(tableId: String, operatorId: Opt
         Permission.ManageTournamentStages,
         tournamentId = Some(table.tournamentId)
       )
-      riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.save(connection, TableFunctions.start(table, command.startedAt))
+      val startedTable = riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.save(connection, TableFunctions.start(table, command.startedAt))
+      MahjongCoreStartTableAPIMessage.startAndSave(
+        connection,
+        command.tableId,
+        StartMahjongTableRequest(operatorId = command.actor.playerId.map(_.value))
+      )
+      startedTable
     }
 
   private final case class StartTableCommand(

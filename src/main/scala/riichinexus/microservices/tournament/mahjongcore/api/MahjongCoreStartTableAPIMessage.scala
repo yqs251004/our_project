@@ -18,13 +18,25 @@ final case class MahjongCoreStartTableAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[MahjongTableView] =
     IO.blocking {
-      val id = TableId(tableId)
-      val ruleset = request.ruleset.getOrElse(MahjongRuleset())
-      val seed = request.seed.getOrElse(s"mahjongcore:${tableId}")
-      val scheduledTable = riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.findById(context.connection, id)
-      val state = scheduledTable match
-        case Some(table) => MahjongGameStateTransitionFunctions.startTable(id, ruleset, seed, table.seats)
-        case None => MahjongGameStateTransitionFunctions.startTable(id, ruleset, seed)
-      MahjongTableStateTable.save(context.connection, state)
-      MahjongGameStateTransitionFunctions.toView(state, viewerPlayerId = None, includeLegalActions = true)
+      MahjongCoreStartTableAPIMessage.startAndSave(
+        context.connection,
+        TableId(tableId),
+        request
+      )
     }
+
+object MahjongCoreStartTableAPIMessage:
+
+  def startAndSave(
+      connection: java.sql.Connection,
+      tableId: TableId,
+      request: StartMahjongTableRequest
+  ): MahjongTableView =
+    val ruleset = request.ruleset.getOrElse(MahjongRuleset())
+    val seed = request.seed.getOrElse(s"mahjongcore:${tableId.value}")
+    val scheduledTable = riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.findById(connection, tableId)
+    val state = scheduledTable match
+      case Some(table) => MahjongGameStateTransitionFunctions.startTable(tableId, ruleset, seed, table.seats)
+      case None => MahjongGameStateTransitionFunctions.startTable(tableId, ruleset, seed)
+    MahjongTableStateTable.save(connection, state)
+    MahjongGameStateTransitionFunctions.toView(state, viewerPlayerId = None, includeLegalActions = true)

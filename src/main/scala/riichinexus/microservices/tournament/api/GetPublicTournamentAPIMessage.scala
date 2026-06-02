@@ -34,6 +34,7 @@ import riichinexus.microservices.club.domain.clubmanagement.model.*
 import riichinexus.microservices.club.domain.membershipmanagement.model.*
 import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
 import riichinexus.microservices.club.domain.relationmanagement.model.*
+import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.TournamentLineupSubmissionView
 import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.{PublicTournamentDetailView, PublicTournamentStageView}
 import riichinexus.microservices.tournament.domain.rulesmanagement.functions.TournamentStageQueries
 import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
@@ -131,7 +132,23 @@ final case class GetPublicTournamentAPIMessage(
       bracket = publicStageBracket(context, tournament, stage),
       advancementRule = stage.advancementRule,
       swissRule = stage.swissRule,
-      knockoutRule = stage.knockoutRule
+      knockoutRule = stage.knockoutRule,
+      lineupSubmissions = stage.lineupSubmissions
+        .sortBy(_.submittedAt)
+        .map(lineupSubmissionView)
+    )
+
+  private def lineupSubmissionView(
+      submission: StageLineupSubmission
+  ): TournamentLineupSubmissionView =
+    TournamentLineupSubmissionView(
+      submissionId = submission.id.value,
+      clubId = submission.clubId.value,
+      submittedBy = submission.submittedBy.value,
+      submittedAt = submission.submittedAt.toString,
+      activePlayerIds = submission.seats.filterNot(_.reserve).map(_.playerId.value),
+      reservePlayerIds = submission.seats.filter(_.reserve).map(_.playerId.value),
+      note = submission.note
     )
 
   private def publicStageStandings(

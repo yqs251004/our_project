@@ -14,6 +14,7 @@ object MahjongCoreAPIMessageRegistry:
       RegisteredAPIMessage.api[MahjongCoreStartTableAPIMessage, MahjongTableView],
       RegisteredAPIMessage.api[MahjongCoreGetTableAPIMessage, MahjongTableView],
       RegisteredAPIMessage.api[MahjongCoreSubmitActionAPIMessage, MahjongActionResponse],
+      RegisteredAPIMessage.api[MahjongCoreAdvanceRoundAPIMessage, MahjongTableView],
       RegisteredAPIMessage.api[MahjongCoreResetTableAPIMessage, MahjongTableView],
       RegisteredAPIMessage.api[MahjongCoreArchiveTableAPIMessage, MahjongActionResponse]
     )

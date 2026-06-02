@@ -29,7 +29,8 @@ final case class MahjongCoreSubmitActionAPIMessage(
       )
       val current = MahjongTableStateTable.findById(context.connection, id)
         .getOrElse(throw IllegalArgumentException(s"Mahjong table ${tableId} is not started"))
-      val (state, acceptedEvent) = MahjongGameStateTransitionFunctions.submitAction(current, submitted)
+      val normalizedCurrent = MahjongTableStateTable.save(context.connection, MahjongGameStateTransitionFunctions.normalizeCurrentRoundState(current))
+      val (state, acceptedEvent) = MahjongGameStateTransitionFunctions.submitAction(normalizedCurrent, submitted)
       MahjongTableStateTable.save(context.connection, state)
       MahjongActionResponse(
         table = MahjongGameStateTransitionFunctions.toView(state, Some(submitted.playerId), includeLegalActions = true),
