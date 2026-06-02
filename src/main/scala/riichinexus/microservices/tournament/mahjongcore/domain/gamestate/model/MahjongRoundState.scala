@@ -14,6 +14,7 @@ final case class MahjongRoundState(
     deadWall: Vector[PaifuTile],
     doraIndicators: Vector[PaifuTile],
     uraDoraIndicators: Vector[PaifuTile],
+    initialHands: Map[PlayerId, Vector[PaifuTile]],
     turnPlayerId: PlayerId,
     pendingCall: Option[MahjongPendingCallState],
     events: Vector[MahjongEvent],
