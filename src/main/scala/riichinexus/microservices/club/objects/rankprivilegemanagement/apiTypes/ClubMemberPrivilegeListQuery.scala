@@ -1,6 +1,7 @@
 package riichinexus.microservices.club.objects.rankprivilegemanagement.apiTypes
 
 import riichinexus.microservices.club.objects.rankprivilegemanagement.ClubPrivilegeCode
+import riichinexus.system.json.JsonCodecs.given
 import upickle.default.*
 
 final case class ClubMemberPrivilegeListQuery(

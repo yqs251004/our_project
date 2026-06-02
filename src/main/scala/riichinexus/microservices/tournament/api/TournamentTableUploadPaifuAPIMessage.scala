@@ -29,6 +29,7 @@ import riichinexus.microservices.audit.domain.auditevent.AuditEventId
 import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
 import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.auth.domain.model.*
+import riichinexus.microservices.tournament.domain.paifumanagement.functions.TournamentPaifuArchiveService
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
@@ -47,7 +48,7 @@ final case class TournamentTableUploadPaifuAPIMessage(tableId: String, request: 
       actor <- IO.blocking(resolveActor(context))
       table <- IO.blocking {
         {
-          context.support.tournamentPaifuArchiveService.archivePaifu(
+          TournamentPaifuArchiveService(AuthorizationPolicyFunctions.strict).archivePaifu(
             connection = context.connection,
             tableId = TableId(tableId),
             actor = actor,

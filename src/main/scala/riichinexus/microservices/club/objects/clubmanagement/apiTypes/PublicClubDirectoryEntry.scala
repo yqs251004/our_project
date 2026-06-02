@@ -1,6 +1,7 @@
 package riichinexus.microservices.club.objects.clubmanagement.apiTypes
 
 import riichinexus.microservices.club.objects.relationmanagement.ClubRelationView
+import riichinexus.system.json.JsonCodecs.given
 import upickle.default.*
 
 final case class PublicClubDirectoryEntry(

@@ -141,7 +141,7 @@ final case class OpsAnalyticsRecomputeAdvancedStatsAPIMessage(
   ): Vector[AdvancedStatsRecomputeTask] =
     val owners =
       PlayerPersistenceFunctions.findAllPlayers(connection).map(player => DashboardOwner.Player(player.id)) ++
-        ListClubsPrivateAPIMessage(activeOnly = true).plan(ApiPlanContext(support = null, bearerToken = None, connection = connection)).unsafeRunSync().map(club => DashboardOwner.Club(club.id))
+        ListClubsPrivateAPIMessage(activeOnly = true).plan(ApiPlanContext(bearerToken = None, connection = connection)).unsafeRunSync().map(club => DashboardOwner.Club(club.id))
 
     owners.distinct.map(owner => enqueueOwnerRecompute(connection, owner, reason, requestedAt))
 
@@ -154,7 +154,7 @@ final case class OpsAnalyticsRecomputeAdvancedStatsAPIMessage(
   ): Vector[AdvancedStatsRecomputeTask] =
     val owners =
       PlayerPersistenceFunctions.findAllPlayers(connection).map(player => DashboardOwner.Player(player.id)) ++
-        ListClubsPrivateAPIMessage(activeOnly = true).plan(ApiPlanContext(support = null, bearerToken = None, connection = connection)).unsafeRunSync().map(club => DashboardOwner.Club(club.id))
+        ListClubsPrivateAPIMessage(activeOnly = true).plan(ApiPlanContext(bearerToken = None, connection = connection)).unsafeRunSync().map(club => DashboardOwner.Club(club.id))
 
     owners.distinct
       .filter(owner => shouldBackfillOwner(connection, owner, mode))

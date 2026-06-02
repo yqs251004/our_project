@@ -33,7 +33,8 @@ object ApiHttpApp:
     val routed = ApiRouter.httpApp(
       RouteContext(
         executionContext = runtime.executionContext,
-        corsAllowOrigin = runtime.corsAllowOrigin
+        corsAllowOrigin = runtime.corsAllowOrigin,
+        realtimeEventBus = runtime.realtimeEventBus
       )
     )
     Logger.httpApp(logHeaders = logHeaders, logBody = logBody)(

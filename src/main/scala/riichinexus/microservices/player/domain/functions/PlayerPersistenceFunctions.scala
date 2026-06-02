@@ -68,4 +68,4 @@ object PlayerPersistenceFunctions:
     PlayerTable.findAll(connection)
 
   private def apiContext(connection: Connection): ApiPlanContext =
-    ApiPlanContext(support = null, bearerToken = None, connection = connection)
+    ApiPlanContext(bearerToken = None, connection = connection)

@@ -36,6 +36,7 @@ import riichinexus.microservices.auth.objects.apiTypes.{
 import riichinexus.microservices.auth.utils.ResolveGuestAccessPrincipal
 import riichinexus.microservices.player.api.GetPlayerAPIMessage
 import riichinexus.microservices.player.domain.Player
+import riichinexus.system.json.JsonCodecs.given
 import upickle.default.*
 
 final case class CurrentSessionAuthAPIMessage(

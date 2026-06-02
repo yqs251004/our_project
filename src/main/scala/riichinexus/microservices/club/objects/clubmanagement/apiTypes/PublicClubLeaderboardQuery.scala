@@ -1,5 +1,6 @@
 package riichinexus.microservices.club.objects.clubmanagement.apiTypes
 
+import riichinexus.system.json.JsonCodecs.given
 import upickle.default.*
 
 final case class PublicClubLeaderboardQuery(

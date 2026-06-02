@@ -39,6 +39,7 @@ import riichinexus.microservices.tournament.domain.tablemanagement.model.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.microservices.tournament.tables.tournaments.TournamentTable
 import riichinexus.system.objects.PagedResponse
+import riichinexus.system.json.JsonCodecs.given
 import upickle.default.*
 
 final case class ListPublicTournamentsAPIMessage(
@@ -86,7 +87,7 @@ final case class ListPublicTournamentsAPIMessage(
       tournaments: Vector[Tournament]
   ): Map[ClubId, Club] =
     ResolveClubsPrivateAPIMessage(tournaments.flatMap(relatedClubIds))
-      .plan(ApiPlanContext(support = null, bearerToken = None, connection = context.connection))
+      .plan(ApiPlanContext(bearerToken = None, connection = context.connection))
       .unsafeRunSync()
       .map(club => club.id -> club)
       .toMap

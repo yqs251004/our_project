@@ -1,5 +1,5 @@
 package riichinexus.microservices.tournament.domain.tablemanagement.functions
-import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
+import riichinexus.microservices.player.api.`private`.ResolvePlayersPrivateAPIMessage
 
 import riichinexus.microservices.tournament.domain.lineupmanagement.functions.*
 import riichinexus.microservices.tournament.domain.paifumanagement.functions.*
@@ -161,7 +161,7 @@ object TournamentStageTableScheduler:
   ): Vector[Player] =
     val clubIds = (tournament.participatingClubs ++ tournament.whitelist.flatMap(_.clubId)).distinct
     val clubsById = ResolveClubsPrivateAPIMessage(clubIds)
-      .plan(ApiPlanContext(support = null, bearerToken = None, connection = connection))
+      .plan(ApiPlanContext(bearerToken = None, connection = connection))
       .unsafeRunSync()
       .map(club => club.id -> club)
       .toMap
@@ -177,7 +177,9 @@ object TournamentStageTableScheduler:
 
       (tournament.participatingPlayers ++ whitelistedPlayers ++ registeredClubMembers ++ whitelistedClubMembers).distinct
 
-    val playersById = PlayerPersistenceFunctions.findPlayersByIds(connection, (stage.lineupSubmissions.flatMap(_.seats.map(_.playerId)) ++ fallbackPlayerIds).distinct)
+    val playersById = ResolvePlayersPrivateAPIMessage((stage.lineupSubmissions.flatMap(_.seats.map(_.playerId)) ++ fallbackPlayerIds).distinct)
+      .plan(ApiPlanContext(bearerToken = None, connection = connection))
+      .unsafeRunSync()
       .map(player => player.id -> player)
       .toMap
     val stagePlayerIds = StageLineupResolver.resolveEligiblePlayers(stage, playersById.get)
@@ -253,7 +255,7 @@ object TournamentStageTableScheduler:
       roundNumber: Int
   ): Vector[StageTablePlan] =
     val clubRelations = buildClubRelationIndex(
-      ListClubsPrivateAPIMessage(activeOnly = true).plan(ApiPlanContext(support = null, bearerToken = None, connection = connection)).unsafeRunSync()
+      ListClubsPrivateAPIMessage(activeOnly = true).plan(ApiPlanContext(bearerToken = None, connection = connection)).unsafeRunSync()
     )
     stage.format match
       case TournamentFormat.RoundRobin =>

@@ -1,6 +1,7 @@
 package riichinexus.microservices.club.objects.membershipmanagement.apiTypes
 
 import upickle.default.*
+import riichinexus.system.json.JsonCodecs.given
 
 final case class ClubMembershipApplicationView(
     applicationId: String,

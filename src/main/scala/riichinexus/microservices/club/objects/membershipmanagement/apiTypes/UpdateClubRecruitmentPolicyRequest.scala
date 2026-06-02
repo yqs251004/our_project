@@ -21,6 +21,7 @@ import riichinexus.microservices.audit.domain.auditevent.AuditEventId
 import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
 import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.club.domain.membershipmanagement.model.ClubRecruitmentPolicy
+import riichinexus.system.json.JsonCodecs.given
 import upickle.default.*
 
 final case class UpdateClubRecruitmentPolicyRequest(

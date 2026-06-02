@@ -80,9 +80,8 @@ object ClubApplicationReviewer:
             s"Player ${parsedPlayerId.value} is already a member of club ${parsedClubId.value}"
           )
 
-        if application.applicantUserId.exists(applicantUserId =>
-            !applicantUserId.startsWith("guest:") && applicantUserId != player.userId
-          )
+        if !application.playerId.contains(parsedPlayerId) &&
+            !application.applicantUserId.contains(player.userId)
         then
           throw IllegalArgumentException(
             s"Membership application ${parsedMembershipId.value} does not belong to player ${parsedPlayerId.value}"

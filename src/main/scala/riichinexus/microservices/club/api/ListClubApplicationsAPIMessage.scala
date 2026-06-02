@@ -59,14 +59,14 @@ final case class ListClubApplicationsAPIMessage(
       clubId = ClubId(clubId),
       operatorId = Option(query.operatorId).filter(_.nonEmpty).map(PlayerId(_)),
       status = query.status,
-      applicantUserId = query.applicantUserId.filter(_.nonEmpty),
+      playerId = query.playerId.filter(_.nonEmpty).map(PlayerId(_)),
       displayName = query.displayName.filter(_.nonEmpty),
       limit = query.limit.getOrElse(20),
       offset = query.offset.getOrElse(0),
       appliedFilters = Vector(
         Option(query.operatorId).filter(_.nonEmpty).map("operatorId" -> _),
         query.status.map(status => "status" -> ClubApplicationStatus.toString(status)),
-        query.applicantUserId.filter(_.nonEmpty).map("applicantUserId" -> _),
+        query.playerId.filter(_.nonEmpty).map("playerId" -> _),
         query.displayName.filter(_.nonEmpty).map("displayName" -> _)
       ).flatten.toMap
     )
@@ -83,7 +83,7 @@ final case class ListClubApplicationsAPIMessage(
 
     val applications = club.membershipApplications
       .filter(application => query.status.forall(_ == application.status))
-      .filter(application => query.applicantUserId.forall(value => application.applicantUserId.contains(value)))
+      .filter(application => query.playerId.forall(application.playerId.contains))
       .filter(application => query.displayName.forall(riichinexus.system.TextSearch.containsIgnoreCase(application.displayName, _)))
       .sortBy(_.submittedAt)
       .map(application => ClubApplicationViewAssembler.applicationView(context.connection, club, application, actor))
@@ -110,7 +110,7 @@ final case class ListClubApplicationsAPIMessage(
       clubId: ClubId,
       operatorId: Option[PlayerId],
       status: Option[ClubApplicationStatus],
-      applicantUserId: Option[String],
+      playerId: Option[PlayerId],
       displayName: Option[String],
       limit: Int,
       offset: Int,

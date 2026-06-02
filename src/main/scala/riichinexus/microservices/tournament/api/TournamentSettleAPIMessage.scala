@@ -3,6 +3,7 @@ import riichinexus.microservices.audit.domain.auditevent.AuditEvent
 import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
 import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPIMessage
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
+import riichinexus.microservices.auth.domain.functions.AuthorizationPolicyFunctions
 
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
@@ -28,7 +29,10 @@ import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGen
 import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.auth.domain.model.AccessPrincipal
 import riichinexus.microservices.tournament.domain.settlementmanagement.model.TournamentSettlementSnapshot
-import riichinexus.microservices.tournament.objects.settlementmanagement.TournamentSettlementAdjustment
+import riichinexus.microservices.tournament.domain.settlementmanagement.functions.TournamentSettlementCoordinator
+import riichinexus.microservices.tournament.objects.settlementmanagement.{TournamentSettlementAdjustment, TournamentSettlementStatus}
+import riichinexus.microservices.notification.api.`private`.CreateBulkNotificationsPrivateAPIMessage
+import riichinexus.microservices.notification.objects.apiTypes.CreateNotificationRequest
 import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
@@ -48,7 +52,7 @@ final case class TournamentSettleAPIMessage(tournamentId: String, request: Settl
       _ = validateRequest()
       snapshot <- IO.blocking {
         {
-          context.support.tournamentSettlementCoordinator.settleTournament(
+          TournamentSettlementCoordinator(AuthorizationPolicyFunctions.strict).settleTournament(
             connection = context.connection,
             tournamentId = TournamentId(tournamentId),
             finalStageId = TournamentStageId(request.finalStageId),
@@ -65,6 +69,11 @@ final case class TournamentSettleAPIMessage(tournamentId: String, request: Settl
         }
       }
       _ <- RecordAuditEventsPrivateAPIMessage(settleTournamentAudit(snapshot, actor, settledAt)).plan(context)
+      notificationRequests <- IO.blocking {
+        if snapshot.status == TournamentSettlementStatus.Finalized then settlementFinalizedNotifications(context.connection, snapshot)
+        else Vector.empty
+      }
+      _ <- CreateBulkNotificationsPrivateAPIMessage(notificationRequests).plan(context)
     yield TournamentSettlementView.fromDomain(snapshot)
 
   private def validateRequest(): Unit =
@@ -108,3 +117,36 @@ final case class TournamentSettleAPIMessage(tournamentId: String, request: Settl
         note = request.note.orElse(Some(snapshot.summary))
       )
     )
+
+  private def settlementFinalizedNotifications(
+      connection: java.sql.Connection,
+      snapshot: TournamentSettlementSnapshot
+  ): Vector[CreateNotificationRequest] =
+    val tournamentName =
+      riichinexus.microservices.tournament.tables.tournaments.TournamentTable
+        .findById(connection, snapshot.tournamentId)
+        .map(_.name)
+        .getOrElse(snapshot.tournamentId.value)
+
+    snapshot.entries.map { entry =>
+      CreateNotificationRequest(
+        recipientPlayerId = entry.playerId.value,
+        notificationType = "TournamentSettlementFinalized",
+        title = "赛事结算已完成",
+        body = s"$tournamentName 已完成结算：你的排名第 ${entry.rank}，结算分 ${entry.finalPoints}。",
+        severity = Some("info"),
+        sourceService = "tournament",
+        sourceType = "tournament-settlement",
+        sourceId = snapshot.id.value,
+        actionUrl = Some(s"/public/tournaments/${snapshot.tournamentId.value}"),
+        objects = Map(
+          "tournamentId" -> snapshot.tournamentId.value,
+          "stageId" -> snapshot.stageId.value,
+          "settlementId" -> snapshot.id.value,
+          "playerId" -> entry.playerId.value,
+          "rank" -> entry.rank.toString,
+          "finalPoints" -> entry.finalPoints.toString,
+          "awardAmount" -> entry.awardAmount.toString
+        )
+      )
+    }

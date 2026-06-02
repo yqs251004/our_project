@@ -2,21 +2,16 @@ package riichinexus.system.api.http
 
 import cats.effect.IO
 import org.http4s.{Request, Response, Status}
-import riichinexus.system.api.runtime.ApiPlanSupport
 import upickle.default.Writer
 
 final case class RouteSupport(
-    routeContext: RouteContext,
-    apiPlanSupport: ApiPlanSupport
+    routeContext: RouteContext
 )
 
 object RouteSupport:
 
   def fromRouteContext(routeContext: RouteContext): RouteSupport =
-    RouteSupport(
-      routeContext = routeContext,
-      apiPlanSupport = ApiPlanSupport.fromExecutionContext(routeContext.executionContext)
-    )
+    RouteSupport(routeContext = routeContext)
 
   def bearerToken(support: RouteSupport, request: Request[IO]): Option[String] =
     HttpRequest.bearerToken(request)

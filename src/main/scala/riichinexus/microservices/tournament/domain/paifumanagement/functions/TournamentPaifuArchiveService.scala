@@ -132,7 +132,7 @@ final class TournamentPaifuArchiveService(
     RefreshOpsAnalyticsAfterMatchArchivedPrivateAPIMessage(
       matchRecord = archived.matchRecord,
       occurredAt = occurredAt
-    ).plan(ApiPlanContext(support = null, bearerToken = None, connection = connection)).unsafeRunSync()
+    ).plan(ApiPlanContext(bearerToken = None, connection = connection)).unsafeRunSync()
 
   private def validatePaifu(table: Table, paifu: Paifu): Unit =
     PaifuFunctions.validate(paifu)

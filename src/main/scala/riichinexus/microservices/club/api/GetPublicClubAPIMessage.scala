@@ -65,6 +65,7 @@ import riichinexus.microservices.tournament.api.`private`.{
   ListRecentClubMatchRecordsPrivateAPIMessage,
   ResolveTournamentsPrivateAPIMessage
 }
+import riichinexus.system.json.JsonCodecs.given
 import upickle.default.*
 
 final case class GetPublicClubAPIMessage(

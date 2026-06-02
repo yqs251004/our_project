@@ -49,6 +49,8 @@ import riichinexus.microservices.club.objects.rankprivilegemanagement.ClubPrivil
 import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
 import riichinexus.microservices.auth.domain.AuthorizationFailure
+import riichinexus.microservices.notification.api.`private`.CreateBulkNotificationsPrivateAPIMessage
+import riichinexus.microservices.notification.objects.apiTypes.CreateNotificationRequest
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import riichinexus.microservices.tournament.api.`private`.TournamentOperationViewAssembler
@@ -74,11 +76,12 @@ final case class TournamentStageSubmitLineupAPIMessage(tournamentId: String, sta
         submission = stageLineupSubmission(request),
         actor = actor
       )
-      _ <- IO.blocking {
+      savedTournament <- IO.blocking {
         {
           submitLineup(context.connection, command)
-        }
+        }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
+      _ <- CreateBulkNotificationsPrivateAPIMessage(lineupSelectedNotifications(savedTournament, command)).plan(context)
       view <- IO.blocking {
         TournamentOperationViewAssembler.mutationView(context.connection, command.tournamentId, Vector.empty)
         .getOrElse(throw NoSuchElementException("Resource not found"))
@@ -111,6 +114,34 @@ final case class TournamentStageSubmitLineupAPIMessage(tournamentId: String, sta
       .find(_.id == stageId)
       .getOrElse(throw NoSuchElementException(s"Stage ${stageId.value} was not found"))
 
+  private def lineupSelectedNotifications(
+      tournament: Tournament,
+      command: SubmitStageLineupCommand
+  ): Vector[CreateNotificationRequest] =
+    val stage = requireStage(tournament, command.stageId)
+    command.submission.seats.map { seat =>
+      val roleText = if seat.reserve then "候补" else "正选"
+      CreateNotificationRequest(
+        recipientPlayerId = seat.playerId.value,
+        notificationType = "TournamentLineupSelected",
+        title = if seat.reserve then "被列入赛事候补阵容" else "被选中参加赛事",
+        body = s"你被选入赛事 ${tournament.name} 的 ${stage.name}，身份为${roleText}选手。",
+        severity = Some("info"),
+        sourceService = "tournament",
+        sourceType = "tournament-lineup",
+        sourceId = command.submission.id.value,
+        actionUrl = Some(s"/public/tournaments/${tournament.id.value}"),
+        objects = Map(
+          "tournamentId" -> tournament.id.value,
+          "stageId" -> stage.id.value,
+          "clubId" -> command.submission.clubId.value,
+          "lineupSubmissionId" -> command.submission.id.value,
+          "playerId" -> seat.playerId.value,
+          "reserve" -> seat.reserve.toString
+        )
+      )
+    }
+
   private def ensureNoLineupConflict(stage: TournamentStage, command: SubmitStageLineupCommand): Unit =
     val submissionPlayerIds = command.submission.seats.map(_.playerId).distinct
     val conflictingPlayers = stage.lineupSubmissions
@@ -132,7 +163,7 @@ final case class TournamentStageSubmitLineupAPIMessage(tournamentId: String, sta
 
   private def resolveActiveClub(connection: java.sql.Connection, clubId: ClubId): Club =
     val club = ResolveClubPrivateAPIMessage(clubId)
-      .plan(ApiPlanContext(support = null, bearerToken = None, connection = connection))
+      .plan(ApiPlanContext(bearerToken = None, connection = connection))
       .unsafeRunSync()
       .getOrElse(throw NoSuchElementException(s"Club ${clubId.value} was not found"))
     ensureClubActive(club)

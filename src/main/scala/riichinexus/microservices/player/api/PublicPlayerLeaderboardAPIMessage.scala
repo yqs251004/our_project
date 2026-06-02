@@ -34,6 +34,7 @@ import riichinexus.microservices.player.objects.PlayerStatus
 import riichinexus.microservices.player.tables.players.PlayerTable
 import riichinexus.microservices.player.objects.apiTypes.PlayerLeaderboardEntry
 import riichinexus.system.objects.PagedResponse
+import riichinexus.system.json.JsonCodecs.given
 import upickle.default.*
 
 final case class PublicPlayerLeaderboardAPIMessage(

@@ -45,11 +45,11 @@ object APIMessageRouter:
   ): IO[Response[IO]] =
     for
       body <- request.bodyText.compile.string
-      responseJson <- support.apiPlanSupport.executionContext.connectionFactory.withTransactionConnection { connection =>
+      responseJson <- support.routeContext.executionContext.connectionFactory.withTransactionConnection { connection =>
         val context = ApiPlanContext(
-          support = support.apiPlanSupport,
           bearerToken = RouteSupport.bearerToken(support, request),
-          connection = connection
+          connection = connection,
+          realtimeEventBus = support.routeContext.realtimeEventBus
         )
         for
           _ <-

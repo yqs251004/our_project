@@ -1,11 +1,12 @@
 package riichinexus.microservices.club.objects.membershipmanagement.apiTypes
 
 import upickle.default.*
+import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.club.objects.membershipmanagement.ClubApplicationStatus
 
 final case class ClubMembershipApplicationResponse(
     id: String,
-    applicantUserId: Option[String],
+    playerId: Option[String],
     displayName: String,
     submittedAt: String,
     message: Option[String],
@@ -20,7 +21,7 @@ object ClubMembershipApplicationResponse:
   def fromDomain(application: riichinexus.microservices.club.domain.membershipmanagement.model.ClubMembershipApplication): ClubMembershipApplicationResponse =
     ClubMembershipApplicationResponse(
       id = application.id.value,
-      applicantUserId = application.applicantUserId,
+      playerId = application.playerId.map(_.value),
       displayName = application.displayName,
       submittedAt = application.submittedAt.toString,
       message = application.message,

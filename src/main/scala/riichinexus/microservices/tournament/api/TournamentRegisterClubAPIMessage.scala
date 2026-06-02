@@ -91,7 +91,7 @@ final case class TournamentRegisterClubAPIMessage(tournamentId: String, clubId: 
       tournamentId = Some(command.tournamentId)
     )
     val club = ResolveClubPrivateAPIMessage(command.clubId)
-      .plan(ApiPlanContext(support = null, bearerToken = None, connection = connection))
+      .plan(ApiPlanContext(bearerToken = None, connection = connection))
       .unsafeRunSync()
       .getOrElse(throw NoSuchElementException(s"Club ${command.clubId.value} was not found"))
     ensureClubActive(club)

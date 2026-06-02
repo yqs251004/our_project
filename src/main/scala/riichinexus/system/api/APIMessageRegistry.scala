@@ -2,6 +2,7 @@ package riichinexus.system.api
 
 import riichinexus.microservices.auth.router.AuthAPIMessageRegistry
 import riichinexus.microservices.club.router.ClubAPIMessageRegistry
+import riichinexus.microservices.notification.router.NotificationAPIMessageRegistry
 import riichinexus.microservices.opsanalytics.router.OpsAnalyticsAPIMessageRegistry
 import riichinexus.microservices.player.router.PlayerAPIMessageRegistry
 import riichinexus.microservices.platformadmin.router.PlatformAdminAPIMessageRegistry
@@ -15,6 +16,7 @@ object APIMessageRegistry:
     AuthAPIMessageRegistry.apiMessages ++
       PlayerAPIMessageRegistry.apiMessages ++
       ClubAPIMessageRegistry.apiMessages ++
+      NotificationAPIMessageRegistry.apiMessages ++
       PlatformAdminAPIMessageRegistry.apiMessages ++
       OpsAnalyticsAPIMessageRegistry.apiMessages ++
       TournamentAppealAPIMessageRegistry.apiMessages ++

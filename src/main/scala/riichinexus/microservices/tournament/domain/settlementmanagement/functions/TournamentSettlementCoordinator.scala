@@ -1,6 +1,6 @@
 package riichinexus.microservices.tournament.domain.settlementmanagement.functions
 import riichinexus.microservices.auth.objects.Permission
-import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
+import riichinexus.microservices.player.api.`private`.ResolvePlayerPrivateAPIMessage
 
 import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
@@ -26,6 +26,8 @@ import java.sql.Connection
 import java.time.Instant
 import java.util.NoSuchElementException
 
+import cats.effect.unsafe.implicits.global
+import riichinexus.system.api.ApiPlanContext
 import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.club.domain.functions.ClubIdGenerator
@@ -288,7 +290,9 @@ final class TournamentSettlementCoordinator(
       val deductionAmount =
         adjustmentsByPlayer.getOrElse(playerId, Vector.empty).filter(_.amount < 0L).map(adjustment => math.abs(adjustment.amount)).sum
       val netAwardAmount = baseAwards.lift(index).getOrElse(0L) + adjustmentAmount - deductionAmount
-      val clubId = PlayerPersistenceFunctions.findPlayer(connection, playerId)
+      val clubId = ResolvePlayerPrivateAPIMessage(playerId)
+        .plan(ApiPlanContext(bearerToken = None, connection = connection))
+        .unsafeRunSync()
         .flatMap(player => PlayerClubBindingFunctions.boundClubIds(player).headOption)
       val clubShareAmount =
         if clubId.nonEmpty then math.floor(netAwardAmount.toDouble * settlement.clubShareRatio).toLong

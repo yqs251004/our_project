@@ -85,7 +85,6 @@ final case class UpgradeGuestSessionAuthAPIMessage(
       connection,
       GuestAccessSessionFunctions.upgrade(session, command.playerId, command.upgradedAt)
     )
-    reconcileGuestApplications(connection, command.sessionId, player)
     savedSession
 
   private def upgradeGuestSessionAudit(
@@ -104,25 +103,6 @@ final case class UpgradeGuestSessionAuthAPIMessage(
         note = None
       )
     )
-
-  private def reconcileGuestApplications(
-      connection: java.sql.Connection,
-      sessionId: GuestSessionId,
-      player: Player
-  ): Unit =
-    val guestApplicantId = s"guest:${sessionId.value}"
-    ListClubsPrivateAPIMessage().plan(ApiPlanContext(support = null, bearerToken = None, connection = connection)).unsafeRunSync().foreach { club =>
-      val updatedApplications = club.membershipApplications.map { application =>
-        if ClubMembershipApplicationFunctions.isPending(application) && application.applicantUserId.contains(guestApplicantId) then
-          ClubMembershipApplicationFunctions.bindRegisteredApplicant(application, player.userId, player.nickname)
-        else application
-      }
-
-      if updatedApplications != club.membershipApplications then
-        SaveClubPrivateAPIMessage(club.copy(membershipApplications = updatedApplications))
-          .plan(ApiPlanContext(support = null, bearerToken = None, connection = connection))
-          .unsafeRunSync()
-    }
 
   private def guestSessionResponse(session: GuestAccessSession): GuestSessionResponse =
     GuestSessionResponse(

@@ -20,12 +20,12 @@ import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
 import riichinexus.microservices.audit.domain.auditevent.AuditEventId
 import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
 import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
+import riichinexus.system.json.JsonCodecs.given
 import upickle.default.*
 
 final case class ReviewClubApplicationRequest(
     operatorId: String,
     decision: ClubApplicationReviewDecision,
-    playerId: Option[String] = None,
     note: Option[String] = None
 )
 

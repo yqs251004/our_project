@@ -1,0 +1,27 @@
+package riichinexus.microservices.notification.api
+
+import cats.effect.IO
+import riichinexus.microservices.notification.objects.Notification
+import riichinexus.microservices.notification.objects.apiTypes.NotificationListQuery
+import riichinexus.microservices.notification.tables.notifications.NotificationTable
+import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.system.api.{APIMessage, ApiPlanContext}
+import riichinexus.system.json.JsonCodecs.given
+import upickle.default.*
+
+final case class ListNotificationsAPIMessage(
+    operatorId: String,
+    query: NotificationListQuery = NotificationListQuery()
+) extends APIMessage[Vector[Notification]] derives ReadWriter:
+
+  override def plan(context: ApiPlanContext): IO[Vector[Notification]] =
+    IO.blocking {
+      NotificationTable
+        .listForRecipient(
+          context.connection,
+          PlayerId(operatorId),
+          query.unreadOnly.getOrElse(false),
+          query.limit.getOrElse(30),
+          query.offset.getOrElse(0)
+        )
+    }

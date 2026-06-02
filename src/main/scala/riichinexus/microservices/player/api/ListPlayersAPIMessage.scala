@@ -30,6 +30,7 @@ import riichinexus.microservices.player.objects.apiTypes.{PlayerProfileView, Pla
 import riichinexus.microservices.player.objects.apiTypes.PlayerListQuery
 import riichinexus.microservices.player.tables.players.PlayerTable
 import riichinexus.system.objects.PagedResponse
+import riichinexus.system.json.JsonCodecs.given
 import upickle.default.*
 
 final case class ListPlayersAPIMessage(

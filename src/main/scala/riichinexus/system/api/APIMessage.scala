@@ -3,7 +3,7 @@ package riichinexus.system.api
 import java.sql.Connection
 
 import cats.effect.IO
-import riichinexus.system.api.runtime.ApiPlanSupport
+import riichinexus.system.realtime.domain.RealtimeEventBus
 import riichinexus.microservices.auth.domain.AuthenticationFailure
 import upickle.default.*
 
@@ -15,9 +15,9 @@ trait APIMessage[Response]:
 trait APIWithTokenMessage[Response] extends APIMessage[Response]
 
 final case class ApiPlanContext(
-    support: ApiPlanSupport,
     bearerToken: Option[String],
-    connection: Connection
+    connection: Connection,
+    realtimeEventBus: RealtimeEventBus = RealtimeEventBus.empty
 )
 
 enum ApiSuccessStatus:

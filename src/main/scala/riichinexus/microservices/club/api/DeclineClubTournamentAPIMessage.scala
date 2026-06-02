@@ -90,7 +90,7 @@ final case class DeclineClubTournamentAPIMessage(
     val club = resolveActiveClub(connection, command.clubId)
     requireClubLineupCapability(command.actor, club)
     DeclineClubTournamentPrivateAPIMessage(command.tournamentId, command.clubId)
-      .plan(ApiPlanContext(support = null, bearerToken = None, connection = connection))
+      .plan(ApiPlanContext(bearerToken = None, connection = connection))
       .unsafeRunSync()
 
   private def resolveActiveClub(connection: java.sql.Connection, clubId: ClubId): Club =

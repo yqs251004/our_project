@@ -43,8 +43,7 @@ import upickle.default.*
 final case class GetClubApplicationAPIMessage(
     clubId: String,
     membershipId: String,
-    operatorId: Option[String] = None,
-    guestSessionId: Option[String] = None
+    operatorId: Option[String] = None
 ) extends APIMessage[ClubMembershipApplicationView] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[ClubMembershipApplicationView] =
@@ -58,15 +57,14 @@ final case class GetClubApplicationAPIMessage(
     GetClubApplicationInput(
       clubId = ClubId(clubId),
       membershipId = MembershipApplicationId(membershipId),
-      operatorId = operatorId.filter(_.nonEmpty).map(PlayerId(_)),
-      guestSessionId = guestSessionId.filter(_.nonEmpty).map(GuestSessionId(_))
+      operatorId = operatorId.filter(_.nonEmpty).map(PlayerId(_))
     )
 
   private def resolveActor(
       context: ApiPlanContext,
       input: GetClubApplicationInput
   ): IO[AccessPrincipal] =
-    ResolveRequestActor(input.guestSessionId, input.operatorId).plan(context)
+    ResolveRequestActor(None, input.operatorId).plan(context)
 
   private def getApplicationView(
       context: ApiPlanContext,
@@ -107,6 +105,5 @@ final case class GetClubApplicationAPIMessage(
   private final case class GetClubApplicationInput(
       clubId: ClubId,
       membershipId: MembershipApplicationId,
-      operatorId: Option[PlayerId],
-      guestSessionId: Option[GuestSessionId]
+      operatorId: Option[PlayerId]
   )

@@ -163,7 +163,45 @@ object JsonCodecs:
       ClubApplicationStatus.fromString,
       ClubApplicationStatus.toString
     )
-  given ReadWriter[ClubMembershipApplication] = macroRW
+  given ReadWriter[ClubMembershipApplication] =
+    readwriter[ujson.Value].bimap[ClubMembershipApplication](
+      application =>
+        ujson.Obj.from(
+          Vector(
+            "id" -> writeJs(application.id),
+            "playerId" -> writeJs(application.playerId),
+            "displayName" -> writeJs(application.displayName),
+            "submittedAt" -> writeJs(application.submittedAt),
+            "message" -> writeJs(application.message),
+            "status" -> writeJs(application.status),
+            "reviewedBy" -> writeJs(application.reviewedBy),
+            "reviewedAt" -> writeJs(application.reviewedAt),
+            "reviewNote" -> writeJs(application.reviewNote),
+            "withdrawnByPrincipalId" -> writeJs(application.withdrawnByPrincipalId)
+          ) ++ application.applicantUserId.map("applicantUserId" -> writeJs(_)).toVector
+        ),
+      {
+        case obj: ujson.Obj =>
+          def optional[A: ReadWriter](name: String): Option[A] =
+            obj.value.get(name).fold(Option.empty[A])(read[Option[A]](_))
+
+          ClubMembershipApplication(
+            id = read[MembershipApplicationId](obj("id")),
+            playerId = optional[PlayerId]("playerId"),
+            applicantUserId = optional[String]("applicantUserId"),
+            displayName = read[String](obj("displayName")),
+            submittedAt = read[Instant](obj("submittedAt")),
+            message = optional[String]("message"),
+            status = obj.value.get("status").fold(ClubApplicationStatus.Pending)(read[ClubApplicationStatus](_)),
+            reviewedBy = optional[PlayerId]("reviewedBy"),
+            reviewedAt = optional[Instant]("reviewedAt"),
+            reviewNote = optional[String]("reviewNote"),
+            withdrawnByPrincipalId = optional[String]("withdrawnByPrincipalId")
+          )
+        case json =>
+          throw upickle.core.Abort(s"Expected ClubMembershipApplication object, got $json")
+      }
+    )
   given ReadWriter[ClubRankNode] = macroRW
   given ReadWriter[ClubMemberContribution] = macroRW
   given ReadWriter[ClubMemberPrivilegeSnapshot] = macroRW

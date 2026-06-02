@@ -8,6 +8,7 @@ import riichinexus.microservices.auth.tables.accountcredential.AccountCredential
 import riichinexus.microservices.auth.tables.authenticatedsession.AuthenticatedSessionTableInitializer
 import riichinexus.microservices.auth.tables.guestsession.GuestSessionTableInitializer
 import riichinexus.microservices.club.tables.clubs.ClubTableInitializer
+import riichinexus.microservices.notification.tables.notifications.NotificationTableInitializer
 import riichinexus.microservices.opsanalytics.tables.advancedstatsboard.AdvancedStatsBoardTableInitializer
 import riichinexus.microservices.opsanalytics.tables.advancedstatsrecomputetask.AdvancedStatsRecomputeTaskTableInitializer
 import riichinexus.microservices.audit.tables.auditevent.AuditEventTableInitializer
@@ -35,6 +36,7 @@ final class PostgresSchemaInitializer(connectionFactory: JdbcConnectionFactory):
       AdvancedStatsBoardTableInitializer.initialize(connection)
       AdvancedStatsRecomputeTaskTableInitializer.initialize(connection)
       AuditEventTableInitializer.initialize(connection)
+      NotificationTableInitializer.initialize(connection)
       TournamentTableInitializer.initialize(connection)
       TournamentGameTableInitializer.initialize(connection)
       PaifuTableInitializer.initialize(connection)

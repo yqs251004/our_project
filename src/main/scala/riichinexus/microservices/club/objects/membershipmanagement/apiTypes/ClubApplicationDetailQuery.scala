@@ -1,10 +1,10 @@
 package riichinexus.microservices.club.objects.membershipmanagement.apiTypes
 
+import riichinexus.system.json.JsonCodecs.given
 import upickle.default.*
 
 final case class ClubApplicationDetailQuery(
-    operatorId: Option[String] = None,
-    guestSessionId: Option[String] = None
+    operatorId: Option[String] = None
 )
 
 object ClubApplicationDetailQuery:

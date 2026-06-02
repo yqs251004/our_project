@@ -30,6 +30,9 @@ import riichinexus.microservices.club.domain.Club
 import riichinexus.microservices.club.domain.ClubPowerRatingService
 import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import riichinexus.microservices.opsanalytics.domain.functions.RatingService
+import riichinexus.microservices.opsanalytics.domain.model.RatingChange
+import riichinexus.microservices.notification.api.`private`.CreateBulkNotificationsPrivateAPIMessage
+import riichinexus.microservices.notification.objects.apiTypes.CreateNotificationRequest
 import riichinexus.microservices.player.domain.functions.{PlayerClubBindingFunctions, PlayerRatingFunctions}
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage}
 import riichinexus.microservices.tournament.domain.recordmanagement.functions.MatchRecordFunctions
@@ -74,6 +77,7 @@ final case class RefreshOpsAnalyticsAfterMatchArchivedPrivateAPIMessage(
         )
       }
       ratingDeltas = RatingService.calculateDeltas(players, matchRecord.seatResults)
+      ratingNotificationRequests = eloChangeNotifications(matchRecord, players, ratingDeltas)
       _ <- ratingDeltas.foldLeft(IO.unit) { (previous, delta) =>
         previous.flatMap { _ =>
           IO.blocking(PlayerPersistenceFunctions.findPlayer(context.connection, delta.playerId)).flatMap {
@@ -84,6 +88,7 @@ final case class RefreshOpsAnalyticsAfterMatchArchivedPrivateAPIMessage(
           }
         }
       }
+      _ <- CreateBulkNotificationsPrivateAPIMessage(ratingNotificationRequests).plan(context)
       refreshedClubs <- impactedClubIds.foldLeft(IO.pure(Vector.empty[Club])) { (previous, clubId) =>
         previous.flatMap { clubs =>
           ResolveClubPrivateAPIMessage(clubId).plan(context).flatMap {
@@ -113,3 +118,38 @@ final case class RefreshOpsAnalyticsAfterMatchArchivedPrivateAPIMessage(
         )
       }
     yield ()
+
+  private def eloChangeNotifications(
+      matchRecord: MatchRecord,
+      players: Vector[riichinexus.microservices.player.domain.Player],
+      ratingDeltas: Vector[RatingChange]
+  ): Vector[CreateNotificationRequest] =
+    val playersById = players.map(player => player.id -> player).toMap
+    ratingDeltas.filter(_.delta != 0).flatMap { delta =>
+      playersById.get(delta.playerId).map { player =>
+        val nextElo = player.elo + delta.delta
+        val deltaText =
+          if delta.delta > 0 then s"+${delta.delta}"
+          else delta.delta.toString
+        CreateNotificationRequest(
+          recipientPlayerId = delta.playerId.value,
+          notificationType = "PlayerEloChanged",
+          title = "ELO 已更新",
+          body = s"本场对局结算后，你的 ELO $deltaText，当前 ELO $nextElo。",
+          severity = Some("info"),
+          sourceService = "opsanalytics",
+          sourceType = "player-rating",
+          sourceId = matchRecord.id.value,
+          actionUrl = Some(s"/public/tournaments/${matchRecord.tournamentId.value}"),
+          objects = Map(
+            "tournamentId" -> matchRecord.tournamentId.value,
+            "stageId" -> matchRecord.stageId.value,
+            "tableId" -> matchRecord.tableId.value,
+            "matchRecordId" -> matchRecord.id.value,
+            "playerId" -> delta.playerId.value,
+            "eloDelta" -> delta.delta.toString,
+            "elo" -> nextElo.toString
+          )
+        )
+      }
+    }

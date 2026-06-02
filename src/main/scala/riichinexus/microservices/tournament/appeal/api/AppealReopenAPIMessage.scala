@@ -10,6 +10,7 @@ import java.util.NoSuchElementException
 import cats.effect.IO
 
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
+import riichinexus.microservices.auth.domain.functions.AuthorizationPolicyFunctions
 import riichinexus.microservices.tournament.appeal.domain.AppealApplicationService
 import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
@@ -54,7 +55,7 @@ final case class AppealReopenAPIMessage(
       resolved <- IO.blocking(resolveInput)
       actor <- IO.blocking(ResolveAccessPrincipal(PlayerId(resolved.operatorId)).resolve(context.connection))
       reopenedAt <- IO.realTimeInstant
-      service = context.support.tournamentAppealService
+      service = AppealApplicationService(AuthorizationPolicyFunctions.strict)
       command = ReopenAppealCommand(AppealTicketId(appealId), resolved, actor, reopenedAt)
       ticket <- IO.blocking(reopenAppeal(context.connection, service, command))
       _ <- RecordAuditEventsPrivateAPIMessage(reopenAppealAudit(ticket, command)).plan(context)

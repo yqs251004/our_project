@@ -44,6 +44,8 @@ import riichinexus.microservices.auth.domain.*
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubAuthorization
 import riichinexus.microservices.club.objects.clubmanagement.ClubView
+import riichinexus.microservices.notification.api.`private`.CreateNotificationPrivateAPIMessage
+import riichinexus.microservices.notification.objects.apiTypes.CreateNotificationRequest
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import upickle.default.*
 
@@ -73,6 +75,7 @@ final case class AssignClubTitleAPIMessage(
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
       _ <- RecordAuditEventsPrivateAPIMessage(assignTitleAudit(command)).plan(context)
+      _ <- CreateNotificationPrivateAPIMessage(assignTitleNotification(savedClub, command)).plan(context)
     yield ClubView.fromDomain(savedClub)
 
   private def assignTitle(
@@ -132,6 +135,27 @@ final case class AssignClubTitleAPIMessage(
           "title" -> command.title
         ),
         note = command.note
+      )
+    )
+
+  private def assignTitleNotification(
+      updatedClub: Club,
+      command: AssignClubTitleCommand
+  ): CreateNotificationRequest =
+    CreateNotificationRequest(
+      recipientPlayerId = command.playerId.value,
+      notificationType = "ClubTitleAssigned",
+      title = "获得俱乐部专属头衔",
+      body = s"你在 ${updatedClub.name} 获得了专属头衔「${command.title}」。",
+      severity = Some("success"),
+      sourceService = "club",
+      sourceType = "club-title",
+      sourceId = updatedClub.id.value,
+      actionUrl = Some(s"/public/clubs/${updatedClub.id.value}"),
+      objects = Map(
+        "clubId" -> updatedClub.id.value,
+        "playerId" -> command.playerId.value,
+        "title" -> command.title
       )
     )
 

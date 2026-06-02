@@ -7,7 +7,7 @@ import upickle.default.*
 final case class ClubApplicationListQuery(
     operatorId: String,
     status: Option[ClubApplicationStatus] = None,
-    applicantUserId: Option[String] = None,
+    playerId: Option[String] = None,
     displayName: Option[String] = None,
     limit: Option[Int] = None,
     offset: Option[Int] = None

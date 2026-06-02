@@ -45,6 +45,7 @@ import riichinexus.microservices.tournament.objects.rulesmanagement.knockout.Kno
 import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.StageRankingSnapshot
 import riichinexus.microservices.tournament.tables.tournaments.TournamentTable
 import riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable
+import riichinexus.system.json.JsonCodecs.given
 import upickle.default.*
 
 final case class GetPublicTournamentAPIMessage(
@@ -73,7 +74,7 @@ final case class GetPublicTournamentAPIMessage(
       tournament: Tournament
   ): Map[ClubId, Club] =
     ResolveClubsPrivateAPIMessage(relatedClubIds(tournament))
-      .plan(ApiPlanContext(support = null, bearerToken = None, connection = context.connection))
+      .plan(ApiPlanContext(bearerToken = None, connection = context.connection))
       .unsafeRunSync()
       .map(club => club.id -> club)
       .toMap

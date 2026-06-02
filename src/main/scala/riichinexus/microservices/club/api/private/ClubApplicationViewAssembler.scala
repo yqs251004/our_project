@@ -52,12 +52,10 @@ object ClubApplicationViewAssembler:
       actor: AccessPrincipal,
       application: ClubMembershipApplication
   ): Boolean =
-    val ownedByGuest = AccessPrincipalFunctions.isGuest(actor) && application.applicantUserId.contains(s"guest:${actor.principalId}")
-    val ownedByRegisteredPlayer =
-      actor.playerId.flatMap(PlayerPersistenceFunctions.findPlayer(connection, _)).exists(player =>
+    actor.playerId.flatMap(PlayerPersistenceFunctions.findPlayer(connection, _)).exists { player =>
+      application.playerId.contains(player.id) ||
         application.applicantUserId.contains(player.userId)
-      )
-    ownedByGuest || ownedByRegisteredPlayer
+    }
 
   def canWithdrawClubApplication(
       connection: Connection,
@@ -72,14 +70,13 @@ object ClubApplicationViewAssembler:
       application: ClubMembershipApplication,
       actor: AccessPrincipal
   ): ClubMembershipApplicationView =
-    val applicantPlayer = application.applicantUserId.flatMap(PlayerPersistenceFunctions.findPlayerByUserId(connection, _))
+    val applicantPlayer = resolveApplicantPlayer(connection, application)
     ClubMembershipApplicationView(
       applicationId = application.id.value,
       clubId = club.id.value,
       clubName = club.name,
       applicant = ClubMembershipApplicantView(
         playerId = applicantPlayer.map(_.id.value),
-        applicantUserId = application.applicantUserId,
         displayName = application.displayName,
         playerStatus = applicantPlayer.map(_.status.toString),
         currentRank = applicantPlayer.map(_.currentRank),
@@ -97,3 +94,11 @@ object ClubApplicationViewAssembler:
       canReview = ClubMembershipApplicationFunctions.isPending(application) && canManageClubApplications(actor, club),
       canWithdraw = ClubMembershipApplicationFunctions.isPending(application) && canWithdrawClubApplication(connection, actor, application)
     )
+
+  private def resolveApplicantPlayer(
+      connection: Connection,
+      application: ClubMembershipApplication
+  ) =
+    application.playerId
+      .flatMap(PlayerPersistenceFunctions.findPlayer(connection, _))
+      .orElse(application.applicantUserId.flatMap(PlayerPersistenceFunctions.findPlayerByUserId(connection, _)))

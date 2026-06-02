@@ -43,6 +43,10 @@ import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
 import riichinexus.microservices.player.domain.functions.PlayerClubBindingFunctions
 import riichinexus.microservices.auth.domain.*
+import riichinexus.microservices.audit.api.`private`.RecordAuditEventPrivateAPIMessage
+import riichinexus.microservices.audit.domain.auditevent.AuditEvent
+import riichinexus.microservices.notification.api.`private`.CreateBulkNotificationsPrivateAPIMessage
+import riichinexus.microservices.notification.objects.apiTypes.CreateNotificationRequest
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubAuthorization
 import riichinexus.microservices.club.objects.membershipmanagement.apiTypes.{ClubMembershipApplicationResponse, ClubMembershipApplicationRequest}
@@ -56,7 +60,7 @@ final case class SubmitClubApplicationAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubMembershipApplicationResponse] =
     for
-      actor <- ResolveRequestActor(request.guestSessionId.map(GuestSessionId(_)), request.operatorId.map(PlayerId(_))).plan(context)
+      actor <- ResolveRequestActor(None, request.operatorId.map(PlayerId(_))).plan(context)
       parsedClubId = ClubId(clubId)
       submittedAt <- IO.realTimeInstant
       resolvedInput <- IO.blocking(resolveApplicantInput(context.connection, actor, request))
@@ -72,6 +76,9 @@ final case class SubmitClubApplicationAPIMessage(
           submitApplication(context.connection, command)
         }
       }
+      _ <- RecordAuditEventPrivateAPIMessage(submitApplicationAudit(command, application)).plan(context)
+      notificationRequests <- IO.blocking(submitApplicationNotifications(context.connection, command, application))
+      _ <- CreateBulkNotificationsPrivateAPIMessage(notificationRequests).plan(context)
     yield ClubMembershipApplicationResponse.fromDomain(application)
 
   private def resolveApplicantInput(
@@ -81,14 +88,11 @@ final case class SubmitClubApplicationAPIMessage(
   ): ResolvedClubApplicationInput =
     val operatorPlayer = request.operatorId.filter(_.nonEmpty)
       .flatMap(id => PlayerPersistenceFunctions.findPlayer(connection, PlayerId(id)))
-    val applicantUserId = request.applicantUserId
-      .orElse(request.guestSessionId.filter(_.nonEmpty).map(session => s"guest:$session"))
-      .orElse(operatorPlayer.map(_.userId))
-    val displayName = request.guestSessionId.filter(_.nonEmpty).map(_ => actor.displayName)
-      .orElse(operatorPlayer.map(_.nickname))
-      .getOrElse(request.displayName)
+    val playerId = actor.playerId
+      .getOrElse(throw AuthorizationFailure("Only registered players can apply to clubs"))
+    val displayName = operatorPlayer.map(_.nickname).getOrElse(request.displayName)
     ResolvedClubApplicationInput(
-      applicantUserId = applicantUserId,
+      playerId = playerId,
       displayName = displayName
     )
 
@@ -112,7 +116,7 @@ final case class SubmitClubApplicationAPIMessage(
     ClubAuthorization.ensureClubActive(club)
     ensureApplicationsOpen(club, command.clubId)
     ensureDisplayNameNonEmpty(command.input.displayName)
-    ensureNoPendingApplication(club, command)
+    ensureNoPendingApplication(connection, club, command)
     ensureApplicantNotAlreadyMember(connection, command)
 
   private def ensureApplicationsOpen(club: Club, clubId: ClubId): Unit =
@@ -123,38 +127,89 @@ final case class SubmitClubApplicationAPIMessage(
     if displayName.trim.isEmpty then
       throw IllegalArgumentException("Membership application display name cannot be empty")
 
-  private def ensureNoPendingApplication(club: Club, command: SubmitClubApplicationCommand): Unit =
-    command.input.applicantUserId.foreach { userId =>
-      if club.membershipApplications.exists(application =>
-          application.applicantUserId.contains(userId) && ClubMembershipApplicationFunctions.isPending(application)
-        )
-      then
-        throw IllegalArgumentException(
-          s"User $userId already has a pending application for club ${command.clubId.value}"
-        )
-    }
+  private def ensureNoPendingApplication(
+      connection: java.sql.Connection,
+      club: Club,
+      command: SubmitClubApplicationCommand
+  ): Unit =
+    val playerId = command.input.playerId
+    val player = PlayerPersistenceFunctions.findPlayer(connection, playerId)
+    if club.membershipApplications.exists(application =>
+        ClubMembershipApplicationFunctions.isPending(application) &&
+          (application.playerId.contains(playerId) ||
+            player.exists(existing => application.applicantUserId.contains(existing.userId)))
+      )
+    then
+      throw IllegalArgumentException(
+        s"Player ${playerId.value} already has a pending application for club ${command.clubId.value}"
+      )
 
   private def ensureApplicantNotAlreadyMember(
       connection: java.sql.Connection,
       command: SubmitClubApplicationCommand
   ): Unit =
-    command.input.applicantUserId.foreach { userId =>
-      PlayerPersistenceFunctions.findPlayerByUserId(connection, userId).foreach { existingPlayer =>
-        if PlayerClubBindingFunctions.boundClubIds(existingPlayer).contains(command.clubId) then
-          throw IllegalArgumentException(
-            s"Player ${existingPlayer.id.value} is already a member of club ${command.clubId.value}"
-          )
-      }
+    PlayerPersistenceFunctions.findPlayer(connection, command.input.playerId).foreach { existingPlayer =>
+      if PlayerClubBindingFunctions.boundClubIds(existingPlayer).contains(command.clubId) then
+        throw IllegalArgumentException(
+          s"Player ${existingPlayer.id.value} is already a member of club ${command.clubId.value}"
+        )
     }
 
   private def createApplication(command: SubmitClubApplicationCommand): ClubMembershipApplication =
     ClubMembershipApplication(
       id = ClubIdGenerator.membershipApplicationId(),
-      applicantUserId = command.input.applicantUserId,
+      playerId = Some(command.input.playerId),
       displayName = command.input.displayName,
       submittedAt = command.submittedAt,
       message = command.message
     )
+
+  private def submitApplicationAudit(
+      command: SubmitClubApplicationCommand,
+      application: ClubMembershipApplication
+  ): AuditEvent =
+    AuditEvent(
+      id = AuditIdGenerator.auditEventId(),
+      aggregateType = "club-application",
+      aggregateId = command.clubId.value,
+      eventType = "ClubApplicationSubmitted",
+      occurredAt = command.submittedAt,
+      actorId = command.actor.playerId,
+      details = Map(
+        "clubId" -> command.clubId.value,
+        "membershipId" -> application.id.value,
+        "displayName" -> application.displayName
+      )
+    )
+
+  private def submitApplicationNotifications(
+      connection: java.sql.Connection,
+      command: SubmitClubApplicationCommand,
+      application: ClubMembershipApplication
+  ): Vector[CreateNotificationRequest] =
+    val club = riichinexus.microservices.club.tables.clubs.ClubTable
+      .findById(connection, command.clubId)
+      .getOrElse(throw NoSuchElementException("Resource not found"))
+    val recipients = (club.admins :+ club.creator).distinct
+
+    recipients.map { recipient =>
+      CreateNotificationRequest(
+        recipientPlayerId = recipient.value,
+        notificationType = "ClubApplicationSubmitted",
+        title = "新的俱乐部申请",
+        body = s"${application.displayName} 提交了加入 ${club.name} 的申请。",
+        severity = Some("info"),
+        sourceService = "club",
+        sourceType = "club-application",
+        sourceId = application.id.value,
+        actionUrl = Some(s"/public/clubs/${club.id.value}"),
+        objects = Map(
+          "clubId" -> club.id.value,
+          "membershipId" -> application.id.value,
+          "displayName" -> application.displayName
+        )
+      )
+    }
 
   private final case class SubmitClubApplicationCommand(
       actor: AccessPrincipal,
@@ -165,6 +220,6 @@ final case class SubmitClubApplicationAPIMessage(
   )
 
   private final case class ResolvedClubApplicationInput(
-      applicantUserId: Option[String],
+      playerId: PlayerId,
       displayName: String
   )

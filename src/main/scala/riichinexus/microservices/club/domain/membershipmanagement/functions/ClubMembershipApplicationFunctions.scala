@@ -71,15 +71,3 @@ object ClubMembershipApplicationFunctions:
       withdrawnByPrincipalId = Some(byPrincipalId)
     )
 
-  def bindRegisteredApplicant(
-      application: ClubMembershipApplication,
-      userId: String,
-      updatedDisplayName: String
-  ): ClubMembershipApplication =
-    require(isPending(application), "Only pending applications can be rebound to a registered applicant")
-    require(userId.trim.nonEmpty, "Bound applicant userId cannot be empty")
-    require(updatedDisplayName.trim.nonEmpty, "Bound applicant display name cannot be empty")
-    application.copy(
-      applicantUserId = Some(userId.trim),
-      displayName = updatedDisplayName.trim
-    )

@@ -26,7 +26,8 @@ import riichinexus.microservices.club.objects.membershipmanagement.ClubApplicati
 
 final case class ClubMembershipApplication(
     id: MembershipApplicationId,
-    applicantUserId: Option[String],
+    playerId: Option[PlayerId] = None,
+    applicantUserId: Option[String] = None,
     displayName: String,
     submittedAt: Instant,
     message: Option[String] = None,

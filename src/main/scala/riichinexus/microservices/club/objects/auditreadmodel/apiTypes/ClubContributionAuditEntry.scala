@@ -1,6 +1,7 @@
 package riichinexus.microservices.club.objects.auditreadmodel.apiTypes
 
 import upickle.default.*
+import riichinexus.system.json.JsonCodecs.given
 
 final case class ClubContributionAuditEntry(
     id: String,

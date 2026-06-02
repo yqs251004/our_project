@@ -29,6 +29,7 @@ import riichinexus.microservices.audit.domain.auditevent.AuditEventId
 import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
 import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.auth.domain.model.*
+import riichinexus.microservices.tournament.domain.tournamentmanagement.functions.TournamentStageCompletionCoordinator
 import riichinexus.microservices.tournament.objects.rulesmanagement.stageprogression.StageAdvancementSnapshot
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.*
@@ -45,7 +46,7 @@ final case class TournamentStageCompleteAPIMessage(
       actor = operatorId.filter(_.nonEmpty).map(PlayerId(_)).map(ResolveAccessPrincipal(_).resolve(context.connection)).getOrElse(AccessPrincipalFunctions.system)
       advancement <- IO.blocking {
         {
-            context.support.tournamentStageCompletionCoordinator.completeStage(
+            TournamentStageCompletionCoordinator(AuthorizationPolicyFunctions.strict).completeStage(
               connection = context.connection,
               tournamentId = TournamentId(tournamentId),
               stageId = TournamentStageId(stageId),

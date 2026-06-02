@@ -32,6 +32,7 @@ import riichinexus.microservices.club.domain.Club
 import riichinexus.microservices.club.tables.clubs.ClubTable
 import riichinexus.microservices.club.objects.clubmanagement.apiTypes.ClubLeaderboardEntry
 import riichinexus.system.objects.PagedResponse
+import riichinexus.system.json.JsonCodecs.given
 import upickle.default.*
 
 final case class PublicClubLeaderboardAPIMessage(

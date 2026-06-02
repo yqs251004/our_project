@@ -43,6 +43,8 @@ import riichinexus.microservices.club.domain.clubmanagement.model.*
 import riichinexus.microservices.club.domain.membershipmanagement.model.*
 import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
 import riichinexus.microservices.club.domain.relationmanagement.model.*
+import riichinexus.microservices.notification.api.`private`.CreateBulkNotificationsPrivateAPIMessage
+import riichinexus.microservices.notification.objects.apiTypes.CreateNotificationRequest
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
@@ -60,12 +62,16 @@ final case class TournamentWhitelistClubAPIMessage(tournamentId: String, clubId:
     for
       actor <- IO.blocking(resolveOperatorActor(context))
       command = WhitelistClubCommand(TournamentId(tournamentId), ClubId(clubId), actor)
-      tournament <- IO.blocking {
+      invitation <- IO.blocking {
         {
           whitelistClub(context.connection, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
-    yield TournamentSummaryView.fromDomain(tournament)
+      notificationRequests =
+        if invitation.wasNewInvitation then clubInvitationNotifications(invitation.tournament, invitation.club)
+        else Vector.empty
+      _ <- CreateBulkNotificationsPrivateAPIMessage(notificationRequests).plan(context)
+    yield TournamentSummaryView.fromDomain(invitation.tournament)
 
   private def resolveOperatorActor(context: ApiPlanContext): AccessPrincipal =
     operatorId.map(PlayerId(_))
@@ -75,19 +81,44 @@ final case class TournamentWhitelistClubAPIMessage(tournamentId: String, clubId:
   private def whitelistClub(
       connection: java.sql.Connection,
       command: WhitelistClubCommand
-  ): Option[Tournament] =
+  ): Option[ClubInvitationResult] =
     AuthorizationPolicyFunctions.requirePermission(AuthorizationPolicyFunctions.strict, 
       command.actor,
       Permission.ManageTournamentStages,
       tournamentId = Some(command.tournamentId)
     )
     val club = ResolveClubPrivateAPIMessage(command.clubId)
-      .plan(ApiPlanContext(support = null, bearerToken = None, connection = connection))
+      .plan(ApiPlanContext(bearerToken = None, connection = connection))
       .unsafeRunSync()
       .getOrElse(throw NoSuchElementException(s"Club ${command.clubId.value} was not found"))
     ensureClubActive(club)
     riichinexus.microservices.tournament.tables.tournaments.TournamentTable.findById(connection, command.tournamentId).map { tournament =>
-      riichinexus.microservices.tournament.tables.tournaments.TournamentTable.save(connection, TournamentFunctions.whitelistClub(tournament, command.clubId))
+      val wasNewInvitation = !tournament.whitelist.exists(_.clubId.contains(command.clubId))
+      val updatedTournament =
+        riichinexus.microservices.tournament.tables.tournaments.TournamentTable.save(connection, TournamentFunctions.whitelistClub(tournament, command.clubId))
+      ClubInvitationResult(updatedTournament, club, wasNewInvitation)
+    }
+
+  private def clubInvitationNotifications(
+      tournament: Tournament,
+      club: Club
+  ): Vector[CreateNotificationRequest] =
+    (club.creator +: club.admins).distinct.map { recipient =>
+      CreateNotificationRequest(
+        recipientPlayerId = recipient.value,
+        notificationType = "TournamentClubInvited",
+        title = "俱乐部收到赛事邀请",
+        body = s"${club.name} 被邀请参加赛事 ${tournament.name}。",
+        severity = Some("info"),
+        sourceService = "tournament",
+        sourceType = "tournament-club-invitation",
+        sourceId = tournament.id.value,
+        actionUrl = Some(s"/public/tournaments/${tournament.id.value}"),
+        objects = Map(
+          "tournamentId" -> tournament.id.value,
+          "clubId" -> club.id.value
+        )
+      )
     }
 
   private def ensureClubActive(club: Club): Unit =
@@ -98,4 +129,10 @@ final case class TournamentWhitelistClubAPIMessage(tournamentId: String, clubId:
       tournamentId: TournamentId,
       clubId: ClubId,
       actor: AccessPrincipal
+  )
+
+  private final case class ClubInvitationResult(
+      tournament: Tournament,
+      club: Club,
+      wasNewInvitation: Boolean
   )

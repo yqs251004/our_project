@@ -87,7 +87,7 @@ final case class TournamentRemoveClubParticipationAPIMessage(tournamentId: Strin
       tournamentId = Some(command.tournamentId)
     )
     ResolveClubPrivateAPIMessage(command.clubId)
-      .plan(ApiPlanContext(support = null, bearerToken = None, connection = connection))
+      .plan(ApiPlanContext(bearerToken = None, connection = connection))
       .unsafeRunSync()
       .getOrElse(throw NoSuchElementException(s"Club ${command.clubId.value} was not found"))
     riichinexus.microservices.tournament.tables.tournaments.TournamentTable.findById(connection, command.tournamentId).foreach { tournament =>

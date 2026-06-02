@@ -2,6 +2,7 @@ package riichinexus.microservices.club.objects.rankprivilegemanagement.apiTypes
 
 import riichinexus.microservices.club.domain.rankprivilegemanagement.model.{ClubMemberPrivilegeSnapshot as DomainClubMemberPrivilegeSnapshot}
 import riichinexus.microservices.club.objects.rankprivilegemanagement.ClubPrivilegeCode
+import riichinexus.system.json.JsonCodecs.given
 import upickle.default.*
 
 final case class ClubMemberPrivilegeSnapshotView(

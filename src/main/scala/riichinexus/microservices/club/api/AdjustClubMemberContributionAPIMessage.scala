@@ -44,6 +44,8 @@ import riichinexus.microservices.auth.domain.*
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubAuthorization
 import riichinexus.microservices.club.objects.clubmanagement.ClubView
+import riichinexus.microservices.notification.api.`private`.CreateNotificationPrivateAPIMessage
+import riichinexus.microservices.notification.objects.apiTypes.CreateNotificationRequest
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import upickle.default.*
 
@@ -73,6 +75,7 @@ final case class AdjustClubMemberContributionAPIMessage(
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
       _ <- RecordAuditEventsPrivateAPIMessage(adjustMemberContributionAudit(savedClub, command)).plan(context)
+      _ <- CreateNotificationPrivateAPIMessage(adjustMemberContributionNotification(savedClub, command)).plan(context)
     yield ClubView.fromDomain(savedClub)
 
   private def adjustMemberContribution(
@@ -148,6 +151,32 @@ final case class AdjustClubMemberContributionAPIMessage(
           "rankCode" -> ClubFunctions.rankFor(updatedClub, command.playerId).map(_.code).getOrElse("unknown")
         ),
         note = command.note
+      )
+    )
+
+  private def adjustMemberContributionNotification(
+      updatedClub: Club,
+      command: AdjustClubMemberContributionCommand
+  ): CreateNotificationRequest =
+    val nextContribution = ClubFunctions.contributionOf(updatedClub, command.playerId)
+    val deltaText =
+      if command.delta > 0 then s"+${command.delta}"
+      else command.delta.toString
+    CreateNotificationRequest(
+      recipientPlayerId = command.playerId.value,
+      notificationType = "ClubMemberContributionAdjusted",
+      title = "俱乐部贡献值已调整",
+      body = s"你在 ${updatedClub.name} 的贡献值调整了 $deltaText，当前贡献值为 $nextContribution。",
+      severity = Some("info"),
+      sourceService = "club",
+      sourceType = "club-contribution",
+      sourceId = updatedClub.id.value,
+      actionUrl = Some(s"/public/clubs/${updatedClub.id.value}"),
+      objects = Map(
+        "clubId" -> updatedClub.id.value,
+        "playerId" -> command.playerId.value,
+        "delta" -> command.delta.toString,
+        "contribution" -> nextContribution.toString
       )
     )
 

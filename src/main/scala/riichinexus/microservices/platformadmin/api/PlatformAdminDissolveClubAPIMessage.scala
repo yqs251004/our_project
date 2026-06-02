@@ -95,7 +95,7 @@ final case class PlatformAdminDissolveClubAPIMessage(
       connection: java.sql.Connection,
       command: DissolveClubCommand
   ): Option[Club] =
-    ResolveClubPrivateAPIMessage(command.clubId).plan(ApiPlanContext(support = null, bearerToken = None, connection = connection)).unsafeRunSync().map { club =>
+    ResolveClubPrivateAPIMessage(command.clubId).plan(ApiPlanContext(bearerToken = None, connection = connection)).unsafeRunSync().map { club =>
       ensureClubCanDissolve(club, command.clubId)
       removeMembersFromClub(connection, club, command.clubId)
       removeRelationsToClub(connection, command.clubId)
@@ -120,12 +120,12 @@ final case class PlatformAdminDissolveClubAPIMessage(
     }
 
   private def removeRelationsToClub(connection: java.sql.Connection, clubId: ClubId): Unit =
-    ListClubsPrivateAPIMessage(activeOnly = true).plan(ApiPlanContext(support = null, bearerToken = None, connection = connection)).unsafeRunSync()
+    ListClubsPrivateAPIMessage(activeOnly = true).plan(ApiPlanContext(bearerToken = None, connection = connection)).unsafeRunSync()
       .filterNot(_.id == clubId)
       .filter(_.relations.exists(_.targetClubId == clubId))
       .foreach { relatedClub =>
         SaveClubPrivateAPIMessage(ClubFunctions.removeRelation(relatedClub, clubId))
-          .plan(ApiPlanContext(support = null, bearerToken = None, connection = connection))
+          .plan(ApiPlanContext(bearerToken = None, connection = connection))
           .unsafeRunSync()
       }
 
@@ -136,7 +136,7 @@ final case class PlatformAdminDissolveClubAPIMessage(
   ): Club =
     SaveClubPrivateAPIMessage(
       ClubFunctions.dissolve(club, command.actor.playerId.getOrElse(club.creator), command.dissolvedAt)
-    ).plan(ApiPlanContext(support = null, bearerToken = None, connection = connection)).unsafeRunSync()
+    ).plan(ApiPlanContext(bearerToken = None, connection = connection)).unsafeRunSync()
 
   private def dissolveClubAudit(club: Club, command: DissolveClubCommand): Vector[AuditEvent] =
     Vector(

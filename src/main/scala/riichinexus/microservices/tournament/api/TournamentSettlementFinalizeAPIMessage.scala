@@ -41,6 +41,8 @@ import riichinexus.microservices.tournament.domain.recordmanagement.model.*
 import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
 import riichinexus.microservices.tournament.domain.tablemanagement.model.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
+import riichinexus.microservices.notification.api.`private`.CreateBulkNotificationsPrivateAPIMessage
+import riichinexus.microservices.notification.objects.apiTypes.CreateNotificationRequest
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
@@ -65,18 +67,23 @@ final case class TournamentSettlementFinalizeAPIMessage(tournamentId: String, se
         note = request.note,
         finalizedAt = finalizedAt
       )
-      finalized <- IO.blocking {
+      result <- IO.blocking {
         {
           finalizeSettlement(context.connection, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
-      _ <- RecordAuditEventsPrivateAPIMessage(finalizeSettlementAudit(finalized, command)).plan(context)
-    yield TournamentSettlementView.fromDomain(finalized)
+      _ <- RecordAuditEventsPrivateAPIMessage(finalizeSettlementAudit(result.snapshot, command)).plan(context)
+      notificationRequests <- IO.blocking {
+        if result.didFinalize then settlementFinalizedNotifications(context.connection, result.snapshot)
+        else Vector.empty
+      }
+      _ <- CreateBulkNotificationsPrivateAPIMessage(notificationRequests).plan(context)
+    yield TournamentSettlementView.fromDomain(result.snapshot)
 
   private def finalizeSettlement(
       connection: java.sql.Connection,
       command: FinalizeSettlementCommand
-  ): Option[TournamentSettlementSnapshot] =
+  ): Option[FinalizeSettlementResult] =
     requireFinalizePermission(command)
     riichinexus.microservices.tournament.tables.settlement.TournamentSettlementTable
       .findById(connection, command.settlementId)
@@ -96,12 +103,16 @@ final case class TournamentSettlementFinalizeAPIMessage(tournamentId: String, se
       connection: java.sql.Connection,
       command: FinalizeSettlementCommand,
       settlement: TournamentSettlementSnapshot
-  ): TournamentSettlementSnapshot =
+  ): FinalizeSettlementResult =
+    val didFinalize =
+      settlement.status != riichinexus.microservices.tournament.objects.settlementmanagement.TournamentSettlementStatus.Finalized
     val finalized =
       if settlement.status == riichinexus.microservices.tournament.objects.settlementmanagement.TournamentSettlementStatus.Finalized then settlement
       else TournamentSettlementSnapshotFunctions.finalize(settlement, command.finalizedAt)
-    if settlement.status == riichinexus.microservices.tournament.objects.settlementmanagement.TournamentSettlementStatus.Finalized then finalized
-    else riichinexus.microservices.tournament.tables.settlement.TournamentSettlementTable.save(connection, finalized)
+    val saved =
+      if settlement.status == riichinexus.microservices.tournament.objects.settlementmanagement.TournamentSettlementStatus.Finalized then finalized
+      else riichinexus.microservices.tournament.tables.settlement.TournamentSettlementTable.save(connection, finalized)
+    FinalizeSettlementResult(saved, didFinalize)
 
   private def finalizeSettlementAudit(
       finalized: TournamentSettlementSnapshot,
@@ -124,10 +135,48 @@ final case class TournamentSettlementFinalizeAPIMessage(tournamentId: String, se
       )
     )
 
+  private def settlementFinalizedNotifications(
+      connection: java.sql.Connection,
+      snapshot: TournamentSettlementSnapshot
+  ): Vector[CreateNotificationRequest] =
+    val tournamentName =
+      riichinexus.microservices.tournament.tables.tournaments.TournamentTable
+        .findById(connection, snapshot.tournamentId)
+        .map(_.name)
+        .getOrElse(snapshot.tournamentId.value)
+
+    snapshot.entries.map { entry =>
+      CreateNotificationRequest(
+        recipientPlayerId = entry.playerId.value,
+        notificationType = "TournamentSettlementFinalized",
+        title = "赛事结算已完成",
+        body = s"$tournamentName 已完成结算：你的排名第 ${entry.rank}，结算分 ${entry.finalPoints}。",
+        severity = Some("info"),
+        sourceService = "tournament",
+        sourceType = "tournament-settlement",
+        sourceId = snapshot.id.value,
+        actionUrl = Some(s"/public/tournaments/${snapshot.tournamentId.value}"),
+        objects = Map(
+          "tournamentId" -> snapshot.tournamentId.value,
+          "stageId" -> snapshot.stageId.value,
+          "settlementId" -> snapshot.id.value,
+          "playerId" -> entry.playerId.value,
+          "rank" -> entry.rank.toString,
+          "finalPoints" -> entry.finalPoints.toString,
+          "awardAmount" -> entry.awardAmount.toString
+        )
+      )
+    }
+
   private final case class FinalizeSettlementCommand(
       tournamentId: TournamentId,
       settlementId: SettlementSnapshotId,
       actor: AccessPrincipal,
       note: Option[String],
       finalizedAt: Instant
+  )
+
+  private final case class FinalizeSettlementResult(
+      snapshot: TournamentSettlementSnapshot,
+      didFinalize: Boolean
   )

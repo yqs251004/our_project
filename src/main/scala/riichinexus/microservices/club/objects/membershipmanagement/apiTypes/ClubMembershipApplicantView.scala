@@ -6,7 +6,6 @@ import upickle.default.*
 
 final case class ClubMembershipApplicantView(
     playerId: Option[String],
-    applicantUserId: Option[String],
     displayName: String,
     playerStatus: Option[String],
     currentRank: Option[RankSnapshot],

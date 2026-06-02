@@ -24,6 +24,7 @@ import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGen
 import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.club.domain.relationmanagement.model.ClubRelation
 import riichinexus.microservices.club.objects.relationmanagement.ClubRelationKind
+import riichinexus.system.json.JsonCodecs.given
 import upickle.default.*
 
 final case class UpdateClubRelationRequest(

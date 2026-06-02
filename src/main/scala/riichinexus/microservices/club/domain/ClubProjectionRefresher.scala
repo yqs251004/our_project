@@ -59,4 +59,4 @@ object ClubProjectionRefresher:
     PlayerPersistenceFunctions.findPlayer(connection, playerId)
 
   private def apiContext(connection: Connection): ApiPlanContext =
-    ApiPlanContext(support = null, bearerToken = None, connection = connection)
+    ApiPlanContext(bearerToken = None, connection = connection)

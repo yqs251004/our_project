@@ -2,17 +2,14 @@ package riichinexus.system.api
 
 import riichinexus.system.api.runtime.ApiExecutionContext
 import riichinexus.system.postgres.JdbcConnectionFactory
-import riichinexus.microservices.auth.domain.functions.AuthorizationPolicyFunctions
-import riichinexus.microservices.tournament.appeal.domain.AppealApplicationService
-import riichinexus.microservices.tournament.domain.paifumanagement.functions.TournamentPaifuArchiveService
-import riichinexus.microservices.tournament.domain.settlementmanagement.functions.TournamentSettlementCoordinator
-import riichinexus.microservices.tournament.domain.tournamentmanagement.functions.TournamentStageCompletionCoordinator
 import riichinexus.system.instrumentation.PerformanceDiagnosticsService
+import riichinexus.system.realtime.domain.RealtimeEventBus
 
 final case class ApiRuntimeContext(
     executionContext: ApiExecutionContext,
     corsAllowOrigin: String,
-    performanceDiagnosticsService: PerformanceDiagnosticsService
+    performanceDiagnosticsService: PerformanceDiagnosticsService,
+    realtimeEventBus: RealtimeEventBus
 )
 
 object ApiRuntimeContext:
@@ -32,16 +29,12 @@ object ApiRuntimeContext:
       storageLabel: String,
       corsAllowOrigin: String = "*"
   ): ApiRuntimeContext =
-    val authorizationService = AuthorizationPolicyFunctions.strict
     ApiRuntimeContext(
       executionContext = ApiExecutionContext(
         connectionFactory = connectionFactory,
-        tournamentPaifuArchiveService = TournamentPaifuArchiveService(authorizationService),
-        tournamentSettlementCoordinator = TournamentSettlementCoordinator(authorizationService),
-        tournamentStageCompletionCoordinator = TournamentStageCompletionCoordinator(authorizationService),
-        tournamentAppealService = AppealApplicationService(authorizationService),
         storageLabel = storageLabel
       ),
       corsAllowOrigin = corsAllowOrigin,
-      performanceDiagnosticsService = PerformanceDiagnosticsService()
+      performanceDiagnosticsService = PerformanceDiagnosticsService(),
+      realtimeEventBus = RealtimeEventBus.empty
     )

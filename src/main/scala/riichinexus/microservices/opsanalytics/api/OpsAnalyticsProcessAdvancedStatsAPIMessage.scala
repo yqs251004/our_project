@@ -111,7 +111,7 @@ final case class OpsAnalyticsProcessAdvancedStatsAPIMessage(
             case DashboardOwner.Player(playerId) =>
               riichinexus.microservices.opsanalytics.tables.advancedstatsboard.AdvancedStatsBoardTable.save(connection, rebuildPlayerBoard(connection, playerId, command.processedAt))
             case DashboardOwner.Club(clubId) =>
-              val club = ResolveClubPrivateAPIMessage(clubId).plan(ApiPlanContext(support = null, bearerToken = None, connection = connection)).unsafeRunSync().getOrElse(
+              val club = ResolveClubPrivateAPIMessage(clubId).plan(ApiPlanContext(bearerToken = None, connection = connection)).unsafeRunSync().getOrElse(
                 throw NoSuchElementException(s"Club ${clubId.value} was not found")
               )
               riichinexus.microservices.opsanalytics.tables.advancedstatsboard.AdvancedStatsBoardTable.save(connection, rebuildClubBoard(connection, club, command.processedAt))
@@ -153,10 +153,10 @@ final case class OpsAnalyticsProcessAdvancedStatsAPIMessage(
       at: Instant
   ): AdvancedStatsBoard =
     val records = ListPlayerMatchRecordsPrivateAPIMessage(playerId)
-      .plan(ApiPlanContext(support = null, bearerToken = None, connection = connection))
+      .plan(ApiPlanContext(bearerToken = None, connection = connection))
       .unsafeRunSync()
     val paifus = ListPlayerPaifusPrivateAPIMessage(playerId)
-      .plan(ApiPlanContext(support = null, bearerToken = None, connection = connection))
+      .plan(ApiPlanContext(bearerToken = None, connection = connection))
       .unsafeRunSync()
     val existingVersion =
       riichinexus.microservices.opsanalytics.tables.advancedstatsboard.AdvancedStatsBoardTable.findByOwner(connection, DashboardOwner.Player(playerId)).map(_.version).getOrElse(0)

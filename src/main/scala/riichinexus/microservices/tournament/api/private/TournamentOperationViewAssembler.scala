@@ -78,7 +78,7 @@ object TournamentOperationViewAssembler:
       tournament: Tournament
   ): TournamentDetailView =
     val tournamentClubIds = relatedClubIds(tournament)
-    val clubsById = ResolveClubsPrivateAPIMessage(tournamentClubIds).plan(ApiPlanContext(support = null, bearerToken = None, connection = connection)).unsafeRunSync()
+    val clubsById = ResolveClubsPrivateAPIMessage(tournamentClubIds).plan(ApiPlanContext(bearerToken = None, connection = connection)).unsafeRunSync()
       .map(club => club.id -> club)
       .toMap
     val participantIds = tournamentParticipantIds(tournament, clubsById)

@@ -41,6 +41,7 @@ import riichinexus.microservices.player.objects.PlayerStatus
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import riichinexus.microservices.club.objects.clubmanagement.apiTypes.PublicClubDirectoryEntry
 import riichinexus.system.objects.PagedResponse
+import riichinexus.system.json.JsonCodecs.given
 import upickle.default.*
 
 final case class ListPublicClubsAPIMessage(

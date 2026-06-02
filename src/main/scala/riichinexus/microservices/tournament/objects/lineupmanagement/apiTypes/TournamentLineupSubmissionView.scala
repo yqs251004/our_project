@@ -1,6 +1,7 @@
 package riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes
 
 import upickle.default.*
+import riichinexus.system.json.JsonCodecs.given
 
 import java.time.Instant
 

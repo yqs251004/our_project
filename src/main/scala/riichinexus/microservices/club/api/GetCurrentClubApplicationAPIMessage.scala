@@ -41,8 +41,7 @@ import upickle.default.*
 
 final case class GetCurrentClubApplicationAPIMessage(
     clubId: String,
-    operatorId: Option[String] = None,
-    guestSessionId: Option[String] = None
+    operatorId: Option[String] = None
 ) extends APIMessage[ClubMembershipApplicationView] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[ClubMembershipApplicationView] =
@@ -53,21 +52,19 @@ final case class GetCurrentClubApplicationAPIMessage(
     yield view
 
   private def resolveInput: CurrentClubApplicationInput =
-    val parsedGuestSessionId = guestSessionId.filter(_.nonEmpty).map(GuestSessionId(_))
     val parsedOperatorId = operatorId.filter(_.nonEmpty).map(PlayerId(_))
-    if parsedGuestSessionId.isEmpty && parsedOperatorId.isEmpty then
-      throw IllegalArgumentException("operatorId or guestSessionId is required")
+    if parsedOperatorId.isEmpty then
+      throw IllegalArgumentException("operatorId is required")
     CurrentClubApplicationInput(
       clubId = ClubId(clubId),
-      operatorId = parsedOperatorId,
-      guestSessionId = parsedGuestSessionId
+      operatorId = parsedOperatorId
     )
 
   private def resolveActor(
       context: ApiPlanContext,
       input: CurrentClubApplicationInput
   ): IO[AccessPrincipal] =
-    ResolveRequestActor(input.guestSessionId, input.operatorId).plan(context)
+    ResolveRequestActor(None, input.operatorId).plan(context)
 
   private def getCurrentApplicationView(
       context: ApiPlanContext,
@@ -85,6 +82,5 @@ final case class GetCurrentClubApplicationAPIMessage(
 
   private final case class CurrentClubApplicationInput(
       clubId: ClubId,
-      operatorId: Option[PlayerId],
-      guestSessionId: Option[GuestSessionId]
+      operatorId: Option[PlayerId]
   )
