@@ -22,5 +22,6 @@ final case class MahjongWinContext(
     haitei: Boolean = false,
     houtei: Boolean = false,
     tenhou: Boolean = false,
+    chiihou: Boolean = false,
     ruleset: MahjongRuleset = MahjongRuleset()
 )

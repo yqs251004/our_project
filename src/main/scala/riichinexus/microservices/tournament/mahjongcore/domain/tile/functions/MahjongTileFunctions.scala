@@ -163,8 +163,13 @@ object MahjongTileFunctions:
     var valid = true
     tilesToRemove.foreach { tile =>
       if valid then
-        val targetIndex = indexOf(tile)
-        val position = remaining.indexWhere { case (candidate, _) => indexOf(candidate) == targetIndex }
+        val normalizedTile = normalize(tile)
+        val exactPosition = remaining.indexWhere { case (candidate, _) => normalize(candidate) == normalizedTile }
+        val position =
+          if exactPosition >= 0 then exactPosition
+          else
+            val targetIndex = indexOf(tile)
+            remaining.indexWhere { case (candidate, _) => indexOf(candidate) == targetIndex }
         if position < 0 then valid = false
         else remaining.remove(position)
     }

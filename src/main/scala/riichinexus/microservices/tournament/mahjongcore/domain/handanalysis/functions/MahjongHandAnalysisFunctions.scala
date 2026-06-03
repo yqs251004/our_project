@@ -91,24 +91,30 @@ object MahjongHandAnalysisFunctions:
       tiles: Iterable[PaifuTile],
       fixedMelds: Vector[MahjongHandMeld] = Vector.empty
   ): Option[MahjongHandDecomposition] =
-    standardDecomposition(countsOf(tiles), fixedMelds)
+    standardDecompositions(countsOf(tiles), fixedMelds).headOption
 
   def standardDecomposition(
       counts: Array[Int],
       fixedMelds: Vector[MahjongHandMeld]
   ): Option[MahjongHandDecomposition] =
+    standardDecompositions(counts, fixedMelds).headOption
+
+  def standardDecompositions(
+      counts: Array[Int],
+      fixedMelds: Vector[MahjongHandMeld]
+  ): Vector[MahjongHandDecomposition] =
     val neededMelds = 4 - fixedMelds.size
-    if neededMelds < 0 then None
+    if neededMelds < 0 then Vector.empty
     else
-      (0 until TileTypeCount).iterator.flatMap { pairIndex =>
-        if counts(pairIndex) < 2 then Iterator.empty
+      (0 until TileTypeCount).toVector.flatMap { pairIndex =>
+        if counts(pairIndex) < 2 then Vector.empty
         else
           val temp = counts.clone()
           temp(pairIndex) -= 2
           decomposeMelds(temp, neededMelds, Vector.empty).map { concealedMelds =>
             MahjongHandDecomposition(fixedMelds ++ concealedMelds, pairIndex)
-          }.iterator
-      }.toSeq.headOption
+          }
+      }
 
   private def calculateStandardShanten(counts: Array[Int], completedMelds: Int): Int =
     var minShanten = 8
@@ -175,12 +181,12 @@ object MahjongHandAnalysisFunctions:
       counts: Array[Int],
       neededMelds: Int,
       acc: Vector[MahjongHandMeld]
-  ): Option[Vector[MahjongHandMeld]] =
+  ): Vector[Vector[MahjongHandMeld]] =
     if acc.size == neededMelds then
-      if counts.forall(_ == 0) then Some(acc) else None
+      if counts.forall(_ == 0) then Vector(acc) else Vector.empty
     else
       val first = counts.indexWhere(_ > 0)
-      if first < 0 then Some(acc)
+      if first < 0 then Vector(acc)
       else
         val triplet =
           if counts(first) >= 3 then
@@ -192,21 +198,22 @@ object MahjongHandAnalysisFunctions:
             )
             counts(first) += 3
             result
-          else None
+          else Vector.empty
 
-        triplet.orElse {
+        val sequence =
           if isSuited(first) && first % 9 <= 6 && counts(first + 1) > 0 && counts(first + 2) > 0 then
-            counts(first) -= 1
-            counts(first + 1) -= 1
-            counts(first + 2) -= 1
-            val result = decomposeMelds(
-              counts,
-              neededMelds,
-              acc :+ MahjongHandMeld(MahjongHandMeldType.Shuntsu, first, concealed = true)
-            )
-            counts(first) += 1
-            counts(first + 1) += 1
-            counts(first + 2) += 1
-            result
-          else None
-        }
+              counts(first) -= 1
+              counts(first + 1) -= 1
+              counts(first + 2) -= 1
+              val result = decomposeMelds(
+                counts,
+                neededMelds,
+                acc :+ MahjongHandMeld(MahjongHandMeldType.Shuntsu, first, concealed = true)
+              )
+              counts(first) += 1
+              counts(first + 1) += 1
+              counts(first + 2) += 1
+              result
+          else Vector.empty
+
+        triplet ++ sequence

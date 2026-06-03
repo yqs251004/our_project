@@ -264,7 +264,9 @@ object MahjongGameStateTransitionFunctions:
       round: MahjongRoundState,
       seat: MahjongSeatState
   ): Vector[MahjongLegalAction] =
-    val discardTiles = (seat.handTiles ++ seat.drawTile.toVector).map(MahjongTileFunctions.normalize).distinctBy(tile => (indexOf(tile), isRed(tile)))
+    val discardTiles =
+      if seat.riichi then seat.drawTile.toVector.map(MahjongTileFunctions.normalize)
+      else (seat.handTiles ++ seat.drawTile.toVector).map(MahjongTileFunctions.normalize).distinctBy(tile => (indexOf(tile), isRed(tile)))
     val discardActions = discardTiles.map(tile => MahjongLegalAction(MahjongCommandType.Discard, tile = Some(tile), priority = 10))
     val riichiActions =
       if canDeclareRiichi(seat) then
@@ -292,7 +294,9 @@ object MahjongGameStateTransitionFunctions:
     val round = requireRound(state)
     val seat = seatByPlayerId(state, playerId)
     val normalizedTile = MahjongTileFunctions.normalize(tile)
-    val fromDraw = seat.drawTile.exists(draw => indexOf(draw) == indexOf(normalizedTile))
+    val fromDraw = seat.drawTile.exists(draw => sameTile(draw, normalizedTile))
+    if seat.riichi && !riichiDeclared && !fromDraw then
+      throw IllegalArgumentException(s"Player ${playerId.value} must discard the drawn tile after riichi")
     val updatedSeatWithoutDiscard =
       if fromDraw then seat.copy(drawTile = None)
       else
@@ -544,10 +548,13 @@ object MahjongGameStateTransitionFunctions:
   ): Option[MahjongPendingCallState] =
     val candidates = state.seats.filterNot(_.playerId == discard.playerId).flatMap { seat =>
       val ron = ronLegalAction(state, round, seat, discard)
-      val pon = ponLegalAction(seat, discard)
-      val kan = openKanLegalAction(seat, discard)
-      val chi = if seat.playerId == nextSeatId(state, discard.playerId) then chiLegalActions(seat, discard) else Vector.empty
-      val actions = ron.toVector ++ kan.toVector ++ pon.toVector ++ chi
+      val actions =
+        if seat.riichi then ron.toVector
+        else
+          val pon = ponLegalAction(seat, discard)
+          val kan = openKanLegalAction(seat, discard)
+          val chi = if seat.playerId == nextSeatId(state, discard.playerId) then chiLegalActions(seat, discard) else Vector.empty
+          ron.toVector ++ kan.toVector ++ pon.toVector ++ chi
       Option.when(actions.nonEmpty)(MahjongCallCandidate(seat.playerId, actions))
     }
     Option.when(candidates.nonEmpty)(
@@ -605,17 +612,17 @@ object MahjongGameStateTransitionFunctions:
       Vector(index - 2, index - 1, index).filter(start => start >= 0 && start % 9 <= 6 && index >= start && index <= start + 2).flatMap { start =>
         val needed = Vector(start, start + 1, start + 2).filterNot(_ == index)
         if needed.forall(tileIndex => counts(tileIndex) > 0) then
-          Some(
+          tileChoiceCombinations(needed, seat.handTiles).map { handTiles =>
             MahjongLegalAction(
               MahjongCommandType.Chi,
               tile = Some(discard.tile),
-              tiles = Vector(start, start + 1, start + 2).map(tileOf(_)),
+              tiles = sortTiles(discard.tile +: handTiles),
               fromPlayerId = Some(discard.playerId),
               targetSequenceNo = Some(discard.sequenceNo),
               priority = 40
             )
-          )
-        else None
+          }
+        else Vector.empty
       }
 
   private def closedKanLegalActions(seat: MahjongSeatState): Vector[MahjongLegalAction] =
@@ -651,6 +658,24 @@ object MahjongGameStateTransitionFunctions:
 
   private def canDeclareRiichi(seat: MahjongSeatState): Boolean =
     !seat.riichi && seat.points >= 1000 && seat.melds.forall(_.closed)
+
+  private def sameTile(left: PaifuTile, right: PaifuTile): Boolean =
+    MahjongTileFunctions.normalize(left) == MahjongTileFunctions.normalize(right)
+
+  private def tileChoiceCombinations(
+      neededIndices: Vector[Int],
+      handTiles: Vector[PaifuTile]
+  ): Vector[Vector[PaifuTile]] =
+    neededIndices.foldLeft(Vector(Vector.empty[PaifuTile])) { (combinations, tileIndex) =>
+      val choices = handTileChoices(tileIndex, handTiles)
+      combinations.flatMap(combination => choices.map(choice => combination :+ choice))
+    }
+
+  private def handTileChoices(tileIndex: Int, handTiles: Vector[PaifuTile]): Vector[PaifuTile] =
+    handTiles
+      .map(MahjongTileFunctions.normalize)
+      .filter(tile => indexOf(tile) == tileIndex)
+      .distinctBy(tile => isRed(tile))
 
   private def dealRound(
       state: MahjongTableState,
@@ -823,6 +848,16 @@ object MahjongGameStateTransitionFunctions:
       target match
         case Some(_) => seat.handTiles :+ winningTile
         case None => seat.handTiles ++ seat.drawTile.toVector
+    val winnerIsDealer = seat.seat == SeatWind.East
+    val winnerDrawCount = round.events.count {
+      case MahjongEvent.TileDrawn(_, `winner`, _) => true
+      case _ => false
+    }
+    val noCallsMade = !round.events.exists {
+      case MahjongEvent.MeldCalled(_, _, _) => true
+      case MahjongEvent.KanDeclared(_, _, _) => true
+      case _ => false
+    }
     MahjongWinContext(
       winner = winner,
       target = target,
@@ -841,10 +876,8 @@ object MahjongGameStateTransitionFunctions:
       },
       haitei = round.wall.isEmpty && target.isEmpty,
       houtei = round.wall.isEmpty && target.nonEmpty,
-      tenhou = round.events.count {
-        case MahjongEvent.TileDrawn(_, _, _) => true
-        case _ => false
-      } == 1 && target.isEmpty,
+      tenhou = winnerIsDealer && winnerDrawCount == 1 && target.isEmpty,
+      chiihou = !winnerIsDealer && winnerDrawCount == 1 && target.isEmpty && noCallsMade,
       ruleset = state.ruleset
     )
 
@@ -956,7 +989,10 @@ object MahjongGameStateTransitionFunctions:
     legalAction.commandType == submitted.commandType &&
       submitted.tile.forall(tile => legalAction.tile.exists(legalTile => indexOf(legalTile) == indexOf(tile))) &&
       submitted.targetSequenceNo.forall(sequenceNo => legalAction.targetSequenceNo.contains(sequenceNo)) &&
-      (submitted.tiles.isEmpty || submitted.tiles.map(indexOf).sorted == legalAction.tiles.map(indexOf).sorted)
+      (submitted.tiles.isEmpty || tileSignatures(submitted.tiles) == tileSignatures(legalAction.tiles))
+
+  private def tileSignatures(tiles: Vector[PaifuTile]): Vector[(Int, Boolean)] =
+    tiles.map(tile => indexOf(tile) -> isRed(tile)).sortBy { case (index, red) => (index, red) }
 
   private def defaultMeldTiles(commandType: MahjongCommandType, tile: PaifuTile): Vector[PaifuTile] =
     val index = indexOf(tile)

@@ -40,5 +40,4 @@ import riichinexus.microservices.tournament.objects.paifumanagement.Yaku
 
 object YakuFunctions:
   def validate(yaku: Yaku): Unit =
-    require(yaku.name.trim.nonEmpty, "Yaku name cannot be empty")
     require(yaku.han > 0, "Yaku han must be positive")

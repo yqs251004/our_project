@@ -2,7 +2,7 @@ package riichinexus.system.json
 import riichinexus.microservices.audit.domain.auditevent.AuditEvent
 import riichinexus.microservices.auth.objects.Permission
 
-import riichinexus.microservices.tournament.objects.paifumanagement.{AgariResult, FinalStanding, HandOutcome, KyokuDescriptor, Paifu, PaifuAction, PaifuActionType, PaifuHand, PaifuMetadata, PaifuPlayerTrack, PaifuRound, PaifuRoundPlayer, PaifuTimeline, PaifuTile, RoundSettlement, ScoreChange, Yaku}
+import riichinexus.microservices.tournament.objects.paifumanagement.{AgariResult, FinalStanding, HandOutcome, KyokuDescriptor, MahjongYakuKind, Paifu, PaifuAction, PaifuActionType, PaifuHand, PaifuMetadata, PaifuPlayerTrack, PaifuRound, PaifuRoundPlayer, PaifuTimeline, PaifuTile, RoundSettlement, ScoreChange, Yaku}
 import riichinexus.microservices.tournament.objects.settlementmanagement.TournamentSettlementStatus
 
 import java.time.Instant
@@ -296,7 +296,25 @@ object JsonCodecs:
 
   given ReadWriter[HandOutcome] =
     stringEnumReadWriter(HandOutcome.valueOf, _.toString)
-  given ReadWriter[Yaku] = macroRW
+  given ReadWriter[MahjongYakuKind] =
+    stringEnumReadWriter(MahjongYakuKind.valueOf, _.productPrefix)
+  given ReadWriter[Yaku] =
+    readwriter[ujson.Value].bimap[Yaku](
+      yaku =>
+        ujson.Obj(
+          "kind" -> writeJs(yaku.kind),
+          "han" -> writeJs(yaku.han)
+        ),
+      {
+        case obj: ujson.Obj =>
+          Yaku(
+            kind = readYakuKind(obj),
+            han = read[Int](obj("han"))
+          )
+        case json =>
+          throw upickle.core.Abort(s"Expected Yaku object, got $json")
+      }
+    )
   given ReadWriter[ScoreChange] = macroRW
   given ReadWriter[RoundSettlement] =
     readwriter[ujson.Value].bimap[RoundSettlement](
@@ -397,6 +415,67 @@ object JsonCodecs:
   given ReadWriter[FinalStanding] = macroRW
   given ReadWriter[PaifuMetadata] = macroRW
   given ReadWriter[Paifu] = macroRW
+
+  private val legacyYakuKindByName: Map[String, MahjongYakuKind] =
+    Map(
+      "国士无双十三面" -> MahjongYakuKind.KokushiMusouThirteenWait,
+      "国士无双" -> MahjongYakuKind.KokushiMusou,
+      "纯正九莲宝灯" -> MahjongYakuKind.PureChuurenPoutou,
+      "九莲宝灯" -> MahjongYakuKind.ChuurenPoutou,
+      "字一色" -> MahjongYakuKind.Tsuuiisou,
+      "绿一色" -> MahjongYakuKind.Ryuuiisou,
+      "清老头" -> MahjongYakuKind.Chinroutou,
+      "四暗刻单骑" -> MahjongYakuKind.SuuankouTanki,
+      "四暗刻" -> MahjongYakuKind.Suuankou,
+      "大三元" -> MahjongYakuKind.Daisangen,
+      "大四喜" -> MahjongYakuKind.Daisuushi,
+      "小四喜" -> MahjongYakuKind.Shousuushi,
+      "四杠子" -> MahjongYakuKind.Suukantsu,
+      "天和" -> MahjongYakuKind.Tenhou,
+      "地和" -> MahjongYakuKind.Chiihou,
+      "七对子" -> MahjongYakuKind.Chiitoitsu,
+      "门前清自摸和" -> MahjongYakuKind.MenzenTsumo,
+      "双立直" -> MahjongYakuKind.DoubleRiichi,
+      "立直" -> MahjongYakuKind.Riichi,
+      "一发" -> MahjongYakuKind.Ippatsu,
+      "岭上开花" -> MahjongYakuKind.RinshanKaihou,
+      "海底捞月" -> MahjongYakuKind.HaiteiRaoyue,
+      "河底捞鱼" -> MahjongYakuKind.HouteiRaoyui,
+      "断幺九" -> MahjongYakuKind.Tanyao,
+      "役牌:白" -> MahjongYakuKind.YakuhaiHaku,
+      "役牌:发" -> MahjongYakuKind.YakuhaiHatsu,
+      "役牌:中" -> MahjongYakuKind.YakuhaiChun,
+      "场风牌" -> MahjongYakuKind.RoundWind,
+      "自风牌" -> MahjongYakuKind.SeatWind,
+      "平和" -> MahjongYakuKind.Pinfu,
+      "二杯口" -> MahjongYakuKind.Ryanpeikou,
+      "一杯口" -> MahjongYakuKind.Iipeikou,
+      "对对和" -> MahjongYakuKind.Toitoi,
+      "三暗刻" -> MahjongYakuKind.Sanankou,
+      "三杠子" -> MahjongYakuKind.Sankantsu,
+      "小三元" -> MahjongYakuKind.Shousangen,
+      "三色同顺" -> MahjongYakuKind.SanshokuDoujun,
+      "一气通贯" -> MahjongYakuKind.Ittsu,
+      "清一色" -> MahjongYakuKind.Chinitsu,
+      "混一色" -> MahjongYakuKind.Honitsu,
+      "混老头" -> MahjongYakuKind.Honroutou,
+      "纯全带幺九" -> MahjongYakuKind.Junchan,
+      "混全带幺九" -> MahjongYakuKind.Chanta,
+      "三色同刻" -> MahjongYakuKind.SanshokuDoukou,
+      "宝牌" -> MahjongYakuKind.Dora,
+      "红宝牌" -> MahjongYakuKind.AkaDora,
+      "里宝牌" -> MahjongYakuKind.UraDora
+    )
+
+  private def readYakuKind(obj: ujson.Obj): MahjongYakuKind =
+    obj.value.get("kind") match
+      case Some(kind) => read[MahjongYakuKind](kind)
+      case None =>
+        val legacyName = read[String](obj("name"))
+        legacyYakuKindByName
+          .get(legacyName)
+          .orElse(MahjongYakuKind.values.find(_.productPrefix == legacyName))
+          .getOrElse(throw upickle.core.Abort(s"Unsupported legacy yaku name: $legacyName"))
 
   given ReadWriter[DashboardOwner] =
     eitherStringEnumReadWriter(

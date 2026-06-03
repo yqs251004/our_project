@@ -1,6 +1,5 @@
 package riichinexus.microservices.tournament.mahjongcore.domain.yakuanalysis.functions
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.tournament.mahjongcore.domain.handanalysis.functions.MahjongHandAnalysisFunctions
 import riichinexus.microservices.tournament.mahjongcore.domain.handanalysis.model.*
 import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.MahjongTileFunctions.*
@@ -24,35 +23,36 @@ object MahjongYakuAnalysisFunctions:
 
     if !MahjongHandAnalysisFunctions.isWinning(concealedCounts, fixedMelds.size, allowSpecialHands) then None
     else
-      val yakuman = yakumanYaku(allCounts, context, fixedMelds)
-      val yaku =
-        if yakuman.nonEmpty then yakuman
-        else ordinaryYaku(concealedCounts, allCounts, context, fixedMelds, closedHand)
+      val yakuman =
+        MahjongYakuCheckFunctions.yakumanYaku(concealedCounts, allCounts, allTiles, context, fixedMelds, closedHand)
+      val scoredResult =
+        if yakuman.nonEmpty then
+          scoreCandidate(yakuman, decomposition = None, concealedCounts, allCounts, allTiles, context, fixedMelds, closedHand, includeDora = false)
+        else
+          MahjongYakuCheckFunctions.ordinaryYakuCandidates(concealedCounts, allCounts, allTiles, context, fixedMelds, closedHand)
+          .flatMap(candidate => scoreCandidate(candidate.yaku, candidate.decomposition, concealedCounts, allCounts, allTiles, context, fixedMelds, closedHand, includeDora = true))
+          .sortBy(scored => (scored.pointResult.points, scored.han, scored.fu))
+          .lastOption
 
-      if yaku.isEmpty then None
+      if scoredResult.isEmpty then None
       else
-        val yakuWithDora =
-          if yakuman.nonEmpty then yaku
-          else addDora(yaku, allTiles, context)
-        val han = yakuWithDora.map(_.han).sum
-        val fu = calculateFu(concealedCounts, context, fixedMelds, closedHand, yakuWithDora)
-        val pointResult = calculatePointResult(han, fu, context)
+        val scored = scoredResult.get
         Some(
           AgariResult(
             outcome = if context.target.isDefined then HandOutcome.Ron else HandOutcome.Tsumo,
             winner = Some(context.winner),
             target = context.target,
-            han = Some(han),
-            fu = Some(fu),
-            yaku = yakuWithDora,
-            points = pointResult.points,
-            scoreChanges = pointResult.scoreChanges,
+            han = Some(scored.han),
+            fu = Some(scored.fu),
+            yaku = scored.yaku,
+            points = scored.pointResult.points,
+            scoreChanges = scored.pointResult.scoreChanges,
             doraIndicators = Some(context.doraIndicators),
             uraDoraIndicators = Option.when(context.riichi || context.doubleRiichi)(context.uraDoraIndicators),
             uraDoraVisible = Some(context.riichi || context.doubleRiichi),
             settlement = Some(
               RoundSettlement(
-                notes = Vector(limitName(han, fu)).filter(_.nonEmpty)
+                notes = Vector(limitName(scored.han, scored.fu)).filter(_.nonEmpty)
               )
             )
           )
@@ -61,199 +61,55 @@ object MahjongYakuAnalysisFunctions:
   def isWinning(context: MahjongWinContext): Boolean =
     analyzeWin(context).nonEmpty
 
+  private final case class ScoredYakuCandidate(
+      yaku: Vector[Yaku],
+      han: Int,
+      fu: Int,
+      pointResult: PointResult
+  )
+
   private final case class PointResult(points: Int, scoreChanges: Vector[ScoreChange])
 
-  private def yakumanYaku(
-      counts: Array[Int],
-      context: MahjongWinContext,
-      fixedMelds: Vector[MahjongHandMeld]
-  ): Vector[Yaku] =
-    val builder = Vector.newBuilder[Yaku]
-    val hasOpenMeld = context.melds.exists(meld => !meld.closed)
-    val lastIndex = indexOf(context.winningTile)
-
-    if fixedMelds.isEmpty && isKokushi(counts) then
-      if counts(lastIndex) == 2 then builder += Yaku("国士无双十三面", 26)
-      else builder += Yaku("国士无双", 13)
-
-    if fixedMelds.isEmpty && isChuuren(counts) then
-      if isPureChuurenWait(counts, lastIndex) then builder += Yaku("纯正九莲宝灯", 26)
-      else builder += Yaku("九莲宝灯", 13)
-
-    if counts.indices.exists(index => counts(index) > 0) && counts.indices.forall(index => counts(index) == 0 || isHonor(index)) then
-      builder += Yaku("字一色", 13)
-
-    if counts.indices.exists(index => counts(index) > 0) && counts.indices.forall(index => counts(index) == 0 || isGreen(index)) then
-      builder += Yaku("绿一色", 13)
-
-    if counts.indices.exists(index => counts(index) > 0) && counts.indices.forall(index => counts(index) == 0 || isTerminal(index)) then
-      builder += Yaku("清老头", 13)
-
-    MahjongHandAnalysisFunctions.standardDecomposition(counts, fixedMelds).foreach { decomposition =>
-      val tripletLike = decomposition.melds.filter(_.meldType != MahjongHandMeldType.Shuntsu)
-      val dragonTriplets = tripletLike.count(meld => meld.tileIndex >= Haku && meld.tileIndex <= Chun)
-      val windTriplets = tripletLike.count(meld => meld.tileIndex >= Ton && meld.tileIndex <= Pei)
-      val kanCount = decomposition.melds.count(_.meldType == MahjongHandMeldType.Kantsu)
-      val concealedTriplets = tripletLike.count(_.concealed)
-
-      if !hasOpenMeld && concealedTriplets == 4 then
-        if decomposition.pairIndex == lastIndex then builder += Yaku("四暗刻单骑", 26)
-        else builder += Yaku("四暗刻", 13)
-      if dragonTriplets == 3 then builder += Yaku("大三元", 13)
-      if windTriplets == 4 then builder += Yaku("大四喜", 26)
-      else if windTriplets == 3 && decomposition.pairIndex >= Ton && decomposition.pairIndex <= Pei then
-        builder += Yaku("小四喜", 13)
-      if kanCount == 4 then builder += Yaku("四杠子", 13)
-    }
-
-    if context.tenhou then builder += Yaku("天和", 13)
-    builder.result()
-
-  private def ordinaryYaku(
+  private def scoreCandidate(
+      yaku: Vector[Yaku],
+      decomposition: Option[MahjongHandDecomposition],
       concealedCounts: Array[Int],
       allCounts: Array[Int],
+      allTiles: Vector[PaifuTile],
       context: MahjongWinContext,
       fixedMelds: Vector[MahjongHandMeld],
-      closedHand: Boolean
-  ): Vector[Yaku] =
-    val builder = Vector.newBuilder[Yaku]
-    val allTileIndices = allCounts.indices.filter(allCounts(_) > 0).toVector
-
-    val isChiitoitsu = fixedMelds.isEmpty && allCounts.count(_ == 2) == 7
-    if isChiitoitsu then builder += Yaku("七对子", 2)
-
-    MahjongHandAnalysisFunctions.standardDecomposition(concealedCounts, fixedMelds).foreach { decomposition =>
-      val shuntsu = decomposition.melds.filter(_.meldType == MahjongHandMeldType.Shuntsu)
-      val tripletLike = decomposition.melds.filter(_.meldType != MahjongHandMeldType.Shuntsu)
-      val seatWind = context.seatByPlayer.getOrElse(context.winner, SeatWind.East)
-
-      if context.target.isEmpty && closedHand then builder += Yaku("门前清自摸和", 1)
-      if context.doubleRiichi && closedHand then builder += Yaku("双立直", 2)
-      else if context.riichi && closedHand then builder += Yaku("立直", 1)
-      if context.ippatsu && closedHand then builder += Yaku("一发", 1)
-      if context.rinshan then builder += Yaku("岭上开花", 1)
-      if context.haitei && context.target.isEmpty then builder += Yaku("海底捞月", 1)
-      if context.houtei && context.target.nonEmpty then builder += Yaku("河底捞鱼", 1)
-
-      if allTileIndices.forall(isSimple) && (closedHand || context.ruleset.openTanyao) then
-        builder += Yaku("断幺九", 1)
-
-      tripletLike.foreach { meld =>
-        if meld.tileIndex == Haku then builder += Yaku("役牌:白", 1)
-        if meld.tileIndex == Hatsu then builder += Yaku("役牌:发", 1)
-        if meld.tileIndex == Chun then builder += Yaku("役牌:中", 1)
-        if meld.tileIndex == windToIndex(context.roundWind) then builder += Yaku("场风牌", 1)
-        if meld.tileIndex == windToIndex(seatWind) then builder += Yaku("自风牌", 1)
-      }
-
-      val pinfu =
-        closedHand &&
-          shuntsu.size == 4 &&
-          !isYakuhaiPair(decomposition.pairIndex, context.roundWind, seatWind)
-      if pinfu then builder += Yaku("平和", 1)
-
-      if closedHand then
-        val pairCount = shuntsu.map(_.tileIndex).groupBy(identity).values.count(_.size >= 2)
-        if pairCount >= 2 then builder += Yaku("二杯口", 3)
-        else if pairCount == 1 then builder += Yaku("一杯口", 1)
-
-      if shuntsu.isEmpty then builder += Yaku("对对和", 2)
-      if tripletLike.count(_.concealed) == 3 then builder += Yaku("三暗刻", 2)
-      if decomposition.melds.count(_.meldType == MahjongHandMeldType.Kantsu) == 3 then builder += Yaku("三杠子", 2)
-
-      val dragonTriplets = tripletLike.count(meld => meld.tileIndex >= Haku && meld.tileIndex <= Chun)
-      if dragonTriplets == 2 && decomposition.pairIndex >= Haku && decomposition.pairIndex <= Chun then
-        builder += Yaku("小三元", 2)
-
-      addSequencePatternYaku(builder, shuntsu, closedHand)
-      addTerminalAndSuitYaku(builder, allTileIndices, decomposition, closedHand)
-    }
-
-    builder.result().distinct
-
-  private def addDora(
-      yaku: Vector[Yaku],
-      allTiles: Vector[PaifuTile],
-      context: MahjongWinContext
-  ): Vector[Yaku] =
-    val omote = countDora(allTiles, context.doraIndicators)
-    val red = redDoraCount(allTiles)
-    val ura =
-      if context.riichi || context.doubleRiichi then countDora(allTiles, context.uraDoraIndicators)
-      else 0
-    yaku ++
-      Option.when(omote > 0)(Yaku("宝牌", omote)).toVector ++
-      Option.when(red > 0)(Yaku("红宝牌", red)).toVector ++
-      Option.when(ura > 0)(Yaku("里宝牌", ura)).toVector
-
-  private def addSequencePatternYaku(
-      builder: scala.collection.mutable.Builder[Yaku, Vector[Yaku]],
-      shuntsu: Vector[MahjongHandMeld],
-      closedHand: Boolean
-  ): Unit =
-    val starts = shuntsu.map(_.tileIndex).toSet
-    (0 to 6).foreach { start =>
-      if starts.contains(Man1 + start) && starts.contains(Pin1 + start) && starts.contains(Sou1 + start) then
-        builder += Yaku("三色同顺", if closedHand then 2 else 1)
-    }
-    Vector(Man1, Pin1, Sou1).foreach { suitStart =>
-      if starts.contains(suitStart) && starts.contains(suitStart + 3) && starts.contains(suitStart + 6) then
-        builder += Yaku("一气通贯", if closedHand then 2 else 1)
-    }
-
-  private def addTerminalAndSuitYaku(
-      builder: scala.collection.mutable.Builder[Yaku, Vector[Yaku]],
-      allTileIndices: Vector[Int],
-      decomposition: MahjongHandDecomposition,
-      closedHand: Boolean
-  ): Unit =
-    val hasHonor = allTileIndices.exists(isHonor)
-    val suitCount =
-      Vector(
-        allTileIndices.exists(index => index >= Man1 && index <= Man9),
-        allTileIndices.exists(index => index >= Pin1 && index <= Pin9),
-        allTileIndices.exists(index => index >= Sou1 && index <= Sou9)
-      ).count(identity)
-
-    if suitCount == 1 && !hasHonor then builder += Yaku("清一色", if closedHand then 6 else 5)
-    else if suitCount == 1 && hasHonor then builder += Yaku("混一色", if closedHand then 3 else 2)
-
-    if allTileIndices.forall(isYaochu) then builder += Yaku("混老头", 2)
-
-    val everyMeldHasTerminal =
-      decomposition.melds.forall {
-        case MahjongHandMeld(MahjongHandMeldType.Shuntsu, start, _) => start % 9 == 0 || start % 9 == 6
-        case MahjongHandMeld(_, index, _) => isYaochu(index)
-      }
-    if everyMeldHasTerminal && isYaochu(decomposition.pairIndex) then
-      if !hasHonor && decomposition.melds.exists(_.meldType == MahjongHandMeldType.Shuntsu) then
-        builder += Yaku("纯全带幺九", if closedHand then 3 else 2)
-      else if hasHonor then builder += Yaku("混全带幺九", if closedHand then 2 else 1)
-
-    val tripletStarts = decomposition.melds.filter(_.meldType != MahjongHandMeldType.Shuntsu).map(_.tileIndex).toSet
-    (0 to 8).foreach { rank =>
-      if tripletStarts.contains(Man1 + rank) && tripletStarts.contains(Pin1 + rank) && tripletStarts.contains(Sou1 + rank) then
-        builder += Yaku("三色同刻", 2)
-    }
+      closedHand: Boolean,
+      includeDora: Boolean
+  ): Option[ScoredYakuCandidate] =
+    if yaku.isEmpty then None
+    else
+      val yakuWithDora =
+        if includeDora then MahjongYakuCheckFunctions.addDora(yaku, concealedCounts, allCounts, allTiles, context, fixedMelds, closedHand)
+        else yaku
+      val han = yakuWithDora.map(_.han).sum
+      val fu = calculateFu(concealedCounts, context, fixedMelds, closedHand, yakuWithDora, decomposition)
+      val pointResult = calculatePointResult(han, fu, context)
+      Some(ScoredYakuCandidate(yakuWithDora, han, fu, pointResult))
 
   private def calculateFu(
       concealedCounts: Array[Int],
       context: MahjongWinContext,
       fixedMelds: Vector[MahjongHandMeld],
       closedHand: Boolean,
-      yaku: Vector[Yaku]
+      yaku: Vector[Yaku],
+      decomposition: Option[MahjongHandDecomposition]
   ): Int =
-    if yaku.exists(_.name == "七对子") then 25
+    if hasYaku(yaku, MahjongYakuKind.Chiitoitsu) then 25
     else
-      val decomposition = MahjongHandAnalysisFunctions.standardDecomposition(concealedCounts, fixedMelds)
-      val isPinfu = yaku.exists(_.name == "平和")
+      val selectedDecomposition = decomposition.orElse(MahjongHandAnalysisFunctions.standardDecomposition(concealedCounts, fixedMelds))
+      val isPinfu = hasYaku(yaku, MahjongYakuKind.Pinfu)
       if isPinfu && context.target.isEmpty then 20
       else
         val seatWind = context.seatByPlayer.getOrElse(context.winner, SeatWind.East)
         var fu = 20
         if context.target.isEmpty then fu += 2
         if context.target.nonEmpty && closedHand then fu += 10
-        decomposition.foreach { hand =>
+        selectedDecomposition.foreach { hand =>
           if isYakuhaiPair(hand.pairIndex, context.roundWind, seatWind) then
             fu += 2
             if windToIndex(context.roundWind) == hand.pairIndex && windToIndex(seatWind) == hand.pairIndex then fu += 2
@@ -268,6 +124,9 @@ object MahjongYakuAnalysisFunctions:
           }
         }
         roundUpTo10(math.max(fu, 30))
+
+  private def hasYaku(yaku: Vector[Yaku], kind: MahjongYakuKind): Boolean =
+    yaku.exists(_.kind == kind)
 
   private def calculatePointResult(han: Int, fu: Int, context: MahjongWinContext): PointResult =
     val basic = basicPoints(han, fu)
@@ -335,35 +194,6 @@ object MahjongYakuAnalysisFunctions:
       )
     }
 
-  private def isKokushi(counts: Array[Int]): Boolean =
-    val yaochu = Vector(Man1, Man9, Pin1, Pin9, Sou1, Sou9, Ton, Nan, Sha, Pei, Haku, Hatsu, Chun)
-    yaochu.forall(counts(_) >= 1) && yaochu.map(counts).sum == 14 && yaochu.exists(counts(_) == 2)
-
-  private def isChuuren(counts: Array[Int]): Boolean =
-    Vector(Man1, Pin1, Sou1).exists { start =>
-      val suitCounts = (0 until 9).map(offset => counts(start + offset))
-      val otherTilesEmpty = counts.indices.forall { index =>
-        (index >= start && index < start + 9) || counts(index) == 0
-      }
-      otherTilesEmpty &&
-        suitCounts.head >= 3 &&
-        suitCounts.last >= 3 &&
-        suitCounts.slice(1, 8).forall(_ >= 1) &&
-        suitCounts.sum == 14
-    }
-
-  private def isPureChuurenWait(counts: Array[Int], lastIndex: Int): Boolean =
-    val temp = counts.clone()
-    if lastIndex >= 0 && lastIndex < temp.length then temp(lastIndex) -= 1
-    Vector(Man1, Pin1, Sou1).exists { start =>
-      val pattern = Vector(3, 1, 1, 1, 1, 1, 1, 1, 3)
-      pattern.indices.forall(offset => temp(start + offset) == pattern(offset))
-    }
-
-  private def isGreen(index: Int): Boolean =
-    index == Hatsu ||
-      (index >= Sou1 && index <= Sou9 && Set(2, 3, 4, 6, 8).contains(index - Sou1 + 1))
-
   private def isYakuhaiPair(pairIndex: Int, roundWind: SeatWind, seatWind: SeatWind): Boolean =
     (pairIndex >= Haku && pairIndex <= Chun) ||
       pairIndex == windToIndex(roundWind) ||
@@ -381,3 +211,4 @@ object MahjongYakuAnalysisFunctions:
 
   private def roundUpTo100(value: Int): Int =
     ((value + 99) / 100) * 100
+
