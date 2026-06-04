@@ -4,12 +4,13 @@ import munit.FunSuite
 
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.tournament.mahjongcore.domain.gamestate.functions.MahjongGameStateTransitionFunctions
+import riichinexus.microservices.tournament.mahjongcore.domain.gamestate.model.{MahjongCallCandidate, MahjongPendingCallState}
 import riichinexus.microservices.tournament.mahjongcore.domain.handanalysis.functions.MahjongHandAnalysisFunctions
 import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.MahjongTileFunctions.*
 import riichinexus.microservices.tournament.mahjongcore.domain.yakuanalysis.functions.MahjongYakuAnalysisFunctions
 import riichinexus.microservices.tournament.mahjongcore.domain.yakuanalysis.model.MahjongWinContext
-import riichinexus.microservices.tournament.mahjongcore.objects.action.MahjongCommandType
-import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.MahjongRuleset
+import riichinexus.microservices.tournament.mahjongcore.objects.action.{MahjongCommandType, MahjongLegalAction}
+import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.{MahjongRoundPhase, MahjongRuleset, MahjongTableStatus}
 import riichinexus.microservices.tournament.objects.paifumanagement.PaifuTile
 import riichinexus.microservices.tournament.objects.tablemanagement.{SeatWind, TableId}
 
@@ -51,4 +52,47 @@ class MahjongCoreDomainSuite extends FunSuite:
     assertEquals(state.seats.size, 4)
     assertEquals(east.handTiles.size + east.drawTile.size, 14)
     assert(legalActions.exists(_.commandType == MahjongCommandType.Discard))
+  }
+
+  test("pending call view is only exposed to the responding viewer") {
+    val state = MahjongGameStateTransitionFunctions.startTable(TableId("mahjong-core-call-view-test"), MahjongRuleset(), seed = "mahjong-core-call-view-test-seed")
+    val east = state.seats.find(_.seat == SeatWind.East).get
+    val south = state.seats.find(_.seat == SeatWind.South).get
+    val discardedTile = PaifuTile("3m")
+    val chiAction = MahjongLegalAction(
+      commandType = MahjongCommandType.Chi,
+      tile = Some(discardedTile),
+      tiles = Vector("2m", "3m", "4m").map(PaifuTile(_)),
+      fromPlayerId = Some(east.playerId),
+      targetSequenceNo = Some(100),
+      priority = 40
+    )
+    val pendingCallState = state.copy(
+      status = MahjongTableStatus.WaitingCallDecision,
+      currentRound = state.currentRound.map(round =>
+        round.copy(
+          phase = MahjongRoundPhase.CallDecision,
+          pendingCall = Some(MahjongPendingCallState(
+            discardSequenceNo = 100,
+            discardPlayerId = east.playerId,
+            tile = discardedTile,
+            candidates = Vector(MahjongCallCandidate(south.playerId, Vector(chiAction)))
+          ))
+        )
+      )
+    )
+
+    val callerView = MahjongGameStateTransitionFunctions.toView(pendingCallState, Some(south.playerId), includeLegalActions = true)
+    val discarderView = MahjongGameStateTransitionFunctions.toView(pendingCallState, Some(east.playerId), includeLegalActions = true)
+    val publicView = MahjongGameStateTransitionFunctions.toView(pendingCallState, viewerPlayerId = None, includeLegalActions = true)
+
+    assert(callerView.currentRound.flatMap(_.pendingCall).nonEmpty)
+    assertEquals(callerView.currentRound.flatMap(_.pendingCall).map(_.waitingPlayerIds), Some(Vector.empty))
+    assert(callerView.legalActions.exists(_.commandType == MahjongCommandType.Chi))
+    assert(callerView.legalActions.exists(_.commandType == MahjongCommandType.Pass))
+    assertEquals(discarderView.currentRound.flatMap(_.pendingCall), None)
+    assertEquals(discarderView.legalActions, Vector.empty)
+    assertEquals(publicView.currentRound.flatMap(_.pendingCall), None)
+    assertEquals(publicView.legalActions, Vector.empty)
+    assert(publicView.seats.forall(_.handTiles.isEmpty))
   }

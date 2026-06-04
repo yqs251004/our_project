@@ -43,6 +43,8 @@ import riichinexus.microservices.club.domain.clubmanagement.model.*
 import riichinexus.microservices.club.domain.membershipmanagement.model.*
 import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
 import riichinexus.microservices.club.domain.relationmanagement.model.*
+import riichinexus.microservices.notification.api.`private`.CreateBulkNotificationsPrivateAPIMessage
+import riichinexus.microservices.notification.objects.apiTypes.CreateNotificationRequest
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.tournament.api.`private`.TournamentOperationViewAssembler
 import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
@@ -65,11 +67,15 @@ final case class TournamentRegisterClubAPIMessage(tournamentId: String, clubId: 
         clubId = ClubId(clubId),
         actor = actor
       )
-      _ <- IO.blocking {
+      registration <- IO.blocking {
         {
           registerClub(context.connection, command)
-        }
+        }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
+      notificationRequests =
+        if registration.wasNewInvitation then clubInvitationNotifications(registration.tournament, registration.club)
+        else Vector.empty
+      _ <- CreateBulkNotificationsPrivateAPIMessage(notificationRequests).plan(context)
       view <- IO.blocking {
         TournamentOperationViewAssembler.mutationView(context.connection, command.tournamentId, Vector.empty)
         .getOrElse(throw NoSuchElementException("Resource not found"))
@@ -84,7 +90,7 @@ final case class TournamentRegisterClubAPIMessage(tournamentId: String, clubId: 
   private def registerClub(
       connection: java.sql.Connection,
       command: RegisterTournamentClubCommand
-  ): Unit =
+  ): Option[ClubInvitationResult] =
     AuthorizationPolicyFunctions.requirePermission(AuthorizationPolicyFunctions.strict, 
       command.actor,
       Permission.ManageTournamentStages,
@@ -95,8 +101,35 @@ final case class TournamentRegisterClubAPIMessage(tournamentId: String, clubId: 
       .unsafeRunSync()
       .getOrElse(throw NoSuchElementException(s"Club ${command.clubId.value} was not found"))
     ensureClubActive(club)
-    riichinexus.microservices.tournament.tables.tournaments.TournamentTable.findById(connection, command.tournamentId).foreach { tournament =>
-      riichinexus.microservices.tournament.tables.tournaments.TournamentTable.save(connection, TournamentFunctions.whitelistClub(tournament, command.clubId))
+    riichinexus.microservices.tournament.tables.tournaments.TournamentTable.findById(connection, command.tournamentId).map { tournament =>
+      val wasNewInvitation =
+        !tournament.whitelist.exists(_.clubId.contains(command.clubId)) &&
+          !tournament.participatingClubs.contains(command.clubId)
+      val updatedTournament =
+        riichinexus.microservices.tournament.tables.tournaments.TournamentTable.save(connection, TournamentFunctions.whitelistClub(tournament, command.clubId))
+      ClubInvitationResult(updatedTournament, club, wasNewInvitation)
+    }
+
+  private def clubInvitationNotifications(
+      tournament: Tournament,
+      club: Club
+  ): Vector[CreateNotificationRequest] =
+    (club.creator +: club.admins).distinct.map { recipient =>
+      CreateNotificationRequest(
+        recipientPlayerId = recipient.value,
+        notificationType = "TournamentClubInvited",
+        title = "俱乐部收到赛事邀请",
+        body = club.name + " 被邀请参加赛事 " + tournament.name + "。",
+        severity = Some("info"),
+        sourceService = "tournament",
+        sourceType = "tournament-club-invitation",
+        sourceId = tournament.id.value,
+        actionUrl = Some("/public/tournaments/" + tournament.id.value),
+        objects = Map(
+          "tournamentId" -> tournament.id.value,
+          "clubId" -> club.id.value
+        )
+      )
     }
 
   private def ensureClubActive(club: Club): Unit =
@@ -107,4 +140,10 @@ final case class TournamentRegisterClubAPIMessage(tournamentId: String, clubId: 
       tournamentId: TournamentId,
       clubId: ClubId,
       actor: AccessPrincipal
+  )
+
+  private final case class ClubInvitationResult(
+      tournament: Tournament,
+      club: Club,
+      wasNewInvitation: Boolean
   )

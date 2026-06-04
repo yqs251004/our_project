@@ -3,6 +3,8 @@ import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
 import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
+import riichinexus.microservices.notification.api.`private`.CreateBulkNotificationsPrivateAPIMessage
+import riichinexus.microservices.notification.objects.apiTypes.CreateNotificationRequest
 
 import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
@@ -61,12 +63,16 @@ final case class TournamentRegisterPlayerAPIMessage(tournamentId: String, player
         playerId = PlayerId(playerId),
         actor = actor
       )
-      tournament <- IO.blocking {
+      registration <- IO.blocking {
         {
           registerPlayer(context.connection, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
-    yield TournamentSummaryView.fromDomain(tournament)
+      notificationRequests =
+        if registration.wasNewInvitation then playerInvitationNotifications(registration.tournament, registration.player)
+        else Vector.empty
+      _ <- CreateBulkNotificationsPrivateAPIMessage(notificationRequests).plan(context)
+    yield TournamentSummaryView.fromDomain(registration.tournament)
 
   private def resolveOperatorActor(context: ApiPlanContext): AccessPrincipal =
     operatorId.filter(_.nonEmpty).map(PlayerId(_))
@@ -76,7 +82,7 @@ final case class TournamentRegisterPlayerAPIMessage(tournamentId: String, player
   private def registerPlayer(
       connection: java.sql.Connection,
       command: RegisterTournamentPlayerCommand
-  ): Option[Tournament] =
+  ): Option[PlayerInvitationResult] =
     AuthorizationPolicyFunctions.requirePermission(AuthorizationPolicyFunctions.strict, 
       command.actor,
       Permission.ManageTournamentStages,
@@ -86,8 +92,35 @@ final case class TournamentRegisterPlayerAPIMessage(tournamentId: String, player
       .getOrElse(throw NoSuchElementException(s"Player ${command.playerId.value} was not found"))
     ensurePlayerCanEnter(player, command)
     riichinexus.microservices.tournament.tables.tournaments.TournamentTable.findById(connection, command.tournamentId).map { tournament =>
-      riichinexus.microservices.tournament.tables.tournaments.TournamentTable.save(connection, TournamentFunctions.registerPlayer(tournament, command.playerId))
+      val wasNewInvitation =
+        !tournament.whitelist.exists(_.playerId.contains(command.playerId)) &&
+          !tournament.participatingPlayers.contains(command.playerId)
+      val updatedTournament =
+        riichinexus.microservices.tournament.tables.tournaments.TournamentTable.save(connection, TournamentFunctions.registerPlayer(tournament, command.playerId))
+      PlayerInvitationResult(updatedTournament, player, wasNewInvitation)
     }
+
+  private def playerInvitationNotifications(
+      tournament: Tournament,
+      player: Player
+  ): Vector[CreateNotificationRequest] =
+    Vector(
+      CreateNotificationRequest(
+        recipientPlayerId = player.id.value,
+        notificationType = "TournamentPlayerInvited",
+        title = "收到赛事邀请",
+        body = "你被邀请参加赛事 " + tournament.name + "。",
+        severity = Some("info"),
+        sourceService = "tournament",
+        sourceType = "tournament-player-invitation",
+        sourceId = tournament.id.value,
+        actionUrl = Some("/public/tournaments/" + tournament.id.value),
+        objects = Map(
+          "tournamentId" -> tournament.id.value,
+          "playerId" -> player.id.value
+        )
+      )
+    )
 
   private def ensurePlayerCanEnter(player: Player, command: RegisterTournamentPlayerCommand): Unit =
     if player.status != PlayerStatus.Active then
@@ -97,4 +130,10 @@ final case class TournamentRegisterPlayerAPIMessage(tournamentId: String, player
       tournamentId: TournamentId,
       playerId: PlayerId,
       actor: AccessPrincipal
+  )
+
+  private final case class PlayerInvitationResult(
+      tournament: Tournament,
+      player: Player,
+      wasNewInvitation: Boolean
   )

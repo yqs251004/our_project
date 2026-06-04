@@ -10,6 +10,7 @@ object AuthAPIMessageRegistry:
 
   val apiMessages: Vector[RegisteredAPIMessage] =
     Vector(
+      RegisteredAPIMessage.created[BootstrapSuperAdminAuthAPIMessage, AuthSuccessView],
       RegisteredAPIMessage.created[RegisterAuthAPIMessage, AuthSuccessView],
       RegisteredAPIMessage.api[LoginAuthAPIMessage, AuthSuccessView],
       RegisteredAPIMessage.apiWithToken[RestoreAuthSessionAPIMessage, AuthSessionView],

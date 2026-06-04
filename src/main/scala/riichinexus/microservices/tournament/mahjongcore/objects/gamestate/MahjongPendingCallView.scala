@@ -5,7 +5,7 @@ import riichinexus.microservices.tournament.objects.paifumanagement.PaifuTile
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.*
 
-/** 前端可见的鸣牌/荣和等待状态，是 MahjongPendingCallState 裁掉具体候选行动后的公开投影。 */
+/** 前端可见的鸣牌/荣和等待状态，只给可响应的 viewer 返回，不暴露其他候选玩家。 */
 final case class MahjongPendingCallView(
     discardSequenceNo: Int,
     discardPlayerId: PlayerId,

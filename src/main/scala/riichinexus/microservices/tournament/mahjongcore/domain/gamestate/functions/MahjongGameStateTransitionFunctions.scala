@@ -227,7 +227,7 @@ object MahjongGameStateTransitionFunctions:
       if includeLegalActions then
         viewerPlayerId match
           case Some(playerId) => legalActionsForPlayer(state, playerId)
-          case None => state.seats.flatMap(seat => legalActionsForPlayer(state, seat.playerId))
+          case None => Vector.empty
       else Vector.empty
 
     MahjongTableView(
@@ -235,7 +235,7 @@ object MahjongGameStateTransitionFunctions:
       status = state.status,
       ruleset = state.ruleset,
       seats = state.seats.map(seatToView(_, state, viewerPlayerId)),
-      currentRound = state.currentRound.map(roundToView(_, state)),
+      currentRound = state.currentRound.map(roundToView(_, state, viewerPlayerId)),
       legalActions = legalActions,
       finishedRoundCount = state.finishedRounds.size,
       lastEventSequenceNo = state.currentRound.flatMap(_.events.lastOption.map(sequenceNoOf)).getOrElse(0),
@@ -912,7 +912,6 @@ object MahjongGameStateTransitionFunctions:
       viewerPlayerId: Option[PlayerId]
   ): MahjongSeatView =
     val visibleHand = viewerPlayerId match
-      case None => Some(sortTiles(seat.handTiles ++ seat.drawTile.toVector))
       case Some(viewer) if viewer == seat.playerId => Some(sortTiles(seat.handTiles ++ seat.drawTile.toVector))
       case _ => None
     MahjongSeatView(
@@ -930,7 +929,14 @@ object MahjongGameStateTransitionFunctions:
       tenpai = Some(MahjongHandAnalysisFunctions.calculateShanten(seat.handTiles, seat.melds.size, allowSpecialHands = seat.melds.isEmpty) == 0)
     )
 
-  private def roundToView(round: MahjongRoundState, state: MahjongTableState): MahjongRoundView =
+  private def roundToView(
+      round: MahjongRoundState,
+      state: MahjongTableState,
+      viewerPlayerId: Option[PlayerId]
+  ): MahjongRoundView =
+    val viewerHasPendingCall = viewerPlayerId.exists(playerId =>
+      round.pendingCall.exists(_.candidates.exists(_.playerId == playerId))
+    )
     MahjongRoundView(
       descriptor = round.descriptor,
       phase = round.phase,
@@ -939,12 +945,12 @@ object MahjongGameStateTransitionFunctions:
       sticks = state.sticks,
       doraIndicators = round.doraIndicators,
       doraIndicatorVisibleCount = round.doraIndicators.size,
-      pendingCall = round.pendingCall.map(pending =>
+      pendingCall = round.pendingCall.filter(_ => viewerHasPendingCall).map(pending =>
         MahjongPendingCallView(
           discardSequenceNo = pending.discardSequenceNo,
           discardPlayerId = pending.discardPlayerId,
           tile = pending.tile,
-          waitingPlayerIds = pending.candidates.map(_.playerId)
+          waitingPlayerIds = Vector.empty
         )
       ),
       result = round.result
