@@ -31,6 +31,8 @@ import riichinexus.microservices.audit.domain.auditevent.AuditEventId
 import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
 import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.auth.domain.model.*
+import riichinexus.microservices.notification.api.`private`.CreateBulkNotificationsPrivateAPIMessage
+import riichinexus.microservices.notification.objects.apiTypes.CreateNotificationRequest
 import riichinexus.microservices.tournament.mahjongcore.api.MahjongCoreStartTableAPIMessage
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.MahjongRuleset
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.apiTypes.StartMahjongTableRequest
@@ -64,6 +66,7 @@ final case class TournamentTableStartAPIMessage(tableId: String, operatorId: Opt
           startTable(context.connection, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
+      _ <- CreateBulkNotificationsPrivateAPIMessage(tableStartedNotifications(context.connection, table)).plan(context)
     yield TournamentTableView.fromDomain(table)
 
   private def resolveOperatorActor(context: ApiPlanContext): AccessPrincipal =
@@ -96,6 +99,38 @@ final case class TournamentTableStartAPIMessage(tableId: String, operatorId: Opt
       .flatMap(_.stages.find(_.id == table.stageId))
       .map(_.mahjongRuleset)
       .getOrElse(MahjongRuleset())
+
+  private def tableStartedNotifications(connection: java.sql.Connection, table: Table): Vector[CreateNotificationRequest] =
+    val tournament = riichinexus.microservices.tournament.tables.tournaments.TournamentTable
+      .findById(connection, table.tournamentId)
+      .getOrElse(throw NoSuchElementException(s"Tournament ${table.tournamentId.value} was not found"))
+    val stage = tournament.stages
+      .find(_.id == table.stageId)
+      .getOrElse(throw NoSuchElementException(s"Stage ${table.stageId.value} was not found"))
+
+    table.seats.map { seat =>
+      CreateNotificationRequest(
+        recipientPlayerId = seat.playerId.value,
+        notificationType = "TournamentTableStarted",
+        title = "\u8d5b\u4e8b\u724c\u684c\u5df2\u5f00\u59cb",
+        body =
+          s"${tournament.name} / ${stage.name} \u7684\u7b2c ${table.tableNo} \u684c\u5df2\u7ecf\u5f00\u59cb\uff0c\u8bf7\u8fdb\u5165\u724c\u684c\u5bf9\u5c40\u3002",
+        severity = Some("info"),
+        sourceService = "tournament",
+        sourceType = "tournament-table",
+        sourceId = table.id.value,
+        actionUrl = Some(s"/tables/${table.id.value}"),
+        objects = Map(
+          "tournamentId" -> tournament.id.value,
+          "tournamentName" -> tournament.name,
+          "stageId" -> stage.id.value,
+          "stageName" -> stage.name,
+          "tableId" -> table.id.value,
+          "tableNo" -> table.tableNo.toString,
+          "playerId" -> seat.playerId.value
+        )
+      )
+    }
 
   private final case class StartTableCommand(
       tableId: TableId,

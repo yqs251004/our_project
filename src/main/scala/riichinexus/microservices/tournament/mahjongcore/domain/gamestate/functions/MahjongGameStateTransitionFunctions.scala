@@ -1269,6 +1269,7 @@ object MahjongGameStateTransitionFunctions:
       points = seat.points,
       isDealer = seat.seat == SeatWind.East,
       handTiles = visibleHand,
+      drawTile = visibleHand.flatMap(_ => seat.drawTile),
       handTileCount = seat.handTiles.size + seat.drawTile.size,
       melds = seat.melds,
       river = seat.river,

@@ -13,6 +13,7 @@ final case class MahjongSeatView(
     points: Int,
     isDealer: Boolean,
     handTiles: Option[Vector[PaifuTile]] = None,
+    drawTile: Option[PaifuTile] = None,
     handTileCount: Int,
     melds: Vector[MahjongMeld] = Vector.empty,
     river: Vector[MahjongDiscard] = Vector.empty,
