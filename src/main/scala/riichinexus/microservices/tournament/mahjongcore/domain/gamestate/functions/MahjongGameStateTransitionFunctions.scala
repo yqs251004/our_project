@@ -251,6 +251,7 @@ object MahjongGameStateTransitionFunctions:
       legalActions = legalActions,
       finishedRoundCount = state.finishedRounds.size,
       lastEventSequenceNo = state.currentRound.flatMap(_.events.lastOption.map(sequenceNoOf)).getOrElse(0),
+      lastEvent = state.currentRound.flatMap(_.events.lastOption.map(eventToPublicView)),
       version = state.version
     )
 

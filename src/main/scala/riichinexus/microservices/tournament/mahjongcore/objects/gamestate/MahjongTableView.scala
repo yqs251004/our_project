@@ -1,6 +1,6 @@
 package riichinexus.microservices.tournament.mahjongcore.objects.gamestate
 
-import riichinexus.microservices.tournament.mahjongcore.objects.action.MahjongLegalAction
+import riichinexus.microservices.tournament.mahjongcore.objects.action.{MahjongLegalAction, MahjongPublicEventView}
 import riichinexus.microservices.tournament.objects.tablemanagement.TableId
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.*
@@ -15,6 +15,7 @@ final case class MahjongTableView(
     legalActions: Vector[MahjongLegalAction],
     finishedRoundCount: Int,
     lastEventSequenceNo: Int,
+    lastEvent: Option[MahjongPublicEventView] = None,
     version: Int
 )
 
