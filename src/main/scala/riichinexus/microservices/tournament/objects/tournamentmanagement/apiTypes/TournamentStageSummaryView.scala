@@ -28,6 +28,7 @@ import riichinexus.microservices.audit.domain.auditevent.AuditEventId
 import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
 import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.system.json.JsonCodecs.given
+import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.MahjongRuleset
 import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
 import riichinexus.microservices.tournament.domain.recordmanagement.model.*
 import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
@@ -47,7 +48,8 @@ final case class TournamentStageSummaryView(
     scheduledTableCount: Int,
     advancementRule: AdvancementRule = AdvancementRule(AdvancementRuleType.Custom, note = Some("unconfigured")),
     swissRule: Option[SwissRuleConfig] = None,
-    knockoutRule: Option[KnockoutRuleConfig] = None
+    knockoutRule: Option[KnockoutRuleConfig] = None,
+    mahjongRuleset: MahjongRuleset = MahjongRuleset()
 )
 
 object TournamentStageSummaryView:
@@ -66,7 +68,8 @@ object TournamentStageSummaryView:
       scheduledTableCount: Int,
       advancementRule: AdvancementRule,
       swissRule: Option[SwissRuleConfig],
-      knockoutRule: Option[KnockoutRuleConfig]
+      knockoutRule: Option[KnockoutRuleConfig],
+      mahjongRuleset: MahjongRuleset
   ): TournamentStageSummaryView =
     TournamentStageSummaryView(
       stageId = stageId.value,
@@ -81,7 +84,8 @@ object TournamentStageSummaryView:
       scheduledTableCount = scheduledTableCount,
       advancementRule = advancementRule,
       swissRule = swissRule,
-      knockoutRule = knockoutRule
+      knockoutRule = knockoutRule,
+      mahjongRuleset = mahjongRuleset
     )
 
   def fromDomain(stage: TournamentStage): TournamentStageSummaryView =
@@ -98,5 +102,6 @@ object TournamentStageSummaryView:
       scheduledTableCount = stage.scheduledTableIds.size,
       advancementRule = stage.advancementRule,
       swissRule = stage.swissRule,
-      knockoutRule = stage.knockoutRule
+      knockoutRule = stage.knockoutRule,
+      mahjongRuleset = stage.mahjongRuleset
     )

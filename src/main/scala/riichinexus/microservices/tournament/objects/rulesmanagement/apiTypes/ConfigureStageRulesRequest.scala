@@ -20,6 +20,7 @@ import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
 import riichinexus.microservices.audit.domain.auditevent.AuditEventId
 import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
 import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
+import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.MahjongRuleset
 import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
 import riichinexus.microservices.tournament.domain.recordmanagement.model.*
 import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
@@ -47,6 +48,7 @@ final case class ConfigureStageRulesRequest(
     thirdPlaceMatch: Option[Boolean] = None,
     repechageEnabled: Option[Boolean] = None,
     seedingPolicy: Option[String] = None,
+    mahjongRuleset: Option[MahjongRuleset] = None,
     note: Option[String] = None
 )
 

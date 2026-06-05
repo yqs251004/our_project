@@ -32,6 +32,7 @@ import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
 import riichinexus.microservices.tournament.domain.tablemanagement.model.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.system.json.JsonCodecs.given
+import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.MahjongRuleset
 import riichinexus.microservices.tournament.objects.rulesmanagement.knockout.KnockoutBracketSnapshot
 import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.StageRankingSnapshot
 import upickle.default.*
@@ -53,6 +54,7 @@ final case class PublicTournamentStageView(
     advancementRule: AdvancementRule = AdvancementRule(AdvancementRuleType.Custom, note = Some("unconfigured")),
     swissRule: Option[SwissRuleConfig] = None,
     knockoutRule: Option[KnockoutRuleConfig] = None,
+    mahjongRuleset: MahjongRuleset = MahjongRuleset(),
     lineupSubmissions: Vector[TournamentLineupSubmissionView] = Vector.empty
 )
 
@@ -76,6 +78,7 @@ object PublicTournamentStageView:
       advancementRule: AdvancementRule,
       swissRule: Option[SwissRuleConfig],
       knockoutRule: Option[KnockoutRuleConfig],
+      mahjongRuleset: MahjongRuleset,
       lineupSubmissions: Vector[TournamentLineupSubmissionView]
   ): PublicTournamentStageView =
     PublicTournamentStageView(
@@ -95,5 +98,6 @@ object PublicTournamentStageView:
       advancementRule = advancementRule,
       swissRule = swissRule,
       knockoutRule = knockoutRule,
+      mahjongRuleset = mahjongRuleset,
       lineupSubmissions = lineupSubmissions
     )

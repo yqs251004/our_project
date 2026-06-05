@@ -44,6 +44,7 @@ import riichinexus.microservices.tournament.domain.tablemanagement.model.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.tournament.domain.tournamentmanagement.functions.TournamentRuntimeDefaults
+import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.MahjongRuleset
 import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
@@ -123,9 +124,10 @@ final case class TournamentStageCreateAPIMessage(tournamentId: String, request: 
             templateKey = request.ruleTemplateKey,
             note = request.note.orElse(AdvancementRuleFunctions.defaultFor(request.format).note)
           )
-        ),
+      ),
       swissRule = swissRule(request),
       knockoutRule = knockoutRule(request),
+      mahjongRuleset = request.mahjongRuleset.getOrElse(MahjongRuleset()),
       schedulingPoolSize = request.schedulingPoolSize.getOrElse(4)
     )
 

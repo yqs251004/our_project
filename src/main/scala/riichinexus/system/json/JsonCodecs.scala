@@ -2,7 +2,7 @@ package riichinexus.system.json
 import riichinexus.microservices.audit.domain.auditevent.AuditEvent
 import riichinexus.microservices.auth.objects.Permission
 
-import riichinexus.microservices.tournament.objects.paifumanagement.{AgariResult, FinalStanding, HandOutcome, KyokuDescriptor, MahjongYakuKind, Paifu, PaifuAction, PaifuActionType, PaifuHand, PaifuMetadata, PaifuPlayerTrack, PaifuRound, PaifuRoundPlayer, PaifuTimeline, PaifuTile, RoundSettlement, ScoreChange, Yaku}
+import riichinexus.microservices.tournament.objects.paifumanagement.{AgariResult, AgariWinResult, FinalStanding, HandOutcome, KyokuDescriptor, MahjongYakuKind, Paifu, PaifuAction, PaifuActionType, PaifuHand, PaifuMetadata, PaifuPlayerTrack, PaifuRound, PaifuRoundPlayer, PaifuTimeline, PaifuTile, RoundSettlement, ScoreChange, Yaku}
 import riichinexus.microservices.tournament.objects.settlementmanagement.TournamentSettlementStatus
 
 import java.time.Instant
@@ -335,6 +335,7 @@ object JsonCodecs:
           throw upickle.core.Abort(s"Expected RoundSettlement object, got $json")
       }
     )
+  given ReadWriter[AgariWinResult] = macroRW
   given ReadWriter[AgariResult] = macroRW
   given ReadWriter[PaifuActionType] =
     stringEnumReadWriter(PaifuActionType.valueOf, _.toString)
@@ -441,6 +442,7 @@ object JsonCodecs:
       "岭上开花" -> MahjongYakuKind.RinshanKaihou,
       "海底捞月" -> MahjongYakuKind.HaiteiRaoyue,
       "河底捞鱼" -> MahjongYakuKind.HouteiRaoyui,
+      "流局满贯" -> MahjongYakuKind.NagashiMangan,
       "断幺九" -> MahjongYakuKind.Tanyao,
       "役牌:白" -> MahjongYakuKind.YakuhaiHaku,
       "役牌:发" -> MahjongYakuKind.YakuhaiHatsu,

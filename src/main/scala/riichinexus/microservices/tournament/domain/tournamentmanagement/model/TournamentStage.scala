@@ -38,6 +38,7 @@ import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
 import riichinexus.microservices.audit.domain.auditevent.AuditEventId
 import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
 import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
+import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.MahjongRuleset
 import riichinexus.microservices.tournament.objects.rulesmanagement.stageprogression.{AdvancementRule, AdvancementRuleType}
 import riichinexus.microservices.tournament.objects.rulesmanagement.knockout.KnockoutRuleConfig
 import riichinexus.microservices.tournament.objects.tournamentmanagement.{StageStatus, TournamentFormat}
@@ -54,9 +55,9 @@ final case class TournamentStage(
     advancementRule: AdvancementRule = AdvancementRule(AdvancementRuleType.Custom, note = Some("unconfigured")),
     swissRule: Option[SwissRuleConfig] = None,
     knockoutRule: Option[KnockoutRuleConfig] = None,
+    mahjongRuleset: MahjongRuleset = MahjongRuleset(),
     schedulingPoolSize: Int = 4,
     lineupSubmissions: Vector[StageLineupSubmission] = Vector.empty,
     pendingTablePlans: Vector[StageTablePlan] = Vector.empty,
     scheduledTableIds: Vector[TableId] = Vector.empty
 )
-

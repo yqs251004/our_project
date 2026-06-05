@@ -42,6 +42,7 @@ import riichinexus.microservices.player.objects.*
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import riichinexus.microservices.tournament.domain.tournamentmanagement.functions.TournamentRuntimeDefaults
+import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.MahjongRuleset
 import riichinexus.microservices.tournament.objects.rulesmanagement.stageprogression.{AdvancementRule, AdvancementRuleType}
 import riichinexus.microservices.tournament.objects.rulesmanagement.knockout.KnockoutRuleConfig
 import riichinexus.microservices.tournament.objects.rulesmanagement.swiss.SwissRuleConfig
@@ -102,9 +103,10 @@ final case class TournamentCreateAPIMessage(
             templateKey = request.ruleTemplateKey,
             note = request.note.orElse(AdvancementRuleFunctions.defaultFor(request.format).note)
           )
-        ),
+      ),
       swissRule = swissRule(request),
       knockoutRule = knockoutRule(request),
+      mahjongRuleset = request.mahjongRuleset.getOrElse(MahjongRuleset()),
       schedulingPoolSize = request.schedulingPoolSize.getOrElse(4)
     )
 

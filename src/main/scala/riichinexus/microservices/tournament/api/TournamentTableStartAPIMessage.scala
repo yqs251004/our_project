@@ -32,6 +32,7 @@ import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGen
 import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.tournament.mahjongcore.api.MahjongCoreStartTableAPIMessage
+import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.MahjongRuleset
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.apiTypes.StartMahjongTableRequest
 import riichinexus.microservices.tournament.domain.tablemanagement.functions.TableFunctions
 import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
@@ -81,10 +82,20 @@ final case class TournamentTableStartAPIMessage(tableId: String, operatorId: Opt
       MahjongCoreStartTableAPIMessage.startAndSave(
         connection,
         command.tableId,
-        StartMahjongTableRequest(operatorId = command.actor.playerId.map(_.value))
+        StartMahjongTableRequest(
+          operatorId = command.actor.playerId.map(_.value),
+          ruleset = Some(rulesetForTable(connection, table))
+        )
       )
       startedTable
     }
+
+  private def rulesetForTable(connection: java.sql.Connection, table: Table): MahjongRuleset =
+    riichinexus.microservices.tournament.tables.tournaments.TournamentTable
+      .findById(connection, table.tournamentId)
+      .flatMap(_.stages.find(_.id == table.stageId))
+      .map(_.mahjongRuleset)
+      .getOrElse(MahjongRuleset())
 
   private final case class StartTableCommand(
       tableId: TableId,

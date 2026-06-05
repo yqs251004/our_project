@@ -116,13 +116,11 @@ final class TournamentPaifuArchiveService(
       table: Table,
       paifu: Paifu
   ): Unit =
-    if table.bracketMatchId.nonEmpty then
-      KnockoutStageCoordinator.materializeUnlockedTables(
-        connection,
-        table.tournamentId,
-        table.stageId,
-        paifu.metadata.recordedAt
-      )
+    TournamentStageTableScheduler.progressAfterTableArchived(
+      connection,
+      table,
+      paifu.metadata.recordedAt
+    )
 
   private def refreshOpsAnalytics(
       connection: Connection,

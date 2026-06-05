@@ -142,10 +142,11 @@ object MahjongTileFunctions:
     (0 until TileTypeCount).toVector.map(tileOf(_))
 
   def fullWall(ruleset: MahjongRuleset): Vector[PaifuTile] =
+    val redFiveIndexes = Vector(Man1 + 4, Pin1 + 4, Sou1 + 4)
+      .take(ruleset.normalizedAkaDoraCount)
+      .toSet
     (0 until TileTypeCount).toVector.flatMap { index =>
-      val red =
-        ruleset.akaDora &&
-          (index == Man1 + 4 || index == Pin1 + 4 || index == Sou1 + 4)
+      val red = redFiveIndexes.contains(index)
       if red then tileOf(index, red = true) +: Vector.fill(3)(tileOf(index))
       else Vector.fill(4)(tileOf(index))
     }

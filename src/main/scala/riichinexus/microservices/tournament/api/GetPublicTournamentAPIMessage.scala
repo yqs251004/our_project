@@ -133,6 +133,7 @@ final case class GetPublicTournamentAPIMessage(
       advancementRule = stage.advancementRule,
       swissRule = stage.swissRule,
       knockoutRule = stage.knockoutRule,
+      mahjongRuleset = stage.mahjongRuleset,
       lineupSubmissions = stage.lineupSubmissions
         .sortBy(_.submittedAt)
         .map(lineupSubmissionView)

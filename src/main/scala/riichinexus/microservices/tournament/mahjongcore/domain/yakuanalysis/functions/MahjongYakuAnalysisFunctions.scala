@@ -37,9 +37,23 @@ object MahjongYakuAnalysisFunctions:
       if scoredResult.isEmpty then None
       else
         val scored = scoredResult.get
+        val outcome = if context.target.isDefined then HandOutcome.Ron else HandOutcome.Tsumo
+        val uraDoraIndicators = Option.when(context.riichi || context.doubleRiichi)(context.uraDoraIndicators)
+        val uraDoraVisible = Some(context.riichi || context.doubleRiichi)
+        val win = AgariWinResult(
+          winner = context.winner,
+          target = context.target,
+          han = Some(scored.han),
+          fu = Some(scored.fu),
+          yaku = scored.yaku,
+          points = scored.pointResult.points,
+          doraIndicators = Some(context.doraIndicators),
+          uraDoraIndicators = uraDoraIndicators,
+          uraDoraVisible = uraDoraVisible
+        )
         Some(
           AgariResult(
-            outcome = if context.target.isDefined then HandOutcome.Ron else HandOutcome.Tsumo,
+            outcome = outcome,
             winner = Some(context.winner),
             target = context.target,
             han = Some(scored.han),
@@ -48,13 +62,14 @@ object MahjongYakuAnalysisFunctions:
             points = scored.pointResult.points,
             scoreChanges = scored.pointResult.scoreChanges,
             doraIndicators = Some(context.doraIndicators),
-            uraDoraIndicators = Option.when(context.riichi || context.doubleRiichi)(context.uraDoraIndicators),
-            uraDoraVisible = Some(context.riichi || context.doubleRiichi),
+            uraDoraIndicators = uraDoraIndicators,
+            uraDoraVisible = uraDoraVisible,
             settlement = Some(
               RoundSettlement(
-                notes = Vector(limitName(scored.han, scored.fu)).filter(_.nonEmpty)
+                notes = Vector(limitName(scored.han, scored.fu, context.ruleset.allowMultipleYakuman)).filter(_.nonEmpty)
               )
-            )
+            ),
+            wins = Vector(win)
           )
         )
 
@@ -83,13 +98,16 @@ object MahjongYakuAnalysisFunctions:
   ): Option[ScoredYakuCandidate] =
     if yaku.isEmpty then None
     else
-      val yakuWithDora =
-        if includeDora then MahjongYakuCheckFunctions.addDora(yaku, concealedCounts, allCounts, allTiles, context, fixedMelds, closedHand)
-        else yaku
-      val han = yakuWithDora.map(_.han).sum
-      val fu = calculateFu(concealedCounts, context, fixedMelds, closedHand, yakuWithDora, decomposition)
-      val pointResult = calculatePointResult(han, fu, context)
-      Some(ScoredYakuCandidate(yakuWithDora, han, fu, pointResult))
+      val baseHan = yaku.map(_.han).sum
+      if baseHan < context.ruleset.normalizedMinHan then None
+      else
+        val yakuWithDora =
+          if includeDora then MahjongYakuCheckFunctions.addDora(yaku, concealedCounts, allCounts, allTiles, context, fixedMelds, closedHand)
+          else yaku
+        val han = yakuWithDora.map(_.han).sum
+        val fu = calculateFu(concealedCounts, context, fixedMelds, closedHand, yakuWithDora, decomposition)
+        val pointResult = calculatePointResult(han, fu, context)
+        Some(ScoredYakuCandidate(yakuWithDora, han, fu, pointResult))
 
   private def calculateFu(
       concealedCounts: Array[Int],
@@ -129,7 +147,7 @@ object MahjongYakuAnalysisFunctions:
     yaku.exists(_.kind == kind)
 
   private def calculatePointResult(han: Int, fu: Int, context: MahjongWinContext): PointResult =
-    val basic = basicPoints(han, fu)
+    val basic = basicPoints(han, fu, context.ruleset.allowMultipleYakuman)
     val winnerIsDealer = context.seatByPlayer.get(context.winner).contains(SeatWind.East)
     val players = context.seatByPlayer.keys.toVector
     val changes =
@@ -157,17 +175,18 @@ object MahjongYakuAnalysisFunctions:
           }
     PointResult(changes.find(_.playerId == context.winner).map(_.delta).getOrElse(0), changes)
 
-  private def basicPoints(han: Int, fu: Int): Int =
-    if han >= 13 then 8000 * (han / 13).max(1)
+  private def basicPoints(han: Int, fu: Int, allowMultipleYakuman: Boolean): Int =
+    if han >= 13 then
+      if allowMultipleYakuman then 8000 * (han / 13).max(1) else 8000
     else if han >= 11 then 6000
     else if han >= 8 then 4000
     else if han >= 6 then 3000
     else if han == 5 || (han == 4 && fu >= 40) || (han == 3 && fu >= 70) then 2000
     else math.min(2000, fu * (1 << (han + 2)))
 
-  private def limitName(han: Int, fu: Int): String =
+  private def limitName(han: Int, fu: Int, allowMultipleYakuman: Boolean): String =
     if han >= 13 then
-      val multiple = (han / 13).max(1)
+      val multiple = if allowMultipleYakuman then (han / 13).max(1) else 1
       if multiple == 1 then "役满" else if multiple == 2 then "双倍役满" else s"${multiple}倍役满"
     else if han >= 11 then "三倍满"
     else if han >= 8 then "倍满"
@@ -211,4 +230,3 @@ object MahjongYakuAnalysisFunctions:
 
   private def roundUpTo100(value: Int): Int =
     ((value + 99) / 100) * 100
-

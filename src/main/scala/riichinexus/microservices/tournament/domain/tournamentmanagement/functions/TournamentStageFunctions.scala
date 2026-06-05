@@ -56,6 +56,7 @@ import riichinexus.microservices.tournament.domain.recordmanagement.model.*
 import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
 import riichinexus.microservices.tournament.domain.tablemanagement.model.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
+import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.MahjongRuleset
 import riichinexus.microservices.tournament.objects.rulesmanagement.stageprogression.AdvancementRule
 import riichinexus.microservices.tournament.objects.rulesmanagement.knockout.KnockoutRuleConfig
 import riichinexus.microservices.tournament.objects.tournamentmanagement.StageStatus
@@ -67,21 +68,31 @@ object TournamentStageFunctions:
     require(stage.roundCount >= 1, "Stage round count must be positive")
     require(stage.currentRound >= 1 && stage.currentRound <= stage.roundCount, "Current round must be within stage bounds")
     require(stage.schedulingPoolSize >= 1, "Scheduling pool size must be positive")
+    validateMahjongRuleset(stage.mahjongRuleset)
 
   def withRules(
       stage: TournamentStage,
       advancementRule: AdvancementRule,
       swissRule: Option[SwissRuleConfig],
       knockoutRule: Option[KnockoutRuleConfig],
-      schedulingPoolSize: Int
+      schedulingPoolSize: Int,
+      mahjongRuleset: MahjongRuleset
   ): TournamentStage =
     require(schedulingPoolSize >= 1, "Scheduling pool size must be positive")
+    validateMahjongRuleset(mahjongRuleset)
     stage.copy(
       advancementRule = advancementRule,
       swissRule = swissRule,
       knockoutRule = knockoutRule,
+      mahjongRuleset = mahjongRuleset,
       schedulingPoolSize = schedulingPoolSize
     )
+
+  private def validateMahjongRuleset(ruleset: MahjongRuleset): Unit =
+    require(ruleset.initialPoints > 0, "Initial points must be positive")
+    require(ruleset.targetPoints > 0, "Target points must be positive")
+    require(ruleset.akaDoraCount >= 0 && ruleset.akaDoraCount <= 3, "Red dora count must be between 0 and 3")
+    require(ruleset.minHan >= 1, "Minimum han must be positive")
 
   def submitLineup(stage: TournamentStage, submission: StageLineupSubmission): TournamentStage =
     require(

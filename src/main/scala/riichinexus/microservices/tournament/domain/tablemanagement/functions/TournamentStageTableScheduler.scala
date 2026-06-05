@@ -16,6 +16,7 @@ import cats.effect.unsafe.implicits.global
 import riichinexus.system.api.ApiPlanContext
 import java.sql.Connection
 import java.util.NoSuchElementException
+import java.time.Instant
 
 import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
@@ -59,10 +60,23 @@ import riichinexus.microservices.tournament.objects.tablemanagement.{SeatWind, T
 import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentFormat, TournamentStatus}
 
 object TournamentStageTableScheduler:
+  def progressAfterTableArchived(
+      connection: Connection,
+      table: Table,
+      at: Instant = Instant.now()
+  ): Vector[Table] =
+    schedule(
+      connection = connection,
+      tournamentId = table.tournamentId,
+      stageId = table.stageId,
+      at = at
+    )
+
   def schedule(
       connection: Connection,
       tournamentId: TournamentId,
-      stageId: TournamentStageId
+      stageId: TournamentStageId,
+      at: Instant = Instant.now()
   ): Vector[Table] =
     val tournament = riichinexus.microservices.tournament.tables.tournaments.TournamentTable
       .findById(connection, tournamentId)
@@ -83,7 +97,8 @@ object TournamentStageTableScheduler:
         stage.advancementRule.ruleType == AdvancementRuleType.KnockoutElimination
 
     if isKnockoutStage then
-      KnockoutStageCoordinator.materializeUnlockedTables(connection, tournamentId, stageId)
+      KnockoutStageCoordinator.materializeUnlockedTables(connection, tournamentId, stageId, at)
+      ensureScheduledTournamentWithTablesIsActive(connection, tournamentId, stageId)
       riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.findByTournamentAndStage(connection, tournamentId, stageId).sortBy(table =>
         (table.stageRoundNumber, table.tableNo, table.id.value)
       )
@@ -148,11 +163,30 @@ object TournamentStageTableScheduler:
         )
         createdTables
 
+    if materializedTables.isEmpty && existingTables.nonEmpty then
+      ensureScheduledTournamentWithTablesIsActive(connection, tournament.id, stage.id)
+
     if materializedTables.nonEmpty || existingTables.nonEmpty || preparedStage.pendingTablePlans.nonEmpty then
       riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.findByTournamentAndStage(connection, tournament.id, stage.id).sortBy(table =>
         (table.stageRoundNumber, table.tableNo, table.id.value)
       )
     else Vector.empty
+
+  private def ensureScheduledTournamentWithTablesIsActive(
+      connection: Connection,
+      tournamentId: TournamentId,
+      stageId: TournamentStageId
+  ): Unit =
+    val stageTables =
+      riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.findByTournamentAndStage(connection, tournamentId, stageId)
+    if stageTables.nonEmpty then
+      riichinexus.microservices.tournament.tables.tournaments.TournamentTable.findById(connection, tournamentId).foreach { latestTournament =>
+        if latestTournament.status == TournamentStatus.Scheduled then
+          riichinexus.microservices.tournament.tables.tournaments.TournamentTable.save(
+            connection,
+            TournamentFunctions.activateStage(latestTournament, stageId)
+          )
+      }
 
   private def resolveParticipants(
       connection: Connection,

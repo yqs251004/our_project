@@ -26,6 +26,7 @@ enum MahjongYakuKind:
   case RinshanKaihou // 岭上开花
   case HaiteiRaoyue // 海底捞月
   case HouteiRaoyui // 河底捞鱼
+  case NagashiMangan // 流局满贯
   case Tanyao // 断幺九
   case YakuhaiHaku // 役牌:白
   case YakuhaiHatsu // 役牌:发

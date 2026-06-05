@@ -44,7 +44,7 @@ object MahjongGameStateTransitionFunctions:
       MahjongSeatState(
         seat = tableSeat.seat,
         playerId = tableSeat.playerId,
-        points = tableSeat.initialPoints,
+        points = ruleset.initialPoints,
         handTiles = sortTiles(initialHands(index)),
         drawTile = if tableSeat.seat == SeatWind.East then Some(eastDraw) else None,
         melds = Vector.empty,
@@ -145,7 +145,7 @@ object MahjongGameStateTransitionFunctions:
             val discardedSeat = updatedSeatWithoutDiscard.copy(
               river = updatedSeatWithoutDiscard.river :+ discardView,
               riichi = updatedSeatWithoutDiscard.riichi || riichiDeclared,
-              ippatsu = updatedSeatWithoutDiscard.ippatsu || riichiDeclared
+              ippatsu = riichiDeclared
             )
             current.copy(seats = replaceSeat(current.seats, discardedSeat))
 
@@ -174,7 +174,7 @@ object MahjongGameStateTransitionFunctions:
         val eastPlayerId = normalized.seats.find(_.seat == SeatWind.East).map(_.playerId)
         val dealerContinues =
           result.outcome match
-            case HandOutcome.Ron | HandOutcome.Tsumo => result.winner.exists(winner => eastPlayerId.contains(winner))
+            case HandOutcome.Ron | HandOutcome.Tsumo => eastPlayerId.exists(east => winningPlayerIds(result).contains(east))
             case HandOutcome.ExhaustiveDraw => eastPlayerId.exists(east => result.tenpaiPlayerIds.exists(_.contains(east)))
             case HandOutcome.AbortiveDraw => true
         val nextDescriptor =
@@ -183,16 +183,27 @@ object MahjongGameStateTransitionFunctions:
         val nextSeats =
           if dealerContinues then normalized.seats
           else rotateSeatsForNextDealer(normalized.seats)
-        val nextRoundState = dealRound(
-          state = normalized,
-          descriptor = nextDescriptor,
-          seatsForRound = nextSeats,
-          seed = s"mahjongcore:${normalized.tableId.value}:${normalized.version + 1}:${SeatWind.toString(nextDescriptor.roundWind)}:${nextDescriptor.handNumber}:${nextDescriptor.honba}"
-        )
-        nextRoundState.copy(
-          finishedRounds = normalized.finishedRounds :+ finishedRoundFromState(normalized, round),
-          version = normalized.version + 1
-        )
+        val finishedRounds = normalized.finishedRounds :+ finishedRoundFromState(normalized, round)
+        if shouldFinishTable(normalized, round, dealerContinues) then
+          val finishEvent = MahjongEvent.TableFinished(nextSequenceNo(round), finalStandings(normalized))
+          val finishedRound = round.copy(events = round.events :+ finishEvent)
+          normalized.copy(
+            status = MahjongTableStatus.Finished,
+            currentRound = Some(finishedRound),
+            finishedRounds = finishedRounds,
+            version = normalized.version + 1
+          )
+        else
+          val nextRoundState = dealRound(
+            state = normalized,
+            descriptor = nextDescriptor,
+            seatsForRound = nextSeats,
+            seed = s"mahjongcore:${normalized.tableId.value}:${normalized.version + 1}:${SeatWind.toString(nextDescriptor.roundWind)}:${nextDescriptor.handNumber}:${nextDescriptor.honba}"
+          )
+          nextRoundState.copy(
+            finishedRounds = finishedRounds,
+            version = normalized.version + 1
+          )
 
   def submitAction(
       state: MahjongTableState,
@@ -221,7 +232,8 @@ object MahjongGameStateTransitionFunctions:
   def toView(
       state: MahjongTableState,
       viewerPlayerId: Option[PlayerId],
-      includeLegalActions: Boolean
+      includeLegalActions: Boolean,
+      revealAllHands: Boolean = false
   ): MahjongTableView =
     val legalActions =
       if includeLegalActions then
@@ -234,7 +246,7 @@ object MahjongGameStateTransitionFunctions:
       tableId = state.tableId,
       status = state.status,
       ruleset = state.ruleset,
-      seats = state.seats.map(seatToView(_, state, viewerPlayerId)),
+      seats = state.seats.map(seatToView(_, state, viewerPlayerId, revealAllHands)),
       currentRound = state.currentRound.map(roundToView(_, state, viewerPlayerId)),
       legalActions = legalActions,
       finishedRoundCount = state.finishedRounds.size,
@@ -248,13 +260,17 @@ object MahjongGameStateTransitionFunctions:
       case Some(round) =>
         round.pendingCall.flatMap(_.candidates.find(_.playerId == playerId)) match
           case Some(candidate) =>
-            candidate.legalActions :+ MahjongLegalAction(
-              commandType = MahjongCommandType.Pass,
-              tile = Some(round.pendingCall.get.tile),
-              fromPlayerId = Some(round.pendingCall.get.discardPlayerId),
-              targetSequenceNo = Some(round.pendingCall.get.discardSequenceNo),
-              priority = 0
-            )
+            val pending = round.pendingCall.get
+            val activeActions = activeLegalActionsForCandidate(state, pending, candidate)
+            if activeActions.isEmpty then Vector.empty
+            else
+              activeActions :+ MahjongLegalAction(
+                commandType = MahjongCommandType.Pass,
+                tile = Some(pending.tile),
+                fromPlayerId = Some(pending.discardPlayerId),
+                targetSequenceNo = Some(pending.discardSequenceNo),
+                priority = 0
+              )
           case None if round.turnPlayerId == playerId && round.phase == MahjongRoundPhase.PlayerTurn =>
             currentTurnActions(state, round, seatByPlayerId(state, playerId))
           case _ => Vector.empty
@@ -332,22 +348,33 @@ object MahjongGameStateTransitionFunctions:
         )
         nextState -> Some(discardEvent)
       case None =>
-        drawForNextPlayer(state.copy(seats = seats), roundWithDiscard, nextSeatId(state, playerId)) -> Some(discardEvent)
+        val stateWithAcceptedRiichi = acceptRiichiDeclarationForDiscard(state.copy(seats = seats), discardView)
+        drawForNextPlayer(stateWithAcceptedRiichi, roundWithDiscard, nextSeatId(state, playerId)) -> Some(discardEvent)
 
   private def passPendingCall(state: MahjongTableState, playerId: PlayerId): (MahjongTableState, Option[MahjongEvent]) =
     val round = requireRound(state)
     val pending = round.pendingCall.getOrElse(throw IllegalArgumentException("No pending call to pass"))
     val event = MahjongEvent.PlayerPassed(nextSequenceNo(round), playerId)
     val remaining = pending.candidates.filterNot(_.playerId == playerId)
-    if remaining.nonEmpty then
+    val normalizedRemaining =
+      if pending.acceptedRonPlayerIds.nonEmpty then remaining.filter(hasRonAction)
+      else remaining
+    if normalizedRemaining.nonEmpty then
       val nextRound = round.copy(
-        pendingCall = Some(pending.copy(candidates = remaining)),
+        pendingCall = Some(pending.copy(candidates = normalizedRemaining)),
         events = round.events :+ event
       )
       state.copy(currentRound = Some(nextRound), status = MahjongTableStatus.WaitingCallDecision) -> Some(event)
+    else if pending.acceptedRonPlayerIds.nonEmpty then
+      val nextRound = round.copy(
+        pendingCall = Some(pending.copy(candidates = Vector.empty)),
+        events = round.events :+ event
+      )
+      finishRoundWithRonWinners(state, nextRound, pending.copy(candidates = Vector.empty), Some(event))
     else
       val clearedRound = round.copy(pendingCall = None, events = round.events :+ event)
-      drawForNextPlayer(state, clearedRound, nextSeatId(state, pending.discardPlayerId)) -> Some(event)
+      val stateWithAcceptedRiichi = acceptPendingRiichiDeclaration(state, pending)
+      drawForNextPlayer(stateWithAcceptedRiichi, clearedRound, nextSeatId(state, pending.discardPlayerId)) -> Some(event)
 
   private def callMeld(
       state: MahjongTableState,
@@ -356,7 +383,8 @@ object MahjongGameStateTransitionFunctions:
   ): (MahjongTableState, Option[MahjongEvent]) =
     val round = requireRound(state)
     val pending = round.pendingCall.getOrElse(throw IllegalArgumentException("No pending call to resolve"))
-    val caller = seatByPlayerId(state, playerId)
+    val stateWithAcceptedRiichi = acceptPendingRiichiDeclaration(state, pending)
+    val caller = seatByPlayerId(stateWithAcceptedRiichi, playerId)
     val discardTile = pending.tile
     val meldTiles = legalAction.tiles.nonEmpty match
       case true => legalAction.tiles.map(MahjongTileFunctions.normalize)
@@ -379,14 +407,14 @@ object MahjongGameStateTransitionFunctions:
     val sequenceNo = nextSequenceNo(round)
     val event = if legalAction.commandType == MahjongCommandType.OpenKan then MahjongEvent.KanDeclared(sequenceNo, playerId, meld) else MahjongEvent.MeldCalled(sequenceNo, playerId, meld)
     val callerAfterCall = caller.copy(handTiles = sortTiles(handAfterCall), melds = caller.melds :+ meld, ippatsu = false)
-    val seatsAfterCall = replaceSeat(markDiscardCalledBy(state.seats, pending.discardPlayerId, pending.discardSequenceNo, playerId), callerAfterCall).map(_.copy(ippatsu = false))
+    val seatsAfterCall = replaceSeat(markDiscardCalledBy(stateWithAcceptedRiichi.seats, pending.discardPlayerId, pending.discardSequenceNo, playerId), callerAfterCall).map(_.copy(ippatsu = false))
     val baseRound = round.copy(
       pendingCall = None,
       turnPlayerId = playerId,
       phase = MahjongRoundPhase.PlayerTurn,
       events = round.events :+ event
     )
-    val nextState = state.copy(seats = seatsAfterCall)
+    val nextState = stateWithAcceptedRiichi.copy(seats = seatsAfterCall)
     if legalAction.commandType == MahjongCommandType.OpenKan then
       drawReplacementAfterKan(nextState, baseRound, callerAfterCall.playerId, event)
     else
@@ -412,7 +440,7 @@ object MahjongGameStateTransitionFunctions:
     )
     val event = MahjongEvent.KanDeclared(nextSequenceNo(round), playerId, meld)
     val seatAfterKan = seat.copy(handTiles = sortTiles(handAfterKan), drawTile = None, melds = seat.melds :+ meld, ippatsu = false)
-    val nextState = state.copy(seats = replaceSeat(state.seats, seatAfterKan))
+    val nextState = state.copy(seats = replaceSeat(state.seats.map(_.copy(ippatsu = false)), seatAfterKan))
     val nextRound = round.copy(events = round.events :+ event, turnPlayerId = playerId, phase = MahjongRoundPhase.PlayerTurn)
     drawReplacementAfterKan(nextState, nextRound, playerId, event)
 
@@ -434,7 +462,7 @@ object MahjongGameStateTransitionFunctions:
     val melds = seat.melds.updated(ponIndex, upgraded)
     val event = MahjongEvent.KanDeclared(nextSequenceNo(round), playerId, upgraded)
     val seatAfterKan = seat.copy(handTiles = sortTiles(handAfterKan), drawTile = None, melds = melds, ippatsu = false)
-    val nextState = state.copy(seats = replaceSeat(state.seats, seatAfterKan))
+    val nextState = state.copy(seats = replaceSeat(state.seats.map(_.copy(ippatsu = false)), seatAfterKan))
     val nextRound = round.copy(events = round.events :+ event, turnPlayerId = playerId, phase = MahjongRoundPhase.PlayerTurn)
     drawReplacementAfterKan(nextState, nextRound, playerId, event)
 
@@ -453,9 +481,30 @@ object MahjongGameStateTransitionFunctions:
   ): (MahjongTableState, Option[MahjongEvent]) =
     val round = requireRound(state)
     val pending = round.pendingCall.getOrElse(throw IllegalArgumentException("Ron requires a pending discard"))
-    val result = MahjongYakuAnalysisFunctions.analyzeWin(winContext(state, playerId, Some(pending.discardPlayerId), pending.tile))
+    MahjongYakuAnalysisFunctions.analyzeWin(winContext(state, playerId, Some(pending.discardPlayerId), pending.tile))
       .getOrElse(throw IllegalArgumentException("Submitted ron is not a winning hand"))
-    finishRoundWithWin(state, round, playerId, target = Some(pending.discardPlayerId), pending.tile, result)
+    val acceptedRonPlayerIds = (pending.acceptedRonPlayerIds :+ playerId).distinct
+    val remainingRonCandidates = pending.candidates
+      .filterNot(_.playerId == playerId)
+      .filter(hasRonAction)
+    val updatedPending = pending.copy(
+      candidates = remainingRonCandidates,
+      acceptedRonPlayerIds = acceptedRonPlayerIds
+    )
+    if state.ruleset.tripleRonAbortiveDraw && acceptedRonPlayerIds.size >= 3 then
+      finishRoundWithAbortiveDraw(
+        state,
+        round.copy(pendingCall = Some(updatedPending)),
+        Vector("三家和流局"),
+        acceptedEvent = None
+      )
+    else if !state.ruleset.doubleRon || remainingRonCandidates.isEmpty then
+      finishRoundWithRonWinners(state, round.copy(pendingCall = Some(updatedPending)), updatedPending, acceptedEvent = None)
+    else
+      state.copy(
+        currentRound = Some(round.copy(pendingCall = Some(updatedPending))),
+        status = MahjongTableStatus.WaitingCallDecision
+      ) -> None
 
   private def finishRoundWithWin(
       state: MahjongTableState,
@@ -465,35 +514,100 @@ object MahjongGameStateTransitionFunctions:
       winningTile: PaifuTile,
       result: AgariResult
   ): (MahjongTableState, Option[MahjongEvent]) =
+    val settledResult = applyWinSettlementAdjustments(state, result, Vector(winner))
     val winEvent = MahjongEvent.WinDeclared(nextSequenceNo(round), winner, target, winningTile)
-    val finishEvent = MahjongEvent.RoundFinished(nextSequenceNo(round) + 1, result)
-    val seatsAfterScore = applyScoreChanges(state.seats, result.scoreChanges)
+    val finishEvent = MahjongEvent.RoundFinished(nextSequenceNo(round) + 1, settledResult)
+    val seatsAfterScore = applyScoreChanges(state.seats, settledResult.scoreChanges)
     val finishedRound = round.copy(
       phase = MahjongRoundPhase.Finished,
       pendingCall = None,
       events = round.events :+ winEvent :+ finishEvent,
+      result = Some(settledResult)
+    )
+    state.copy(
+      seats = seatsAfterScore,
+      currentRound = Some(finishedRound),
+      sticks = sticksAfterRoundResult(state, settledResult),
+      status = MahjongTableStatus.RoundEnded
+    ) -> Some(winEvent)
+
+  private def finishRoundWithRonWinners(
+      state: MahjongTableState,
+      round: MahjongRoundState,
+      pending: MahjongPendingCallState,
+      acceptedEvent: Option[MahjongEvent]
+  ): (MahjongTableState, Option[MahjongEvent]) =
+    val winnerIds = ronWinnerIdsBySeatOrder(state, pending)
+    require(winnerIds.nonEmpty, "Ron settlement requires at least one winner")
+    val singleResults = winnerIds.map { winnerId =>
+      MahjongYakuAnalysisFunctions.analyzeWin(winContext(state, winnerId, Some(pending.discardPlayerId), pending.tile))
+        .getOrElse(throw IllegalArgumentException(s"Accepted ron is not a winning hand for ${winnerId.value}"))
+    }
+    val wins = singleResults.flatMap(result => result.wins.headOption.orElse(singleWinFromResult(result)))
+    val scoreChanges = aggregateScoreChanges(state.seats.map(_.playerId), singleResults.flatMap(_.scoreChanges))
+    val primary = singleResults.head
+    val notes =
+      (if winnerIds.size == 2 then Vector("双响") else if winnerIds.size >= 3 then Vector("三家荣和") else Vector.empty) ++
+        singleResults.flatMap(_.settlement.toVector.flatMap(_.notes)).distinct
+    val baseResult = AgariResult(
+      outcome = HandOutcome.Ron,
+      winner = Some(winnerIds.head),
+      target = Some(pending.discardPlayerId),
+      han = primary.han,
+      fu = primary.fu,
+      yaku = primary.yaku,
+      points = wins.map(_.points).sum,
+      scoreChanges = scoreChanges,
+      doraIndicators = primary.doraIndicators,
+      uraDoraIndicators = primary.uraDoraIndicators,
+      uraDoraVisible = primary.uraDoraVisible,
+      settlement = Some(RoundSettlement(notes = notes)),
+      wins = wins
+    )
+    val result = applyWinSettlementAdjustments(state, baseResult, winnerIds)
+    val baseSequenceNo = nextSequenceNo(round)
+    val winEvents = winnerIds.zipWithIndex.map { case (winnerId, index) =>
+      MahjongEvent.WinDeclared(baseSequenceNo + index, winnerId, Some(pending.discardPlayerId), pending.tile)
+    }
+    val finishEvent = MahjongEvent.RoundFinished(baseSequenceNo + winEvents.size, result)
+    val seatsAfterScore = applyScoreChanges(state.seats, result.scoreChanges)
+    val finishedRound = round.copy(
+      phase = MahjongRoundPhase.Finished,
+      pendingCall = None,
+      events = round.events ++ winEvents :+ finishEvent,
       result = Some(result)
     )
     state.copy(
       seats = seatsAfterScore,
       currentRound = Some(finishedRound),
+      sticks = sticksAfterRoundResult(state, result),
       status = MahjongTableStatus.RoundEnded
-    ) -> Some(winEvent)
+    ) -> acceptedEvent.orElse(winEvents.headOption)
+
+  private def finishRoundWithAbortiveDraw(
+      state: MahjongTableState,
+      round: MahjongRoundState,
+      notes: Vector[String],
+      acceptedEvent: Option[MahjongEvent]
+  ): (MahjongTableState, Option[MahjongEvent]) =
+    val result = drawResult(state, round, HandOutcome.AbortiveDraw, notes)
+    val event = MahjongEvent.RoundFinished(nextSequenceNo(round), result)
+    state.copy(
+      seats = applyScoreChanges(state.seats, result.scoreChanges),
+      currentRound = Some(round.copy(phase = MahjongRoundPhase.Finished, pendingCall = None, events = round.events :+ event, result = Some(result))),
+      status = MahjongTableStatus.RoundEnded
+    ) -> acceptedEvent.orElse(Some(event))
 
   private def abortiveDraw(state: MahjongTableState, note: Option[String]): (MahjongTableState, Option[MahjongEvent]) =
     val round = requireRound(state)
-    val result = drawResult(state, HandOutcome.AbortiveDraw, note.toVector)
-    val event = MahjongEvent.RoundFinished(nextSequenceNo(round), result)
-    state.copy(
-      currentRound = Some(round.copy(phase = MahjongRoundPhase.Finished, events = round.events :+ event, result = Some(result))),
-      status = MahjongTableStatus.RoundEnded
-    ) -> Some(event)
+    finishRoundWithAbortiveDraw(state, round, note.toVector, acceptedEvent = None)
 
   private def drawForNextPlayer(state: MahjongTableState, round: MahjongRoundState, nextPlayerId: PlayerId): MahjongTableState =
     if round.wall.isEmpty then
-      val result = drawResult(state, HandOutcome.ExhaustiveDraw, Vector("荒牌流局"))
+      val result = drawResult(state, round, HandOutcome.ExhaustiveDraw, Vector("荒牌流局"))
       val event = MahjongEvent.RoundFinished(nextSequenceNo(round), result)
       state.copy(
+        seats = applyScoreChanges(state.seats, result.scoreChanges),
         currentRound = Some(round.copy(phase = MahjongRoundPhase.Finished, pendingCall = None, events = round.events :+ event, result = Some(result))),
         status = MahjongTableStatus.RoundEnded
       )
@@ -560,6 +674,31 @@ object MahjongGameStateTransitionFunctions:
     Option.when(candidates.nonEmpty)(
       MahjongPendingCallState(discard.sequenceNo, discard.playerId, discard.tile, candidates)
     )
+
+  private def activeLegalActionsForCandidate(
+      state: MahjongTableState,
+      pending: MahjongPendingCallState,
+      candidate: MahjongCallCandidate
+  ): Vector[MahjongLegalAction] =
+    val highestPriority = pending.candidates
+      .flatMap(_.legalActions.map(_.priority))
+      .maxOption
+      .getOrElse(0)
+    val activeActions = candidate.legalActions.filter(_.priority == highestPriority)
+    if activeActions.isEmpty then Vector.empty
+    else if highestPriority == 100 && !state.ruleset.doubleRon then
+      closestRonCandidate(state, pending).filter(_ == candidate.playerId).fold(Vector.empty[MahjongLegalAction])(_ => activeActions)
+    else activeActions
+
+  private def hasRonAction(candidate: MahjongCallCandidate): Boolean =
+    candidate.legalActions.exists(_.commandType == MahjongCommandType.Ron)
+
+  private def closestRonCandidate(state: MahjongTableState, pending: MahjongPendingCallState): Option[PlayerId] =
+    pending.candidates
+      .filter(hasRonAction)
+      .sortBy(candidate => seatDistanceFromDiscarder(state, pending.discardPlayerId, candidate.playerId))
+      .headOption
+      .map(_.playerId)
 
   private def ronLegalAction(
       state: MahjongTableState,
@@ -741,6 +880,50 @@ object MahjongGameStateTransitionFunctions:
       seat.copy(seat = previousSeatWind(seat.seat))
     }
 
+  private def shouldFinishTable(
+      state: MahjongTableState,
+      round: MahjongRoundState,
+      dealerContinues: Boolean
+  ): Boolean =
+    val ruleset = state.ruleset
+    val bankruptcyFinished = ruleset.bankruptcyEnd && state.seats.exists(_.points < 0)
+    val lengthFinished =
+      ruleset.gameLength match
+        case MahjongGameLength.OneKyoku => true
+        case MahjongGameLength.Tonpu | MahjongGameLength.Hanchan =>
+          !dealerContinues &&
+            isAtOrBeyondLastScheduledHand(round.descriptor, ruleset.gameLength) &&
+            state.seats.exists(_.points >= ruleset.targetPoints)
+    bankruptcyFinished || lengthFinished
+
+  private def isAtOrBeyondLastScheduledHand(
+      descriptor: KyokuDescriptor,
+      gameLength: MahjongGameLength
+  ): Boolean =
+    descriptor.handNumber >= 4 &&
+      roundWindOrder(descriptor.roundWind) >= roundWindOrder(lastScheduledRoundWind(gameLength))
+
+  private def lastScheduledRoundWind(gameLength: MahjongGameLength): SeatWind =
+    gameLength match
+      case MahjongGameLength.OneKyoku | MahjongGameLength.Tonpu => SeatWind.East
+      case MahjongGameLength.Hanchan => SeatWind.South
+
+  private def roundWindOrder(seat: SeatWind): Int =
+    SeatWind.all.indexOf(seat)
+
+  private def finalStandings(state: MahjongTableState): Vector[FinalStanding] =
+    state.seats
+      .sortBy(seat => (-seat.points, seat.seat.ordinal))
+      .zipWithIndex
+      .map { case (seat, index) =>
+        FinalStanding(
+          playerId = seat.playerId,
+          seat = seat.seat,
+          finalPoints = seat.points,
+          placement = index + 1
+        )
+      }
+
   private def previousSeatWind(seat: SeatWind): SeatWind =
     val index = SeatWind.all.indexOf(seat)
     SeatWind.all((index - 1 + SeatWind.all.size) % SeatWind.all.size)
@@ -881,7 +1064,27 @@ object MahjongGameStateTransitionFunctions:
       ruleset = state.ruleset
     )
 
-  private def drawResult(state: MahjongTableState, outcome: HandOutcome, notes: Vector[String]): AgariResult =
+  private def drawResult(
+      state: MahjongTableState,
+      round: MahjongRoundState,
+      outcome: HandOutcome,
+      notes: Vector[String]
+  ): AgariResult =
+    if outcome == HandOutcome.ExhaustiveDraw && state.ruleset.nagashiMangan then
+      nagashiManganResult(state, round, notes).getOrElse(exhaustiveDrawResult(state, outcome, notes))
+    else if outcome == HandOutcome.AbortiveDraw then abortiveDrawResult(state, notes)
+    else exhaustiveDrawResult(state, outcome, notes)
+
+  private def abortiveDrawResult(state: MahjongTableState, notes: Vector[String]): AgariResult =
+    AgariResult(
+      outcome = HandOutcome.AbortiveDraw,
+      yaku = Vector.empty,
+      points = 0,
+      scoreChanges = state.seats.map(seat => ScoreChange(seat.playerId, 0)),
+      settlement = Some(RoundSettlement(notes = notes))
+    )
+
+  private def exhaustiveDrawResult(state: MahjongTableState, outcome: HandOutcome, notes: Vector[String]): AgariResult =
     val tenpaiPlayers = state.seats.filter { seat =>
       MahjongHandAnalysisFunctions.calculateShanten(seat.handTiles, seat.melds.size, allowSpecialHands = seat.melds.isEmpty) == 0
     }.map(_.playerId)
@@ -895,6 +1098,66 @@ object MahjongGameStateTransitionFunctions:
       settlement = Some(RoundSettlement(notes = notes))
     )
 
+  private def nagashiManganResult(
+      state: MahjongTableState,
+      round: MahjongRoundState,
+      notes: Vector[String]
+  ): Option[AgariResult] =
+    val winners = state.seats.filter(isNagashiManganSeat)
+    Option.when(winners.nonEmpty) {
+      val players = state.seats.map(_.playerId)
+      val seatByPlayer = state.seats.map(seat => seat.playerId -> seat.seat).toMap
+      val wins = winners.map { seat =>
+        val scoreChanges = manganTsumoScoreChanges(players, seatByPlayer, seat.playerId)
+        AgariWinResult(
+          winner = seat.playerId,
+          han = Some(5),
+          yaku = Vector(MahjongYakuKind.NagashiMangan.yaku(5)),
+          points = scoreChanges.find(_.playerId == seat.playerId).map(_.delta).getOrElse(0),
+          doraIndicators = Some(round.doraIndicators),
+          uraDoraIndicators = None,
+          uraDoraVisible = Some(false)
+        )
+      }
+      val scoreChanges = aggregateScoreChanges(players, wins.flatMap(win => manganTsumoScoreChanges(players, seatByPlayer, win.winner)))
+      val primary = wins.head
+      AgariResult(
+        outcome = HandOutcome.Tsumo,
+        winner = Some(primary.winner),
+        han = primary.han,
+        fu = primary.fu,
+        yaku = primary.yaku,
+        points = wins.map(_.points).sum,
+        scoreChanges = scoreChanges,
+        doraIndicators = Some(round.doraIndicators),
+        uraDoraIndicators = None,
+        uraDoraVisible = Some(false),
+        settlement = Some(RoundSettlement(notes = (notes :+ "流局满贯").distinct)),
+        wins = wins
+      )
+    }
+
+  private def isNagashiManganSeat(seat: MahjongSeatState): Boolean =
+    seat.melds.isEmpty &&
+      seat.river.nonEmpty &&
+      seat.river.forall(discard => isYaochu(indexOf(discard.tile)) && discard.calledBy.isEmpty)
+
+  private def manganTsumoScoreChanges(
+      players: Vector[PlayerId],
+      seatByPlayer: Map[PlayerId, SeatWind],
+      winner: PlayerId
+  ): Vector[ScoreChange] =
+    val winnerIsDealer = seatByPlayer.get(winner).contains(SeatWind.East)
+    val payments = players.filterNot(_ == winner).map { playerId =>
+      val payerIsDealer = seatByPlayer.get(playerId).contains(SeatWind.East)
+      playerId -> (if winnerIsDealer || payerIsDealer then 4000 else 2000)
+    }.toMap
+    val total = payments.values.sum
+    players.map { playerId =>
+      if playerId == winner then ScoreChange(playerId, total)
+      else ScoreChange(playerId, -payments.getOrElse(playerId, 0))
+    }
+
   private def exhaustiveDrawScoreChanges(players: Vector[PlayerId], tenpaiPlayers: Vector[PlayerId]): Vector[ScoreChange] =
     if tenpaiPlayers.isEmpty || tenpaiPlayers.size == players.size then players.map(ScoreChange(_, 0))
     else
@@ -906,12 +1169,98 @@ object MahjongGameStateTransitionFunctions:
         else ScoreChange(player, -notenLoss)
       }
 
+  private def acceptPendingRiichiDeclaration(state: MahjongTableState, pending: MahjongPendingCallState): MahjongTableState =
+    state.seats
+      .find(_.playerId == pending.discardPlayerId)
+      .flatMap(_.river.find(_.sequenceNo == pending.discardSequenceNo))
+      .fold(state)(discard => acceptRiichiDeclarationForDiscard(state, discard))
+
+  private def acceptRiichiDeclarationForDiscard(state: MahjongTableState, discard: MahjongDiscard): MahjongTableState =
+    if !discard.riichiDeclared then state
+    else
+      val declarer = seatByPlayerId(state, discard.playerId)
+      val updatedDeclarer = declarer.copy(points = declarer.points - 1000)
+      state.copy(
+        seats = replaceSeat(state.seats, updatedDeclarer),
+        sticks = state.sticks.copy(riichi = state.sticks.riichi + 1)
+      )
+
+  private def applyWinSettlementAdjustments(
+      state: MahjongTableState,
+      result: AgariResult,
+      winnerIds: Vector[PlayerId]
+  ): AgariResult =
+    val players = state.seats.map(_.playerId)
+    val riichiAward = state.sticks.riichi * 1000
+    val honbaPayment = state.sticks.honba * 300
+    val riichiAwardChanges =
+      winnerIds.headOption.toVector.flatMap(winner => Option.when(riichiAward > 0)(ScoreChange(winner, riichiAward)))
+    val honbaChanges = honbaSettlementChanges(state, result, winnerIds)
+    val scoreChanges = aggregateScoreChanges(players, result.scoreChanges ++ riichiAwardChanges ++ honbaChanges)
+    val settlement = mergeSettlement(result.settlement, riichiAward, honbaPayment)
+
+    result.copy(scoreChanges = scoreChanges, settlement = Some(settlement))
+
+  private def honbaSettlementChanges(
+      state: MahjongTableState,
+      result: AgariResult,
+      winnerIds: Vector[PlayerId]
+  ): Vector[ScoreChange] =
+    if state.sticks.honba <= 0 then Vector.empty
+    else
+      val perRonWinner = state.sticks.honba * 300
+      val perTsumoPayer = state.sticks.honba * 100
+      result.outcome match
+        case HandOutcome.Ron =>
+          result.target.toVector.flatMap { target =>
+            val winnerGains = winnerIds.map(winner => ScoreChange(winner, perRonWinner))
+            winnerGains :+ ScoreChange(target, -perRonWinner * winnerIds.size)
+          }
+        case HandOutcome.Tsumo =>
+          winnerIds.flatMap { winner =>
+            val payers = state.seats.map(_.playerId).filterNot(_ == winner)
+            ScoreChange(winner, perTsumoPayer * payers.size) +: payers.map(playerId => ScoreChange(playerId, -perTsumoPayer))
+          }
+        case HandOutcome.ExhaustiveDraw | HandOutcome.AbortiveDraw => Vector.empty
+
+  private def mergeSettlement(
+      existing: Option[RoundSettlement],
+      riichiAward: Int,
+      honbaPayment: Int
+  ): RoundSettlement =
+    val base = existing.getOrElse(RoundSettlement())
+    base.copy(
+      riichiSticksDelta = riichiAward,
+      honbaPayment = honbaPayment
+    )
+
+  private def sticksAfterRoundResult(state: MahjongTableState, result: AgariResult): MahjongTableSticks =
+    result.outcome match
+      case HandOutcome.Ron | HandOutcome.Tsumo => state.sticks.copy(riichi = 0)
+      case HandOutcome.ExhaustiveDraw | HandOutcome.AbortiveDraw => state.sticks
+
+  private def visibleTenpai(
+      seat: MahjongSeatState,
+      state: MahjongTableState,
+      viewerPlayerId: Option[PlayerId],
+      revealAllHands: Boolean
+  ): Option[Boolean] =
+    val canSeeTenpai =
+      revealAllHands ||
+        viewerPlayerId.contains(seat.playerId) ||
+        state.currentRound.flatMap(_.result).exists(_.outcome == HandOutcome.ExhaustiveDraw)
+    Option.when(canSeeTenpai)(
+      MahjongHandAnalysisFunctions.calculateShanten(seat.handTiles, seat.melds.size, allowSpecialHands = seat.melds.isEmpty) == 0
+    )
+
   private def seatToView(
       seat: MahjongSeatState,
       state: MahjongTableState,
-      viewerPlayerId: Option[PlayerId]
+      viewerPlayerId: Option[PlayerId],
+      revealAllHands: Boolean
   ): MahjongSeatView =
     val visibleHand = viewerPlayerId match
+      case _ if revealAllHands || shouldRevealSettlementHand(seat, state) => Some(sortTiles(seat.handTiles ++ seat.drawTile.toVector))
       case Some(viewer) if viewer == seat.playerId => Some(sortTiles(seat.handTiles ++ seat.drawTile.toVector))
       case _ => None
     MahjongSeatView(
@@ -926,8 +1275,11 @@ object MahjongGameStateTransitionFunctions:
       riichi = seat.riichi,
       ippatsu = seat.ippatsu,
       furiten = seat.furiten,
-      tenpai = Some(MahjongHandAnalysisFunctions.calculateShanten(seat.handTiles, seat.melds.size, allowSpecialHands = seat.melds.isEmpty) == 0)
+      tenpai = visibleTenpai(seat, state, viewerPlayerId, revealAllHands)
     )
+
+  private def shouldRevealSettlementHand(seat: MahjongSeatState, state: MahjongTableState): Boolean =
+    state.currentRound.flatMap(_.result).exists(result => winningPlayerIds(result).contains(seat.playerId))
 
   private def roundToView(
       round: MahjongRoundState,
@@ -1068,5 +1420,48 @@ object MahjongGameStateTransitionFunctions:
     }
 
   private def applyScoreChanges(seats: Vector[MahjongSeatState], changes: Vector[ScoreChange]): Vector[MahjongSeatState] =
-    val deltaByPlayer = changes.map(change => change.playerId -> change.delta).toMap
+    val deltaByPlayer = changes.groupMapReduce(_.playerId)(_.delta)(_ + _)
     seats.map(seat => seat.copy(points = seat.points + deltaByPlayer.getOrElse(seat.playerId, 0)))
+
+  private def aggregateScoreChanges(players: Vector[PlayerId], changes: Vector[ScoreChange]): Vector[ScoreChange] =
+    val deltaByPlayer = changes.groupMapReduce(_.playerId)(_.delta)(_ + _)
+    players.map(playerId => ScoreChange(playerId, deltaByPlayer.getOrElse(playerId, 0)))
+
+  private def singleWinFromResult(result: AgariResult): Option[AgariWinResult] =
+    result.winner.map { winner =>
+      AgariWinResult(
+        winner = winner,
+        target = result.target,
+        han = result.han,
+        fu = result.fu,
+        yaku = result.yaku,
+        points = result.points,
+        doraIndicators = result.doraIndicators,
+        uraDoraIndicators = result.uraDoraIndicators,
+        uraDoraVisible = result.uraDoraVisible
+      )
+    }
+
+  private def winningPlayerIds(result: AgariResult): Vector[PlayerId] =
+    val winIds = result.wins.map(_.winner)
+    if winIds.nonEmpty then winIds else result.winner.toVector
+
+  private def ronWinnerIdsBySeatOrder(
+      state: MahjongTableState,
+      pending: MahjongPendingCallState
+  ): Vector[PlayerId] =
+    val ordered = pending.acceptedRonPlayerIds
+      .distinct
+      .sortBy(playerId => seatDistanceFromDiscarder(state, pending.discardPlayerId, playerId))
+    if state.ruleset.doubleRon then ordered else ordered.take(1)
+
+  private def seatDistanceFromDiscarder(
+      state: MahjongTableState,
+      discardPlayerId: PlayerId,
+      targetPlayerId: PlayerId
+  ): Int =
+    val discardSeat = seatByPlayerId(state, discardPlayerId).seat
+    val targetSeat = seatByPlayerId(state, targetPlayerId).seat
+    val discardIndex = SeatWind.all.indexOf(discardSeat)
+    val targetIndex = SeatWind.all.indexOf(targetSeat)
+    (targetIndex - discardIndex + SeatWind.all.size) % SeatWind.all.size

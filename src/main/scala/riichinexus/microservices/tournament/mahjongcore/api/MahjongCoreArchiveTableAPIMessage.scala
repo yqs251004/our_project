@@ -3,6 +3,7 @@ package riichinexus.microservices.tournament.mahjongcore.api
 import java.time.Instant
 
 import cats.effect.IO
+import riichinexus.microservices.opsanalytics.api.`private`.RefreshOpsAnalyticsAfterMatchArchivedPrivateAPIMessage
 import riichinexus.microservices.tournament.mahjongcore.domain.gamestate.functions.MahjongGameStateTransitionFunctions
 import riichinexus.microservices.tournament.mahjongcore.domain.paifumanagement.functions.MahjongTableArchiveFunctions
 import riichinexus.microservices.tournament.mahjongcore.objects.action.apiTypes.MahjongActionResponse
@@ -20,20 +21,28 @@ final case class MahjongCoreArchiveTableAPIMessage(
 ) extends APIMessage[MahjongActionResponse] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[MahjongActionResponse] =
-    IO.blocking {
-      val id = TableId(tableId)
-      val current = MahjongTableStateTable.findById(context.connection, id)
-        .getOrElse(throw IllegalArgumentException(s"Mahjong table ${tableId} is not started"))
-      val archived = MahjongTableArchiveFunctions.archive(context.connection, current, Instant.now())
-      val storedState = MahjongTableStateTable.save(
-        context.connection,
-        archived.tableState.copy(version = archived.tableState.version + 1),
-        archivedPaifuId = Some(archived.paifu.id),
-        archivedMatchRecordId = Some(archived.matchRecord.id)
-      )
-      MahjongActionResponse(
+    val archivedAt = Instant.now()
+    for
+      archived <- IO.blocking {
+        val id = TableId(tableId)
+        val current = MahjongTableStateTable.findById(context.connection, id)
+          .getOrElse(throw IllegalArgumentException(s"Mahjong table ${tableId} is not started"))
+        MahjongTableArchiveFunctions.archive(context.connection, current, archivedAt)
+      }
+      _ <- RefreshOpsAnalyticsAfterMatchArchivedPrivateAPIMessage(
+        matchRecord = archived.matchRecord,
+        occurredAt = archived.matchRecord.generatedAt
+      ).plan(context)
+      storedState <- IO.blocking {
+        MahjongTableStateTable.save(
+          context.connection,
+          archived.tableState.copy(version = archived.tableState.version + 1),
+          archivedPaifuId = Some(archived.paifu.id),
+          archivedMatchRecordId = Some(archived.matchRecord.id)
+        )
+      }
+    yield MahjongActionResponse(
         table = MahjongGameStateTransitionFunctions.toView(storedState, viewerPlayerId = None, includeLegalActions = false),
         acceptedEvent = None,
         archivedPaifuId = Some(archived.paifu.id)
       )
-    }

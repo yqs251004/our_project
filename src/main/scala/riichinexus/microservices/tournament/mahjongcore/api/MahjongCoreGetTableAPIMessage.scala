@@ -1,9 +1,11 @@
 package riichinexus.microservices.tournament.mahjongcore.api
 
 import cats.effect.IO
+import riichinexus.microservices.auth.domain.functions.AccessPrincipalFunctions
+import riichinexus.microservices.auth.utils.ResolveAccessPrincipal
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.tournament.mahjongcore.domain.gamestate.functions.MahjongGameStateTransitionFunctions
-import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.{MahjongRuleset, MahjongTableView}
+import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.{MahjongRuleset, MahjongTableStatus, MahjongTableView}
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.apiTypes.MahjongTableQuery
 import riichinexus.microservices.tournament.mahjongcore.tables.tablestate.MahjongTableStateTable
 import riichinexus.microservices.tournament.objects.tablemanagement.TableId
@@ -22,11 +24,20 @@ final case class MahjongCoreGetTableAPIMessage(
       val id = TableId(tableId)
       val state = MahjongTableStateTable.findById(context.connection, id) match
         case Some(current) =>
-          MahjongTableStateTable.save(context.connection, MahjongGameStateTransitionFunctions.normalizeCurrentRoundState(current))
+          val normalized = MahjongGameStateTransitionFunctions.normalizeCurrentRoundState(current)
+          if current.status == MahjongTableStatus.Archived then normalized
+          else MahjongTableStateTable.save(context.connection, normalized)
         case None => MahjongGameStateTransitionFunctions.notStartedTable(id, MahjongRuleset())
       MahjongGameStateTransitionFunctions.toView(
         state,
         viewerPlayerId = query.viewerPlayerId.map(PlayerId(_)),
-        includeLegalActions = query.includeLegalActions
+        includeLegalActions = query.includeLegalActions,
+        revealAllHands = canRevealAllHands(context, query)
       )
     }
+
+  private def canRevealAllHands(context: ApiPlanContext, query: MahjongTableQuery): Boolean =
+    query.operatorId
+      .map(PlayerId(_))
+      .flatMap(operatorId => scala.util.Try(ResolveAccessPrincipal(operatorId).resolve(context.connection)).toOption)
+      .exists(AccessPrincipalFunctions.isSuperAdmin)

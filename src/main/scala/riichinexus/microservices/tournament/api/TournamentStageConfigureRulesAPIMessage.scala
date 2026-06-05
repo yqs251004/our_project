@@ -38,6 +38,7 @@ import riichinexus.microservices.tournament.domain.tablemanagement.model.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.tournament.domain.tournamentmanagement.functions.TournamentRuntimeDefaults
+import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.MahjongRuleset
 import riichinexus.microservices.tournament.objects.rulesmanagement.stageprogression.{AdvancementRule, AdvancementRuleType}
 import riichinexus.microservices.tournament.objects.rulesmanagement.knockout.KnockoutRuleConfig
 import riichinexus.microservices.tournament.objects.rulesmanagement.swiss.SwissRuleConfig
@@ -106,7 +107,8 @@ final case class TournamentStageConfigureRulesAPIMessage(tournamentId: String, s
         advancementRule(request),
         swissRule(request),
         knockoutRule(request),
-        request.schedulingPoolSize.getOrElse(baseStage.schedulingPoolSize)
+        request.schedulingPoolSize.getOrElse(baseStage.schedulingPoolSize),
+        request.mahjongRuleset.getOrElse(baseStage.mahjongRuleset)
       )
     )
 
@@ -152,6 +154,13 @@ final case class TournamentStageConfigureRulesAPIMessage(tournamentId: String, s
       request.ruleTemplateKey.forall(_.trim.nonEmpty),
       "ruleTemplateKey must not be blank"
     )
+    request.mahjongRuleset.foreach(validateMahjongRuleset)
+
+  private def validateMahjongRuleset(ruleset: MahjongRuleset): Unit =
+    require(ruleset.initialPoints > 0, "initialPoints must be positive")
+    require(ruleset.targetPoints > 0, "targetPoints must be positive")
+    require(ruleset.akaDoraCount >= 0 && ruleset.akaDoraCount <= 3, "akaDoraCount must be between 0 and 3")
+    require(ruleset.minHan >= 1, "minHan must be positive")
 
   private final case class ConfigureStageRulesCommand(
       tournamentId: TournamentId,
