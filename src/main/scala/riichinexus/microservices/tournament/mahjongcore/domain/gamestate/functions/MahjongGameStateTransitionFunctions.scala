@@ -124,7 +124,7 @@ object MahjongGameStateTransitionFunctions:
             river = Vector.empty,
             riichi = false,
             ippatsu = false,
-            furiten = false
+            furiten = seat.furiten
           )
         }
         val rebuilt = round.events.foldLeft(state.copy(seats = initialSeats)) {
@@ -145,7 +145,8 @@ object MahjongGameStateTransitionFunctions:
             val discardedSeat = updatedSeatWithoutDiscard.copy(
               river = updatedSeatWithoutDiscard.river :+ discardView,
               riichi = updatedSeatWithoutDiscard.riichi || riichiDeclared,
-              ippatsu = riichiDeclared
+              ippatsu = riichiDeclared,
+              furiten = updatedSeatWithoutDiscard.furiten || isWinningOwnDiscard(updatedSeatWithoutDiscard, normalizedTile)
             )
             current.copy(seats = replaceSeat(current.seats, discardedSeat))
 
@@ -355,6 +356,7 @@ object MahjongGameStateTransitionFunctions:
   private def passPendingCall(state: MahjongTableState, playerId: PlayerId): (MahjongTableState, Option[MahjongEvent]) =
     val round = requireRound(state)
     val pending = round.pendingCall.getOrElse(throw IllegalArgumentException("No pending call to pass"))
+    val stateAfterRiichiFuriten = markRiichiMissedRonFuriten(state, pending, playerId)
     val event = MahjongEvent.PlayerPassed(nextSequenceNo(round), playerId)
     val remaining = pending.candidates.filterNot(_.playerId == playerId)
     val normalizedRemaining =
@@ -365,16 +367,16 @@ object MahjongGameStateTransitionFunctions:
         pendingCall = Some(pending.copy(candidates = normalizedRemaining)),
         events = round.events :+ event
       )
-      state.copy(currentRound = Some(nextRound), status = MahjongTableStatus.WaitingCallDecision) -> Some(event)
+      stateAfterRiichiFuriten.copy(currentRound = Some(nextRound), status = MahjongTableStatus.WaitingCallDecision) -> Some(event)
     else if pending.acceptedRonPlayerIds.nonEmpty then
       val nextRound = round.copy(
         pendingCall = Some(pending.copy(candidates = Vector.empty)),
         events = round.events :+ event
       )
-      finishRoundWithRonWinners(state, nextRound, pending.copy(candidates = Vector.empty), Some(event))
+      finishRoundWithRonWinners(stateAfterRiichiFuriten, nextRound, pending.copy(candidates = Vector.empty), Some(event))
     else
       val clearedRound = round.copy(pendingCall = None, events = round.events :+ event)
-      val stateWithAcceptedRiichi = acceptPendingRiichiDeclaration(state, pending)
+      val stateWithAcceptedRiichi = acceptPendingRiichiDeclaration(stateAfterRiichiFuriten, pending)
       drawForNextPlayer(stateWithAcceptedRiichi, clearedRound, nextSeatId(state, pending.discardPlayerId)) -> Some(event)
 
   private def callMeld(
@@ -685,11 +687,13 @@ object MahjongGameStateTransitionFunctions:
       .flatMap(_.legalActions.map(_.priority))
       .maxOption
       .getOrElse(0)
+    val candidateHighestPriority = candidate.legalActions.map(_.priority).maxOption.getOrElse(0)
     val activeActions = candidate.legalActions.filter(_.priority == highestPriority)
-    if activeActions.isEmpty then Vector.empty
+    if candidateHighestPriority != highestPriority then Vector.empty
     else if highestPriority == 100 && !state.ruleset.doubleRon then
       closestRonCandidate(state, pending).filter(_ == candidate.playerId).fold(Vector.empty[MahjongLegalAction])(_ => activeActions)
-    else activeActions
+    else if highestPriority == 100 then activeActions
+    else candidate.legalActions
 
   private def hasRonAction(candidate: MahjongCallCandidate): Boolean =
     candidate.legalActions.exists(_.commandType == MahjongCommandType.Ron)
@@ -707,16 +711,30 @@ object MahjongGameStateTransitionFunctions:
       seat: MahjongSeatState,
       discard: MahjongDiscard
   ): Option[MahjongLegalAction] =
-    val context = winContext(state, seat.playerId, Some(discard.playerId), discard.tile)
-    Option.when(MahjongYakuAnalysisFunctions.isWinning(context))(
-      MahjongLegalAction(
-        commandType = MahjongCommandType.Ron,
-        tile = Some(discard.tile),
-        fromPlayerId = Some(discard.playerId),
-        targetSequenceNo = Some(discard.sequenceNo),
-        priority = 100
+    if seat.furiten then None
+    else
+      val context = winContext(state, seat.playerId, Some(discard.playerId), discard.tile)
+      Option.when(MahjongYakuAnalysisFunctions.isWinning(context))(
+        MahjongLegalAction(
+          commandType = MahjongCommandType.Ron,
+          tile = Some(discard.tile),
+          fromPlayerId = Some(discard.playerId),
+          targetSequenceNo = Some(discard.sequenceNo),
+          priority = 100
+        )
       )
-    )
+
+  private def markRiichiMissedRonFuriten(
+      state: MahjongTableState,
+      pending: MahjongPendingCallState,
+      playerId: PlayerId
+  ): MahjongTableState =
+    val missedRon = pending.candidates.exists(candidate => candidate.playerId == playerId && hasRonAction(candidate))
+    if !missedRon then state
+    else
+      val seat = seatByPlayerId(state, playerId)
+      if !seat.riichi then state
+      else state.copy(seats = replaceSeat(state.seats, seat.copy(furiten = true)))
 
   private def ponLegalAction(seat: MahjongSeatState, discard: MahjongDiscard): Option[MahjongLegalAction] =
     val index = indexOf(discard.tile)
@@ -787,14 +805,16 @@ object MahjongGameStateTransitionFunctions:
     }
 
   private def riichiClosedKanKeepsWaits(seat: MahjongSeatState, kanIndex: Int): Boolean =
-    val counts = countsOf(seat.handTiles ++ seat.drawTile.toVector)
-    val pre = counts.clone()
-    pre(kanIndex) -= 1
-    val preWaits = MahjongHandAnalysisFunctions.waitingTiles(tilesFromCounts(pre), seat.melds.size, allowSpecialHands = seat.melds.isEmpty).map(indexOf).toSet
-    val post = counts.clone()
-    post(kanIndex) -= 4
-    val postWaits = MahjongHandAnalysisFunctions.waitingTiles(tilesFromCounts(post), seat.melds.size + 1, allowSpecialHands = false).map(indexOf).toSet
-    preWaits == postWaits
+    if !seat.drawTile.exists(tile => indexOf(MahjongTileFunctions.normalize(tile)) == kanIndex) then false
+    else
+      val counts = countsOf(seat.handTiles ++ seat.drawTile.toVector)
+      val pre = counts.clone()
+      pre(kanIndex) -= 1
+      val preWaits = MahjongHandAnalysisFunctions.waitingTiles(tilesFromCounts(pre), seat.melds.size, allowSpecialHands = seat.melds.isEmpty).map(indexOf).toSet
+      val post = counts.clone()
+      post(kanIndex) -= 4
+      val postWaits = MahjongHandAnalysisFunctions.waitingTiles(tilesFromCounts(post), seat.melds.size + 1, allowSpecialHands = false).map(indexOf).toSet
+      preWaits == postWaits
 
   private def canDeclareRiichi(seat: MahjongSeatState): Boolean =
     !seat.riichi && seat.points >= 1000 && seat.melds.forall(_.closed)
