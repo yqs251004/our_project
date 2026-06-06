@@ -624,6 +624,25 @@ class MahjongCoreDomainSuite extends FunSuite:
     assert(advanced.seats.filterNot(_.seat == SeatWind.East).forall(seat => seat.handTiles.size + seat.drawTile.size == 13))
   }
 
+  test("showcase mode deals the scripted default wall on east two") {
+    val state = preparedRonState(MahjongRuleset(gameLength = MahjongGameLength.Tonpu, doubleRon = false), northCanRon = false)
+    val east = state.seats.find(_.seat == SeatWind.East).get
+    val south = state.seats.find(_.seat == SeatWind.South).get
+    val roundEnded = finishRon(state, east.playerId, south.playerId)
+    val advanced = MahjongGameStateTransitionFunctions.advanceRound(roundEnded, showcaseMode = true)
+    val nextRound = advanced.currentRound.get
+
+    assertEquals(nextRound.descriptor.roundWind, SeatWind.East)
+    assertEquals(nextRound.descriptor.handNumber, 2)
+    assertEquals(nextRound.doraIndicators.headOption, Some(PaifuTile("4z")))
+    assertEquals(advanced.seats.find(_.seat == SeatWind.East).map(_.handTiles), Some(tiles("1m", "9m", "1p", "9p", "1s", "9s", "1z", "2z", "3z", "4z", "5z", "6z", "7z")))
+    assertEquals(advanced.seats.find(_.seat == SeatWind.East).flatMap(_.drawTile), Some(PaifuTile("0p")))
+    assertEquals(advanced.seats.find(_.seat == SeatWind.South).map(_.handTiles), Some(tiles("1p", "1p", "1p", "2p", "3p", "4p", "5p", "6p", "7p", "8p", "9p", "9p", "9p")))
+    assertEquals(advanced.seats.find(_.seat == SeatWind.West).map(_.handTiles), Some(tiles("1s", "1s", "1s", "2s", "3s", "4s", "5s", "6s", "7s", "8s", "9s", "9s", "9s")))
+    assertEquals(advanced.seats.find(_.seat == SeatWind.North).map(_.handTiles), Some(tiles("1m", "1m", "1m", "2m", "3m", "4m", "5m", "6m", "7m", "8m", "9m", "9m", "9m")))
+    assertEquals(physicalTiles(advanced).size, 136)
+  }
+
   test("one-kyoku table finishes after a completed hand and exposes final standings") {
     val state = preparedRonState(MahjongRuleset(gameLength = MahjongGameLength.OneKyoku, doubleRon = false), northCanRon = false)
     val east = state.seats.find(_.seat == SeatWind.East).get
