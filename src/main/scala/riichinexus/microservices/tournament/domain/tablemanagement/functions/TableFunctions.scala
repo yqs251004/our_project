@@ -149,9 +149,33 @@ object TableFunctions:
       operatorNotes = table.operatorNotes ++ note.toVector
     )
 
+  def recordScoringResult(
+      table: Table,
+      recordId: MatchRecordId,
+      paifuId: PaifuId,
+      at: Instant,
+      note: Option[String] = None
+  ): Table =
+    validate(table)
+    val scoringTable =
+      table.status match
+        case TableStatus.InProgress =>
+          enterScoring(table, at)
+        case TableStatus.Scoring =>
+          table
+        case _ =>
+          throw IllegalArgumentException("Only running or scoring tables can record scoring results")
+
+    scoringTable.copy(
+      scoringStartedAt = Some(scoringTable.scoringStartedAt.getOrElse(at)),
+      paifuId = Some(paifuId),
+      matchRecordId = Some(recordId),
+      operatorNotes = scoringTable.operatorNotes ++ note.toVector
+    )
+
   def flagAppeal(table: Table, ticketId: AppealTicketId, note: Option[String] = None): Table =
     validate(table)
-    require(table.status != TableStatus.Archived, "Archived tables cannot enter appeal flow")
+    require(table.status == TableStatus.Scoring, "Only scoring tables can enter appeal flow")
     table.copy(
       status = TableStatus.AppealInProgress,
       appealTicketIds = (table.appealTicketIds :+ ticketId).distinct,
@@ -173,8 +197,8 @@ object TableFunctions:
           status =
             resolution match
               case AppealTableResolution.RestorePriorState =>
-                if table.endedAt.nonEmpty || table.matchRecordId.nonEmpty || table.paifuId.nonEmpty then TableStatus.Archived
-                else if table.scoringStartedAt.nonEmpty then TableStatus.Scoring
+                if table.endedAt.nonEmpty then TableStatus.Archived
+                else if table.scoringStartedAt.nonEmpty || table.matchRecordId.nonEmpty || table.paifuId.nonEmpty then TableStatus.Scoring
                 else if table.startedAt.nonEmpty then TableStatus.InProgress
                 else TableStatus.WaitingPreparation
               case AppealTableResolution.ArchiveTable => TableStatus.Archived

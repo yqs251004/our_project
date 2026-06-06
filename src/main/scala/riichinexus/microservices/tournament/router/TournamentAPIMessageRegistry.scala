@@ -59,6 +59,7 @@ object TournamentAPIMessageRegistry:
       RegisteredAPIMessage.api[TournamentTableUpdateOwnReadyAPIMessage, TournamentTableView],
       RegisteredAPIMessage.api[TournamentTableStartAPIMessage, TournamentTableView],
       RegisteredAPIMessage.api[TournamentTableUploadPaifuAPIMessage, TournamentTableView],
+      RegisteredAPIMessage.api[TournamentTableFinalizeArchiveAPIMessage, TournamentTableView],
       RegisteredAPIMessage.api[TournamentTableResetAPIMessage, TournamentTableView],
       RegisteredAPIMessage.api[TournamentRecordListAPIMessage, PagedResponse[TournamentMatchRecordView]],
       RegisteredAPIMessage.api[TournamentRecordGetAPIMessage, TournamentMatchRecordView],

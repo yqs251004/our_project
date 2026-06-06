@@ -46,18 +46,17 @@ final case class CreateNotificationPrivateAPIMessage(
     NotificationTable.save(context.connection, notification)
 
   private def publishNotification(context: ApiPlanContext, notification: Notification): IO[Unit] =
-    context.realtimeEventBus.publish(
-      RealtimeEvent(
-        id = notification.id.value,
-        eventType = "NotificationCreated",
-        aggregateType = "notification",
-        aggregateId = notification.id.value,
-        occurredAt = notification.createdAt,
-        sourceEventType = notification.notificationType,
-        recipientPlayerId = Some(notification.recipientPlayerId.value),
-        title = Some(notification.title),
-        body = Some(notification.body),
-        severity = Some(notification.severity),
-        actionUrl = notification.actionUrl
-      )
+    val event = RealtimeEvent(
+      id = notification.id.value,
+      eventType = "NotificationCreated",
+      aggregateType = "notification",
+      aggregateId = notification.id.value,
+      occurredAt = notification.createdAt,
+      sourceEventType = notification.notificationType,
+      recipientPlayerId = Some(notification.recipientPlayerId.value),
+      title = Some(notification.title),
+      body = Some(notification.body),
+      severity = Some(notification.severity),
+      actionUrl = notification.actionUrl
     )
+    context.afterCommit(context.realtimeEventBus.publish(event))

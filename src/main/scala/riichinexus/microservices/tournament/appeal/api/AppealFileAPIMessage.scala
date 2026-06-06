@@ -3,6 +3,7 @@ import riichinexus.microservices.audit.domain.auditevent.AuditEvent
 import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
 import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPIMessage
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
+import riichinexus.microservices.notification.api.`private`.CreateBulkNotificationsPrivateAPIMessage
 
 import java.time.Instant
 import java.util.NoSuchElementException
@@ -62,6 +63,9 @@ final case class AppealFileAPIMessage(
       command <- IO.blocking(resolveCommand(actor, createdAt))
       ticket <- IO.blocking(fileAppeal(context.connection, service, command))
       _ <- RecordAuditEventsPrivateAPIMessage(fileAppealAudit(ticket, command)).plan(context)
+      _ <- CreateBulkNotificationsPrivateAPIMessage(
+        AppealNotificationRequests.appealFiled(context.connection, ticket)
+      ).plan(context)
     yield AppealTicketView.fromDomain(ticket)
 
   private def resolveCommand(actor: AccessPrincipal, createdAt: Instant): FileAppealCommand =

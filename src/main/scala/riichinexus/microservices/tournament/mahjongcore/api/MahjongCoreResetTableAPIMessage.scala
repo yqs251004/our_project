@@ -18,8 +18,18 @@ final case class MahjongCoreResetTableAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[MahjongTableView] =
     IO.blocking {
-      val id = TableId(tableId)
-      val state = MahjongGameStateTransitionFunctions.notStartedTable(id, MahjongRuleset()).copy(version = 1)
-      MahjongTableStateTable.save(context.connection, state)
-      MahjongGameStateTransitionFunctions.toView(state, viewerPlayerId = None, includeLegalActions = false)
+      MahjongCoreResetTableAPIMessage.resetAndSave(
+        context.connection,
+        TableId(tableId)
+      )
     }
+
+object MahjongCoreResetTableAPIMessage:
+
+  def resetAndSave(
+      connection: java.sql.Connection,
+      tableId: TableId
+  ): MahjongTableView =
+    val state = MahjongGameStateTransitionFunctions.notStartedTable(tableId, MahjongRuleset()).copy(version = 1)
+    MahjongTableStateTable.save(connection, state)
+    MahjongGameStateTransitionFunctions.toView(state, viewerPlayerId = None, includeLegalActions = false)

@@ -3,6 +3,8 @@ import riichinexus.microservices.audit.domain.auditevent.AuditEvent
 import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
 import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPIMessage
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
+import riichinexus.microservices.notification.api.`private`.CreateBulkNotificationsPrivateAPIMessage
+import riichinexus.microservices.tournament.mahjongcore.api.MahjongCoreResetTableAPIMessage
 
 import java.time.Instant
 import java.util.NoSuchElementException
@@ -59,7 +61,17 @@ final case class AppealAdjudicateAPIMessage(
       service = AppealApplicationService(AuthorizationPolicyFunctions.strict)
       command <- IO.blocking(resolveCommand(actor, adjudicatedAt))
       ticket <- IO.blocking(adjudicateAppeal(context.connection, service, command))
+      _ <- resetMahjongCoreIfNeeded(context, ticket, command)
       _ <- RecordAuditEventsPrivateAPIMessage(adjudicateAppealAudit(ticket, command)).plan(context)
+      _ <- CreateBulkNotificationsPrivateAPIMessage(
+        AppealNotificationRequests.appealAdjudicated(
+          context.connection,
+          ticket,
+          command.decision,
+          command.tableResolution,
+          command.verdict
+        )
+      ).plan(context)
     yield AppealTicketView.fromDomain(ticket)
 
   private def resolveCommand(actor: AccessPrincipal, adjudicatedAt: Instant): AdjudicateAppealCommand =
@@ -88,6 +100,18 @@ final case class AppealAdjudicateAPIMessage(
       tableResolution = command.tableResolution,
       note = command.note
     ).getOrElse(throw NoSuchElementException("Resource not found"))
+
+  private def resetMahjongCoreIfNeeded(
+      context: ApiPlanContext,
+      ticket: AppealTicket,
+      command: AdjudicateAppealCommand
+  ): IO[Unit] =
+    if command.tableResolution.contains(DomainAppealTableResolution.ForceReset) then
+      IO.blocking {
+        MahjongCoreResetTableAPIMessage.resetAndSave(context.connection, ticket.tableId)
+        ()
+      }
+    else IO.unit
 
   private def adjudicateAppealAudit(
       ticket: AppealTicket,

@@ -44,6 +44,8 @@ import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAP
 import riichinexus.microservices.tournament.domain.rulesmanagement.functions.knockout.KnockoutStageCoordinator
 import riichinexus.microservices.tournament.domain.tablemanagement.functions.TableFunctions
 import riichinexus.microservices.tournament.appeal.tables.appealticket.AppealTicketTable
+import riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTable
+import riichinexus.microservices.tournament.tables.paifu.PaifuTable
 import riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable
 
 final class AppealApplicationService(
@@ -72,8 +74,8 @@ final class AppealApplicationService(
 
         if !table.seats.exists(_.playerId == openedBy) then
           throw IllegalArgumentException(s"Player ${openedBy.value} is not seated at table ${tableId.value}")
-        if table.status == TableStatus.Archived then
-          throw IllegalArgumentException(s"Archived table ${tableId.value} cannot accept new appeals")
+        if table.status != TableStatus.Scoring then
+          throw IllegalArgumentException(s"Only scoring table ${tableId.value} can accept new appeals")
         if AppealTicketTable.findAll(connection).exists(ticket =>
             ticket.tableId == tableId &&
               (ticket.status == AppealStatus.Open ||
@@ -210,6 +212,7 @@ final class AppealApplicationService(
             val updatedTable =
               tableResolution.getOrElse(AppealTableResolution.RestorePriorState) match
                 case AppealTableResolution.ForceReset =>
+                  deleteTableResultArtifacts(connection, table.id)
                   TableFunctions.forceReset(
                     table,
                     note.getOrElse(s"Appeal ${ticketId.value} adjudication requested reset"),
@@ -255,7 +258,7 @@ final class AppealApplicationService(
 
         val reopenedTicket = AppealTicketTable.save(connection, ticket.reopen(operatorId, reason, reopenedAt, note))
         TournamentGameTable.findById(connection, ticket.tableId).foreach { table =>
-          if table.status != TableStatus.Archived then
+          if table.status == TableStatus.Scoring then
             TournamentGameTable.save(connection, TableFunctions.flagAppeal(table, ticket.id, note.orElse(Some(s"Appeal ${ticket.id.value} reopened"))))
         }
         reopenedTicket
@@ -267,3 +270,7 @@ final class AppealApplicationService(
       .getOrElse(throw NoSuchElementException(s"Player ${playerId.value} was not found"))
     if player.status != PlayerStatus.Active then
       throw IllegalArgumentException(context)
+
+  private def deleteTableResultArtifacts(connection: Connection, tableId: TableId): Unit =
+    MatchRecordTable.deleteByTable(connection, tableId)
+    PaifuTable.deleteByTable(connection, tableId)

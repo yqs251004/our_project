@@ -31,6 +31,7 @@ import riichinexus.microservices.audit.domain.auditevent.AuditEventId
 import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
 import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.auth.domain.model.*
+import riichinexus.microservices.tournament.mahjongcore.api.MahjongCoreResetTableAPIMessage
 import riichinexus.microservices.tournament.domain.tablemanagement.functions.TableFunctions
 import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
 import riichinexus.microservices.tournament.domain.recordmanagement.model.*
@@ -39,6 +40,8 @@ import riichinexus.microservices.tournament.domain.tablemanagement.model.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.tournament.domain.tablemanagement.model.Table
+import riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTable
+import riichinexus.microservices.tournament.tables.paifu.PaifuTable
 import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
@@ -61,6 +64,9 @@ final case class TournamentTableResetAPIMessage(tableId: String, request: ForceR
           resetTable(context.connection, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
+      _ <- IO.blocking {
+        MahjongCoreResetTableAPIMessage.resetAndSave(context.connection, command.tableId)
+      }
     yield TournamentTableView.fromDomain(table)
 
   private def resetTable(connection: java.sql.Connection, command: ResetTableCommand): Option[Table] =
@@ -70,8 +76,13 @@ final case class TournamentTableResetAPIMessage(tableId: String, request: ForceR
         Permission.ResetTableState,
         tournamentId = Some(table.tournamentId)
       )
+      deleteTableResultArtifacts(connection, table.id)
       riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.save(connection, TableFunctions.forceReset(table, command.note, command.resetAt))
     }
+
+  private def deleteTableResultArtifacts(connection: java.sql.Connection, tableId: TableId): Unit =
+    MatchRecordTable.deleteByTable(connection, tableId)
+    PaifuTable.deleteByTable(connection, tableId)
 
   private final case class ResetTableCommand(
       tableId: TableId,

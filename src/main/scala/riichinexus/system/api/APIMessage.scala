@@ -7,6 +7,7 @@ import riichinexus.system.realtime.domain.RealtimeEventBus
 import riichinexus.microservices.auth.domain.AuthenticationFailure
 import upickle.default.*
 
+import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
 trait APIMessage[Response]:
@@ -17,8 +18,30 @@ trait APIWithTokenMessage[Response] extends APIMessage[Response]
 final case class ApiPlanContext(
     bearerToken: Option[String],
     connection: Connection,
-    realtimeEventBus: RealtimeEventBus = RealtimeEventBus.empty
-)
+    realtimeEventBus: RealtimeEventBus = RealtimeEventBus.empty,
+    postCommitHooks: Option[ApiPostCommitHooks] = None
+):
+
+  def afterCommit(effect: IO[Unit]): IO[Unit] =
+    postCommitHooks match
+      case Some(hooks) => IO.delay(hooks.add(effect))
+      case None        => effect
+
+final class ApiPostCommitHooks:
+  private val hooks = ArrayBuffer.empty[IO[Unit]]
+
+  def add(effect: IO[Unit]): Unit =
+    hooks.synchronized {
+      hooks += effect
+      ()
+    }
+
+  def drain: Vector[IO[Unit]] =
+    hooks.synchronized {
+      val effects = hooks.toVector
+      hooks.clear()
+      effects
+    }
 
 enum ApiSuccessStatus:
   case Ok, Created, Accepted
