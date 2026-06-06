@@ -11,9 +11,10 @@ import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.Ma
 import riichinexus.microservices.tournament.mahjongcore.domain.yakuanalysis.functions.MahjongYakuAnalysisFunctions
 import riichinexus.microservices.tournament.mahjongcore.domain.yakuanalysis.model.MahjongWinContext
 import riichinexus.microservices.tournament.mahjongcore.objects.action.{MahjongCommandType, MahjongLegalAction}
-import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.{MahjongDiscard, MahjongGameLength, MahjongRoundPhase, MahjongRuleset, MahjongTableStatus, MahjongTableSticks}
-import riichinexus.microservices.tournament.objects.paifumanagement.{HandOutcome, MahjongYakuKind, PaifuTile}
+import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.{MahjongDiscard, MahjongGameLength, MahjongMeld, MahjongMeldType, MahjongRoundPhase, MahjongRuleset, MahjongTableStatus, MahjongTableSticks, MahjongTableView}
+import riichinexus.microservices.tournament.objects.paifumanagement.{AgariResult, HandOutcome, MahjongYakuKind, PaifuActionType, PaifuTile}
 import riichinexus.microservices.tournament.objects.tablemanagement.{SeatWind, TableId}
+import upickle.default.{read, write}
 
 class MahjongCoreDomainSuite extends FunSuite:
 
@@ -45,6 +46,102 @@ class MahjongCoreDomainSuite extends FunSuite:
     assert(result.exists(_.yaku.exists(yaku => yaku.kind == MahjongYakuKind.KokushiMusou || yaku.kind == MahjongYakuKind.KokushiMusouThirteenWait)))
   }
 
+  test("yakuman settlement handles non-dealer ron and dealer tsumo payments") {
+    val east = PlayerId("yakuman-east")
+    val south = PlayerId("yakuman-south")
+    val west = PlayerId("yakuman-west")
+    val north = PlayerId("yakuman-north")
+    val seatByPlayer = Map(
+      east -> SeatWind.East,
+      south -> SeatWind.South,
+      west -> SeatWind.West,
+      north -> SeatWind.North
+    )
+    val normalKokushiHand = tiles("1m", "1m", "1p", "9p", "1s", "9s", "1z", "2z", "3z", "4z", "5z", "6z", "7z")
+
+    val childRon = MahjongYakuAnalysisFunctions.analyzeWin(
+      MahjongWinContext(
+        winner = south,
+        target = Some(east),
+        seatByPlayer = seatByPlayer,
+        roundWind = SeatWind.East,
+        handTiles = normalKokushiHand,
+        melds = Vector.empty,
+        winningTile = PaifuTile("9m"),
+        doraIndicators = Vector(PaifuTile("3m"))
+      )
+    ).get
+    val dealerTsumo = MahjongYakuAnalysisFunctions.analyzeWin(
+      MahjongWinContext(
+        winner = east,
+        target = None,
+        seatByPlayer = seatByPlayer,
+        roundWind = SeatWind.East,
+        handTiles = normalKokushiHand,
+        melds = Vector.empty,
+        winningTile = PaifuTile("9m"),
+        doraIndicators = Vector(PaifuTile("3m"))
+      )
+    ).get
+
+    assertEquals(childRon.yaku.map(_.kind), Vector(MahjongYakuKind.KokushiMusou))
+    assertEquals(childRon.points, 32000)
+    assertEquals(scoreDelta(childRon, south), 32000)
+    assertEquals(scoreDelta(childRon, east), -32000)
+    assertEquals(scoreDelta(childRon, west), 0)
+    assertEquals(dealerTsumo.yaku.map(_.kind), Vector(MahjongYakuKind.KokushiMusou))
+    assertEquals(dealerTsumo.points, 48000)
+    assertEquals(scoreDelta(dealerTsumo, east), 48000)
+    assertEquals(scoreDelta(dealerTsumo, south), -16000)
+    assertEquals(scoreDelta(dealerTsumo, west), -16000)
+    assertEquals(scoreDelta(dealerTsumo, north), -16000)
+  }
+
+  test("multiple yakuman settlement can be capped by ruleset") {
+    val east = PlayerId("triple-yakuman-east")
+    val south = PlayerId("triple-yakuman-south")
+    val west = PlayerId("triple-yakuman-west")
+    val north = PlayerId("triple-yakuman-north")
+    val seatByPlayer = Map(
+      east -> SeatWind.East,
+      south -> SeatWind.South,
+      west -> SeatWind.West,
+      north -> SeatWind.North
+    )
+    val thirteenWaitKokushi = tiles("1m", "9m", "1p", "9p", "1s", "9s", "1z", "2z", "3z", "4z", "5z", "6z", "7z")
+
+    def analyze(allowMultipleYakuman: Boolean) =
+      MahjongYakuAnalysisFunctions.analyzeWin(
+        MahjongWinContext(
+          winner = east,
+          target = None,
+          seatByPlayer = seatByPlayer,
+          roundWind = SeatWind.East,
+          handTiles = thirteenWaitKokushi,
+          melds = Vector.empty,
+          winningTile = PaifuTile("1m"),
+          doraIndicators = Vector(PaifuTile("3m")),
+          ruleset = MahjongRuleset(allowMultipleYakuman = allowMultipleYakuman),
+          tenhou = true
+        )
+      ).get
+
+    val uncapped = analyze(allowMultipleYakuman = true)
+    val capped = analyze(allowMultipleYakuman = false)
+
+    assertEquals(uncapped.yaku.map(_.kind).toSet, Set(MahjongYakuKind.KokushiMusouThirteenWait, MahjongYakuKind.Tenhou))
+    assertEquals(uncapped.han, Some(39))
+    assertEquals(uncapped.points, 144000)
+    assertEquals(scoreDelta(uncapped, east), 144000)
+    assertEquals(scoreDelta(uncapped, south), -48000)
+    assertEquals(uncapped.settlement.flatMap(_.notes.headOption), Some("3倍役满"))
+    assertEquals(capped.han, Some(39))
+    assertEquals(capped.points, 48000)
+    assertEquals(scoreDelta(capped, east), 48000)
+    assertEquals(scoreDelta(capped, south), -16000)
+    assertEquals(capped.settlement.flatMap(_.notes.headOption), Some("役满"))
+  }
+
   test("started table deals four seats and exposes east discards") {
     val state = MahjongGameStateTransitionFunctions.startTable(TableId("mahjong-core-test"), MahjongRuleset(), seed = "mahjong-core-test-seed")
     val east = state.seats.find(_.seat == SeatWind.East).get
@@ -53,6 +150,40 @@ class MahjongCoreDomainSuite extends FunSuite:
     assertEquals(state.seats.size, 4)
     assertEquals(east.handTiles.size + east.drawTile.size, 14)
     assert(legalActions.exists(_.commandType == MahjongCommandType.Discard))
+  }
+
+  test("startTable is deterministic by seed and accounts for every physical tile") {
+    val first = MahjongGameStateTransitionFunctions.startTable(TableId("mahjong-core-determinism"), MahjongRuleset(), seed = "same-seed")
+    val second = MahjongGameStateTransitionFunctions.startTable(TableId("mahjong-core-determinism"), MahjongRuleset(), seed = "same-seed")
+    val different = MahjongGameStateTransitionFunctions.startTable(TableId("mahjong-core-determinism"), MahjongRuleset(), seed = "different-seed")
+    val firstTiles = physicalTiles(first)
+    val normalizedCounts = firstTiles.groupBy(indexOf).view.mapValues(_.size).toMap
+
+    assertEquals(first.seats.map(_.handTiles), second.seats.map(_.handTiles))
+    assertEquals(first.seats.map(_.drawTile), second.seats.map(_.drawTile))
+    assertEquals(first.currentRound.map(_.wall), second.currentRound.map(_.wall))
+    assertNotEquals(first.seats.map(_.handTiles), different.seats.map(_.handTiles))
+    assertEquals(firstTiles.size, 136)
+    assertEquals(normalizedCounts.size, TileTypeCount)
+    assert((0 until TileTypeCount).forall(index => normalizedCounts.getOrElse(index, 0) == 4))
+  }
+
+  test("public and player table views serialize cleanly while preserving hand privacy") {
+    val state = MahjongGameStateTransitionFunctions.startTable(TableId("mahjong-core-view-json"), MahjongRuleset(), seed = "mahjong-core-view-json-seed")
+    val east = state.seats.find(_.seat == SeatWind.East).get
+    val publicView = MahjongGameStateTransitionFunctions.toView(state, viewerPlayerId = None, includeLegalActions = true)
+    val playerView = MahjongGameStateTransitionFunctions.toView(state, Some(east.playerId), includeLegalActions = true)
+    val decodedPublicView = read[MahjongTableView](write(publicView))
+    val decodedPlayerView = read[MahjongTableView](write(playerView))
+
+    assertEquals(decodedPublicView.tableId, state.tableId)
+    assertEquals(decodedPublicView.legalActions, Vector.empty)
+    assert(decodedPublicView.seats.forall(_.handTiles.isEmpty))
+    assert(decodedPublicView.seats.forall(_.drawTile.isEmpty))
+    assertEquals(decodedPublicView.seats.map(_.handTileCount).sum, 53)
+    assert(decodedPlayerView.seats.find(_.playerId == east.playerId).flatMap(_.handTiles).exists(_.size == 14))
+    assert(decodedPlayerView.seats.find(_.playerId == east.playerId).flatMap(_.drawTile).nonEmpty)
+    assert(decodedPlayerView.legalActions.exists(_.commandType == MahjongCommandType.Discard))
   }
 
   test("pending call view is only exposed to the responding viewer") {
@@ -112,6 +243,62 @@ class MahjongCoreDomainSuite extends FunSuite:
     assert(southActions.exists(_.commandType == MahjongCommandType.Pon))
     assert(southActions.exists(_.commandType == MahjongCommandType.Chi))
     assert(southActions.exists(_.commandType == MahjongCommandType.Pass))
+  }
+
+  test("chi call resolves the discard relation, turn owner, meld surface and caller discard options") {
+    val state = preparedChiPonState()
+    val east = state.seats.find(_.seat == SeatWind.East).get
+    val south = state.seats.find(_.seat == SeatWind.South).get
+
+    val (pendingCallState, _) = MahjongGameStateTransitionFunctions.submitAction(
+      state,
+      MahjongSubmittedAction(east.playerId, MahjongCommandType.Discard, tile = Some(PaifuTile("3m")))
+    )
+    val chiAction = MahjongGameStateTransitionFunctions
+      .legalActionsForPlayer(pendingCallState, south.playerId)
+      .find(_.commandType == MahjongCommandType.Chi)
+      .get
+    val (calledState, acceptedEvent) = MahjongGameStateTransitionFunctions.submitAction(
+      pendingCallState,
+      MahjongSubmittedAction(
+        south.playerId,
+        MahjongCommandType.Chi,
+        tile = chiAction.tile,
+        tiles = chiAction.tiles,
+        targetSequenceNo = chiAction.targetSequenceNo
+      )
+    )
+    val calledEast = calledState.seats.find(_.playerId == east.playerId).get
+    val calledSouth = calledState.seats.find(_.playerId == south.playerId).get
+    val publicView = MahjongGameStateTransitionFunctions.toView(calledState, viewerPlayerId = None, includeLegalActions = false)
+
+    assertEquals(calledState.status, MahjongTableStatus.WaitingPlayerAction)
+    assertEquals(calledState.currentRound.map(_.turnPlayerId), Some(south.playerId))
+    assertEquals(calledState.currentRound.flatMap(_.pendingCall), None)
+    assert(acceptedEvent.exists(_.actionType == PaifuActionType.Chi))
+    assertEquals(calledEast.river.last.calledBy, Some(south.playerId))
+    assertEquals(calledSouth.melds.size, 1)
+    assertEquals(calledSouth.melds.head.meldType, MahjongMeldType.Chi)
+    assertEquals(calledSouth.melds.head.fromPlayer, Some(east.playerId))
+    assert(calledState.seats.forall(!_.ippatsu))
+    assert(MahjongGameStateTransitionFunctions.legalActionsForPlayer(calledState, south.playerId).exists(_.commandType == MahjongCommandType.Discard))
+    assertEquals(publicView.seats.find(_.playerId == east.playerId).flatMap(_.river.lastOption.flatMap(_.calledBy)), Some(south.playerId))
+    assertEquals(publicView.seats.find(_.playerId == south.playerId).map(_.melds.size), Some(1))
+  }
+
+  test("illegal action from a non-turn player is rejected without advancing version") {
+    val state = MahjongGameStateTransitionFunctions.startTable(TableId("mahjong-core-illegal-action"), MahjongRuleset(), seed = "mahjong-core-illegal-action-seed")
+    val south = state.seats.find(_.seat == SeatWind.South).get
+
+    intercept[IllegalArgumentException] {
+      MahjongGameStateTransitionFunctions.submitAction(
+        state,
+        MahjongSubmittedAction(south.playerId, MahjongCommandType.Discard, tile = south.handTiles.headOption)
+      )
+    }
+
+    assertEquals(state.version, 1)
+    assertEquals(state.status, MahjongTableStatus.WaitingPlayerAction)
   }
 
   test("double ron records one win result per winner and aggregates score changes") {
@@ -437,6 +624,431 @@ class MahjongCoreDomainSuite extends FunSuite:
     assert(advanced.seats.filterNot(_.seat == SeatWind.East).forall(seat => seat.handTiles.size + seat.drawTile.size == 13))
   }
 
+  test("one-kyoku table finishes after a completed hand and exposes final standings") {
+    val state = preparedRonState(MahjongRuleset(gameLength = MahjongGameLength.OneKyoku, doubleRon = false), northCanRon = false)
+    val east = state.seats.find(_.seat == SeatWind.East).get
+    val south = state.seats.find(_.seat == SeatWind.South).get
+
+    val (waitingRon, _) = MahjongGameStateTransitionFunctions.submitAction(
+      state,
+      MahjongSubmittedAction(east.playerId, MahjongCommandType.Discard, tile = Some(PaifuTile("3m")))
+    )
+    val (roundEnded, _) = MahjongGameStateTransitionFunctions.submitAction(
+      waitingRon,
+      MahjongSubmittedAction(south.playerId, MahjongCommandType.Ron)
+    )
+    val finished = MahjongGameStateTransitionFunctions.advanceRound(roundEnded)
+    val finalStandings = finished.currentRound.toVector.flatMap(_.events).collectFirst {
+      case MahjongEvent.TableFinished(_, standings) => standings
+    }
+      .getOrElse(Vector.empty)
+
+    assertEquals(finished.status, MahjongTableStatus.Finished)
+    assertEquals(finished.finishedRounds.size, 1)
+    assert(finalStandings.nonEmpty)
+    assertEquals(finalStandings.map(_.placement), Vector(1, 2, 3, 4))
+    assertEquals(finalStandings.map(_.finalPoints), finalStandings.map(_.finalPoints).sortBy(-_))
+  }
+
+  test("dealer tsumo keeps the dealer, carries honba, and starts a fresh wall") {
+    val state = preparedEastTsumoState(MahjongRuleset(gameLength = MahjongGameLength.Tonpu))
+    val east = state.seats.find(_.seat == SeatWind.East).get
+
+    val (roundEnded, _) = MahjongGameStateTransitionFunctions.submitAction(
+      state,
+      MahjongSubmittedAction(east.playerId, MahjongCommandType.Tsumo)
+    )
+    val advanced = MahjongGameStateTransitionFunctions.advanceRound(roundEnded)
+    val nextRound = advanced.currentRound.get
+
+    assertEquals(roundEnded.status, MahjongTableStatus.RoundEnded)
+    assertEquals(roundEnded.currentRound.flatMap(_.result).flatMap(_.winner), Some(east.playerId))
+    assertEquals(advanced.status, MahjongTableStatus.WaitingPlayerAction)
+    assertEquals(nextRound.descriptor.handNumber, 1)
+    assertEquals(nextRound.descriptor.honba, 1)
+    assertEquals(advanced.seats.find(_.seat == SeatWind.East).map(_.playerId), Some(east.playerId))
+    assertEquals(nextRound.turnPlayerId, east.playerId)
+    assertEquals(physicalTiles(advanced).size, 136)
+  }
+
+  test("exhaustive draw transfers noten payments and keeps east when east is tenpai") {
+    val state = preparedExhaustiveDrawState()
+    val east = state.seats.find(_.seat == SeatWind.East).get
+
+    val (roundEnded, _) = MahjongGameStateTransitionFunctions.submitAction(
+      state,
+      MahjongSubmittedAction(east.playerId, MahjongCommandType.Discard, tile = Some(PaifuTile("7z")))
+    )
+    val result = roundEnded.currentRound.flatMap(_.result).get
+    val advanced = MahjongGameStateTransitionFunctions.advanceRound(roundEnded)
+
+    assertEquals(result.outcome, HandOutcome.ExhaustiveDraw)
+    assertEquals(result.tenpaiPlayerIds.map(_.toSet), Some(Set(east.playerId)))
+    assertEquals(result.scoreChanges.find(_.playerId == east.playerId).map(_.delta), Some(3000))
+    assert(result.scoreChanges.filterNot(_.playerId == east.playerId).forall(_.delta == -1000))
+    assertEquals(advanced.currentRound.map(_.descriptor.honba), Some(1))
+    assertEquals(advanced.seats.find(_.seat == SeatWind.East).map(_.playerId), Some(east.playerId))
+  }
+
+  test("tonpu table finishes at east-four when dealer passes and target is reached") {
+    val state = setRoundDescriptor(
+      preparedRonState(
+        MahjongRuleset(
+          gameLength = MahjongGameLength.Tonpu,
+          targetPoints = 25000,
+          doubleRon = false
+        ),
+        northCanRon = false
+      ),
+      SeatWind.East,
+      handNumber = 4
+    )
+    val east = state.seats.find(_.seat == SeatWind.East).get
+    val south = state.seats.find(_.seat == SeatWind.South).get
+    val roundEnded = finishRon(state, east.playerId, south.playerId)
+    val finished = MahjongGameStateTransitionFunctions.advanceRound(roundEnded)
+
+    assertEquals(roundEnded.status, MahjongTableStatus.RoundEnded)
+    assertEquals(finished.status, MahjongTableStatus.Finished)
+    assertEquals(finished.finishedRounds.size, 1)
+    assert(finished.currentRound.exists(_.events.collectFirst { case MahjongEvent.TableFinished(_, _) => () }.nonEmpty))
+  }
+
+  test("hanchan continues from east-four into south-one before south-round finish") {
+    val state = setRoundDescriptor(
+      preparedRonState(
+        MahjongRuleset(
+          gameLength = MahjongGameLength.Hanchan,
+          targetPoints = 25000,
+          doubleRon = false
+        ),
+        northCanRon = false
+      ),
+      SeatWind.East,
+      handNumber = 4
+    )
+    val east = state.seats.find(_.seat == SeatWind.East).get
+    val south = state.seats.find(_.seat == SeatWind.South).get
+    val roundEnded = finishRon(state, east.playerId, south.playerId)
+    val advanced = MahjongGameStateTransitionFunctions.advanceRound(roundEnded)
+
+    assertEquals(advanced.status, MahjongTableStatus.WaitingPlayerAction)
+    assertEquals(advanced.currentRound.map(_.descriptor.roundWind), Some(SeatWind.South))
+    assertEquals(advanced.currentRound.map(_.descriptor.handNumber), Some(1))
+    assertEquals(advanced.seats.find(_.seat == SeatWind.East).map(_.playerId), Some(south.playerId))
+  }
+
+  test("hanchan table finishes at south-four when dealer passes and target is reached") {
+    val state = setRoundDescriptor(
+      preparedRonState(
+        MahjongRuleset(
+          gameLength = MahjongGameLength.Hanchan,
+          targetPoints = 25000,
+          doubleRon = false
+        ),
+        northCanRon = false
+      ),
+      SeatWind.South,
+      handNumber = 4
+    )
+    val east = state.seats.find(_.seat == SeatWind.East).get
+    val south = state.seats.find(_.seat == SeatWind.South).get
+    val roundEnded = finishRon(state, east.playerId, south.playerId)
+    val finished = MahjongGameStateTransitionFunctions.advanceRound(roundEnded)
+
+    assertEquals(finished.status, MahjongTableStatus.Finished)
+    assertEquals(finished.finishedRounds.size, 1)
+    assert(finished.currentRound.exists(_.events.collectFirst { case MahjongEvent.TableFinished(_, _) => () }.nonEmpty))
+  }
+
+  test("dealer win on the last scheduled tonpu hand extends the table with honba") {
+    val state = setRoundDescriptor(
+      preparedEastTsumoState(
+        MahjongRuleset(
+          gameLength = MahjongGameLength.Tonpu,
+          targetPoints = 25000
+        )
+      ),
+      SeatWind.East,
+      handNumber = 4
+    )
+    val east = state.seats.find(_.seat == SeatWind.East).get
+    val (roundEnded, _) = MahjongGameStateTransitionFunctions.submitAction(
+      state,
+      MahjongSubmittedAction(east.playerId, MahjongCommandType.Tsumo)
+    )
+    val advanced = MahjongGameStateTransitionFunctions.advanceRound(roundEnded)
+
+    assertEquals(advanced.status, MahjongTableStatus.WaitingPlayerAction)
+    assertEquals(advanced.currentRound.map(_.descriptor.roundWind), Some(SeatWind.East))
+    assertEquals(advanced.currentRound.map(_.descriptor.handNumber), Some(4))
+    assertEquals(advanced.currentRound.map(_.descriptor.honba), Some(1))
+    assertEquals(advanced.seats.find(_.seat == SeatWind.East).map(_.playerId), Some(east.playerId))
+  }
+
+  test("bankruptcy end switch controls whether a negative score finishes the table") {
+    val bankruptcyOn = preparedRonState(
+      MahjongRuleset(
+        gameLength = MahjongGameLength.Hanchan,
+        bankruptcyEnd = true,
+        doubleRon = false
+      ),
+      northCanRon = false
+    )
+    val bankruptcyOff = preparedRonState(
+      MahjongRuleset(
+        gameLength = MahjongGameLength.Hanchan,
+        bankruptcyEnd = false,
+        doubleRon = false
+      ),
+      northCanRon = false
+    )
+    val lowEastPoints = 1000
+    val endedWithBankruptcy = finishRon(withEastPoints(bankruptcyOn, lowEastPoints), bankruptcyOn.seats.find(_.seat == SeatWind.East).get.playerId, bankruptcyOn.seats.find(_.seat == SeatWind.South).get.playerId)
+    val endedWithoutBankruptcy = finishRon(withEastPoints(bankruptcyOff, lowEastPoints), bankruptcyOff.seats.find(_.seat == SeatWind.East).get.playerId, bankruptcyOff.seats.find(_.seat == SeatWind.South).get.playerId)
+
+    assert(endedWithBankruptcy.seats.exists(_.points < 0))
+    assertEquals(MahjongGameStateTransitionFunctions.advanceRound(endedWithBankruptcy).status, MahjongTableStatus.Finished)
+    assert(endedWithoutBankruptcy.seats.exists(_.points < 0))
+    assertEquals(MahjongGameStateTransitionFunctions.advanceRound(endedWithoutBankruptcy).status, MahjongTableStatus.WaitingPlayerAction)
+  }
+
+  test("special rules switch red fives, open tanyao, min han, double ron and nagashi mangan") {
+    assertEquals(fullWall(MahjongRuleset(akaDora = false)).count(isRed), 0)
+    assertEquals(fullWall(MahjongRuleset(akaDora = true, akaDoraCount = 1)).filter(isRed), Vector(PaifuTile("0m")))
+    assertEquals(fullWall(MahjongRuleset(akaDora = true, akaDoraCount = 2)).filter(isRed), Vector(PaifuTile("0m"), PaifuTile("0p")))
+    assertEquals(fullWall(MahjongRuleset(akaDora = true, akaDoraCount = 99)).filter(isRed), Vector(PaifuTile("0m"), PaifuTile("0p"), PaifuTile("0s")))
+
+    val openTanyao = analyzeOpenTanyao(MahjongRuleset(openTanyao = true))
+    val closedByRule = analyzeOpenTanyao(MahjongRuleset(openTanyao = false))
+    val blockedByMinHan = analyzeOpenTanyao(MahjongRuleset(openTanyao = true, minHan = 2))
+
+    assert(openTanyao.exists(_.yaku.exists(_.kind == MahjongYakuKind.Tanyao)))
+    assertEquals(closedByRule, None)
+    assertEquals(blockedByMinHan, None)
+
+    val doubleRonDisabled = preparedRonState(MahjongRuleset(doubleRon = false))
+    val east = doubleRonDisabled.seats.find(_.seat == SeatWind.East).get
+    val south = doubleRonDisabled.seats.find(_.seat == SeatWind.South).get
+    val west = doubleRonDisabled.seats.find(_.seat == SeatWind.West).get
+    val (waitingRon, _) = MahjongGameStateTransitionFunctions.submitAction(
+      doubleRonDisabled,
+      MahjongSubmittedAction(east.playerId, MahjongCommandType.Discard, tile = Some(PaifuTile("3m")))
+    )
+
+    assert(MahjongGameStateTransitionFunctions.legalActionsForPlayer(waitingRon, south.playerId).exists(_.commandType == MahjongCommandType.Ron))
+    assert(!MahjongGameStateTransitionFunctions.legalActionsForPlayer(waitingRon, west.playerId).exists(_.commandType == MahjongCommandType.Ron))
+
+    val nagashiDisabledState = preparedNagashiManganState().copy(ruleset = MahjongRuleset(nagashiMangan = false))
+    val nagashiEast = nagashiDisabledState.seats.find(_.seat == SeatWind.East).get
+    val (nagashiDisabledResultState, _) = MahjongGameStateTransitionFunctions.submitAction(
+      nagashiDisabledState,
+      MahjongSubmittedAction(nagashiEast.playerId, MahjongCommandType.Discard, tile = Some(PaifuTile("7z")))
+    )
+    val nagashiDisabledResult = nagashiDisabledResultState.currentRound.flatMap(_.result).get
+
+    assertEquals(nagashiDisabledResult.outcome, HandOutcome.ExhaustiveDraw)
+    assertEquals(nagashiDisabledResult.winner, None)
+    assert(!nagashiDisabledResult.yaku.exists(_.kind == MahjongYakuKind.NagashiMangan))
+  }
+
+  test("deterministic long action chain preserves table invariants across calls, draws and round advances") {
+    val initial = MahjongGameStateTransitionFunctions.startTable(
+      TableId("mahjong-core-long-chain"),
+      MahjongRuleset(
+        gameLength = MahjongGameLength.Hanchan,
+        targetPoints = 100000,
+        bankruptcyEnd = false
+      ),
+      seed = "mahjong-core-long-chain-seed"
+    )
+    val (state, submittedActions) = playDeterministicActionChain(initial, targetSubmittedActions = 160)
+    val playerView = MahjongGameStateTransitionFunctions.toView(state, Some(state.seats.head.playerId), includeLegalActions = true)
+    val publicView = MahjongGameStateTransitionFunctions.toView(state, viewerPlayerId = None, includeLegalActions = true)
+
+    assertEquals(submittedActions, 160)
+    assert(state.currentRound.nonEmpty)
+    assert(state.finishedRounds.nonEmpty)
+    assertEquals(livePhysicalTiles(state).size, 136)
+    assert(livePhysicalTiles(state).groupBy(indexOf).forall { case (_, copies) => copies.size == 4 })
+    assertEquals(read[MahjongTableView](write(playerView)).version, playerView.version)
+    assertEquals(read[MahjongTableView](write(publicView)).version, publicView.version)
+    assert(publicView.seats.forall(_.handTiles.isEmpty))
+  }
+
+  test("waiting tile and helpful tile analysis respect waits and visible exhaustion") {
+    val waits = MahjongHandAnalysisFunctions.waitingTiles(ronTenpaiHand).map(indexOf).toSet
+    val helpful = MahjongHandAnalysisFunctions.helpfulTiles(
+      tiles("1m", "1m", "2m", "3m", "4p", "5p", "6p", "7s", "8s", "2z", "2z", "5z", "6z"),
+      visibleTiles = tiles("9s", "9s", "9s")
+    )
+
+    assert(waits.contains(indexOf(PaifuTile("3m"))))
+    assert(!waits.contains(indexOf(PaifuTile("7z"))))
+    assert(helpful.values.forall(_ >= 1))
+    assert(helpful.get(PaifuTile("9s")).exists(_ == 1))
+  }
+
+  test("tile functions preserve red fives and dora indicator wrapping") {
+    assertEquals(normalize(PaifuTile("0m")), PaifuTile("0m"))
+    assertEquals(redDoraCount(tiles("0m", "5m", "0p", "0s", "7z")), 3)
+    assertEquals(tileOf(doraFromIndicator(indexOf(PaifuTile("9m")))), PaifuTile("1m"))
+    assertEquals(tileOf(doraFromIndicator(indexOf(PaifuTile("4z")))), PaifuTile("1z"))
+    assertEquals(tileOf(doraFromIndicator(indexOf(PaifuTile("7z")))), PaifuTile("5z"))
+  }
+
+  private def finishRon(
+      state: MahjongTableState,
+      discarder: PlayerId,
+      winner: PlayerId
+  ): MahjongTableState =
+    val (waitingRon, _) = MahjongGameStateTransitionFunctions.submitAction(
+      state,
+      MahjongSubmittedAction(discarder, MahjongCommandType.Discard, tile = Some(PaifuTile("3m")))
+    )
+    val (roundEnded, _) = MahjongGameStateTransitionFunctions.submitAction(
+      waitingRon,
+      MahjongSubmittedAction(winner, MahjongCommandType.Ron)
+    )
+    roundEnded
+
+  private def setRoundDescriptor(
+      state: MahjongTableState,
+      roundWind: SeatWind,
+      handNumber: Int,
+      honba: Int = 0
+  ): MahjongTableState =
+    state.copy(
+      sticks = state.sticks.copy(honba = honba),
+      currentRound = state.currentRound.map(round =>
+        round.copy(
+          descriptor = round.descriptor.copy(
+            roundWind = roundWind,
+            handNumber = handNumber,
+            honba = honba
+          ),
+          roundStartSticks = round.roundStartSticks.copy(honba = honba)
+        )
+      )
+    )
+
+  private def withEastPoints(state: MahjongTableState, points: Int): MahjongTableState =
+    state.copy(
+      seats = state.seats.map(seat =>
+        if seat.seat == SeatWind.East then seat.copy(points = points)
+        else seat
+      )
+    )
+
+  private def analyzeOpenTanyao(ruleset: MahjongRuleset) =
+    val winner = PlayerId("open-tanyao-winner")
+    val target = PlayerId("open-tanyao-target")
+    val seatByPlayer = Map(
+      target -> SeatWind.East,
+      winner -> SeatWind.South,
+      PlayerId("open-tanyao-west") -> SeatWind.West,
+      PlayerId("open-tanyao-north") -> SeatWind.North
+    )
+    val openChi = MahjongMeld(
+      meldType = MahjongMeldType.Chi,
+      owner = winner,
+      fromPlayer = Some(target),
+      calledTile = Some(PaifuTile("3m")),
+      tiles = tiles("2m", "3m", "4m"),
+      closed = false
+    )
+
+    MahjongYakuAnalysisFunctions.analyzeWin(
+      MahjongWinContext(
+        winner = winner,
+        target = Some(target),
+        seatByPlayer = seatByPlayer,
+        roundWind = SeatWind.East,
+        handTiles = tiles("2p", "3p", "4p", "3s", "4s", "6s", "7s", "8s", "6p", "6p"),
+        melds = Vector(openChi),
+        winningTile = PaifuTile("5s"),
+        doraIndicators = Vector(PaifuTile("1z")),
+        ruleset = ruleset
+      )
+    )
+
+  private def playDeterministicActionChain(
+      initial: MahjongTableState,
+      targetSubmittedActions: Int
+  ): (MahjongTableState, Int) =
+    var state = initial
+    var submittedActions = 0
+    while submittedActions < targetSubmittedActions do
+      if state.status == MahjongTableStatus.RoundEnded then
+        state = MahjongGameStateTransitionFunctions.advanceRound(state)
+      else
+        val (playerId, action) = chooseDeterministicAction(state)
+        val (nextState, _) = MahjongGameStateTransitionFunctions.submitAction(
+          state,
+          MahjongSubmittedAction(
+            playerId = playerId,
+            commandType = action.commandType,
+            tile = action.tile,
+            tiles = action.tiles,
+            targetSequenceNo = action.targetSequenceNo
+          )
+        )
+        state = nextState
+        submittedActions += 1
+
+      if submittedActions % 20 == 0 then
+        assertEquals(livePhysicalTiles(state).size, 136)
+        read[MahjongTableView](write(MahjongGameStateTransitionFunctions.toView(state, Some(state.seats.head.playerId), includeLegalActions = true)))
+
+    (state, submittedActions)
+
+  private def chooseDeterministicAction(state: MahjongTableState): (PlayerId, MahjongLegalAction) =
+    state.currentRound match
+      case Some(round) if round.phase == MahjongRoundPhase.PlayerTurn =>
+        val playerId = round.turnPlayerId
+        val actions = MahjongGameStateTransitionFunctions.legalActionsForPlayer(state, playerId)
+        val action =
+          actions.find(_.commandType == MahjongCommandType.ClosedKan)
+            .orElse(actions.find(_.commandType == MahjongCommandType.AddedKan))
+            .orElse(actions.filter(_.commandType == MahjongCommandType.Discard).sortBy(action => action.tile.map(_.value).getOrElse("")).lastOption)
+            .orElse(actions.find(_.commandType == MahjongCommandType.Riichi))
+            .orElse(actions.find(_.commandType == MahjongCommandType.Tsumo))
+            .getOrElse(throw IllegalStateException(s"No deterministic player-turn action for ${playerId.value}"))
+        playerId -> action
+
+      case Some(round) if round.phase == MahjongRoundPhase.CallDecision =>
+        val candidates = state.seats
+          .map(_.playerId)
+          .flatMap(playerId =>
+            MahjongGameStateTransitionFunctions
+              .legalActionsForPlayer(state, playerId)
+              .map(action => playerId -> action)
+          )
+        candidates
+          .find((_, action) => action.commandType == MahjongCommandType.Chi)
+          .orElse(candidates.find((_, action) => action.commandType == MahjongCommandType.Pon))
+          .orElse(candidates.find((_, action) => action.commandType == MahjongCommandType.OpenKan))
+          .orElse(candidates.find((_, action) => action.commandType == MahjongCommandType.Pass))
+          .orElse(candidates.find((_, action) => action.commandType == MahjongCommandType.Ron))
+          .getOrElse(throw IllegalStateException("CallDecision without deterministic candidate action"))
+
+      case other =>
+        throw IllegalStateException(s"Unsupported state in deterministic action chain: ${state.status}/${other.map(_.phase)}")
+
+  private def livePhysicalTiles(state: MahjongTableState): Vector[PaifuTile] =
+    val roundTiles = state.currentRound.toVector.flatMap { round =>
+      val usedReplacementCount = math.max(0, round.doraIndicators.size - 1)
+      round.wall ++ round.deadWall.drop(usedReplacementCount) ++ round.uraDoraIndicators
+    }
+    val seatTiles = state.seats.flatMap { seat =>
+      seat.handTiles ++
+        seat.drawTile.toVector ++
+        seat.melds.flatMap(_.tiles) ++
+        seat.river.filter(_.calledBy.isEmpty).map(_.tile)
+    }
+
+    roundTiles ++ seatTiles
+
   private def preparedRonState(ruleset: MahjongRuleset, northCanRon: Boolean = true) =
     val state = MahjongGameStateTransitionFunctions.startTable(TableId("mahjong-core-ron-test"), ruleset, seed = "mahjong-core-ron-test-seed")
     val east = state.seats.find(_.seat == SeatWind.East).get
@@ -593,6 +1205,48 @@ class MahjongCoreDomainSuite extends FunSuite:
       )
     )
 
+  private def preparedEastTsumoState(ruleset: MahjongRuleset) =
+    val state = MahjongGameStateTransitionFunctions.startTable(TableId("mahjong-core-east-tsumo-test"), ruleset, seed = "mahjong-core-east-tsumo-test-seed")
+    val east = state.seats.find(_.seat == SeatWind.East).get
+    val quietHand = tiles("2m", "2m", "4m", "5m", "6m", "2p", "3p", "4p", "2s", "3s", "4s", "5z", "6z")
+    state.copy(
+      seats = state.seats.map { seat =>
+        if seat.seat == SeatWind.East then
+          seat.copy(handTiles = ronTenpaiHand, drawTile = Some(PaifuTile("3m")), riichi = true, ippatsu = false, furiten = false)
+        else seat.copy(handTiles = quietHand, drawTile = None, riichi = false, ippatsu = false, furiten = false)
+      },
+      status = MahjongTableStatus.WaitingPlayerAction,
+      currentRound = state.currentRound.map(round =>
+        round.copy(
+          phase = MahjongRoundPhase.PlayerTurn,
+          turnPlayerId = east.playerId,
+          pendingCall = None,
+          wall = tiles("5z", "6z", "7z")
+        )
+      )
+    )
+
+  private def preparedExhaustiveDrawState() =
+    val state = MahjongGameStateTransitionFunctions.startTable(TableId("mahjong-core-exhaustive-draw-test"), MahjongRuleset(nagashiMangan = false), seed = "mahjong-core-exhaustive-draw-test-seed")
+    val east = state.seats.find(_.seat == SeatWind.East).get
+    val notenHand = tiles("1m", "1m", "1m", "2m", "2m", "3m", "4p", "6p", "8p", "1s", "4s", "7s", "5z")
+    state.copy(
+      seats = state.seats.map { seat =>
+        if seat.seat == SeatWind.East then
+          seat.copy(handTiles = ronTenpaiHand, drawTile = Some(PaifuTile("7z")), riichi = false, ippatsu = false, furiten = false)
+        else seat.copy(handTiles = notenHand, drawTile = None, riichi = false, ippatsu = false, furiten = false)
+      },
+      status = MahjongTableStatus.WaitingPlayerAction,
+      currentRound = state.currentRound.map(round =>
+        round.copy(
+          phase = MahjongRoundPhase.PlayerTurn,
+          turnPlayerId = east.playerId,
+          pendingCall = None,
+          wall = Vector.empty
+        )
+      )
+    )
+
   private def withRoundSticks(state: MahjongTableState, sticks: MahjongTableSticks): MahjongTableState =
     state.copy(
       sticks = sticks,
@@ -603,6 +1257,16 @@ class MahjongCoreDomainSuite extends FunSuite:
         )
       )
     )
+
+  private def physicalTiles(state: MahjongTableState): Vector[PaifuTile] =
+    val round = state.currentRound.get
+    state.seats.flatMap(seat => seat.handTiles ++ seat.drawTile.toVector) ++
+      round.wall ++
+      round.deadWall ++
+      round.uraDoraIndicators
+
+  private def scoreDelta(result: AgariResult, playerId: PlayerId): Int =
+    result.scoreChanges.find(_.playerId == playerId).map(_.delta).getOrElse(0)
 
   private def tiles(values: String*): Vector[PaifuTile] =
     values.toVector.map(PaifuTile(_))

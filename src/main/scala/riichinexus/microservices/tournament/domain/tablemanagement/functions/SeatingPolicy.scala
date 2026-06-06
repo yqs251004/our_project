@@ -124,6 +124,17 @@ object SeatingPolicy:
       representedClubByPlayer: Map[PlayerId, ClubId],
       clubRelations: Map[(ClubId, ClubId), ClubRelationKind]
   ): Vector[Vector[Player]] =
+    if players.size > 16 then
+      buildGreedyBalancedGroups(players, opponentCounts, representedClubByPlayer, clubRelations)
+    else
+      buildExhaustiveOptimalGroups(players, opponentCounts, representedClubByPlayer, clubRelations)
+
+  private def buildExhaustiveOptimalGroups(
+      players: Vector[Player],
+      opponentCounts: Map[(PlayerId, PlayerId), Int],
+      representedClubByPlayer: Map[PlayerId, ClubId],
+      clubRelations: Map[(ClubId, ClubId), ClubRelationKind]
+  ): Vector[Vector[Player]] =
     final case class SearchResult(score: Double, grouping: Vector[Vector[Player]])
 
     val branchLimit =
@@ -165,6 +176,51 @@ object SeatingPolicy:
 
     if best.grouping.nonEmpty then best.grouping
     else players.grouped(4).map(_.toVector).toVector
+
+  private def buildGreedyBalancedGroups(
+      players: Vector[Player],
+      opponentCounts: Map[(PlayerId, PlayerId), Int],
+      representedClubByPlayer: Map[PlayerId, ClubId],
+      clubRelations: Map[(ClubId, ClubId), ClubRelationKind]
+  ): Vector[Vector[Player]] =
+    val tableCount = players.size / 4
+    var groups = Vector.fill(tableCount)(Vector.empty[Player])
+    val buckets = players
+      .groupBy(player => primaryClubKey(player, representedClubByPlayer))
+      .toVector
+      .sortBy { case (clubKey, members) => (-members.size, clubKey) }
+
+    buckets.foreach { case (_, members) =>
+      members.sortBy(player => (-player.elo, player.nickname)).foreach { player =>
+        val openIndices = groups.indices.filter(index => groups(index).size < 4).toVector
+        val compatibleIndices = openIndices.filter { index =>
+          !groups(index).exists(existing => sameClub(player, existing, representedClubByPlayer))
+        }
+        val candidateIndices =
+          if compatibleIndices.nonEmpty then compatibleIndices else openIndices
+        val chosenIndex = candidateIndices.minBy { index =>
+          val proposed = groups(index) :+ player
+          (
+            groups(index).size,
+            groupScore(proposed, opponentCounts, representedClubByPlayer, clubRelations),
+            index
+          )
+        }
+
+        groups = groups.updated(chosenIndex, groups(chosenIndex) :+ player)
+      }
+    }
+
+    if groups.forall(_.size == 4) then groups
+    else players.grouped(4).map(_.toVector).toVector
+
+  private def primaryClubKey(
+      player: Player,
+      representedClubByPlayer: Map[PlayerId, ClubId]
+  ): String =
+    representedClubs(player, representedClubByPlayer).headOption
+      .map(clubId => s"club:${clubId.value}")
+      .getOrElse(s"player:${player.id.value}")
 
   private def selectAnchor(
       players: Vector[Player],

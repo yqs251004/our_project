@@ -1,6 +1,5 @@
 package riichinexus.microservices.club.api
 import riichinexus.microservices.audit.domain.auditevent.AuditEvent
-import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
 import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPIMessage
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
@@ -37,6 +36,7 @@ import riichinexus.microservices.club.domain.clubmanagement.model.*
 import riichinexus.microservices.club.domain.membershipmanagement.model.*
 import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
 import riichinexus.microservices.club.domain.relationmanagement.model.*
+import riichinexus.microservices.club.domain.relationmanagement.functions.ClubRelationAuthorizationFunctions
 import riichinexus.microservices.auth.domain.*
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.club.objects.relationmanagement.ClubRelationKind
@@ -91,10 +91,7 @@ final case class UpdateClubRelationAPIMessage(
       command: UpdateClubRelationCommand
   ): Unit =
     ClubAuthorization.ensureClubActive(club)
-    ClubAuthorization.requireClubAdmin(actor = command.actor,
-      club = club,
-      permission = Permission.SetClubTitle
-    )
+    ClubRelationAuthorizationFunctions.requireDirectRelationUpdate(command.actor)
     if command.relation.targetClubId == command.clubId then
       throw IllegalArgumentException("A club cannot define a relation to itself")
 

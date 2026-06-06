@@ -15,6 +15,7 @@ import riichinexus.microservices.club.objects.relationmanagement.apiTypes.*
 import riichinexus.microservices.club.objects.tournamentparticipation.apiTypes.*
 import riichinexus.microservices.club.objects.auditreadmodel.apiTypes.*
 import riichinexus.microservices.player.objects.apiTypes.*
+import riichinexus.microservices.notification.objects.Notification
 import riichinexus.system.objects.PagedResponse
 import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
@@ -54,6 +55,7 @@ object ClubAPIMessageRegistry:
       RegisteredAPIMessage.api[RevokeClubHonorAPIMessage, ClubView],
       RegisteredAPIMessage.api[UpdateClubRecruitmentPolicyAPIMessage, ClubView],
       RegisteredAPIMessage.api[UpdateClubRelationAPIMessage, ClubView],
+      RegisteredAPIMessage.accepted[SubmitClubRelationRequestAPIMessage, Vector[Notification]],
       RegisteredAPIMessage.api[ListClubApplicationsAPIMessage, PagedResponse[ClubMembershipApplicationView]],
       RegisteredAPIMessage.api[GetCurrentClubApplicationAPIMessage, ClubMembershipApplicationView],
       RegisteredAPIMessage.api[GetClubApplicationAPIMessage, ClubMembershipApplicationView],

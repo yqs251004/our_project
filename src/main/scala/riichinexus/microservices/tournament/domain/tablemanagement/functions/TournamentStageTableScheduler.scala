@@ -321,7 +321,7 @@ object TournamentStageTableScheduler:
       })
       .toMap
 
-  private def selectCustomStageParticipants(
+  private[tablemanagement] def selectCustomStageParticipants(
       tournament: Tournament,
       stage: TournamentStage,
       participants: Vector[Player],
@@ -353,7 +353,7 @@ object TournamentStageTableScheduler:
 
     rotatedOrder.take(targetParticipants)
 
-  private def customStageTableCount(
+  private[tablemanagement] def customStageTableCount(
       stage: TournamentStage,
       participantCount: Int
   ): Int =
@@ -367,7 +367,7 @@ object TournamentStageTableScheduler:
       case None =>
         availableTables
 
-  private def buildRoundRobinTables(
+  private[tablemanagement] def buildRoundRobinTables(
       participants: Vector[Player],
       stage: TournamentStage,
       roundNumber: Int
