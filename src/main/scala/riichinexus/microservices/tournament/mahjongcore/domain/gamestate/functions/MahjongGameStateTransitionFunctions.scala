@@ -165,7 +165,7 @@ object MahjongGameStateTransitionFunctions:
 
         state.copy(seats = rebuilt.seats)
 
-  def advanceRound(state: MahjongTableState): MahjongTableState =
+  def advanceRound(state: MahjongTableState, showcaseMode: Boolean = false): MahjongTableState =
     val normalized = normalizeCurrentRoundState(state)
     normalized.currentRound.filter(_.result.nonEmpty) match
       case None => normalized
@@ -199,7 +199,8 @@ object MahjongGameStateTransitionFunctions:
             state = normalized,
             descriptor = nextDescriptor,
             seatsForRound = nextSeats,
-            seed = s"mahjongcore:${normalized.tableId.value}:${normalized.version + 1}:${SeatWind.toString(nextDescriptor.roundWind)}:${nextDescriptor.handNumber}:${nextDescriptor.honba}"
+            seed = s"mahjongcore:${normalized.tableId.value}:${normalized.version + 1}:${SeatWind.toString(nextDescriptor.roundWind)}:${nextDescriptor.handNumber}:${nextDescriptor.honba}",
+            showcaseMode = showcaseMode
           )
           nextRoundState.copy(
             finishedRounds = finishedRounds,
@@ -837,14 +838,57 @@ object MahjongGameStateTransitionFunctions:
       .filter(tile => indexOf(tile) == tileIndex)
       .distinctBy(tile => isRed(tile))
 
+  private val showcaseEast2InitialHands: Map[SeatWind, Vector[PaifuTile]] =
+    Map(
+      SeatWind.East -> showcaseTiles("1m", "9m", "1s", "9s", "1p", "9p", "1z", "2z", "3z", "4z", "5z", "6z", "7z"),
+      SeatWind.South -> showcaseTiles("1p", "1p", "1p", "2p", "3p", "4p", "5p", "6p", "7p", "8p", "9p", "9p", "9p"),
+      SeatWind.West -> showcaseTiles("1s", "1s", "1s", "2s", "3s", "4s", "5s", "6s", "7s", "8s", "9s", "9s", "9s"),
+      SeatWind.North -> showcaseTiles("1m", "1m", "1m", "2m", "3m", "4m", "5m", "6m", "7m", "8m", "9m", "9m", "9m")
+    )
+  private val showcaseEast2EastDraw: PaifuTile = PaifuTile("0p")
+  private val showcaseEast2DoraIndicator: PaifuTile = PaifuTile("4z")
+
+  private def showcaseTiles(values: String*): Vector[PaifuTile] =
+    values.toVector.map(PaifuTile(_))
+
+  private def showcaseWallForRound(
+      ruleset: MahjongRuleset,
+      descriptor: KyokuDescriptor,
+      orderedSeats: Vector[MahjongSeatState]
+  ): Option[Vector[PaifuTile]] =
+    if descriptor.roundWind != SeatWind.East || descriptor.handNumber != 2 then None
+    else
+      val livePrefix =
+        (0 until 13).toVector.flatMap { tileIndex =>
+          orderedSeats.map(seat => showcaseEast2InitialHands(seat.seat)(tileIndex))
+        } :+ showcaseEast2EastDraw
+      val liveWallSize = 136 - 14
+      val liveTailSize = liveWallSize - livePrefix.size
+
+      for
+        remainingAfterLivePrefix <- removeTiles(fullWall(ruleset), livePrefix)
+        remaining <- removeTiles(remainingAfterLivePrefix, Vector(showcaseEast2DoraIndicator))
+        if liveTailSize >= 0 && remaining.size >= liveTailSize + 13
+      yield
+        val liveWall = livePrefix ++ remaining.take(liveTailSize)
+        val deadFill = remaining.drop(liveTailSize)
+        val deadSource =
+          deadFill.take(4) ++
+            Vector(showcaseEast2DoraIndicator) ++
+            deadFill.drop(4).take(9)
+        liveWall ++ deadSource
+
   private def dealRound(
       state: MahjongTableState,
       descriptor: KyokuDescriptor,
       seatsForRound: Vector[MahjongSeatState],
-      seed: String
+      seed: String,
+      showcaseMode: Boolean = false
   ): MahjongTableState =
     val orderedSeats = SeatWind.all.flatMap(wind => seatsForRound.find(_.seat == wind))
-    val shuffled = MahjongTileFunctions.shuffledWall(seed, state.ruleset)
+    val shuffled =
+      (if showcaseMode then showcaseWallForRound(state.ruleset, descriptor, orderedSeats) else None)
+        .getOrElse(MahjongTileFunctions.shuffledWall(seed, state.ruleset))
     val deadSource = shuffled.takeRight(14)
     val deadWall = deadSource.take(4) ++ deadSource.slice(4, 9)
     val uraDora = deadSource.slice(9, 14)
