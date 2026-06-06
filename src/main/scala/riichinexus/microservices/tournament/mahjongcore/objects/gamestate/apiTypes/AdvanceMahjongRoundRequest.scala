@@ -3,6 +3,7 @@ package riichinexus.microservices.tournament.mahjongcore.objects.gamestate.apiTy
 import upickle.default.*
 
 final case class AdvanceMahjongRoundRequest(
+    playerId: Option[String] = None,
     showcaseMode: Option[Boolean] = None
 )
 
