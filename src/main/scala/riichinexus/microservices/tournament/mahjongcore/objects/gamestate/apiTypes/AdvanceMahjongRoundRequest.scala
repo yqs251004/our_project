@@ -1,5 +1,6 @@
 package riichinexus.microservices.tournament.mahjongcore.objects.gamestate.apiTypes
 
+import riichinexus.system.json.JsonCodecs.given
 import upickle.default.*
 
 final case class AdvanceMahjongRoundRequest(

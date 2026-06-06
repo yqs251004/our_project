@@ -3,6 +3,7 @@ package riichinexus
 import munit.FunSuite
 
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.tournament.mahjongcore.api.MahjongCoreAdvanceRoundAPIMessage
 import riichinexus.microservices.tournament.mahjongcore.domain.action.model.MahjongEvent
 import riichinexus.microservices.tournament.mahjongcore.domain.gamestate.functions.MahjongGameStateTransitionFunctions
 import riichinexus.microservices.tournament.mahjongcore.domain.gamestate.model.*
@@ -622,6 +623,21 @@ class MahjongCoreDomainSuite extends FunSuite:
     assertEquals(advanced.seats.find(_.seat == SeatWind.East).map(_.playerId), Some(south.playerId))
     assertEquals(advanced.seats.find(_.seat == SeatWind.East).map(seat => seat.handTiles.size + seat.drawTile.size), Some(14))
     assert(advanced.seats.filterNot(_.seat == SeatWind.East).forall(seat => seat.handTiles.size + seat.drawTile.size == 13))
+  }
+
+  test("advance round API accepts frontend JSON shape") {
+    val message = read[MahjongCoreAdvanceRoundAPIMessage](
+      """{"tableId":"table-be548ec5","request":{"playerId":"player-1fdbf5db","showcaseMode":true}}"""
+    )
+    val nullActorMessage = read[MahjongCoreAdvanceRoundAPIMessage](
+      """{"tableId":"table-be548ec5","request":{"playerId":null,"showcaseMode":false}}"""
+    )
+
+    assertEquals(message.tableId, "table-be548ec5")
+    assertEquals(message.request.flatMap(_.playerId), Some("player-1fdbf5db"))
+    assertEquals(message.request.flatMap(_.showcaseMode), Some(true))
+    assertEquals(nullActorMessage.request.flatMap(_.playerId), None)
+    assertEquals(nullActorMessage.request.flatMap(_.showcaseMode), Some(false))
   }
 
   test("showcase mode deals the scripted default wall on east two") {
