@@ -18,8 +18,6 @@ import riichinexus.microservices.tournament.objects.paifumanagement.{HandOutcome
 
 import java.sql.Connection
 
-import cats.effect.unsafe.implicits.global
-import riichinexus.system.api.ApiPlanContext
 import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.club.domain.functions.ClubIdGenerator
@@ -40,7 +38,6 @@ import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
 import riichinexus.microservices.audit.domain.auditevent.AuditEventId
 import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
 import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
-import riichinexus.microservices.opsanalytics.api.`private`.RefreshOpsAnalyticsAfterMatchArchivedPrivateAPIMessage
 import riichinexus.microservices.tournament.domain.recordmanagement.functions.MatchRecordFunctions
 import riichinexus.microservices.tournament.domain.paifumanagement.functions.{PaifuFunctions, PaifuTileFunctions}
 import riichinexus.microservices.tournament.domain.tablemanagement.functions.TableFunctions
@@ -69,19 +66,23 @@ final class TournamentPaifuArchiveService(
         tournamentId = Some(table.tournamentId)
       )
       validatePaifu(table, paifu)
+      purgeStaleResultArtifacts(connection, table)
       ensureNotArchived(connection, tableId)
 
-      val commit = commitArchivedPaifu(connection, table, paifu, actor)
-      refreshOpsAnalytics(connection, commit, paifu.metadata.recordedAt)
-      materializeUnlockedTables(connection, table, paifu)
+      val commit = commitScoringPaifu(connection, table, paifu, actor)
       commit.table
     }
 
+  private def purgeStaleResultArtifacts(connection: Connection, table: Table): Unit =
+    if table.paifuId.isEmpty && table.matchRecordId.isEmpty then
+      riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTable.deleteByTable(connection, table.id)
+      riichinexus.microservices.tournament.tables.paifu.PaifuTable.deleteByTable(connection, table.id)
+
   private def ensureNotArchived(connection: Connection, id: TableId): Unit =
     if riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTable.findByTable(connection, id).nonEmpty then
-      throw IllegalArgumentException(s"Table ${id.value} has already been archived")
+      throw IllegalArgumentException(s"Table ${id.value} already has a recorded result")
 
-  private def commitArchivedPaifu(
+  private def commitScoringPaifu(
       connection: Connection,
       table: Table,
       paifu: Paifu,
@@ -96,41 +97,21 @@ final class TournamentPaifuArchiveService(
     val storedPaifu = riichinexus.microservices.tournament.tables.paifu.PaifuTable.save(connection, linkedPaifu)
     val storedRecord =
       riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTable.save(connection, provisionalRecord.copy(paifuId = Some(storedPaifu.id)))
-    val archivedTable = riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.save(
+    val scoringTable = riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.save(
       connection,
-      TableFunctions.archive(
-        TableFunctions.enterScoring(table, paifu.metadata.recordedAt),
+      TableFunctions.recordScoringResult(
+        table,
         storedRecord.id,
         storedPaifu.id,
-        paifu.metadata.recordedAt
+        paifu.metadata.recordedAt,
+        note = Some("scoring result recorded from uploaded paifu")
       )
     )
     ArchivedPaifuChange(
-      table = archivedTable,
+      table = scoringTable,
       matchRecord = storedRecord,
       paifu = storedPaifu
     )
-
-  private def materializeUnlockedTables(
-      connection: Connection,
-      table: Table,
-      paifu: Paifu
-  ): Unit =
-    TournamentStageTableScheduler.progressAfterTableArchived(
-      connection,
-      table,
-      paifu.metadata.recordedAt
-    )
-
-  private def refreshOpsAnalytics(
-      connection: Connection,
-      archived: ArchivedPaifuChange,
-      occurredAt: java.time.Instant
-  ): Unit =
-    RefreshOpsAnalyticsAfterMatchArchivedPrivateAPIMessage(
-      matchRecord = archived.matchRecord,
-      occurredAt = occurredAt
-    ).plan(ApiPlanContext(bearerToken = None, connection = connection)).unsafeRunSync()
 
   private def validatePaifu(table: Table, paifu: Paifu): Unit =
     PaifuFunctions.validate(paifu)

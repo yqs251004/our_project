@@ -4,6 +4,7 @@ import java.sql.{Connection, ResultSet, Timestamp}
 
 import scala.annotation.tailrec
 import scala.util.Using
+import scala.util.control.NonFatal
 
 import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
@@ -94,6 +95,19 @@ object MatchRecordTable:
       }
     }
 
+  private val deleteByTableSql: String =
+    """
+      |delete from match_records
+      |where table_id = ?
+      |""".stripMargin
+
+  private[tournament] def deleteByTable(connection: Connection, tableId: TableId): Unit =
+    Using.resource(connection.prepareStatement(deleteByTableSql)) { statement =>
+      statement.setString(1, tableId.value)
+      statement.executeUpdate()
+      ()
+    }
+
   private val findByTournamentAndStageSql: String =
     """
       |select payload
@@ -162,7 +176,11 @@ object MatchRecordTable:
   private def readMatchRecords(resultSet: ResultSet): Vector[MatchRecord] =
     @tailrec
     def loop(acc: Vector[MatchRecord]): Vector[MatchRecord] =
-      if resultSet.next() then loop(readMatchRecord(resultSet) +: acc)
+      if resultSet.next() then
+        val nextAcc =
+          try readMatchRecord(resultSet) +: acc
+          catch case NonFatal(_) => acc
+        loop(nextAcc)
       else acc.reverse
 
     loop(Vector.empty)

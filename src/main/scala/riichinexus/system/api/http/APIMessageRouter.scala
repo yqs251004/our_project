@@ -4,7 +4,7 @@ import cats.effect.IO
 import cats.syntax.all.*
 import org.http4s.{HttpRoutes, Request, Response, Status}
 import org.http4s.dsl.io.*
-import riichinexus.system.api.{APIMessageRegistry, ApiPlanContext, ApiSuccessStatus, RegisteredAPIMessage}
+import riichinexus.system.api.{APIMessageRegistry, ApiPlanContext, ApiPostCommitHooks, ApiSuccessStatus, RegisteredAPIMessage}
 import riichinexus.system.objects.ErrorResponse
 
 object APIMessageRouter:
@@ -43,13 +43,15 @@ object APIMessageRouter:
       apiMessage: RegisteredAPIMessage,
       request: Request[IO]
   ): IO[Response[IO]] =
+    val postCommitHooks = ApiPostCommitHooks()
     for
       body <- request.bodyText.compile.string
       responseJson <- support.routeContext.executionContext.connectionFactory.withTransactionConnection { connection =>
         val context = ApiPlanContext(
           bearerToken = RouteSupport.bearerToken(support, request),
           connection = connection,
-          realtimeEventBus = support.routeContext.realtimeEventBus
+          realtimeEventBus = support.routeContext.realtimeEventBus,
+          postCommitHooks = Some(postCommitHooks)
         )
         for
           _ <-
@@ -58,6 +60,7 @@ object APIMessageRouter:
           responseJson <- apiMessage.planJson(bodyForDecode(body), context)
         yield responseJson
       }
+      _ <- postCommitHooks.drain.traverse_(_.handleErrorWith(_ => IO.unit))
       responseBody <- IO.blocking(ujson.write(responseJson, indent = 2))
       response <- RouteSupport.textResponse(support, httpStatus(apiMessage.successStatus), responseBody, "application/json; charset=utf-8")
     yield response

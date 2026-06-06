@@ -6,7 +6,7 @@ import java.time.Instant
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
 import riichinexus.microservices.tournament.domain.recordmanagement.model.{MatchRecord, MatchRecordSeatResult}
-import riichinexus.microservices.tournament.domain.tablemanagement.functions.{TableFunctions, TournamentStageTableScheduler}
+import riichinexus.microservices.tournament.domain.tablemanagement.functions.TableFunctions
 import riichinexus.microservices.tournament.domain.tablemanagement.model.Table
 import riichinexus.microservices.tournament.mahjongcore.domain.action.model.MahjongEvent
 import riichinexus.microservices.tournament.mahjongcore.domain.gamestate.model.{MahjongRoundState, MahjongTableState}
@@ -63,7 +63,7 @@ object MahjongTableArchiveFunctions:
     val storedPaifu = riichinexus.microservices.tournament.tables.paifu.PaifuTable.save(connection, paifu)
     val storedRecord = riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTable.save(connection, matchRecord)
     table.foreach { scheduledTable =>
-      archiveTournamentTable(
+      recordTournamentTableScoringResult(
         connection = connection,
         table = scheduledTable,
         record = storedRecord,
@@ -204,7 +204,7 @@ object MahjongTableArchiveFunctions:
       )
     }
 
-  private def archiveTournamentTable(
+  private def recordTournamentTableScoringResult(
       connection: Connection,
       table: Table,
       record: MatchRecord,
@@ -212,23 +212,11 @@ object MahjongTableArchiveFunctions:
       recordedAt: Instant
   ): Unit =
     if table.status != TableStatus.Archived then
-      val scoringTable =
-        table.status match
-          case TableStatus.InProgress =>
-            TableFunctions.enterScoring(table, recordedAt)
-          case TableStatus.Scoring =>
-            table
-          case _ =>
-            table.copy(
-              status = TableStatus.Scoring,
-              scoringStartedAt = Some(table.scoringStartedAt.getOrElse(recordedAt))
-            )
-      val archivedTable = TableFunctions.archive(
-        scoringTable,
+      val scoringTable = TableFunctions.recordScoringResult(
+        table,
         recordId = record.id,
         paifuId = paifu.id,
         at = recordedAt,
-        note = Some("archived from mahjongcore live table")
+        note = Some("scoring result recorded from mahjongcore live table")
       )
-      val storedTable = riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.save(connection, archivedTable)
-      TournamentStageTableScheduler.progressAfterTableArchived(connection, storedTable, recordedAt)
+      riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.save(connection, scoringTable)

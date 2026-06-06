@@ -3,7 +3,6 @@ package riichinexus.microservices.tournament.mahjongcore.api
 import java.time.Instant
 
 import cats.effect.IO
-import riichinexus.microservices.opsanalytics.api.`private`.RefreshOpsAnalyticsAfterMatchArchivedPrivateAPIMessage
 import riichinexus.microservices.tournament.mahjongcore.domain.gamestate.functions.MahjongGameStateTransitionFunctions
 import riichinexus.microservices.tournament.mahjongcore.domain.paifumanagement.functions.MahjongTableArchiveFunctions
 import riichinexus.microservices.tournament.mahjongcore.objects.action.apiTypes.MahjongActionResponse
@@ -29,10 +28,6 @@ final case class MahjongCoreArchiveTableAPIMessage(
           .getOrElse(throw IllegalArgumentException(s"Mahjong table ${tableId} is not started"))
         MahjongTableArchiveFunctions.archive(context.connection, current, archivedAt)
       }
-      _ <- RefreshOpsAnalyticsAfterMatchArchivedPrivateAPIMessage(
-        matchRecord = archived.matchRecord,
-        occurredAt = archived.matchRecord.generatedAt
-      ).plan(context)
       storedState <- IO.blocking {
         MahjongTableStateTable.save(
           context.connection,

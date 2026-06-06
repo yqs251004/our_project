@@ -3,6 +3,7 @@ import riichinexus.microservices.audit.domain.auditevent.AuditEvent
 import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
 import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPIMessage
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
+import riichinexus.microservices.notification.api.`private`.CreateBulkNotificationsPrivateAPIMessage
 
 import java.time.Instant
 import java.util.NoSuchElementException
@@ -59,6 +60,15 @@ final case class AppealResolveAPIMessage(
       command = ResolveAppealCommand(AppealTicketId(appealId), resolved, actor, resolvedAt)
       ticket <- IO.blocking(resolveAppeal(context.connection, service, command))
       _ <- RecordAuditEventsPrivateAPIMessage(resolveAppealAudit(ticket, command)).plan(context)
+      _ <- CreateBulkNotificationsPrivateAPIMessage(
+        AppealNotificationRequests.appealAdjudicated(
+          context.connection,
+          ticket,
+          AppealDecisionType.Resolve,
+          Some(AppealTableResolution.RestorePriorState),
+          command.input.verdict
+        )
+      ).plan(context)
     yield AppealTicketView.fromDomain(ticket)
 
   private def resolveInput: ResolveAppealRequest =
