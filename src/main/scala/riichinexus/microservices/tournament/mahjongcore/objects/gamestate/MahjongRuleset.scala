@@ -24,6 +24,7 @@ final case class MahjongRuleset(
     nagashiMangan: Boolean = true,
     allowMultipleYakuman: Boolean = true,
     bankruptcyEnd: Boolean = true,
+    allLastDealerFinishAsTop: Boolean = false,
     minHan: Int = 1
 ):
   def normalizedAkaDoraCount: Int =
@@ -48,6 +49,7 @@ object MahjongRuleset:
           "nagashiMangan" -> ruleset.nagashiMangan,
           "allowMultipleYakuman" -> ruleset.allowMultipleYakuman,
           "bankruptcyEnd" -> ruleset.bankruptcyEnd,
+          "allLastDealerFinishAsTop" -> ruleset.allLastDealerFinishAsTop,
           "minHan" -> ruleset.minHan
         ),
       {
@@ -65,6 +67,7 @@ object MahjongRuleset:
             nagashiMangan = obj.value.get("nagashiMangan").fold(true)(read[Boolean](_)),
             allowMultipleYakuman = obj.value.get("allowMultipleYakuman").fold(true)(read[Boolean](_)),
             bankruptcyEnd = obj.value.get("bankruptcyEnd").fold(true)(read[Boolean](_)),
+            allLastDealerFinishAsTop = obj.value.get("allLastDealerFinishAsTop").fold(false)(read[Boolean](_)),
             minHan = obj.value.get("minHan").fold(1)(read[Int](_))
           )
         case json =>

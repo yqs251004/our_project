@@ -17,5 +17,6 @@ final case class RealtimeEvent(
     title: Option[String] = None,
     body: Option[String] = None,
     severity: Option[String] = None,
-    actionUrl: Option[String] = None
+    actionUrl: Option[String] = None,
+    data: Option[ujson.Value] = None
 ) derives ReadWriter

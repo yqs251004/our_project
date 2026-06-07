@@ -464,7 +464,7 @@ class MahjongCoreDomainSuite extends FunSuite:
     val state = preparedRiichiDeclarationState()
     val east = state.seats.find(_.seat == SeatWind.East).get
 
-    val (afterRiichi, _) = MahjongGameStateTransitionFunctions.submitAction(
+    val (afterRiichi, acceptedEvent) = MahjongGameStateTransitionFunctions.submitAction(
       state,
       MahjongSubmittedAction(east.playerId, MahjongCommandType.Riichi, tile = Some(PaifuTile("9m")))
     )
@@ -473,6 +473,7 @@ class MahjongCoreDomainSuite extends FunSuite:
     assertEquals(updatedEast.points, 24000)
     assert(updatedEast.riichi)
     assertEquals(afterRiichi.sticks.riichi, 1)
+    assertEquals(acceptedEvent.map(_.actionType), Some(PaifuActionType.Riichi))
   }
 
   test("riichi player becomes furiten after passing ron but can still tsumo") {
@@ -884,6 +885,29 @@ class MahjongCoreDomainSuite extends FunSuite:
     assertEquals(advanced.currentRound.map(_.descriptor.handNumber), Some(4))
     assertEquals(advanced.currentRound.map(_.descriptor.honba), Some(1))
     assertEquals(advanced.seats.find(_.seat == SeatWind.East).map(_.playerId), Some(east.playerId))
+  }
+
+  test("dealer win on the last scheduled tonpu hand can finish when dealer is top") {
+    val state = setRoundDescriptor(
+      preparedEastTsumoState(
+        MahjongRuleset(
+          gameLength = MahjongGameLength.Tonpu,
+          allLastDealerFinishAsTop = true
+        )
+      ),
+      SeatWind.East,
+      handNumber = 4
+    )
+    val east = state.seats.find(_.seat == SeatWind.East).get
+    val (roundEnded, _) = MahjongGameStateTransitionFunctions.submitAction(
+      state,
+      MahjongSubmittedAction(east.playerId, MahjongCommandType.Tsumo)
+    )
+    val finished = MahjongGameStateTransitionFunctions.advanceRound(roundEnded)
+
+    assertEquals(finished.status, MahjongTableStatus.Finished)
+    assertEquals(finished.finishedRounds.size, 1)
+    assert(finished.currentRound.exists(_.events.collectFirst { case MahjongEvent.TableFinished(_, _) => () }.nonEmpty))
   }
 
   test("bankruptcy end switch controls whether a negative score finishes the table") {

@@ -349,10 +349,10 @@ object MahjongGameStateTransitionFunctions:
           currentRound = Some(nextRound),
           status = MahjongTableStatus.WaitingCallDecision
         )
-        nextState -> Some(discardEvent)
+        nextState -> riichiEvent.orElse(Some(discardEvent))
       case None =>
         val stateWithAcceptedRiichi = acceptRiichiDeclarationForDiscard(state.copy(seats = seats), discardView)
-        drawForNextPlayer(stateWithAcceptedRiichi, roundWithDiscard, nextSeatId(state, playerId)) -> Some(discardEvent)
+        drawForNextPlayer(stateWithAcceptedRiichi, roundWithDiscard, nextSeatId(state, playerId)) -> riichiEvent.orElse(Some(discardEvent))
 
   private def passPendingCall(state: MahjongTableState, playerId: PlayerId): (MahjongTableState, Option[MahjongEvent]) =
     val round = requireRound(state)
@@ -957,10 +957,22 @@ object MahjongGameStateTransitionFunctions:
       ruleset.gameLength match
         case MahjongGameLength.OneKyoku => true
         case MahjongGameLength.Tonpu | MahjongGameLength.Hanchan =>
-          !dealerContinues &&
-            isAtOrBeyondLastScheduledHand(round.descriptor, ruleset.gameLength) &&
-            state.seats.exists(_.points >= ruleset.targetPoints)
+          val isLastScheduledHand = isAtOrBeyondLastScheduledHand(round.descriptor, ruleset.gameLength)
+          val dealerTopFinish =
+            dealerContinues &&
+              ruleset.allLastDealerFinishAsTop &&
+              isCurrentDealerTop(state)
+          isLastScheduledHand &&
+            (
+              (!dealerContinues && state.seats.exists(_.points >= ruleset.targetPoints)) ||
+                dealerTopFinish
+            )
     bankruptcyFinished || lengthFinished
+
+  private def isCurrentDealerTop(state: MahjongTableState): Boolean =
+    state.seats
+      .find(_.seat == SeatWind.East)
+      .exists(dealer => state.seats.forall(seat => dealer.points >= seat.points))
 
   private def isAtOrBeyondLastScheduledHand(
       descriptor: KyokuDescriptor,
