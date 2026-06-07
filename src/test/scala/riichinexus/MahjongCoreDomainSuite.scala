@@ -632,12 +632,17 @@ class MahjongCoreDomainSuite extends FunSuite:
     val nullActorMessage = read[MahjongCoreAdvanceRoundAPIMessage](
       """{"tableId":"table-be548ec5","request":{"playerId":null,"showcaseMode":false}}"""
     )
+    val backendOptionMessage = read[MahjongCoreAdvanceRoundAPIMessage](
+      """{"tableId":"table-be548ec5","request":[{"playerId":["player-1fdbf5db"],"showcaseMode":[false]}]}"""
+    )
 
     assertEquals(message.tableId, "table-be548ec5")
     assertEquals(message.request.flatMap(_.playerId), Some("player-1fdbf5db"))
     assertEquals(message.request.flatMap(_.showcaseMode), Some(true))
     assertEquals(nullActorMessage.request.flatMap(_.playerId), None)
     assertEquals(nullActorMessage.request.flatMap(_.showcaseMode), Some(false))
+    assertEquals(backendOptionMessage.request.flatMap(_.playerId), Some("player-1fdbf5db"))
+    assertEquals(backendOptionMessage.request.flatMap(_.showcaseMode), Some(false))
   }
 
   test("showcase mode deals the scripted default wall on east two") {
