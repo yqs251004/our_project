@@ -3,6 +3,7 @@ package riichinexus.microservices.tournament.mahjongcore.router
 import riichinexus.microservices.tournament.mahjongcore.api.*
 import riichinexus.microservices.tournament.mahjongcore.objects.action.apiTypes.MahjongActionResponse
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.MahjongTableView
+import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.apiTypes.MahjongCoreShowcaseModeView
 import riichinexus.system.api.RegisteredAPIMessage
 import riichinexus.system.json.JsonCodecs.given
 
@@ -16,5 +17,7 @@ object MahjongCoreAPIMessageRegistry:
       RegisteredAPIMessage.api[MahjongCoreSubmitActionAPIMessage, MahjongActionResponse],
       RegisteredAPIMessage.api[MahjongCoreAdvanceRoundAPIMessage, MahjongTableView],
       RegisteredAPIMessage.api[MahjongCoreResetTableAPIMessage, MahjongTableView],
-      RegisteredAPIMessage.api[MahjongCoreArchiveTableAPIMessage, MahjongActionResponse]
+      RegisteredAPIMessage.api[MahjongCoreArchiveTableAPIMessage, MahjongActionResponse],
+      RegisteredAPIMessage.api[MahjongCoreGetShowcaseModeAPIMessage, MahjongCoreShowcaseModeView],
+      RegisteredAPIMessage.api[MahjongCoreSetShowcaseModeAPIMessage, MahjongCoreShowcaseModeView]
     )

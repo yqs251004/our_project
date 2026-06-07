@@ -3,7 +3,8 @@ package riichinexus
 import munit.FunSuite
 
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.tournament.mahjongcore.api.MahjongCoreAdvanceRoundAPIMessage
+import riichinexus.microservices.tournament.mahjongcore.api.{MahjongCoreAdvanceRoundAPIMessage, MahjongCoreSetShowcaseModeAPIMessage}
+import riichinexus.microservices.tournament.mahjongcore.domain.MahjongCoreShowcaseMode
 import riichinexus.microservices.tournament.mahjongcore.domain.action.model.MahjongEvent
 import riichinexus.microservices.tournament.mahjongcore.domain.gamestate.functions.MahjongGameStateTransitionFunctions
 import riichinexus.microservices.tournament.mahjongcore.domain.gamestate.model.*
@@ -12,6 +13,7 @@ import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.Ma
 import riichinexus.microservices.tournament.mahjongcore.domain.yakuanalysis.functions.MahjongYakuAnalysisFunctions
 import riichinexus.microservices.tournament.mahjongcore.domain.yakuanalysis.model.MahjongWinContext
 import riichinexus.microservices.tournament.mahjongcore.objects.action.{MahjongCommandType, MahjongLegalAction}
+import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.apiTypes.SetMahjongCoreShowcaseModeRequest
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.{MahjongDiscard, MahjongGameLength, MahjongMeld, MahjongMeldType, MahjongRoundPhase, MahjongRuleset, MahjongTableStatus, MahjongTableSticks, MahjongTableView}
 import riichinexus.microservices.tournament.objects.paifumanagement.{AgariResult, HandOutcome, MahjongYakuKind, PaifuActionType, PaifuTile}
 import riichinexus.microservices.tournament.objects.tablemanagement.{SeatWind, TableId}
@@ -244,6 +246,46 @@ class MahjongCoreDomainSuite extends FunSuite:
     assert(southActions.exists(_.commandType == MahjongCommandType.Pon))
     assert(southActions.exists(_.commandType == MahjongCommandType.Chi))
     assert(southActions.exists(_.commandType == MahjongCommandType.Pass))
+  }
+
+  test("pon preserves a red five discard in the public meld tiles") {
+    val base = preparedChiPonState()
+    val east = base.seats.find(_.seat == SeatWind.East).get
+    val south = base.seats.find(_.seat == SeatWind.South).get
+    val state = base.copy(
+      seats = base.seats.map {
+        case seat if seat.seat == SeatWind.East =>
+          seat.copy(drawTile = Some(PaifuTile("0p")))
+        case seat if seat.seat == SeatWind.South =>
+          seat.copy(handTiles = tiles("5p", "5p", "2m", "3m", "4m", "2s", "3s", "4s", "5z", "5z", "6z", "6z", "7z"))
+        case seat => seat
+      }
+    )
+
+    val (pendingCallState, _) = MahjongGameStateTransitionFunctions.submitAction(
+      state,
+      MahjongSubmittedAction(east.playerId, MahjongCommandType.Discard, tile = Some(PaifuTile("0p")))
+    )
+    val ponAction = MahjongGameStateTransitionFunctions
+      .legalActionsForPlayer(pendingCallState, south.playerId)
+      .find(_.commandType == MahjongCommandType.Pon)
+      .get
+    val (calledState, _) = MahjongGameStateTransitionFunctions.submitAction(
+      pendingCallState,
+      MahjongSubmittedAction(
+        south.playerId,
+        MahjongCommandType.Pon,
+        tile = ponAction.tile,
+        tiles = ponAction.tiles,
+        targetSequenceNo = ponAction.targetSequenceNo
+      )
+    )
+    val meld = calledState.seats.find(_.playerId == south.playerId).get.melds.head
+
+    assertEquals(meld.meldType, MahjongMeldType.Pon)
+    assertEquals(meld.calledTile, Some(PaifuTile("0p")))
+    assertEquals(meld.tiles.size, 3)
+    assert(meld.tiles.contains(PaifuTile("0p")))
   }
 
   test("chi call resolves the discard relation, turn owner, meld surface and caller discard options") {
@@ -625,24 +667,42 @@ class MahjongCoreDomainSuite extends FunSuite:
     assert(advanced.seats.filterNot(_.seat == SeatWind.East).forall(seat => seat.handTiles.size + seat.drawTile.size == 13))
   }
 
-  test("advance round API accepts frontend JSON shape") {
+  test("advance round API accepts frontend and legacy option JSON shapes") {
     val message = read[MahjongCoreAdvanceRoundAPIMessage](
+      """{"tableId":"table-be548ec5","request":{"playerId":"player-1fdbf5db"}}"""
+    )
+    val legacyShowcaseMessage = read[MahjongCoreAdvanceRoundAPIMessage](
       """{"tableId":"table-be548ec5","request":{"playerId":"player-1fdbf5db","showcaseMode":true}}"""
     )
-    val nullActorMessage = read[MahjongCoreAdvanceRoundAPIMessage](
+    val legacyNullActorMessage = read[MahjongCoreAdvanceRoundAPIMessage](
       """{"tableId":"table-be548ec5","request":{"playerId":null,"showcaseMode":false}}"""
     )
     val backendOptionMessage = read[MahjongCoreAdvanceRoundAPIMessage](
-      """{"tableId":"table-be548ec5","request":[{"playerId":["player-1fdbf5db"],"showcaseMode":[false]}]}"""
+      """{"tableId":"table-be548ec5","request":[{"playerId":["player-1fdbf5db"]}]}"""
     )
 
     assertEquals(message.tableId, "table-be548ec5")
     assertEquals(message.request.flatMap(_.playerId), Some("player-1fdbf5db"))
-    assertEquals(message.request.flatMap(_.showcaseMode), Some(true))
-    assertEquals(nullActorMessage.request.flatMap(_.playerId), None)
-    assertEquals(nullActorMessage.request.flatMap(_.showcaseMode), Some(false))
+    assertEquals(message.request.flatMap(_.showcaseMode), None)
+    assertEquals(legacyShowcaseMessage.request.flatMap(_.showcaseMode), Some(true))
+    assertEquals(legacyNullActorMessage.request.flatMap(_.playerId), None)
+    assertEquals(legacyNullActorMessage.request.flatMap(_.showcaseMode), Some(false))
     assertEquals(backendOptionMessage.request.flatMap(_.playerId), Some("player-1fdbf5db"))
-    assertEquals(backendOptionMessage.request.flatMap(_.showcaseMode), Some(false))
+    assertEquals(backendOptionMessage.request.flatMap(_.showcaseMode), None)
+  }
+
+  test("showcase mode is stored as a backend process-wide flag") {
+    MahjongCoreShowcaseMode.setEnabled(false)
+    assertEquals(MahjongCoreShowcaseMode.enabled, false)
+
+    val message = read[MahjongCoreSetShowcaseModeAPIMessage](
+      """{"request":{"enabled":true}}"""
+    )
+
+    assertEquals(message.request, SetMahjongCoreShowcaseModeRequest(true))
+    assertEquals(MahjongCoreShowcaseMode.setEnabled(message.request.enabled), true)
+    assertEquals(MahjongCoreShowcaseMode.enabled, true)
+    MahjongCoreShowcaseMode.setEnabled(false)
   }
 
   test("showcase mode deals the scripted default wall on east two") {

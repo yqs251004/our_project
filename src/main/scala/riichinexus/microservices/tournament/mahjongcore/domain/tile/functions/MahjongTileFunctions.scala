@@ -160,7 +160,14 @@ object MahjongTileFunctions:
     countsOf(tiles)(indexOf(tile)) >= copies
 
   def removeTiles(source: Vector[PaifuTile], tilesToRemove: Vector[PaifuTile]): Option[Vector[PaifuTile]] =
+    removeTilesWithRemoved(source, tilesToRemove).map(_._1)
+
+  def removeTilesWithRemoved(
+      source: Vector[PaifuTile],
+      tilesToRemove: Vector[PaifuTile]
+  ): Option[(Vector[PaifuTile], Vector[PaifuTile])] =
     val remaining = source.zipWithIndex.toBuffer
+    val removed = scala.collection.mutable.ArrayBuffer.empty[PaifuTile]
     var valid = true
     tilesToRemove.foreach { tile =>
       if valid then
@@ -172,6 +179,6 @@ object MahjongTileFunctions:
             val targetIndex = indexOf(tile)
             remaining.indexWhere { case (candidate, _) => indexOf(candidate) == targetIndex }
         if position < 0 then valid = false
-        else remaining.remove(position)
+        else removed += remaining.remove(position)._1
     }
-    if valid then Some(remaining.map(_._1).toVector) else None
+    if valid then Some(remaining.map(_._1).toVector -> removed.toVector) else None

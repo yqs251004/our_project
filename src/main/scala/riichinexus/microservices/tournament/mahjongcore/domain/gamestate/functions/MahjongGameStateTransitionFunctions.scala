@@ -390,12 +390,13 @@ object MahjongGameStateTransitionFunctions:
     val stateWithAcceptedRiichi = acceptPendingRiichiDeclaration(state, pending)
     val caller = seatByPlayerId(stateWithAcceptedRiichi, playerId)
     val discardTile = pending.tile
-    val meldTiles = legalAction.tiles.nonEmpty match
+    val declaredMeldTiles = legalAction.tiles.nonEmpty match
       case true => legalAction.tiles.map(MahjongTileFunctions.normalize)
       case false => defaultMeldTiles(legalAction.commandType, discardTile)
-    val handTilesToRemove = removeOneByIndex(meldTiles, indexOf(discardTile))
-    val handAfterCall = MahjongTileFunctions.removeTiles(caller.handTiles, handTilesToRemove)
+    val handTilesToRemove = removeOneByIndex(declaredMeldTiles, indexOf(discardTile))
+    val (handAfterCall, removedHandTiles) = MahjongTileFunctions.removeTilesWithRemoved(caller.handTiles, handTilesToRemove)
       .getOrElse(throw IllegalArgumentException(s"Player ${playerId.value} cannot call ${legalAction.commandType}"))
+    val meldTiles = discardTile +: removedHandTiles
     val meld = MahjongMeld(
       meldType = legalAction.commandType match
         case MahjongCommandType.Chi => MahjongMeldType.Chi

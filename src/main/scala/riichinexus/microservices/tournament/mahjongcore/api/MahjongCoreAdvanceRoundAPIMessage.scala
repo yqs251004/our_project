@@ -2,6 +2,7 @@ package riichinexus.microservices.tournament.mahjongcore.api
 
 import cats.effect.IO
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.tournament.mahjongcore.domain.MahjongCoreShowcaseMode
 import riichinexus.microservices.tournament.mahjongcore.domain.gamestate.functions.MahjongGameStateTransitionFunctions
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.{MahjongTableStatus, MahjongTableView}
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.apiTypes.AdvanceMahjongRoundRequest
@@ -32,7 +33,7 @@ final case class MahjongCoreAdvanceRoundAPIMessage(
           throw IllegalArgumentException("Only the current east player can advance the mahjong round")
       val nextState = MahjongGameStateTransitionFunctions.advanceRound(
         normalizedCurrent,
-        showcaseMode = request.flatMap(_.showcaseMode).getOrElse(false)
+        showcaseMode = MahjongCoreShowcaseMode.enabled
       )
       val stored = MahjongTableStateTable.save(context.connection, nextState)
       MahjongGameStateTransitionFunctions.toView(stored, viewerPlayerId = None, includeLegalActions = true)
