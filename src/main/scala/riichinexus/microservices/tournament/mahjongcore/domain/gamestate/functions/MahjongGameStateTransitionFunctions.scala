@@ -216,12 +216,12 @@ object MahjongGameStateTransitionFunctions:
 
     val (nextState, event) =
       action.commandType match
-        case MahjongCommandType.Pass => passPendingCall(state, action.playerId)
+        case MahjongCommandType.Pass => recordCallResponse(state, action.playerId, legalAction)
         case MahjongCommandType.Discard => discard(state, action.playerId, action.tile.orElse(legalAction.tile).get, riichiDeclared = false)
         case MahjongCommandType.Riichi => discard(state, action.playerId, action.tile.orElse(legalAction.tile).get, riichiDeclared = true)
         case MahjongCommandType.Tsumo => declareTsumo(state, action.playerId)
-        case MahjongCommandType.Ron => declareRon(state, action.playerId, legalAction)
-        case MahjongCommandType.Chi | MahjongCommandType.Pon | MahjongCommandType.OpenKan => callMeld(state, action.playerId, legalAction)
+        case MahjongCommandType.Ron => recordCallResponse(state, action.playerId, legalAction)
+        case MahjongCommandType.Chi | MahjongCommandType.Pon | MahjongCommandType.OpenKan => recordCallResponse(state, action.playerId, legalAction)
         case MahjongCommandType.ClosedKan => closedKan(state, action.playerId, legalAction)
         case MahjongCommandType.AddedKan => addedKan(state, action.playerId, legalAction)
         case MahjongCommandType.AbortiveDraw => abortiveDraw(state, Some("abortive draw requested"))
@@ -262,9 +262,9 @@ object MahjongGameStateTransitionFunctions:
       case None => Vector.empty
       case Some(round) =>
         round.pendingCall.flatMap(_.candidates.find(_.playerId == playerId)) match
-          case Some(candidate) =>
+          case Some(candidate) if !round.pendingCall.exists(_.responses.exists(_.playerId == playerId)) =>
             val pending = round.pendingCall.get
-            val activeActions = activeLegalActionsForCandidate(state, pending, candidate)
+            val activeActions = legalActionsForCandidate(state, pending, candidate)
             if activeActions.isEmpty then Vector.empty
             else
               activeActions :+ MahjongLegalAction(
@@ -274,6 +274,7 @@ object MahjongGameStateTransitionFunctions:
                 targetSequenceNo = Some(pending.discardSequenceNo),
                 priority = 0
               )
+          case Some(_) => Vector.empty
           case None if round.turnPlayerId == playerId && round.phase == MahjongRoundPhase.PlayerTurn =>
             currentTurnActions(state, round, seatByPlayerId(state, playerId))
           case _ => Vector.empty
@@ -354,31 +355,90 @@ object MahjongGameStateTransitionFunctions:
         val stateWithAcceptedRiichi = acceptRiichiDeclarationForDiscard(state.copy(seats = seats), discardView)
         drawForNextPlayer(stateWithAcceptedRiichi, roundWithDiscard, nextSeatId(state, playerId)) -> riichiEvent.orElse(Some(discardEvent))
 
-  private def passPendingCall(state: MahjongTableState, playerId: PlayerId): (MahjongTableState, Option[MahjongEvent]) =
+  private def recordCallResponse(
+      state: MahjongTableState,
+      playerId: PlayerId,
+      legalAction: MahjongLegalAction
+  ): (MahjongTableState, Option[MahjongEvent]) =
     val round = requireRound(state)
-    val pending = round.pendingCall.getOrElse(throw IllegalArgumentException("No pending call to pass"))
-    val stateAfterRiichiFuriten = markRiichiMissedRonFuriten(state, pending, playerId)
-    val event = MahjongEvent.PlayerPassed(nextSequenceNo(round), playerId)
-    val remaining = pending.candidates.filterNot(_.playerId == playerId)
-    val normalizedRemaining =
-      if pending.acceptedRonPlayerIds.nonEmpty then remaining.filter(hasRonAction)
-      else remaining
-    if normalizedRemaining.nonEmpty then
-      val nextRound = round.copy(
-        pendingCall = Some(pending.copy(candidates = normalizedRemaining)),
-        events = round.events :+ event
-      )
-      stateAfterRiichiFuriten.copy(currentRound = Some(nextRound), status = MahjongTableStatus.WaitingCallDecision) -> Some(event)
-    else if pending.acceptedRonPlayerIds.nonEmpty then
-      val nextRound = round.copy(
-        pendingCall = Some(pending.copy(candidates = Vector.empty)),
-        events = round.events :+ event
-      )
-      finishRoundWithRonWinners(stateAfterRiichiFuriten, nextRound, pending.copy(candidates = Vector.empty), Some(event))
+    val pending = round.pendingCall.getOrElse(throw IllegalArgumentException("No pending call to resolve"))
+    val response = MahjongCallResponse(playerId, legalAction)
+    val responseEvent = Option.when(legalAction.commandType == MahjongCommandType.Pass)(
+      MahjongEvent.PlayerPassed(nextSequenceNo(round), playerId)
+    )
+    val updatedPending = pending.copy(
+      responses = (pending.responses.filterNot(_.playerId == playerId) :+ response)
+    )
+    val updatedRound = round.copy(
+      pendingCall = Some(updatedPending),
+      events = round.events ++ responseEvent.toVector
+    )
+    val updatedState = state.copy(currentRound = Some(updatedRound), status = MahjongTableStatus.WaitingCallDecision)
+
+    if !canResolveCallResponses(state, updatedPending) then
+      updatedState -> None
     else
-      val clearedRound = round.copy(pendingCall = None, events = round.events :+ event)
-      val stateWithAcceptedRiichi = acceptPendingRiichiDeclaration(stateAfterRiichiFuriten, pending)
-      drawForNextPlayer(stateWithAcceptedRiichi, clearedRound, nextSeatId(state, pending.discardPlayerId)) -> Some(event)
+      resolveCallResponses(updatedState, updatedRound, updatedPending)
+
+  private def resolveCallResponses(
+      state: MahjongTableState,
+      round: MahjongRoundState,
+      pending: MahjongPendingCallState
+  ): (MahjongTableState, Option[MahjongEvent]) =
+    val selectedResponses = selectedCallResponses(state, pending)
+    val ronResponses = selectedResponses.filter(_.action.commandType == MahjongCommandType.Ron)
+
+    if ronResponses.nonEmpty then
+      ronResponses.foreach(response =>
+        MahjongYakuAnalysisFunctions.analyzeWin(winContext(state, response.playerId, Some(pending.discardPlayerId), pending.tile))
+          .getOrElse(throw IllegalArgumentException(s"Submitted ron is not a winning hand for ${response.playerId.value}"))
+      )
+      val acceptedRonPlayerIds = ronResponses.map(_.playerId).distinct.sortBy(playerId => seatDistanceFromDiscarder(state, pending.discardPlayerId, playerId))
+      val updatedPending = pending.copy(
+        candidates = Vector.empty,
+        acceptedRonPlayerIds = acceptedRonPlayerIds
+      )
+      if state.ruleset.tripleRonAbortiveDraw && acceptedRonPlayerIds.size >= 3 then
+        finishRoundWithAbortiveDraw(
+          state,
+          round.copy(pendingCall = Some(updatedPending)),
+          Vector("三家和流局"),
+          acceptedEvent = None
+        )
+      else finishRoundWithRonWinners(state, round.copy(pendingCall = Some(updatedPending)), updatedPending, acceptedEvent = None)
+    else
+      selectedResponses.find(response => isMeldCommand(response.action.commandType)) match
+        case Some(response) => callMeld(state, response.playerId, response.action)
+        case None =>
+          val stateAfterRiichiFuriten =
+            pending.responses.foldLeft(state) { (current, response) =>
+              if response.action.commandType == MahjongCommandType.Pass then markRiichiMissedRonFuriten(current, pending, response.playerId)
+              else current
+            }
+          val clearedRound = round.copy(pendingCall = None)
+          val stateWithAcceptedRiichi = acceptPendingRiichiDeclaration(stateAfterRiichiFuriten, pending)
+          drawForNextPlayer(stateWithAcceptedRiichi, clearedRound, nextSeatId(state, pending.discardPlayerId)) -> None
+
+  private def canResolveCallResponses(
+      state: MahjongTableState,
+      pending: MahjongPendingCallState
+  ): Boolean =
+    val responsesByPlayer = pending.responses.map(response => response.playerId -> response).toMap
+    val highestUnresolvedPriorities = pending.candidates.flatMap { candidate =>
+      responsesByPlayer.get(candidate.playerId) match
+        case Some(response) => Vector(response.action.priority)
+        case None => legalActionsForCandidate(state, pending, candidate).map(_.priority).filter(_ > 0)
+    }
+    highestUnresolvedPriorities.maxOption match
+      case None => pending.responses.map(_.playerId).distinct.size == pending.candidates.map(_.playerId).distinct.size
+      case Some(highestPriority) =>
+        val topCandidateCount = pending.candidates.count { candidate =>
+          responsesByPlayer.get(candidate.playerId) match
+            case Some(response) => response.action.priority == highestPriority
+            case None => legalActionsForCandidate(state, pending, candidate).exists(_.priority == highestPriority)
+        }
+        val topResponseCount = pending.responses.count(_.action.priority == highestPriority)
+        topResponseCount > 0 && topResponseCount == topCandidateCount
 
   private def callMeld(
       state: MahjongTableState,
@@ -680,22 +740,36 @@ object MahjongGameStateTransitionFunctions:
       MahjongPendingCallState(discard.sequenceNo, discard.playerId, discard.tile, candidates)
     )
 
-  private def activeLegalActionsForCandidate(
+  private def legalActionsForCandidate(
       state: MahjongTableState,
       pending: MahjongPendingCallState,
       candidate: MahjongCallCandidate
   ): Vector[MahjongLegalAction] =
-    val highestPriority = pending.candidates
-      .flatMap(_.legalActions.map(_.priority))
-      .maxOption
-      .getOrElse(0)
-    val candidateHighestPriority = candidate.legalActions.map(_.priority).maxOption.getOrElse(0)
-    val activeActions = candidate.legalActions.filter(_.priority == highestPriority)
-    if candidateHighestPriority != highestPriority then Vector.empty
-    else if highestPriority == 100 && !state.ruleset.doubleRon then
-      closestRonCandidate(state, pending).filter(_ == candidate.playerId).fold(Vector.empty[MahjongLegalAction])(_ => activeActions)
-    else if highestPriority == 100 then activeActions
+    if !state.ruleset.doubleRon && hasRonAction(candidate) then
+      closestRonCandidate(state, pending).filter(_ == candidate.playerId).fold(Vector.empty[MahjongLegalAction])(_ => candidate.legalActions)
+    else if !state.ruleset.doubleRon && pending.candidates.exists(hasRonAction) then Vector.empty
     else candidate.legalActions
+
+  private def selectedCallResponses(
+      state: MahjongTableState,
+      pending: MahjongPendingCallState
+  ): Vector[MahjongCallResponse] =
+    val nonPassResponses = pending.responses.filterNot(_.action.commandType == MahjongCommandType.Pass)
+    if nonPassResponses.isEmpty then Vector.empty
+    else
+      val highestPriority = nonPassResponses.map(_.action.priority).max
+      val highestResponses = nonPassResponses.filter(_.action.priority == highestPriority)
+      if highestPriority == 100 && state.ruleset.doubleRon then
+        highestResponses
+      else
+        highestResponses
+          .sortBy(response => seatDistanceFromDiscarder(state, pending.discardPlayerId, response.playerId))
+          .take(1)
+
+  private def isMeldCommand(commandType: MahjongCommandType): Boolean =
+    commandType == MahjongCommandType.Chi ||
+      commandType == MahjongCommandType.Pon ||
+      commandType == MahjongCommandType.OpenKan
 
   private def hasRonAction(candidate: MahjongCallCandidate): Boolean =
     candidate.legalActions.exists(_.commandType == MahjongCommandType.Ron)
@@ -1366,7 +1440,10 @@ object MahjongGameStateTransitionFunctions:
       viewerPlayerId: Option[PlayerId]
   ): MahjongRoundView =
     val viewerHasPendingCall = viewerPlayerId.exists(playerId =>
-      round.pendingCall.exists(_.candidates.exists(_.playerId == playerId))
+      round.pendingCall.exists(pending =>
+        pending.candidates.exists(_.playerId == playerId) &&
+          !pending.responses.exists(_.playerId == playerId)
+      )
     )
     MahjongRoundView(
       descriptor = round.descriptor,

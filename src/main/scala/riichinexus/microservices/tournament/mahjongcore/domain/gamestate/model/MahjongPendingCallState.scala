@@ -9,5 +9,6 @@ final case class MahjongPendingCallState(
     discardPlayerId: PlayerId,
     tile: PaifuTile,
     candidates: Vector[MahjongCallCandidate],
-    acceptedRonPlayerIds: Vector[PlayerId] = Vector.empty
+    acceptedRonPlayerIds: Vector[PlayerId] = Vector.empty,
+    responses: Vector[MahjongCallResponse] = Vector.empty
 )

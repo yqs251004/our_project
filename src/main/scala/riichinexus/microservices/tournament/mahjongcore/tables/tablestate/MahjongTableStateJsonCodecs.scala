@@ -13,6 +13,7 @@ private[tablestate] object MahjongTableStateJsonCodecs:
     readwriter[ujson.Value].bimap[MahjongEvent](writeEvent, readEvent)
 
   given ReadWriter[MahjongCallCandidate] = macroRW
+  given ReadWriter[MahjongCallResponse] = macroRW
   given ReadWriter[MahjongPendingCallState] = macroRW
   given ReadWriter[MahjongSeatState] = macroRW
   given ReadWriter[MahjongRoundState] = macroRW

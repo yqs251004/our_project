@@ -248,6 +248,61 @@ class MahjongCoreDomainSuite extends FunSuite:
     assert(southActions.exists(_.commandType == MahjongCommandType.Pass))
   }
 
+  test("same responder can choose ron or chi when both are legal") {
+    val base = preparedChiPonState()
+    val east = base.seats.find(_.seat == SeatWind.East).get
+    val south = base.seats.find(_.seat == SeatWind.South).get
+    val state = base.copy(
+      seats = base.seats.map {
+        case seat if seat.seat == SeatWind.South =>
+          seat.copy(handTiles = ronTenpaiHand, drawTile = None, riichi = false, ippatsu = false, furiten = false)
+        case seat => seat
+      }
+    )
+
+    val (pendingCallState, _) = MahjongGameStateTransitionFunctions.submitAction(
+      state,
+      MahjongSubmittedAction(east.playerId, MahjongCommandType.Discard, tile = Some(PaifuTile("3m")))
+    )
+    val southActions = MahjongGameStateTransitionFunctions.legalActionsForPlayer(pendingCallState, south.playerId)
+
+    assert(southActions.exists(_.commandType == MahjongCommandType.Ron))
+    assert(southActions.exists(_.commandType == MahjongCommandType.Chi))
+    assert(southActions.exists(_.commandType == MahjongCommandType.Pass))
+  }
+
+  test("call decisions wait for tied highest-priority responses but not lower-priority calls") {
+    val state = preparedRonState(MahjongRuleset(doubleRon = true), northCanRon = false)
+    val east = state.seats.find(_.seat == SeatWind.East).get
+    val south = state.seats.find(_.seat == SeatWind.South).get
+    val west = state.seats.find(_.seat == SeatWind.West).get
+
+    val (waitingRon, _) = MahjongGameStateTransitionFunctions.submitAction(
+      state,
+      MahjongSubmittedAction(east.playerId, MahjongCommandType.Discard, tile = Some(PaifuTile("3m")))
+    )
+    val westActions = MahjongGameStateTransitionFunctions.legalActionsForPlayer(waitingRon, west.playerId)
+
+    assert(westActions.exists(_.commandType == MahjongCommandType.Ron))
+    val (afterSouthRon, firstEvent) = MahjongGameStateTransitionFunctions.submitAction(
+      waitingRon,
+      MahjongSubmittedAction(south.playerId, MahjongCommandType.Ron)
+    )
+
+    assertEquals(afterSouthRon.status, MahjongTableStatus.WaitingCallDecision)
+    assertEquals(firstEvent, None)
+    assertEquals(MahjongGameStateTransitionFunctions.legalActionsForPlayer(afterSouthRon, south.playerId), Vector.empty)
+    assert(MahjongGameStateTransitionFunctions.legalActionsForPlayer(afterSouthRon, west.playerId).exists(_.commandType == MahjongCommandType.Ron))
+
+    val (finished, _) = MahjongGameStateTransitionFunctions.submitAction(
+      afterSouthRon,
+      MahjongSubmittedAction(west.playerId, MahjongCommandType.Pass)
+    )
+
+    assertEquals(finished.status, MahjongTableStatus.RoundEnded)
+    assertEquals(finished.currentRound.flatMap(_.result).flatMap(_.winner), Some(south.playerId))
+  }
+
   test("pon preserves a red five discard in the public meld tiles") {
     val base = preparedChiPonState()
     val east = base.seats.find(_.seat == SeatWind.East).get
