@@ -6,11 +6,18 @@ domain 是后端领域模型，前端不需要的类型和函数放在这里，�
 table 是读写表操作，riichinexus/microservices/tournament/mahjongcore/tables/tablestate/MahjongTableStateJsonCodecs.scala 这种奇怪的文件不应该在这里
 按惯例应该在 system 的对应位置，现在 system 这个 json 处理文件太大了，可以考虑按功能拆开
 
+- 奇怪的文件：
+riichinexus/microservices/tournament/api/private/TournamentOperationViewAssembler.scala
+riichinexus/microservices/tournament/appeal/api/AppealNotificationRequests.scala
+
+- 赛事微服务 domain 下的 *management 语义还需要明确，是否有包含关系之类，需要进一步整理
+
 - 清理边界问题，现在部分微服务仍然在互相调用 functions，规则：每个微服务下的 functions 全部设为 private [微服务名称]，像 Tables 一样，其它微服务的调用必须走对应的 (private) api
 api 规则：用 plan + for 串起来主流程，不使用大 IO 块或者大量的私有函数嵌套
 private 是只对后端可见的 api，其它 api 是前端有对应镜像的，新建 private api 的时候应该优先检查是否可以复用已有的 api
 
 - 检查是否有 unsafeRunSync 之类的关键词，需要一并换成 IO monad 的形式
+
 
 2 前端问题
 - 同样的，清理新的麻将引擎引入的结构问题，包括 notifications，需要重新按照之前的规则处理，规则文件在 pages/pages-index.md
