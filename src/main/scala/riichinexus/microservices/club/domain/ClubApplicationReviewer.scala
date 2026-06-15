@@ -1,12 +1,14 @@
 package riichinexus.microservices.club.domain
 import riichinexus.microservices.auth.objects.Permission
-import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
+import riichinexus.microservices.player.api.`private`.*
 
 import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.sql.Connection
 import java.time.Instant
 import java.util.NoSuchElementException
 
+import cats.effect.IO
+import riichinexus.system.api.ApiPlanContext
 import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.club.domain.functions.ClubIdGenerator
@@ -42,71 +44,78 @@ import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAP
 
 object ClubApplicationReviewer:
   def approve(
-      connection: Connection,
+      context: ApiPlanContext,
       parsedClubId: ClubId,
       parsedMembershipId: MembershipApplicationId,
       parsedPlayerId: PlayerId,
       actor: AccessPrincipal,
       note: Option[String],
       approvedAt: Instant
-  ): Option[Club] =
-    {
-      for
-        club <- riichinexus.microservices.club.tables.clubs.ClubTable.findById(connection, parsedClubId)
-        player <- PlayerPersistenceFunctions.findPlayer(connection, parsedPlayerId)
-      yield
-        ClubAuthorization.ensureClubActive(club)
-        requireActivePlayer(player, s"Player ${parsedPlayerId.value} cannot be approved into a club")
-        ClubAuthorization.requireClubCapability(          actor = actor,
-          club = club,
-          permission = Permission.ManageClubMembership,
-          delegatedPrivileges = Set(ClubPrivilegeCode.ApproveRoster)
-        )
+  ): IO[Option[Club]] =
+    val connection = context.connection
+    for
+      club <- IO.blocking(riichinexus.microservices.club.tables.clubs.ClubTable.findById(connection, parsedClubId))
+      player <- ResolvePlayerPrivateAPIMessage(parsedPlayerId).plan(context)
+      savedClub <- (club, player) match
+        case (Some(club), Some(player)) =>
+          ClubAuthorization.ensureClubActive(club)
+          requireActivePlayer(player, s"Player ${parsedPlayerId.value} cannot be approved into a club")
+          ClubAuthorization.requireClubCapability(          actor = actor,
+            club = club,
+            permission = Permission.ManageClubMembership,
+            delegatedPrivileges = Set(ClubPrivilegeCode.ApproveRoster)
+          )
 
-        val application = ClubFunctions.findApplication(club, parsedMembershipId)
-          .getOrElse(
-            throw NoSuchElementException(
-              s"Membership application ${parsedMembershipId.value} was not found in club ${parsedClubId.value}"
+          val application = ClubFunctions.findApplication(club, parsedMembershipId)
+            .getOrElse(
+              throw NoSuchElementException(
+                s"Membership application ${parsedMembershipId.value} was not found in club ${parsedClubId.value}"
+              )
             )
+
+          if !ClubMembershipApplicationFunctions.isPending(application) then
+            throw IllegalArgumentException(
+              s"Membership application ${parsedMembershipId.value} has already been reviewed"
+            )
+
+          if club.members.contains(parsedPlayerId) then
+            throw IllegalArgumentException(
+              s"Player ${parsedPlayerId.value} is already a member of club ${parsedClubId.value}"
+            )
+
+          if !application.playerId.contains(parsedPlayerId) &&
+              !application.applicantUserId.contains(player.userId)
+          then
+            throw IllegalArgumentException(
+              s"Membership application ${parsedMembershipId.value} does not belong to player ${parsedPlayerId.value}"
+            )
+
+          val reviewer = actor.playerId.getOrElse(club.creator)
+          val updatedClub = ClubFunctions.addMember(
+            ClubFunctions.reviewApplication(club, parsedMembershipId, ClubMembershipApplicationFunctions.approve(_, reviewer, approvedAt, note)),
+            parsedPlayerId
           )
 
-        if !ClubMembershipApplicationFunctions.isPending(application) then
-          throw IllegalArgumentException(
-            s"Membership application ${parsedMembershipId.value} has already been reviewed"
-          )
-
-        if club.members.contains(parsedPlayerId) then
-          throw IllegalArgumentException(
-            s"Player ${parsedPlayerId.value} is already a member of club ${parsedClubId.value}"
-          )
-
-        if !application.playerId.contains(parsedPlayerId) &&
-            !application.applicantUserId.contains(player.userId)
-        then
-          throw IllegalArgumentException(
-            s"Membership application ${parsedMembershipId.value} does not belong to player ${parsedPlayerId.value}"
-          )
-
-        val reviewer = actor.playerId.getOrElse(club.creator)
-        val updatedClub = ClubFunctions.addMember(
-          ClubFunctions.reviewApplication(club, parsedMembershipId, ClubMembershipApplicationFunctions.approve(_, reviewer, approvedAt, note)),
-          parsedPlayerId
-        )
-
-        val savedPlayer = PlayerPersistenceFunctions.savePlayer(connection, PlayerClubBindingFunctions.joinClub(player, parsedClubId))
-        ClubProjectionRefresher.ensurePlayerDashboard(connection, savedPlayer.id, approvedAt)
-        riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, ClubProjectionRefresher.refreshClubProjection(connection, updatedClub, approvedAt))
-    }
+          for
+            savedPlayer <- SavePlayerPrivateAPIMessage(PlayerClubBindingFunctions.joinClub(player, parsedClubId)).plan(context)
+            _ <- ClubProjectionRefresher.ensurePlayerDashboard(context, savedPlayer.id, approvedAt)
+            refreshedClub <- ClubProjectionRefresher.refreshClubProjection(context, updatedClub, approvedAt)
+            savedClub <- IO.blocking(riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, refreshedClub))
+          yield Some(savedClub)
+        case _ =>
+          IO.pure(None)
+    yield savedClub
 
   def reject(
-      connection: Connection,
+      context: ApiPlanContext,
       parsedClubId: ClubId,
       parsedMembershipId: MembershipApplicationId,
       actor: AccessPrincipal,
       note: Option[String],
       rejectedAt: Instant
-  ): Option[Club] =
-    {
+  ): IO[Option[Club]] =
+    val connection = context.connection
+    IO.blocking {
       riichinexus.microservices.club.tables.clubs.ClubTable.findById(connection, parsedClubId).map { club =>
         ClubAuthorization.ensureClubActive(club)
         ClubAuthorization.requireClubCapability(          actor = actor,

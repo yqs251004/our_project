@@ -1,9 +1,8 @@
 package riichinexus.microservices.tournament.api.`private`
-import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
+import riichinexus.microservices.player.api.`private`.*
 
-import cats.effect.unsafe.implicits.global
+import cats.effect.IO
 import riichinexus.system.api.ApiPlanContext
-import java.sql.Connection
 
 import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
@@ -52,90 +51,90 @@ import riichinexus.microservices.tournament.tables.tournaments.TournamentTable
 
 object TournamentOperationViewAssembler:
   def mutationView(
-      connection: Connection,
+      context: ApiPlanContext,
       tournamentId: TournamentId,
       scheduledTables: Vector[Table]
-  ): Option[TournamentMutationView] =
-    detailView(connection, tournamentId).map(detail =>
+  ): IO[Option[TournamentMutationView]] =
+    detailView(context, tournamentId).map(_.map(detail =>
       TournamentMutationView(
         tournament = detail,
         scheduledTables = scheduledTables
           .sortBy(table => (table.stageRoundNumber, table.tableNo, table.id.value))
           .map(TournamentTableView.fromDomain)
       )
-    )
+    ))
 
   def detailView(
-      connection: Connection,
+      context: ApiPlanContext,
       tournamentId: TournamentId
-  ): Option[TournamentDetailView] =
-    TournamentTable.findById(connection, tournamentId).map(tournament =>
-      detailView(connection, tournament)
-    )
+  ): IO[Option[TournamentDetailView]] =
+    IO.blocking(TournamentTable.findById(context.connection, tournamentId)).flatMap {
+      case Some(tournament) => detailView(context, tournament).map(Some(_))
+      case None             => IO.pure(None)
+    }
 
   def detailView(
-      connection: Connection,
+      context: ApiPlanContext,
       tournament: Tournament
-  ): TournamentDetailView =
+  ): IO[TournamentDetailView] =
     val tournamentClubIds = relatedClubIds(tournament)
-    val clubsById = ResolveClubsPrivateAPIMessage(tournamentClubIds).plan(ApiPlanContext(bearerToken = None, connection = connection)).unsafeRunSync()
-      .map(club => club.id -> club)
-      .toMap
-    val participantIds = tournamentParticipantIds(tournament, clubsById)
-    val playerIdsForLookup = (
-      tournament.participatingClubs.distinct.flatMap(clubId => clubsById.get(clubId).toVector.flatMap(_.members)) ++
-        participantIds ++
-        tournament.stages.flatMap(_.lineupSubmissions.map(_.submittedBy))
-    ).distinct
-    val playersById = PlayerPersistenceFunctions.findPlayersByIds(connection, playerIdsForLookup.toVector.distinct)
-      .map(player => player.id -> player)
-      .toMap
+    for
+      clubs <- ResolveClubsPrivateAPIMessage(tournamentClubIds).plan(context)
+      clubsById = clubs.map(club => club.id -> club).toMap
+      participantIds = tournamentParticipantIds(tournament, clubsById)
+      playerIdsForLookup = (
+        tournament.participatingClubs.distinct.flatMap(clubId => clubsById.get(clubId).toVector.flatMap(_.members)) ++
+          participantIds ++
+          tournament.stages.flatMap(_.lineupSubmissions.map(_.submittedBy))
+      ).distinct
+      players <- ResolvePlayersPrivateAPIMessage(playerIdsForLookup.toVector.distinct).plan(context)
+      playersById = players.map(player => player.id -> player).toMap
+    yield
+      val participatingClubs = tournament.participatingClubs.distinct.flatMap { clubId =>
+        clubsById.get(clubId).map { club =>
+          TournamentParticipantClubView(
+            clubId = club.id,
+            memberCount = club.members.size
+          )
+        }
+      }.sortBy(_.clubId)
 
-    val participatingClubs = tournament.participatingClubs.distinct.flatMap { clubId =>
-      clubsById.get(clubId).map { club =>
-        TournamentParticipantClubView(
-          clubId = club.id,
-          memberCount = club.members.size
+      val participatingPlayers = participantIds.flatMap { playerId =>
+        playersById.get(playerId).map { player =>
+          TournamentParticipantPlayerView(
+            playerId = player.id,
+            nickname = player.nickname,
+            status = player.status,
+            elo = player.elo,
+            currentRank = player.currentRank,
+            clubIds = PlayerClubBindingFunctions.boundClubIds(player)
+          )
+        }
+      }.sortBy(player => (player.nickname, player.playerId))
+
+      val whitelistedClubIds = tournament.whitelist.flatMap(_.clubId).distinct.sortBy(_.value)
+      val whitelistedPlayerIds = tournament.whitelist.flatMap(_.playerId).distinct.sortBy(_.value)
+
+      TournamentDetailView(
+        tournamentId = tournament.id,
+        name = tournament.name,
+        organizer = tournament.organizer,
+        status = tournament.status,
+        startsAt = tournament.startsAt,
+        endsAt = tournament.endsAt,
+        participatingClubs = participatingClubs,
+        participatingPlayers = participatingPlayers,
+        whitelistSummary = TournamentWhitelistSummaryView(
+          totalEntries = tournament.whitelist.size,
+          clubCount = whitelistedClubIds.size,
+          playerCount = whitelistedPlayerIds.size,
+          clubIds = whitelistedClubIds.map(_.value),
+          playerIds = whitelistedPlayerIds.map(_.value)
+        ),
+        stages = tournament.stages.sortBy(_.order).map(stage =>
+          operationsStageView(stage, clubsById, playersById)
         )
-      }
-    }.sortBy(_.clubId)
-
-    val participatingPlayers = participantIds.flatMap { playerId =>
-      playersById.get(playerId).map { player =>
-        TournamentParticipantPlayerView(
-          playerId = player.id,
-          nickname = player.nickname,
-          status = player.status,
-          elo = player.elo,
-          currentRank = player.currentRank,
-          clubIds = PlayerClubBindingFunctions.boundClubIds(player)
-        )
-      }
-    }.sortBy(player => (player.nickname, player.playerId))
-
-    val whitelistedClubIds = tournament.whitelist.flatMap(_.clubId).distinct.sortBy(_.value)
-    val whitelistedPlayerIds = tournament.whitelist.flatMap(_.playerId).distinct.sortBy(_.value)
-
-    TournamentDetailView(
-      tournamentId = tournament.id,
-      name = tournament.name,
-      organizer = tournament.organizer,
-      status = tournament.status,
-      startsAt = tournament.startsAt,
-      endsAt = tournament.endsAt,
-      participatingClubs = participatingClubs,
-      participatingPlayers = participatingPlayers,
-      whitelistSummary = TournamentWhitelistSummaryView(
-        totalEntries = tournament.whitelist.size,
-        clubCount = whitelistedClubIds.size,
-        playerCount = whitelistedPlayerIds.size,
-        clubIds = whitelistedClubIds.map(_.value),
-        playerIds = whitelistedPlayerIds.map(_.value)
-      ),
-      stages = tournament.stages.sortBy(_.order).map(stage =>
-        operationsStageView(stage, clubsById, playersById)
       )
-    )
 
   private def operationsStageView(
       stage: TournamentStage,

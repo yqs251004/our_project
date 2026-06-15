@@ -2,10 +2,8 @@ package riichinexus.microservices.opsanalytics.api
 import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
-import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
+import riichinexus.microservices.player.api.`private`.*
 
-import cats.effect.unsafe.implicits.global
-import riichinexus.system.api.ApiPlanContext
 import java.time.Instant
 
 import cats.effect.IO
@@ -56,11 +54,11 @@ final case class OpsAnalyticsRecomputeAdvancedStatsAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[Vector[AdvancedStatsRecomputeTask]] =
     for
-      operator <- IO.blocking(ResolveAccessPrincipal(request.operatorId).resolve(context.connection))
+      operator <- ResolveAccessPrincipal(request.operatorId).plan(context)
       requestedAt <- IO.realTimeInstant
       command <- IO.blocking(resolveCommand(operator, requestedAt))
       _ <- requireOpsAdmin(context, command.operator)
-      tasks <- IO.blocking(enqueueRecompute(context.connection, command))
+      tasks <- enqueueRecompute(context, command)
     yield tasks
 
   private def resolveCommand(
@@ -104,30 +102,33 @@ final case class OpsAnalyticsRecomputeAdvancedStatsAPIMessage(
     }
 
   private def enqueueRecompute(
-      connection: java.sql.Connection,
+      context: ApiPlanContext,
       command: RecomputeAdvancedStatsCommand
-  ): Vector[AdvancedStatsRecomputeTask] =
+  ): IO[Vector[AdvancedStatsRecomputeTask]] =
+    val connection = context.connection
     command.targetOwner match
       case Some(owner) =>
-        Vector(
-          enqueueOwnerRecompute(
-            connection,
-            owner = owner,
-            reason = command.targetedReason,
-            requestedAt = command.requestedAt
+        IO.blocking(
+          Vector(
+            enqueueOwnerRecompute(
+              connection,
+              owner = owner,
+              reason = command.targetedReason,
+              requestedAt = command.requestedAt
+            )
           )
         )
       case None =>
         command.mode match
           case AdvancedStatsBackfillMode.Full =>
             enqueueFullRecompute(
-              connection,
+              context,
               requestedAt = command.requestedAt,
               reason = command.fullReason
             )
           case selectedMode =>
             enqueueBackfill(
-              connection,
+              context,
               mode = selectedMode,
               requestedAt = command.requestedAt,
               reason = command.backfillReason,
@@ -135,31 +136,45 @@ final case class OpsAnalyticsRecomputeAdvancedStatsAPIMessage(
             )
 
   private def enqueueFullRecompute(
-      connection: java.sql.Connection,
+      context: ApiPlanContext,
       requestedAt: Instant,
       reason: String
-  ): Vector[AdvancedStatsRecomputeTask] =
-    val owners =
-      PlayerPersistenceFunctions.findAllPlayers(connection).map(player => DashboardOwner.Player(player.id)) ++
-        ListClubsPrivateAPIMessage(activeOnly = true).plan(ApiPlanContext(bearerToken = None, connection = connection)).unsafeRunSync().map(club => DashboardOwner.Club(club.id))
+  ): IO[Vector[AdvancedStatsRecomputeTask]] =
+    val connection = context.connection
+    for
+      players <- ListAllPlayersPrivateAPIMessage().plan(context)
+      clubs <- ListClubsPrivateAPIMessage(activeOnly = true).plan(context)
+      tasks <- IO.blocking {
+        val owners =
+          players.map(player => DashboardOwner.Player(player.id)) ++
+            clubs.map(club => DashboardOwner.Club(club.id))
 
-    owners.distinct.map(owner => enqueueOwnerRecompute(connection, owner, reason, requestedAt))
+        owners.distinct.map(owner => enqueueOwnerRecompute(connection, owner, reason, requestedAt))
+      }
+    yield tasks
 
   private def enqueueBackfill(
-      connection: java.sql.Connection,
+      context: ApiPlanContext,
       mode: AdvancedStatsBackfillMode,
       requestedAt: Instant,
       reason: String,
       limit: Int
-  ): Vector[AdvancedStatsRecomputeTask] =
-    val owners =
-      PlayerPersistenceFunctions.findAllPlayers(connection).map(player => DashboardOwner.Player(player.id)) ++
-        ListClubsPrivateAPIMessage(activeOnly = true).plan(ApiPlanContext(bearerToken = None, connection = connection)).unsafeRunSync().map(club => DashboardOwner.Club(club.id))
+  ): IO[Vector[AdvancedStatsRecomputeTask]] =
+    val connection = context.connection
+    for
+      players <- ListAllPlayersPrivateAPIMessage().plan(context)
+      clubs <- ListClubsPrivateAPIMessage(activeOnly = true).plan(context)
+      tasks <- IO.blocking {
+        val owners =
+          players.map(player => DashboardOwner.Player(player.id)) ++
+            clubs.map(club => DashboardOwner.Club(club.id))
 
-    owners.distinct
-      .filter(owner => shouldBackfillOwner(connection, owner, mode))
-      .take(limit)
-      .map(owner => enqueueOwnerRecompute(connection, owner, reason, requestedAt))
+        owners.distinct
+          .filter(owner => shouldBackfillOwner(connection, owner, mode))
+          .take(limit)
+          .map(owner => enqueueOwnerRecompute(connection, owner, reason, requestedAt))
+      }
+    yield tasks
 
   private def enqueueOwnerRecompute(
       connection: java.sql.Connection,

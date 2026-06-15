@@ -1,5 +1,5 @@
 package riichinexus.microservices.opsanalytics.api.`private`
-import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
+import riichinexus.microservices.player.api.`private`.*
 
 import cats.effect.IO
 import java.time.Instant
@@ -41,12 +41,16 @@ final case class RecordClubDashboardAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[Dashboard] =
     for
-      memberDashboards <- IO.blocking {
-        club.members.flatMap { playerId =>
-          PlayerPersistenceFunctions.findPlayer(context.connection, playerId)
-            .filter(_.status == PlayerStatus.Active)
-            .flatMap(_ => DashboardTable.findByOwner(context.connection, DashboardOwner.Player(playerId)))
+      activeMemberIds <- club.members.foldLeft(IO.pure(Vector.empty[PlayerId])) { (previous, playerId) =>
+        previous.flatMap { ids =>
+          ResolvePlayerPrivateAPIMessage(playerId).plan(context).map {
+            case Some(player) if player.status == PlayerStatus.Active => ids :+ playerId
+            case _                                                    => ids
+          }
         }
+      }
+      memberDashboards <- IO.blocking {
+        activeMemberIds.flatMap(playerId => DashboardTable.findByOwner(context.connection, DashboardOwner.Player(playerId)))
       }
       existingVersion <- IO.blocking {
         DashboardTable.findByOwner(context.connection, DashboardOwner.Club(club.id)).map(_.version).getOrElse(0)

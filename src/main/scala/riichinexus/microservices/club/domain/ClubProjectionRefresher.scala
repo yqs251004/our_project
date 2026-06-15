@@ -1,11 +1,11 @@
 package riichinexus.microservices.club.domain
-import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
+import riichinexus.microservices.player.api.`private`.*
 
 import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.sql.Connection
 import java.time.Instant
 
-import cats.effect.unsafe.implicits.global
+import cats.effect.IO
 import riichinexus.system.api.ApiPlanContext
 import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
@@ -41,22 +41,16 @@ import riichinexus.microservices.opsanalytics.api.`private`.{
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 
 object ClubProjectionRefresher:
-  def ensurePlayerDashboard(connection: Connection, playerId: PlayerId, at: Instant): Unit =
+  def ensurePlayerDashboard(context: ApiPlanContext, playerId: PlayerId, at: Instant): IO[Unit] =
     EnsurePlayerDashboardAPIMessage(playerId, at)
-      .plan(apiContext(connection))
-      .unsafeRunSync()
+      .plan(context)
+      .map(_ => ())
 
-  def refreshClubProjection(connection: Connection, club: Club, at: Instant): Club =
-    val refreshedClub = ClubFunctions.updatePowerRating(club,
-      ClubPowerRatingService.calculate(club, findPlayer(connection))
-    )
-    RecordClubDashboardAPIMessage(refreshedClub, at)
-      .plan(apiContext(connection))
-      .unsafeRunSync()
-    refreshedClub
-
-  private def findPlayer(connection: Connection)(playerId: PlayerId): Option[Player] =
-    PlayerPersistenceFunctions.findPlayer(connection, playerId)
-
-  private def apiContext(connection: Connection): ApiPlanContext =
-    ApiPlanContext(bearerToken = None, connection = connection)
+  def refreshClubProjection(context: ApiPlanContext, club: Club, at: Instant): IO[Club] =
+    for
+      players <- ResolvePlayersPrivateAPIMessage(club.members.distinct).plan(context)
+      refreshedClub = ClubFunctions.updatePowerRating(club,
+        ClubPowerRatingService.calculate(club, players.map(player => player.id -> player).toMap.get)
+      )
+      _ <- RecordClubDashboardAPIMessage(refreshedClub, at).plan(context)
+    yield refreshedClub

@@ -43,7 +43,7 @@ final case class OpsAnalyticsPlayerDashboardAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[Dashboard] =
     for
-      operator <- IO.blocking(ResolveAccessPrincipal(operatorId).resolve(context.connection))
+      operator <- ResolveAccessPrincipal(operatorId).plan(context)
       _ <- requireDashboardPermission(context, operator)
       dashboard <- IO.blocking(findDashboard(context))
     yield dashboard

@@ -2,7 +2,7 @@ package riichinexus.microservices.club.api
 import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
-import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
+import riichinexus.microservices.player.api.`private`.*
 
 import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
@@ -57,7 +57,7 @@ final case class AddClubMemberAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
-      actor <- IO.blocking(resolveOperatorActor(context))
+      actor <- resolveOperatorActor(context)
       occurredAt <- IO.realTimeInstant
       command = AddClubMemberCommand(
         clubId = ClubId(clubId),
@@ -65,44 +65,44 @@ final case class AddClubMemberAPIMessage(
         actor = actor,
         occurredAt = occurredAt
       )
-      club <- IO.blocking {
-        {
-            addClubMember(context.connection, command)
-          }
-          .getOrElse(throw NoSuchElementException("Resource not found"))
-      }
+      club <- addClubMember(context, command).map(_.getOrElse(throw NoSuchElementException("Resource not found")))
     yield ClubView.fromDomain(club)
 
-  private def resolveOperatorActor(context: ApiPlanContext): AccessPrincipal =
+  private def resolveOperatorActor(context: ApiPlanContext): IO[AccessPrincipal] =
     operatorId.filter(_.nonEmpty)
-      .map(id => ResolveAccessPrincipal(PlayerId(id)).resolve(context.connection))
-      .getOrElse(AccessPrincipalFunctions.system)
+      .map(id => ResolveAccessPrincipal(PlayerId(id)).plan(context))
+      .getOrElse(IO.pure(AccessPrincipalFunctions.system))
 
   private def addClubMember(
-      connection: java.sql.Connection,
+      context: ApiPlanContext,
       command: AddClubMemberCommand
-  ): Option[Club] =
+  ): IO[Option[Club]] =
+    val connection = context.connection
     for
-      club <- riichinexus.microservices.club.tables.clubs.ClubTable.findById(connection, command.clubId)
-      player <- PlayerPersistenceFunctions.findPlayer(connection, command.playerId)
-    yield
-      ClubAuthorization.ensureClubActive(club)
-      requireActivePlayer(player, s"Player ${command.playerId.value} cannot join club ${command.clubId.value}")
-      ClubAuthorization.requireClubCapability(actor = command.actor,
-        club = club,
-        permission = Permission.ManageClubMembership,
-          delegatedPrivileges = Set(ClubPrivilegeCode.ApproveRoster)
-      )
-
-      val savedPlayer = PlayerPersistenceFunctions.savePlayer(connection, PlayerClubBindingFunctions.joinClub(player, command.clubId))
-      ClubProjectionRefresher.ensurePlayerDashboard(connection, savedPlayer.id, command.occurredAt)
-      riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, 
-        ClubProjectionRefresher.refreshClubProjection(
-          connection,
-          ClubFunctions.addMember(club, command.playerId),
-          command.occurredAt
-        )
-      )
+      club <- IO.blocking(riichinexus.microservices.club.tables.clubs.ClubTable.findById(connection, command.clubId))
+      player <- ResolvePlayerPrivateAPIMessage(command.playerId).plan(context)
+        .map(_.getOrElse(throw NoSuchElementException(s"Player ${command.playerId.value} was not found")))
+      savedClub <- club match
+        case None => IO.pure(None)
+        case Some(club) =>
+          ClubAuthorization.ensureClubActive(club)
+          requireActivePlayer(player, s"Player ${command.playerId.value} cannot join club ${command.clubId.value}")
+          ClubAuthorization.requireClubCapability(actor = command.actor,
+            club = club,
+            permission = Permission.ManageClubMembership,
+              delegatedPrivileges = Set(ClubPrivilegeCode.ApproveRoster)
+          )
+          for
+            savedPlayer <- SavePlayerPrivateAPIMessage(PlayerClubBindingFunctions.joinClub(player, command.clubId)).plan(context)
+            _ <- ClubProjectionRefresher.ensurePlayerDashboard(context, savedPlayer.id, command.occurredAt)
+            refreshedClub <- ClubProjectionRefresher.refreshClubProjection(
+              context,
+              ClubFunctions.addMember(club, command.playerId),
+              command.occurredAt
+            )
+            savedClub <- IO.blocking(riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, refreshedClub))
+          yield Some(savedClub)
+    yield savedClub
 
   private def requireActivePlayer(player: Player, context: String): Unit =
     if player.status != PlayerStatus.Active then
@@ -114,3 +114,4 @@ final case class AddClubMemberAPIMessage(
       actor: AccessPrincipal,
       occurredAt: Instant
   )
+

@@ -1,5 +1,5 @@
 package riichinexus.microservices.tournament.api
-import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
+import riichinexus.microservices.player.api.`private`.*
 
 import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
@@ -63,11 +63,7 @@ final case class TournamentCreateAPIMessage(
   override def plan(context: ApiPlanContext): IO[TournamentSummaryView] =
     for
       input <- IO.blocking(resolveInput)
-      tournament <- IO.blocking {
-        {
-          createTournament(context.connection, input)
-        }
-      }
+      tournament <- createTournament(context, input)
     yield TournamentSummaryView.fromDomain(tournament)
 
   private def resolveInput: CreateTournamentInput =
@@ -134,17 +130,21 @@ final case class TournamentCreateAPIMessage(
     else None
 
   private def createTournament(
-      connection: java.sql.Connection,
+      context: ApiPlanContext,
       input: CreateTournamentInput
-  ): Tournament =
-    validateRequest(input)
-    val normalizedStages = resolveNormalizedStages(input.stages)
-    val adminPlayer = resolveAdminPlayer(connection, input.admin)
-    ensureTournamentDoesNotExist(connection, input)
-    val baseTournament = buildTournament(input, normalizedStages)
-    val tournament = assignAdmin(baseTournament, input.admin)
-    grantAdminRole(connection, tournament, input, adminPlayer)
-    saveTournament(connection, tournament)
+  ): IO[Tournament] =
+    for
+      _ <- IO.blocking(validateRequest(input))
+      normalizedStages <- IO.blocking(resolveNormalizedStages(input.stages))
+      adminPlayer <- resolveAdminPlayer(context, input.admin)
+      tournament <- IO.blocking {
+        ensureTournamentDoesNotExist(context.connection, input)
+        val baseTournament = buildTournament(input, normalizedStages)
+        assignAdmin(baseTournament, input.admin)
+      }
+      _ <- grantAdminRole(context, tournament, input, adminPlayer)
+      savedTournament <- IO.blocking(saveTournament(context.connection, tournament))
+    yield savedTournament
 
   private def validateRequest(input: CreateTournamentInput): Unit =
     require(input.name.trim.nonEmpty, "Tournament name cannot be empty")
@@ -159,15 +159,19 @@ final case class TournamentCreateAPIMessage(
     normalizedStages
 
   private def resolveAdminPlayer(
-      connection: java.sql.Connection,
+      context: ApiPlanContext,
       admin: Option[PlayerId]
-  ): Option[Player] =
-    admin.map { targetAdminId =>
-      val player = PlayerPersistenceFunctions.findPlayer(connection, targetAdminId)
-        .getOrElse(throw NoSuchElementException(s"Player ${targetAdminId.value} was not found"))
-      requireActivePlayer(player, s"Player ${targetAdminId.value} cannot administer tournaments")
-      player
-    }
+  ): IO[Option[Player]] =
+    admin match
+      case Some(targetAdminId) =>
+        ResolvePlayerPrivateAPIMessage(targetAdminId)
+          .plan(context)
+          .map(_.getOrElse(throw NoSuchElementException(s"Player ${targetAdminId.value} was not found")))
+          .flatMap { player =>
+            IO.blocking(requireActivePlayer(player, s"Player ${targetAdminId.value} cannot administer tournaments"))
+              .as(Some(player))
+          }
+      case None => IO.pure(None)
 
   private def ensureTournamentDoesNotExist(
       connection: java.sql.Connection,
@@ -199,20 +203,20 @@ final case class TournamentCreateAPIMessage(
     admin.fold(tournament)(playerId => TournamentFunctions.assignAdmin(tournament, playerId))
 
   private def grantAdminRole(
-      connection: java.sql.Connection,
+      context: ApiPlanContext,
       tournament: Tournament,
       input: CreateTournamentInput,
       adminPlayer: Option[Player]
-  ): Unit =
-    adminPlayer.foreach { player =>
-      PlayerPersistenceFunctions.savePlayer(
-        connection,
-        PlayerRoleFunctions.grantRole(
-          player,
-          RoleGrantFunctions.tournamentAdmin(tournament.id, input.startsAt, AccessPrincipalFunctions.system.playerId)
-        )
-      )
-    }
+  ): IO[Unit] =
+    adminPlayer match
+      case Some(player) =>
+        SavePlayerPrivateAPIMessage(
+          PlayerRoleFunctions.grantRole(
+            player,
+            RoleGrantFunctions.tournamentAdmin(tournament.id, input.startsAt, AccessPrincipalFunctions.system.playerId)
+          )
+        ).plan(context).map(_ => ())
+      case None => IO.unit
 
   private def saveTournament(
       connection: java.sql.Connection,

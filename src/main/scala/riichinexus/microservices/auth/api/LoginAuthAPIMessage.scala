@@ -1,10 +1,9 @@
 package riichinexus.microservices.auth.api
-import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
+import riichinexus.microservices.player.api.`private`.*
 
 import java.time.Instant
 
 import cats.effect.IO
-import cats.effect.unsafe.implicits.global
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
@@ -49,11 +48,7 @@ final case class LoginAuthAPIMessage(
     for
       loginAt <- IO.realTimeInstant
       command = LoginCommand(AccountCredentialFunctions.normalizeUsername(username), password, loginAt)
-      result <- IO.blocking {
-        {
-          login(context, command)
-        }
-      }
+      result <- login(context, command)
     yield AuthSuccessView(
       userId = result.player.id.value,
       username = result.credential.username,
@@ -62,28 +57,33 @@ final case class LoginAuthAPIMessage(
       roles = registeredRoleFlags(result.player)
     )
 
-  private def login(context: ApiPlanContext, command: LoginCommand): LoginResult =
+  private def login(context: ApiPlanContext, command: LoginCommand): IO[LoginResult] =
     val connection = context.connection
-    require(command.password.nonEmpty, "Password is required")
-    val credential = AccountCredentialTable.findByUsername(connection, command.username)
-      .getOrElse(throw AuthenticationFailure("Invalid username or password", "invalid_credentials"))
-    if !PasswordHashFunctions.verify(command.password, credential) then
-      throw AuthenticationFailure("Invalid username or password", "invalid_credentials")
-
-    val player = PlayerPersistenceFunctions.findPlayer(context.connection, credential.playerId)
-      .getOrElse(throw AuthenticationFailure(s"Player ${credential.playerId.value} was not found", "invalid_credentials"))
-    ensureActivePlayer(player)
-
-    val session = AuthenticatedSessionTable.save(
-      connection,
-      AuthenticatedSessionFunctions.create(
-        username = credential.username,
-        playerId = credential.playerId,
-        createdAt = command.loginAt,
-        ttl = SessionTtl
+    for
+      credential <- IO.blocking {
+        require(command.password.nonEmpty, "Password is required")
+        val credential = AccountCredentialTable.findByUsername(connection, command.username)
+          .getOrElse(throw AuthenticationFailure("Invalid username or password", "invalid_credentials"))
+        if !PasswordHashFunctions.verify(command.password, credential) then
+          throw AuthenticationFailure("Invalid username or password", "invalid_credentials")
+        credential
+      }
+      player <- ResolvePlayerPrivateAPIMessage(credential.playerId).plan(context).map(
+        _.getOrElse(throw AuthenticationFailure(s"Player ${credential.playerId.value} was not found", "invalid_credentials"))
       )
-    )
-    LoginResult(credential, player, session)
+      _ <- IO.blocking(ensureActivePlayer(player))
+      session <- IO.blocking(
+        AuthenticatedSessionTable.save(
+          connection,
+          AuthenticatedSessionFunctions.create(
+            username = credential.username,
+            playerId = credential.playerId,
+            createdAt = command.loginAt,
+            ttl = SessionTtl
+          )
+        )
+      )
+    yield LoginResult(credential, player, session)
 
   private def ensureActivePlayer(player: Player): Unit =
     if player.status != PlayerStatus.Active then

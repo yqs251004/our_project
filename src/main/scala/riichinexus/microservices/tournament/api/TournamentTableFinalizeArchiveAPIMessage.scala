@@ -30,7 +30,7 @@ final case class TournamentTableFinalizeArchiveAPIMessage(
   override def plan(context: ApiPlanContext): IO[TournamentTableView] =
     val archivedAt = Instant.now()
     for
-      actor <- IO.blocking(ResolveAccessPrincipal(PlayerId(operatorId)).resolve(context.connection))
+      actor <- ResolveAccessPrincipal(PlayerId(operatorId)).plan(context)
       appealPage <- AppealListAPIMessage(
         AppealListQuery(
           tableId = Some(TableId(tableId)),
@@ -38,28 +38,17 @@ final case class TournamentTableFinalizeArchiveAPIMessage(
           offset = Some(0)
         )
       ).plan(context)
-      archived <- IO.blocking {
-        val table = TournamentGameTable.findById(context.connection, TableId(tableId))
-          .getOrElse(throw NoSuchElementException("Resource not found"))
-
-        AuthorizationPolicyFunctions.requirePermission(
-          AuthorizationPolicyFunctions.strict,
-          actor,
-          Permission.ManageTournamentStages,
-          tournamentId = Some(table.tournamentId)
+      archived <- finalizeArchive(
+        context,
+        actor,
+        TableId(tableId),
+        archivedAt,
+        activeAppealExists = appealPage.items.exists(appeal =>
+          appeal.status == AppealViewStatus.Open ||
+            appeal.status == AppealViewStatus.UnderReview ||
+            appeal.status == AppealViewStatus.Escalated
         )
-
-        finalizeArchive(
-          context.connection,
-          table,
-          archivedAt,
-          activeAppealExists = appealPage.items.exists(appeal =>
-            appeal.status == AppealViewStatus.Open ||
-              appeal.status == AppealViewStatus.UnderReview ||
-              appeal.status == AppealViewStatus.Escalated
-          )
-        )
-      }
+      )
       _ <- RefreshOpsAnalyticsAfterMatchArchivedPrivateAPIMessage(
         matchRecord = archived.matchRecord,
         occurredAt = archived.matchRecord.generatedAt
@@ -67,36 +56,49 @@ final case class TournamentTableFinalizeArchiveAPIMessage(
     yield TournamentTableView.fromDomain(archived.table)
 
   private def finalizeArchive(
-      connection: java.sql.Connection,
-      table: Table,
+      context: ApiPlanContext,
+      actor: riichinexus.microservices.auth.domain.model.AccessPrincipal,
+      tableId: TableId,
       archivedAt: Instant,
       activeAppealExists: Boolean
-  ): ArchivedTable =
-    require(table.status == TableStatus.Scoring, s"Only scoring table ${table.id.value} can be archived")
-    require(
-      !activeAppealExists,
-      s"Table ${table.id.value} cannot be archived while appeals are active"
-    )
+  ): IO[ArchivedTable] =
+    for
+      archived <- IO.blocking {
+        val table = TournamentGameTable.findById(context.connection, tableId)
+          .getOrElse(throw NoSuchElementException("Resource not found"))
+        AuthorizationPolicyFunctions.requirePermission(
+          AuthorizationPolicyFunctions.strict,
+          actor,
+          Permission.ManageTournamentStages,
+          tournamentId = Some(table.tournamentId)
+        )
+        require(table.status == TableStatus.Scoring, s"Only scoring table ${table.id.value} can be archived")
+        require(
+          !activeAppealExists,
+          s"Table ${table.id.value} cannot be archived while appeals are active"
+        )
 
-    val recordId = table.matchRecordId
-      .getOrElse(throw IllegalArgumentException(s"Table ${table.id.value} has no match record to archive"))
-    val paifuId = table.paifuId
-      .getOrElse(throw IllegalArgumentException(s"Table ${table.id.value} has no paifu to archive"))
-    val record = MatchRecordTable.findById(connection, recordId)
-      .getOrElse(throw NoSuchElementException(s"Match record ${recordId.value} was not found"))
+        val recordId = table.matchRecordId
+          .getOrElse(throw IllegalArgumentException(s"Table ${table.id.value} has no match record to archive"))
+        val paifuId = table.paifuId
+          .getOrElse(throw IllegalArgumentException(s"Table ${table.id.value} has no paifu to archive"))
+        val record = MatchRecordTable.findById(context.connection, recordId)
+          .getOrElse(throw NoSuchElementException(s"Match record ${recordId.value} was not found"))
 
-    val archivedTable = TournamentGameTable.save(
-      connection,
-      TableFunctions.archive(
-        table,
-        recordId = recordId,
-        paifuId = paifuId,
-        at = archivedAt,
-        note = Some("archived after appeal review")
-      )
-    )
-    TournamentStageTableScheduler.progressAfterTableArchived(connection, archivedTable, archivedAt)
-    ArchivedTable(archivedTable, record)
+        val archivedTable = TournamentGameTable.save(
+          context.connection,
+          TableFunctions.archive(
+            table,
+            recordId = recordId,
+            paifuId = paifuId,
+            at = archivedAt,
+            note = Some("archived after appeal review")
+          )
+        )
+        ArchivedTable(archivedTable, record)
+      }
+      _ <- TournamentStageTableScheduler.progressAfterTableArchived(context.connection, archived.table, archivedAt)
+    yield archived
 
   private final case class ArchivedTable(
       table: Table,

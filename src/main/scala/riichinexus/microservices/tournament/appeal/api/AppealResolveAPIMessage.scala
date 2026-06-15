@@ -54,11 +54,11 @@ final case class AppealResolveAPIMessage(
   override def plan(context: ApiPlanContext): IO[AppealTicketView] =
     for
       resolved <- IO.blocking(resolveInput)
-      actor <- IO.blocking(ResolveAccessPrincipal(PlayerId(resolved.operatorId)).resolve(context.connection))
+      actor <- ResolveAccessPrincipal(PlayerId(resolved.operatorId)).plan(context)
       resolvedAt <- IO.realTimeInstant
       service = AppealApplicationService(AuthorizationPolicyFunctions.strict)
       command = ResolveAppealCommand(AppealTicketId(appealId), resolved, actor, resolvedAt)
-      ticket <- IO.blocking(resolveAppeal(context.connection, service, command))
+      ticket <- resolveAppeal(context.connection, service, command)
       _ <- RecordAuditEventsPrivateAPIMessage(resolveAppealAudit(ticket, command)).plan(context)
       _ <- CreateBulkNotificationsPrivateAPIMessage(
         AppealNotificationRequests.appealAdjudicated(
@@ -78,7 +78,7 @@ final case class AppealResolveAPIMessage(
       connection: java.sql.Connection,
       service: AppealApplicationService,
       command: ResolveAppealCommand
-  ): AppealTicket =
+  ): IO[AppealTicket] =
     service.resolveAppeal(
       connection = connection,
       ticketId = command.ticketId,
@@ -86,7 +86,7 @@ final case class AppealResolveAPIMessage(
       actor = command.actor,
       resolvedAt = command.resolvedAt,
       note = command.input.note
-    ).getOrElse(throw NoSuchElementException("Resource not found"))
+    ).map(_.getOrElse(throw NoSuchElementException("Resource not found")))
 
   private def resolveAppealAudit(
       ticket: AppealTicket,

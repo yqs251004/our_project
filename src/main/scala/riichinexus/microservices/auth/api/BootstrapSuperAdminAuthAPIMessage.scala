@@ -15,7 +15,8 @@ import riichinexus.microservices.auth.security.PasswordSaltGenerator
 import riichinexus.microservices.auth.tables.accountcredential.AccountCredentialTable
 import riichinexus.microservices.auth.tables.authenticatedsession.AuthenticatedSessionTable
 import riichinexus.microservices.player.domain.Player
-import riichinexus.microservices.player.domain.functions.{PlayerPersistenceFunctions, PlayerRoleFunctions}
+import riichinexus.microservices.player.api.`private`.*
+import riichinexus.microservices.player.domain.functions.PlayerRoleFunctions
 import riichinexus.microservices.player.objects.{PlayerStatus, RankPlatform, RankSnapshot}
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import upickle.default.*
@@ -43,7 +44,7 @@ final case class BootstrapSuperAdminAuthAPIMessage(
         displayName = normalizeDisplayName(displayName),
         initializedAt = initializedAt
       )
-      result <- IO.blocking(initializeSuperAdmin(context, command))
+      result <- initializeSuperAdmin(context, command)
     yield AuthSuccessView(
       userId = result.player.id.value,
       username = result.username,
@@ -55,53 +56,55 @@ final case class BootstrapSuperAdminAuthAPIMessage(
   private def initializeSuperAdmin(
       context: ApiPlanContext,
       command: BootstrapSuperAdminAuthCommand
-  ): BootstrapSuperAdminAuthResult =
+  ): IO[BootstrapSuperAdminAuthResult] =
     val connection = context.connection
-    validateBootstrapKey(command.bootstrapKey)
-    ensureNoSuperAdmin(connection)
-    validatePassword(command.password)
-    if AccountCredentialTable.findByUsername(connection, command.username).nonEmpty then
-      throw IllegalArgumentException("Username " + command.username + " is already registered")
-
-    val player = resolveRegisteredPlayer(context, command)
-    ensureActivePlayer(player)
-    saveCredential(connection, command, player)
-    val superAdminPlayer = PlayerPersistenceFunctions.savePlayer(
-      connection,
-      PlayerRoleFunctions.grantRole(
-        player,
-        RoleGrantFunctions.superAdmin(command.initializedAt, None)
+    for
+      _ <- IO.blocking {
+        validateBootstrapKey(command.bootstrapKey)
+        validatePassword(command.password)
+        if AccountCredentialTable.findByUsername(connection, command.username).nonEmpty then
+          throw IllegalArgumentException("Username " + command.username + " is already registered")
+      }
+      _ <- ensureNoSuperAdmin(context)
+      player <- resolveRegisteredPlayer(context, command)
+      _ <- IO.blocking {
+        ensureActivePlayer(player)
+        saveCredential(connection, command, player)
+      }
+      superAdminPlayer <- SavePlayerPrivateAPIMessage(
+        PlayerRoleFunctions.grantRole(
+          player,
+          RoleGrantFunctions.superAdmin(command.initializedAt, None)
+        )
+      ).plan(context)
+      session <- IO.blocking(
+        AuthenticatedSessionTable.save(
+          connection,
+          AuthenticatedSessionFunctions.create(
+            username = command.username,
+            playerId = superAdminPlayer.id,
+            createdAt = command.initializedAt,
+            ttl = SessionTtl
+          )
+        )
       )
-    )
-    val session = AuthenticatedSessionTable.save(
-      connection,
-      AuthenticatedSessionFunctions.create(
-        username = command.username,
-        playerId = superAdminPlayer.id,
-        createdAt = command.initializedAt,
-        ttl = SessionTtl
-      )
-    )
-    BootstrapSuperAdminAuthResult(command.username, superAdminPlayer, session)
+    yield BootstrapSuperAdminAuthResult(command.username, superAdminPlayer, session)
 
   private def resolveRegisteredPlayer(
       context: ApiPlanContext,
       command: BootstrapSuperAdminAuthCommand
-  ): Player =
-    PlayerPersistenceFunctions.findAllPlayers(context.connection).find(_.userId.equalsIgnoreCase(command.username)) match
-      case Some(existing) if existing.nickname == command.displayName =>
-        existing
-      case Some(existing) =>
-        PlayerPersistenceFunctions.savePlayer(context.connection, existing.copy(nickname = command.displayName))
-      case None =>
-        PlayerPersistenceFunctions.createPlayer(
-          connection = context.connection,
-          userId = command.username,
-          nickname = command.displayName,
-          rank = DefaultRank,
-          registeredAt = command.initializedAt,
-          initialElo = 1500
-        )
+  ): IO[Player] =
+    ListAllPlayersPrivateAPIMessage()
+      .plan(context)
+      .flatMap { players =>
+        players.find(_.userId.equalsIgnoreCase(command.username)) match
+          case Some(existing) if existing.nickname == command.displayName =>
+            IO.pure(existing)
+          case Some(existing) =>
+            SavePlayerPrivateAPIMessage(existing.copy(nickname = command.displayName)).plan(context)
+          case None =>
+            CreatePlayerPrivateAPIMessage(command.username, command.displayName, DefaultRank, command.initializedAt, 1500).plan(context)
+      }
 
   private def saveCredential(
       connection: Connection,
@@ -134,9 +137,11 @@ final case class BootstrapSuperAdminAuthAPIMessage(
     if value != configuredBootstrapKey then
       throw AuthenticationFailure("Invalid super admin bootstrap key", "invalid_bootstrap_key")
 
-  private def ensureNoSuperAdmin(connection: Connection): Unit =
-    if PlayerPersistenceFunctions.findAllPlayers(connection).exists(_.roleGrants.exists(_.role == Role.SuperAdmin)) then
-      throw AuthorizationFailure("Super admin has already been initialized")
+  private def ensureNoSuperAdmin(context: ApiPlanContext): IO[Unit] =
+    ListAllPlayersPrivateAPIMessage().plan(context).map { players =>
+      if players.exists(_.roleGrants.exists(_.role == Role.SuperAdmin)) then
+        throw AuthorizationFailure("Super admin has already been initialized")
+    }
 
   private def normalizeDisplayName(displayName: String): String =
     Option(displayName)

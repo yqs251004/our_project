@@ -6,7 +6,6 @@ import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
 import java.util.NoSuchElementException
 
 import cats.effect.IO
-import cats.effect.unsafe.implicits.global
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
@@ -61,37 +60,31 @@ final case class DeclineClubTournamentAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[TournamentMutationView] =
     for
-      actor <- IO.blocking(resolveOperatorActor(context))
+      actor <- resolveOperatorActor(context)
       command = DeclineClubTournamentCommand(
         clubId = ClubId(clubId),
         tournamentId = TournamentId(tournamentId),
         actor = actor
       )
-      _ <- IO.blocking {
-        {
-          declineTournament(context.connection, command)
-        }
-      }
-      view <- IO.blocking {
-        TournamentOperationViewAssembler.mutationView(context.connection, command.tournamentId, Vector.empty)
-        .getOrElse(throw NoSuchElementException("Resource not found"))
-      }
+      _ <- declineTournament(context, command)
+      view <- TournamentOperationViewAssembler.mutationView(context, command.tournamentId, Vector.empty)
+        .map(_.getOrElse(throw NoSuchElementException("Resource not found")))
     yield view
 
-  private def resolveOperatorActor(context: ApiPlanContext): AccessPrincipal =
+  private def resolveOperatorActor(context: ApiPlanContext): IO[AccessPrincipal] =
     operatorId.filter(_.nonEmpty)
-      .map(id => ResolveAccessPrincipal(PlayerId(id)).resolve(context.connection))
+      .map(id => ResolveAccessPrincipal(PlayerId(id)).plan(context))
       .getOrElse(throw IllegalArgumentException("operatorId is required"))
 
   private def declineTournament(
-      connection: java.sql.Connection,
+      context: ApiPlanContext,
       command: DeclineClubTournamentCommand
-  ): Unit =
-    val club = resolveActiveClub(connection, command.clubId)
-    requireClubLineupCapability(command.actor, club)
-    DeclineClubTournamentPrivateAPIMessage(command.tournamentId, command.clubId)
-      .plan(ApiPlanContext(bearerToken = None, connection = connection))
-      .unsafeRunSync()
+  ): IO[Unit] =
+    for
+      club <- IO.blocking(resolveActiveClub(context.connection, command.clubId))
+      _ <- IO.blocking(requireClubLineupCapability(command.actor, club))
+      _ <- DeclineClubTournamentPrivateAPIMessage(command.tournamentId, command.clubId).plan(context)
+    yield ()
 
   private def resolveActiveClub(connection: java.sql.Connection, clubId: ClubId): Club =
     riichinexus.microservices.club.tables.clubs.ClubTable
@@ -118,3 +111,4 @@ final case class DeclineClubTournamentAPIMessage(
       tournamentId: TournamentId,
       actor: AccessPrincipal
   )
+

@@ -2,7 +2,7 @@ package riichinexus.microservices.club.api
 import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
-import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
+import riichinexus.microservices.player.api.`private`.*
 
 import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
@@ -63,7 +63,7 @@ final case class SubmitClubApplicationAPIMessage(
       actor <- ResolveRequestActor(None, request.operatorId.map(PlayerId(_))).plan(context)
       parsedClubId = ClubId(clubId)
       submittedAt <- IO.realTimeInstant
-      resolvedInput <- IO.blocking(resolveApplicantInput(context.connection, actor, request))
+      resolvedInput <- resolveApplicantInput(context, actor, request)
       command = SubmitClubApplicationCommand(
         actor = actor,
         clubId = parsedClubId,
@@ -71,53 +71,57 @@ final case class SubmitClubApplicationAPIMessage(
         input = resolvedInput,
         message = request.message
       )
-      application <- IO.blocking {
-        {
-          submitApplication(context.connection, command)
-        }
-      }
+      application <- submitApplication(context, command)
       _ <- RecordAuditEventPrivateAPIMessage(submitApplicationAudit(command, application)).plan(context)
       notificationRequests <- IO.blocking(submitApplicationNotifications(context.connection, command, application))
       _ <- CreateBulkNotificationsPrivateAPIMessage(notificationRequests).plan(context)
     yield ClubMembershipApplicationResponse.fromDomain(application)
 
   private def resolveApplicantInput(
-      connection: java.sql.Connection,
+      context: ApiPlanContext,
       actor: AccessPrincipal,
       request: ClubMembershipApplicationRequest
-  ): ResolvedClubApplicationInput =
-    val operatorPlayer = request.operatorId.filter(_.nonEmpty)
-      .flatMap(id => PlayerPersistenceFunctions.findPlayer(connection, PlayerId(id)))
+  ): IO[ResolvedClubApplicationInput] =
     val playerId = actor.playerId
       .getOrElse(throw AuthorizationFailure("Only registered players can apply to clubs"))
-    val displayName = operatorPlayer.map(_.nickname).getOrElse(request.displayName)
-    ResolvedClubApplicationInput(
-      playerId = playerId,
-      displayName = displayName
-    )
+    request.operatorId.filter(_.nonEmpty)
+      .map(id => ResolvePlayerPrivateAPIMessage(PlayerId(id)).plan(context))
+      .getOrElse(IO.pure(None))
+      .map { operatorPlayer =>
+        ResolvedClubApplicationInput(
+          playerId = playerId,
+          displayName = operatorPlayer.map(_.nickname).getOrElse(request.displayName)
+        )
+      }
 
   private def submitApplication(
-      connection: java.sql.Connection,
+      context: ApiPlanContext,
       command: SubmitClubApplicationCommand
-  ): ClubMembershipApplication =
-    AuthorizationPolicyFunctions.requirePermission(AuthorizationPolicyFunctions.strict, command.actor, Permission.SubmitClubApplication)
-    val club = riichinexus.microservices.club.tables.clubs.ClubTable.findById(connection, command.clubId)
-      .getOrElse(throw NoSuchElementException("Resource not found"))
-    validateSubmission(connection, club, command)
-    val application = createApplication(command)
-    riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, ClubFunctions.submitApplication(club, application))
-    application
+  ): IO[ClubMembershipApplication] =
+    val connection = context.connection
+    for
+      applicantPlayer <- ResolvePlayerPrivateAPIMessage(command.input.playerId).plan(context)
+      application <- IO.blocking {
+        AuthorizationPolicyFunctions.requirePermission(AuthorizationPolicyFunctions.strict, command.actor, Permission.SubmitClubApplication)
+        val club = riichinexus.microservices.club.tables.clubs.ClubTable.findById(connection, command.clubId)
+          .getOrElse(throw NoSuchElementException("Resource not found"))
+        validateSubmission(club, command, applicantPlayer)
+        val application = createApplication(command)
+        riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, ClubFunctions.submitApplication(club, application))
+        application
+      }
+    yield application
 
   private def validateSubmission(
-      connection: java.sql.Connection,
       club: Club,
-      command: SubmitClubApplicationCommand
+      command: SubmitClubApplicationCommand,
+      applicantPlayer: Option[Player]
   ): Unit =
     ClubAuthorization.ensureClubActive(club)
     ensureApplicationsOpen(club, command.clubId)
     ensureDisplayNameNonEmpty(command.input.displayName)
-    ensureNoPendingApplication(connection, club, command)
-    ensureApplicantNotAlreadyMember(connection, command)
+    ensureNoPendingApplication(club, command, applicantPlayer)
+    ensureApplicantNotAlreadyMember(command, applicantPlayer)
 
   private def ensureApplicationsOpen(club: Club, clubId: ClubId): Unit =
     if !club.recruitmentPolicy.applicationsOpen then
@@ -128,16 +132,15 @@ final case class SubmitClubApplicationAPIMessage(
       throw IllegalArgumentException("Membership application display name cannot be empty")
 
   private def ensureNoPendingApplication(
-      connection: java.sql.Connection,
       club: Club,
-      command: SubmitClubApplicationCommand
+      command: SubmitClubApplicationCommand,
+      applicantPlayer: Option[Player]
   ): Unit =
     val playerId = command.input.playerId
-    val player = PlayerPersistenceFunctions.findPlayer(connection, playerId)
     if club.membershipApplications.exists(application =>
         ClubMembershipApplicationFunctions.isPending(application) &&
           (application.playerId.contains(playerId) ||
-            player.exists(existing => application.applicantUserId.contains(existing.userId)))
+            applicantPlayer.exists(existing => application.applicantUserId.contains(existing.userId)))
       )
     then
       throw IllegalArgumentException(
@@ -145,10 +148,10 @@ final case class SubmitClubApplicationAPIMessage(
       )
 
   private def ensureApplicantNotAlreadyMember(
-      connection: java.sql.Connection,
-      command: SubmitClubApplicationCommand
+      command: SubmitClubApplicationCommand,
+      applicantPlayer: Option[Player]
   ): Unit =
-    PlayerPersistenceFunctions.findPlayer(connection, command.input.playerId).foreach { existingPlayer =>
+    applicantPlayer.foreach { existingPlayer =>
       if PlayerClubBindingFunctions.boundClubIds(existingPlayer).contains(command.clubId) then
         throw IllegalArgumentException(
           s"Player ${existingPlayer.id.value} is already a member of club ${command.clubId.value}"

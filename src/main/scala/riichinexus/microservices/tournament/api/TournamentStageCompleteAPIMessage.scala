@@ -43,17 +43,12 @@ final case class TournamentStageCompleteAPIMessage(
   override def plan(context: ApiPlanContext): IO[StageAdvancementSnapshot] =
     for
       completedAt <- IO.realTimeInstant
-      actor = operatorId.filter(_.nonEmpty).map(PlayerId(_)).map(ResolveAccessPrincipal(_).resolve(context.connection)).getOrElse(AccessPrincipalFunctions.system)
-      advancement <- IO.blocking {
-        {
-            TournamentStageCompletionCoordinator(AuthorizationPolicyFunctions.strict).completeStage(
-              connection = context.connection,
-              tournamentId = TournamentId(tournamentId),
-              stageId = TournamentStageId(stageId),
-              actor = actor,
-              completedAt = completedAt
-            )
-          }
-          .getOrElse(throw NoSuchElementException("Resource not found"))
-      }
+      actor <- operatorId.filter(_.nonEmpty).map(PlayerId(_)).map(ResolveAccessPrincipal(_).plan(context)).getOrElse(IO.pure(AccessPrincipalFunctions.system))
+      advancement <- TournamentStageCompletionCoordinator(AuthorizationPolicyFunctions.strict).completeStage(
+        connection = context.connection,
+        tournamentId = TournamentId(tournamentId),
+        stageId = TournamentStageId(stageId),
+        actor = actor,
+        completedAt = completedAt
+      ).map(_.getOrElse(throw NoSuchElementException("Resource not found")))
     yield advancement

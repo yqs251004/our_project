@@ -4,7 +4,7 @@ import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
 import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPIMessage
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
-import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
+import riichinexus.microservices.player.api.`private`.*
 
 import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.time.Instant
@@ -59,7 +59,7 @@ final case class AdjustClubMemberContributionAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
-      actor <- IO.blocking(ResolveAccessPrincipal(PlayerId(operatorId)).resolve(context.connection))
+      actor <- ResolveAccessPrincipal(PlayerId(operatorId)).plan(context)
       occurredAt <- IO.realTimeInstant
       command = AdjustClubMemberContributionCommand(
         clubId = ClubId(clubId),
@@ -69,27 +69,28 @@ final case class AdjustClubMemberContributionAPIMessage(
         note = note,
         occurredAt = occurredAt
       )
-      savedClub <- IO.blocking {
-        {
-          adjustMemberContribution(context.connection, command)
-        }.getOrElse(throw NoSuchElementException("Resource not found"))
-      }
+      savedClub <- adjustMemberContribution(context, command).map(_.getOrElse(throw NoSuchElementException("Resource not found")))
       _ <- RecordAuditEventsPrivateAPIMessage(adjustMemberContributionAudit(savedClub, command)).plan(context)
       _ <- CreateNotificationPrivateAPIMessage(adjustMemberContributionNotification(savedClub, command)).plan(context)
     yield ClubView.fromDomain(savedClub)
 
   private def adjustMemberContribution(
-      connection: java.sql.Connection,
+      context: ApiPlanContext,
       command: AdjustClubMemberContributionCommand
-  ): Option[Club] =
+  ): IO[Option[Club]] =
+    val connection = context.connection
     for
-      club <- riichinexus.microservices.club.tables.clubs.ClubTable.findById(connection, command.clubId)
-      player <- PlayerPersistenceFunctions.findPlayer(connection, command.playerId)
-    yield
-      ensureContributionCanBeAdjusted(club, player, command)
-      val nextContribution = resolveNextContribution(club, command)
-      val updatedBy = command.actor.playerId.getOrElse(club.creator)
-      commitContributionAdjustment(connection, club, command, nextContribution, updatedBy)
+      club <- IO.blocking(riichinexus.microservices.club.tables.clubs.ClubTable.findById(connection, command.clubId))
+      player <- ResolvePlayerPrivateAPIMessage(command.playerId).plan(context)
+        .map(_.getOrElse(throw NoSuchElementException(s"Player ${command.playerId.value} was not found")))
+      savedClub <- club match
+        case None => IO.pure(None)
+        case Some(club) =>
+          ensureContributionCanBeAdjusted(club, player, command)
+          val nextContribution = resolveNextContribution(club, command)
+          val updatedBy = command.actor.playerId.getOrElse(club.creator)
+          IO.blocking(Some(commitContributionAdjustment(connection, club, command, nextContribution, updatedBy)))
+    yield savedClub
 
   private def ensureContributionCanBeAdjusted(
       club: Club,

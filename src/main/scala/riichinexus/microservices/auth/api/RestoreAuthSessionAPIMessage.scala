@@ -1,11 +1,10 @@
 package riichinexus.microservices.auth.api
 import riichinexus.system.api.ApiPlanContext
-import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
+import riichinexus.microservices.player.api.`private`.*
 
 import java.time.Instant
 
 import cats.effect.IO
-import cats.effect.unsafe.implicits.global
 import riichinexus.system.api.{APIWithTokenMessage, ApiPlanContext}
 import riichinexus.microservices.auth.domain.AuthenticationFailure
 import riichinexus.microservices.auth.domain.functions.AuthenticatedSessionFunctions
@@ -25,11 +24,7 @@ final case class RestoreAuthSessionAPIMessage() extends APIWithTokenMessage[Auth
       token <- IO.blocking(ApiPlanContext.requireBearerToken(context))
       asOf <- IO.realTimeInstant
       command = RestoreSessionCommand(token, asOf)
-      result <- IO.blocking {
-        {
-          restoreSession(context, command)
-        }
-      }
+      result <- restoreSession(context, command)
     yield AuthSessionView(
       userId = result.player.id.value,
       username = result.session.username,
@@ -41,19 +36,24 @@ final case class RestoreAuthSessionAPIMessage() extends APIWithTokenMessage[Auth
   private def restoreSession(
       context: ApiPlanContext,
       command: RestoreSessionCommand
-  ): RestoreSessionResult =
+  ): IO[RestoreSessionResult] =
     val connection = context.connection
-    val session = AuthenticatedSessionTable.findByToken(connection, command.token)
-      .getOrElse(throw AuthenticationFailure("Session is invalid or expired", "invalid_session"))
-    if !AuthenticatedSessionFunctions.canAuthenticate(session, command.asOf) then
-      throw AuthenticationFailure("Session is invalid or expired", "invalid_session")
-
-    val touched = AuthenticatedSessionTable.save(connection, AuthenticatedSessionFunctions.touch(session, command.asOf))
-    val player = PlayerPersistenceFunctions.findPlayer(context.connection, touched.playerId)
-      .getOrElse(throw AuthenticationFailure(s"Player ${touched.playerId.value} was not found", "invalid_session"))
-    if player.status != PlayerStatus.Active then
-      throw AuthenticationFailure(s"Player ${player.id.value} is not active", "inactive_account")
-    RestoreSessionResult(touched, player)
+    for
+      touched <- IO.blocking {
+        val session = AuthenticatedSessionTable.findByToken(connection, command.token)
+          .getOrElse(throw AuthenticationFailure("Session is invalid or expired", "invalid_session"))
+        if !AuthenticatedSessionFunctions.canAuthenticate(session, command.asOf) then
+          throw AuthenticationFailure("Session is invalid or expired", "invalid_session")
+        AuthenticatedSessionTable.save(connection, AuthenticatedSessionFunctions.touch(session, command.asOf))
+      }
+      player <- ResolvePlayerPrivateAPIMessage(touched.playerId).plan(context).map(
+        _.getOrElse(throw AuthenticationFailure(s"Player ${touched.playerId.value} was not found", "invalid_session"))
+      )
+      _ <- IO.blocking {
+        if player.status != PlayerStatus.Active then
+          throw AuthenticationFailure(s"Player ${player.id.value} is not active", "inactive_account")
+      }
+    yield RestoreSessionResult(touched, player)
 
   private final case class RestoreSessionCommand(
       token: String,

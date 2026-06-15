@@ -53,7 +53,7 @@ final case class AppealReopenAPIMessage(
   override def plan(context: ApiPlanContext): IO[AppealTicketView] =
     for
       resolved <- IO.blocking(resolveInput)
-      actor <- IO.blocking(ResolveAccessPrincipal(PlayerId(resolved.operatorId)).resolve(context.connection))
+      actor <- ResolveAccessPrincipal(PlayerId(resolved.operatorId)).plan(context)
       reopenedAt <- IO.realTimeInstant
       service = AppealApplicationService(AuthorizationPolicyFunctions.strict)
       command = ReopenAppealCommand(AppealTicketId(appealId), resolved, actor, reopenedAt)

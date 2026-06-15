@@ -53,11 +53,11 @@ final case class AppealUpdateWorkflowAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[AppealTicketView] =
     for
-      actor <- IO.blocking(ResolveAccessPrincipal(PlayerId(request.operatorId)).resolve(context.connection))
+      actor <- ResolveAccessPrincipal(PlayerId(request.operatorId)).plan(context)
       updatedAt <- IO.realTimeInstant
       service = AppealApplicationService(AuthorizationPolicyFunctions.strict)
       command <- IO.blocking(resolveCommand(actor, updatedAt))
-      ticket <- IO.blocking(updateWorkflow(context.connection, service, command))
+      ticket <- updateWorkflow(context.connection, service, command)
       _ <- RecordAuditEventsPrivateAPIMessage(updateWorkflowAudit(ticket, command)).plan(context)
     yield AppealTicketView.fromDomain(ticket)
 
@@ -89,7 +89,7 @@ final case class AppealUpdateWorkflowAPIMessage(
       connection: java.sql.Connection,
       service: AppealApplicationService,
       command: UpdateAppealWorkflowCommand
-  ): AppealTicket =
+  ): IO[AppealTicket] =
     service.updateAppealWorkflow(
       connection = connection,
       ticketId = command.ticketId,
@@ -101,7 +101,7 @@ final case class AppealUpdateWorkflowAPIMessage(
       clearDueAt = command.clearDueAt,
       updatedAt = command.updatedAt,
       note = command.note
-    ).getOrElse(throw NoSuchElementException("Resource not found"))
+    ).map(_.getOrElse(throw NoSuchElementException("Resource not found")))
 
   private def updateWorkflowAudit(
       ticket: AppealTicket,

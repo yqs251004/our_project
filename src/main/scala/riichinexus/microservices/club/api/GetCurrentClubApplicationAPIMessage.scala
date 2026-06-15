@@ -48,7 +48,7 @@ final case class GetCurrentClubApplicationAPIMessage(
     for
       input <- IO.blocking(resolveInput)
       actor <- resolveActor(context, input)
-      view <- IO.blocking(getCurrentApplicationView(context, input, actor))
+      view <- getCurrentApplicationView(context, input, actor)
     yield view
 
   private def resolveInput: CurrentClubApplicationInput =
@@ -70,15 +70,26 @@ final case class GetCurrentClubApplicationAPIMessage(
       context: ApiPlanContext,
       input: CurrentClubApplicationInput,
       actor: AccessPrincipal
-  ): ClubMembershipApplicationView =
-    val club = ClubTable
-      .findById(context.connection, input.clubId)
-      .getOrElse(throw NoSuchElementException(s"Club ${input.clubId.value} was not found"))
-    val application = club.membershipApplications
-      .filter(application => ClubMembershipApplicationFunctions.isPending(application) && ClubApplicationViewAssembler.ownsClubApplication(context.connection, actor, application))
-      .maxByOption(_.submittedAt)
-      .getOrElse(throw NoSuchElementException("Resource not found"))
-    ClubApplicationViewAssembler.applicationView(context.connection, club, application, actor)
+  ): IO[ClubMembershipApplicationView] =
+    for
+      club <- IO.blocking {
+        ClubTable
+          .findById(context.connection, input.clubId)
+          .getOrElse(throw NoSuchElementException(s"Club ${input.clubId.value} was not found"))
+      }
+      ownedApplications <- club.membershipApplications.foldLeft(IO.pure(Vector.empty[ClubMembershipApplication])) { (previous, application) =>
+        previous.flatMap { applications =>
+          if ClubMembershipApplicationFunctions.isPending(application) then
+            ClubApplicationViewAssembler.ownsClubApplication(context, actor, application).map {
+              case true  => applications :+ application
+              case false => applications
+            }
+          else IO.pure(applications)
+        }
+      }
+      application = ownedApplications.maxByOption(_.submittedAt).getOrElse(throw NoSuchElementException("Resource not found"))
+      view <- ClubApplicationViewAssembler.applicationView(context, club, application, actor)
+    yield view
 
   private final case class CurrentClubApplicationInput(
       clubId: ClubId,

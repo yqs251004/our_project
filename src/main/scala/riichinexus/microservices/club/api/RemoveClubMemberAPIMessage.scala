@@ -2,7 +2,7 @@ package riichinexus.microservices.club.api
 import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
-import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
+import riichinexus.microservices.player.api.`private`.*
 
 import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
@@ -57,7 +57,7 @@ final case class RemoveClubMemberAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
-      actor <- IO.blocking(resolveOperatorActor(context))
+      actor <- resolveOperatorActor(context)
       occurredAt <- IO.realTimeInstant
       command = RemoveClubMemberCommand(
         clubId = ClubId(clubId),
@@ -65,50 +65,49 @@ final case class RemoveClubMemberAPIMessage(
         actor = actor,
         occurredAt = occurredAt
       )
-      club <- IO.blocking {
-        {
-            removeClubMember(context.connection, command)
-          }
-          .getOrElse(throw NoSuchElementException("Resource not found"))
-      }
+      club <- removeClubMember(context, command).map(_.getOrElse(throw NoSuchElementException("Resource not found")))
     yield ClubView.fromDomain(club)
 
-  private def resolveOperatorActor(context: ApiPlanContext): AccessPrincipal =
+  private def resolveOperatorActor(context: ApiPlanContext): IO[AccessPrincipal] =
     operatorId.filter(_.nonEmpty)
-      .map(id => ResolveAccessPrincipal(PlayerId(id)).resolve(context.connection))
-      .getOrElse(AccessPrincipalFunctions.system)
+      .map(id => ResolveAccessPrincipal(PlayerId(id)).plan(context))
+      .getOrElse(IO.pure(AccessPrincipalFunctions.system))
 
   private def removeClubMember(
-      connection: java.sql.Connection,
+      context: ApiPlanContext,
       command: RemoveClubMemberCommand
-  ): Option[Club] =
+  ): IO[Option[Club]] =
+    val connection = context.connection
     for
-      club <- riichinexus.microservices.club.tables.clubs.ClubTable.findById(connection, command.clubId)
-      player <- PlayerPersistenceFunctions.findPlayer(connection, command.playerId)
-    yield
-      ClubAuthorization.ensureClubActive(club)
-      ClubAuthorization.requireClubMember(club, command.playerId, "remove member")
-      ClubAuthorization.requireClubCapability(actor = command.actor,
-        club = club,
-        permission = Permission.ManageClubMembership,
-        delegatedPrivileges = Set(ClubPrivilegeCode.ApproveRoster)
-      )
-      ensureMemberCanBeRemoved(club, command.clubId, command.playerId)
-
-      PlayerPersistenceFunctions.savePlayer(
-        connection,
-        PlayerRoleFunctions.revokeClubAdmin(
-          PlayerClubBindingFunctions.leaveClub(player, command.clubId),
-          command.clubId
-        )
-      )
-      riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, 
-        ClubProjectionRefresher.refreshClubProjection(
-          connection,
-          ClubFunctions.removeMember(club, command.playerId),
-          command.occurredAt
-        )
-      )
+      club <- IO.blocking(riichinexus.microservices.club.tables.clubs.ClubTable.findById(connection, command.clubId))
+      player <- ResolvePlayerPrivateAPIMessage(command.playerId).plan(context)
+        .map(_.getOrElse(throw NoSuchElementException(s"Player ${command.playerId.value} was not found")))
+      savedClub <- club match
+        case None => IO.pure(None)
+        case Some(club) =>
+          ClubAuthorization.ensureClubActive(club)
+          ClubAuthorization.requireClubMember(club, command.playerId, "remove member")
+          ClubAuthorization.requireClubCapability(actor = command.actor,
+            club = club,
+            permission = Permission.ManageClubMembership,
+            delegatedPrivileges = Set(ClubPrivilegeCode.ApproveRoster)
+          )
+          ensureMemberCanBeRemoved(club, command.clubId, command.playerId)
+          for
+            _ <- SavePlayerPrivateAPIMessage(
+              PlayerRoleFunctions.revokeClubAdmin(
+                PlayerClubBindingFunctions.leaveClub(player, command.clubId),
+                command.clubId
+              )
+            ).plan(context)
+            refreshedClub <- ClubProjectionRefresher.refreshClubProjection(
+              context,
+              ClubFunctions.removeMember(club, command.playerId),
+              command.occurredAt
+            )
+            savedClub <- IO.blocking(riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, refreshedClub))
+          yield Some(savedClub)
+    yield savedClub
 
   private def ensureMemberCanBeRemoved(club: Club, clubId: ClubId, playerId: PlayerId): Unit =
     if club.creator == playerId then
@@ -127,3 +126,4 @@ final case class RemoveClubMemberAPIMessage(
       actor: AccessPrincipal,
       occurredAt: Instant
   )
+

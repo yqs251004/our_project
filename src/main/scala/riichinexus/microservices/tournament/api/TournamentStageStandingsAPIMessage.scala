@@ -39,7 +39,7 @@ final case class TournamentStageStandingsAPIMessage(tournamentId: String, stageI
   override def plan(context: ApiPlanContext): IO[StageRankingSnapshot] =
     for
       input <- IO.blocking(resolveInput)
-      snapshot <- IO.blocking(TournamentStageQueries.stageStandings(context.connection, input.tournamentId, input.stageId))
+      snapshot <- TournamentStageQueries.stageStandings(context.connection, input.tournamentId, input.stageId)
     yield snapshot
 
   private def resolveInput: StageQueryInput =

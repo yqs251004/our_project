@@ -57,7 +57,7 @@ final case class AppealFileAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[AppealTicketView] =
     for
-      actor <- IO.blocking(ResolveAccessPrincipal(PlayerId(request.playerId)).resolve(context.connection))
+      actor <- ResolveAccessPrincipal(PlayerId(request.playerId)).plan(context)
       createdAt <- IO.realTimeInstant
       service = AppealApplicationService(AuthorizationPolicyFunctions.strict)
       command <- IO.blocking(resolveCommand(actor, createdAt))

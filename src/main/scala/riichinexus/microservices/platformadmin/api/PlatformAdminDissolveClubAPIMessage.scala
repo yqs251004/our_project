@@ -4,12 +4,11 @@ import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
 import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPIMessage
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
-import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
+import riichinexus.microservices.player.api.`private`.*
 
 import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
 import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
-import cats.effect.unsafe.implicits.global
 import cats.effect.IO
 
 import java.time.Instant
@@ -62,7 +61,7 @@ final case class PlatformAdminDissolveClubAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[PlatformAdminClubView] =
     for
-      actor <- IO.blocking(ResolveAccessPrincipal(operatorId).resolve(context.connection))
+      actor <- ResolveAccessPrincipal(operatorId).plan(context)
       _ <- requireDissolveClubPermission(context, actor)
       request = DissolveClubRequest(operatorId = operatorId)
       dissolvedAt <- IO.realTimeInstant
@@ -71,12 +70,8 @@ final case class PlatformAdminDissolveClubAPIMessage(
         actor = actor,
         dissolvedAt = dissolvedAt
       )
-      dissolvedClub <- IO.blocking {
-        {
-            dissolveClub(context.connection, command)
-          }
-          .getOrElse(throw NoSuchElementException(s"Club ${command.clubId.value} was not found"))
-      }
+      dissolvedClub <- dissolveClub(context, command)
+        .map(_.getOrElse(throw NoSuchElementException(s"Club ${command.clubId.value} was not found")))
       _ <- RecordAuditEventsPrivateAPIMessage(dissolveClubAudit(dissolvedClub, command)).plan(context)
       _ <- ResetClubDashboardAPIMessage(command.clubId, command.dissolvedAt).plan(context)
       _ <- ResetClubAdvancedStatsBoardAPIMessage(command.clubId, command.dissolvedAt).plan(context)
@@ -92,51 +87,64 @@ final case class PlatformAdminDissolveClubAPIMessage(
     }
 
   private def dissolveClub(
-      connection: java.sql.Connection,
+      context: ApiPlanContext,
       command: DissolveClubCommand
-  ): Option[Club] =
-    ResolveClubPrivateAPIMessage(command.clubId).plan(ApiPlanContext(bearerToken = None, connection = connection)).unsafeRunSync().map { club =>
-      ensureClubCanDissolve(club, command.clubId)
-      removeMembersFromClub(connection, club, command.clubId)
-      removeRelationsToClub(connection, command.clubId)
-      commitDissolvedClub(connection, club, command)
+  ): IO[Option[Club]] =
+    ResolveClubPrivateAPIMessage(command.clubId).plan(context).flatMap {
+      case Some(club) =>
+        ensureClubCanDissolve(club, command.clubId)
+        for
+          _ <- removeMembersFromClub(context, club, command.clubId)
+          _ <- removeRelationsToClub(context, command.clubId)
+          dissolvedClub <- commitDissolvedClub(context, club, command)
+        yield Some(dissolvedClub)
+      case None =>
+        IO.pure(None)
     }
 
   private def ensureClubCanDissolve(club: Club, clubId: ClubId): Unit =
     if club.dissolvedAt.nonEmpty then
       throw IllegalArgumentException(s"Club ${clubId.value} has already been dissolved")
 
-  private def removeMembersFromClub(connection: java.sql.Connection, club: Club, clubId: ClubId): Unit =
-    club.members.foreach { memberId =>
-      PlayerPersistenceFunctions.findPlayer(connection, memberId).foreach { player =>
-        PlayerPersistenceFunctions.savePlayer(
-          connection,
-          PlayerRoleFunctions.revokeClubAdmin(
-            PlayerClubBindingFunctions.leaveClub(player, clubId),
-            clubId
-          )
-        )
+  private def removeMembersFromClub(context: ApiPlanContext, club: Club, clubId: ClubId): IO[Unit] =
+    club.members.foldLeft(IO.unit) { (previous, memberId) =>
+      previous.flatMap { _ =>
+        ResolvePlayerPrivateAPIMessage(memberId).plan(context).flatMap {
+          case Some(player) =>
+            SavePlayerPrivateAPIMessage(
+              PlayerRoleFunctions.revokeClubAdmin(
+                PlayerClubBindingFunctions.leaveClub(player, clubId),
+                clubId
+              )
+            ).plan(context).map(_ => ())
+          case None =>
+            IO.unit
+        }
       }
     }
 
-  private def removeRelationsToClub(connection: java.sql.Connection, clubId: ClubId): Unit =
-    ListClubsPrivateAPIMessage(activeOnly = true).plan(ApiPlanContext(bearerToken = None, connection = connection)).unsafeRunSync()
-      .filterNot(_.id == clubId)
-      .filter(_.relations.exists(_.targetClubId == clubId))
-      .foreach { relatedClub =>
-        SaveClubPrivateAPIMessage(ClubFunctions.removeRelation(relatedClub, clubId))
-          .plan(ApiPlanContext(bearerToken = None, connection = connection))
-          .unsafeRunSync()
-      }
+  private def removeRelationsToClub(context: ApiPlanContext, clubId: ClubId): IO[Unit] =
+    ListClubsPrivateAPIMessage(activeOnly = true).plan(context).flatMap { clubs =>
+      clubs
+        .filterNot(_.id == clubId)
+        .filter(_.relations.exists(_.targetClubId == clubId))
+        .foldLeft(IO.unit) { (previous, relatedClub) =>
+          previous.flatMap(_ =>
+            SaveClubPrivateAPIMessage(ClubFunctions.removeRelation(relatedClub, clubId))
+              .plan(context)
+              .map(_ => ())
+          )
+        }
+    }
 
   private def commitDissolvedClub(
-      connection: java.sql.Connection,
+      context: ApiPlanContext,
       club: Club,
       command: DissolveClubCommand
-  ): Club =
+  ): IO[Club] =
     SaveClubPrivateAPIMessage(
       ClubFunctions.dissolve(club, command.actor.playerId.getOrElse(club.creator), command.dissolvedAt)
-    ).plan(ApiPlanContext(bearerToken = None, connection = connection)).unsafeRunSync()
+    ).plan(context)
 
   private def dissolveClubAudit(club: Club, command: DissolveClubCommand): Vector[AuditEvent] =
     Vector(

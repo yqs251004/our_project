@@ -47,7 +47,7 @@ final case class RejectClubApplicationAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
-      actor <- IO.blocking(ResolveAccessPrincipal(PlayerId(operatorId)).resolve(context.connection))
+      actor <- ResolveAccessPrincipal(PlayerId(operatorId)).plan(context)
       rejectedAt <- IO.realTimeInstant
       command = RejectClubApplicationCommand(
         clubId = ClubId(clubId),
@@ -56,18 +56,15 @@ final case class RejectClubApplicationAPIMessage(
         note = note,
         rejectedAt = rejectedAt
       )
-      club <- IO.blocking(
-        rejectApplication(context.connection, command)
-          .getOrElse(throw NoSuchElementException("Resource not found"))
-      )
+      club <- rejectApplication(context, command).map(_.getOrElse(throw NoSuchElementException("Resource not found")))
     yield ClubView.fromDomain(club)
 
   private def rejectApplication(
-      connection: java.sql.Connection,
+      context: ApiPlanContext,
       command: RejectClubApplicationCommand
-  ): Option[Club] =
+  ): IO[Option[Club]] =
     ClubApplicationReviewer.reject(
-      connection = connection,      parsedClubId = command.clubId,
+      context = context,      parsedClubId = command.clubId,
       parsedMembershipId = command.membershipId,
       actor = command.actor,
       note = command.note,

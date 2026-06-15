@@ -1,13 +1,12 @@
 package riichinexus.microservices.auth.api
 import riichinexus.microservices.audit.domain.auditevent.AuditEvent
 import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPIMessage
-import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
+import riichinexus.microservices.player.api.`private`.*
 
 import java.time.Instant
 import java.util.NoSuchElementException
 
 import cats.effect.IO
-import cats.effect.unsafe.implicits.global
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
@@ -59,33 +58,34 @@ final case class UpgradeGuestSessionAuthAPIMessage(
         playerId = PlayerId(playerId),
         upgradedAt = upgradedAt
       )
-      savedSession <- IO.blocking {
-        {
-          upgradeGuestSession(context, command)
-        }
-      }
+      savedSession <- upgradeGuestSession(context, command)
       _ <- RecordAuditEventsPrivateAPIMessage(upgradeGuestSessionAudit(savedSession, command)).plan(context)
     yield guestSessionResponse(savedSession)
 
   private def upgradeGuestSession(
       context: ApiPlanContext,
       command: UpgradeGuestSessionCommand
-  ): GuestAccessSession =
+  ): IO[GuestAccessSession] =
     val connection = context.connection
-    val session = GuestSessionTable.findById(connection, command.sessionId)
-      .getOrElse(throw NoSuchElementException(s"Guest session ${command.sessionId.value} was not found"))
-    val player = PlayerPersistenceFunctions.findPlayer(context.connection, command.playerId)
-      .getOrElse(throw NoSuchElementException(s"Player ${command.playerId.value} was not found"))
-    require(
-      player.status == PlayerStatus.Active,
-      s"Player ${command.playerId.value} must be active before linking a guest session"
-    )
-
-    val savedSession = GuestSessionTable.save(
-      connection,
-      GuestAccessSessionFunctions.upgrade(session, command.playerId, command.upgradedAt)
-    )
-    savedSession
+    for
+      session <- IO.blocking(
+        GuestSessionTable.findById(connection, command.sessionId)
+          .getOrElse(throw NoSuchElementException(s"Guest session ${command.sessionId.value} was not found"))
+      )
+      player <- ResolvePlayerPrivateAPIMessage(command.playerId).plan(context).map(
+        _.getOrElse(throw NoSuchElementException(s"Player ${command.playerId.value} was not found"))
+      )
+      savedSession <- IO.blocking {
+        require(
+          player.status == PlayerStatus.Active,
+          s"Player ${command.playerId.value} must be active before linking a guest session"
+        )
+        GuestSessionTable.save(
+          connection,
+          GuestAccessSessionFunctions.upgrade(session, command.playerId, command.upgradedAt)
+        )
+      }
+    yield savedSession
 
   private def upgradeGuestSessionAudit(
       savedSession: GuestAccessSession,

@@ -1,6 +1,6 @@
 package riichinexus.microservices.tournament.appeal.domain
 import riichinexus.microservices.auth.objects.Permission
-import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
+import riichinexus.microservices.player.api.`private`.*
 
 import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
@@ -10,6 +10,7 @@ import java.sql.Connection
 import java.time.Instant
 import java.util.NoSuchElementException
 
+import cats.effect.IO
 import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.club.domain.functions.ClubIdGenerator
@@ -119,17 +120,20 @@ final class AppealApplicationService(
       clearDueAt: Boolean = false,
       updatedAt: Instant = Instant.now(),
       note: Option[String] = None
-  ): Option[AppealTicket] =
-    {
-      AppealTicketTable.findById(connection, ticketId).map { ticket =>
-        AuthorizationPolicyFunctions.requirePermission(authorizationService, 
-          actor,
-          Permission.ResolveAppeal,
-          tournamentId = Some(ticket.tournamentId)
-        )
-
+  ): IO[Option[AppealTicket]] =
+    IO.blocking(AppealTicketTable.findById(connection, ticketId)).flatMap {
+      case Some(ticket) =>
+        for
+          _ <- IO.blocking {
+            AuthorizationPolicyFunctions.requirePermission(authorizationService,
+              actor,
+              Permission.ResolveAppeal,
+              tournamentId = Some(ticket.tournamentId)
+            )
+          }
+          _ <- assigneeId.map(id => requireActiveAppealOperator(connection, id, "Appeal assignee must be an active player")).getOrElse(IO.unit)
+          saved <- IO.blocking {
         val operatorId = actor.playerId.getOrElse(ticket.openedBy)
-        assigneeId.foreach(id => requireActiveAppealOperator(connection, id, "Appeal assignee must be an active player"))
         val nextAssignee =
           if clearAssignee then None
           else assigneeId.orElse(ticket.assigneeId)
@@ -152,6 +156,8 @@ final class AppealApplicationService(
 
         AppealTicketTable.save(connection, triagedTicket.copy(updatedAt = updatedAt))
       }
+        yield Some(saved)
+      case None => IO.pure(None)
     }
 
   def resolveAppeal(
@@ -161,7 +167,7 @@ final class AppealApplicationService(
       actor: AccessPrincipal,
       resolvedAt: Instant = Instant.now(),
       note: Option[String] = None
-  ): Option[AppealTicket] =
+  ): IO[Option[AppealTicket]] =
     adjudicateAppeal(
       connection = connection,
       ticketId = ticketId,
@@ -182,8 +188,8 @@ final class AppealApplicationService(
       adjudicatedAt: Instant = Instant.now(),
       tableResolution: Option[AppealTableResolution] = None,
       note: Option[String] = None
-  ): Option[AppealTicket] =
-    {
+  ): IO[Option[AppealTicket]] =
+    IO.blocking {
       AppealTicketTable.findById(connection, ticketId).map { ticket =>
         AuthorizationPolicyFunctions.requirePermission(authorizationService, 
           actor,
@@ -206,6 +212,8 @@ final class AppealApplicationService(
               reviewedTicket.escalate(operatorId, verdict, adjudicatedAt, note)
 
         val savedTicket = AppealTicketTable.save(connection, adjudicatedTicket)
+        val reconcileInputs =
+          collection.mutable.ArrayBuffer.empty[(TournamentId, TournamentStageId, String)]
 
         if decision != AppealDecisionType.Escalate then
           TournamentGameTable.findById(connection, ticket.tableId).foreach { table =>
@@ -224,17 +232,15 @@ final class AppealApplicationService(
             TournamentGameTable.save(connection, updatedTable)
 
             if updatedTable.bracketMatchId.nonEmpty && updatedTable.status != TableStatus.Archived then
-              KnockoutStageCoordinator.reconcileAfterMatchMutation(
-                connection,
-                updatedTable.tournamentId,
-                updatedTable.stageId,
-                updatedTable.bracketMatchId.get,
-                adjudicatedAt
-              )
+              reconcileInputs += ((updatedTable.tournamentId, updatedTable.stageId, updatedTable.bracketMatchId.get))
           }
 
-        savedTicket
+        (savedTicket, reconcileInputs.toVector)
       }
+    }.flatMap {
+      case Some((savedTicket, reconcileInputs)) =>
+        runReconciliations(connection, reconcileInputs, adjudicatedAt).as(Some(savedTicket))
+      case None => IO.pure(None)
     }
 
   def reopenAppeal(
@@ -265,11 +271,33 @@ final class AppealApplicationService(
       }
     }
 
-  private def requireActiveAppealOperator(connection: Connection, playerId: PlayerId, context: String): Unit =
-    val player = PlayerPersistenceFunctions.findPlayer(connection, playerId)
-      .getOrElse(throw NoSuchElementException(s"Player ${playerId.value} was not found"))
-    if player.status != PlayerStatus.Active then
-      throw IllegalArgumentException(context)
+  private def requireActiveAppealOperator(connection: Connection, playerId: PlayerId, context: String): IO[Unit] =
+    ResolvePlayerPrivateAPIMessage(playerId)
+      .plan(riichinexus.system.api.ApiPlanContext(bearerToken = None, connection = connection))
+      .map(_.getOrElse(throw NoSuchElementException(s"Player ${playerId.value} was not found")))
+      .flatMap { player =>
+        IO.blocking {
+          if player.status != PlayerStatus.Active then
+            throw IllegalArgumentException(context)
+        }
+      }
+
+  private def runReconciliations(
+      connection: Connection,
+      reconcileInputs: Vector[(TournamentId, TournamentStageId, String)],
+      at: Instant
+  ): IO[Unit] =
+    reconcileInputs.foldLeft(IO.unit) { case (effect, (tournamentId, stageId, matchId)) =>
+      effect.flatMap(_ =>
+        KnockoutStageCoordinator.reconcileAfterMatchMutation(
+          connection,
+          tournamentId,
+          stageId,
+          matchId,
+          at
+        ).map(_ => ())
+      )
+    }
 
   private def deleteTableResultArtifacts(connection: Connection, tableId: TableId): Unit =
     MatchRecordTable.deleteByTable(connection, tableId)

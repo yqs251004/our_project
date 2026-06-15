@@ -58,7 +58,7 @@ final case class TournamentTableStartAPIMessage(tableId: String, operatorId: Opt
 
   override def plan(context: ApiPlanContext): IO[TournamentTableView] =
     for
-      actor <- IO.blocking(resolveOperatorActor(context))
+      actor <- resolveOperatorActor(context)
       startedAt <- IO.realTimeInstant
       command = StartTableCommand(TableId(tableId), actor, startedAt)
       table <- IO.blocking {
@@ -69,10 +69,10 @@ final case class TournamentTableStartAPIMessage(tableId: String, operatorId: Opt
       _ <- CreateBulkNotificationsPrivateAPIMessage(tableStartedNotifications(context.connection, table)).plan(context)
     yield TournamentTableView.fromDomain(table)
 
-  private def resolveOperatorActor(context: ApiPlanContext): AccessPrincipal =
+  private def resolveOperatorActor(context: ApiPlanContext): IO[AccessPrincipal] =
     operatorId.filter(_.nonEmpty).map(PlayerId(_))
-      .map(ResolveAccessPrincipal(_).resolve(context.connection))
-      .getOrElse(AccessPrincipalFunctions.system)
+      .map(ResolveAccessPrincipal(_).plan(context))
+      .getOrElse(IO.pure(AccessPrincipalFunctions.system))
 
   private def startTable(connection: java.sql.Connection, command: StartTableCommand): Option[Table] =
     riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.findById(connection, command.tableId).map { table =>
@@ -137,3 +137,4 @@ final case class TournamentTableStartAPIMessage(tableId: String, operatorId: Opt
       actor: AccessPrincipal,
       startedAt: Instant
   )
+

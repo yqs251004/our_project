@@ -1,5 +1,5 @@
 package riichinexus.microservices.club.api
-import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
+import riichinexus.microservices.player.api.`private`.*
 
 import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.time.Instant
@@ -81,7 +81,7 @@ final case class GetPublicClubAPIMessage(
       lineupPlayerIds <- IO.blocking(currentLineupPlayerIds(club, clubTournaments))
       tournaments <- ResolveTournamentsPrivateAPIMessage(recentRecords.map(_.tournamentId).distinct).plan(context)
       tournamentsById <- IO.blocking(tournaments.map(tournament => tournament.id -> tournament).toMap)
-      playersById <- IO.blocking(publicClubPlayersById(context, club, lineupPlayerIds, recentRecords))
+      playersById <- publicClubPlayersById(context, club, lineupPlayerIds, recentRecords)
     yield publicClubDetailView(club, lineupPlayerIds, recentRecords, tournamentsById, playersById)
 
   private def publicClub(context: ApiPlanContext, clubId: ClubId): Club =
@@ -95,11 +95,11 @@ final case class GetPublicClubAPIMessage(
       club: Club,
       lineupPlayerIds: Vector[PlayerId],
       recentRecords: Vector[MatchRecord]
-  ): Map[PlayerId, Player] =
-    PlayerPersistenceFunctions.findPlayersByIds(
-      context.connection,
+  ): IO[Map[PlayerId, Player]] =
+    ResolvePlayersPrivateAPIMessage(
       (club.members ++ lineupPlayerIds ++ recentRecords.flatMap(_.seatResults.map(_.playerId))).distinct
-    ).map(player => player.id -> player).toMap
+    ).plan(context)
+      .map(_.map(player => player.id -> player).toMap)
 
   private def publicClubDetailView(
       club: Club,

@@ -1,6 +1,6 @@
 package riichinexus.microservices.tournament.domain.settlementmanagement.functions
 import riichinexus.microservices.auth.objects.Permission
-import riichinexus.microservices.player.api.`private`.ResolvePlayerPrivateAPIMessage
+import riichinexus.microservices.player.api.`private`.ResolvePlayersPrivateAPIMessage
 
 import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
@@ -26,7 +26,7 @@ import java.sql.Connection
 import java.time.Instant
 import java.util.NoSuchElementException
 
-import cats.effect.unsafe.implicits.global
+import cats.effect.IO
 import riichinexus.system.api.ApiPlanContext
 import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
@@ -81,7 +81,7 @@ final class TournamentSettlementCoordinator(
       adjustments: Vector[TournamentSettlementAdjustment],
       finalizeSettlement: Boolean,
       note: Option[String]
-  ): TournamentSettlementSnapshot =
+  ): IO[TournamentSettlementSnapshot] =
     val settlement = SettlementInput(
       tournamentId = tournamentId,
       finalStageId = finalStageId,
@@ -95,38 +95,42 @@ final class TournamentSettlementCoordinator(
       finalizeSettlement = finalizeSettlement,
       note = note
     )
-    validateSettlementInput(settlement)
+    for
+      base <- IO.blocking {
+        validateSettlementInput(settlement)
 
-    val tournament = requireTournament(connection, settlement.tournamentId)
-    val finalStage = requireStage(tournament, settlement.finalStageId)
-    AuthorizationPolicyFunctions.requirePermission(authorizationService, 
-      settlement.actor,
-      Permission.ManageTournamentStages,
-      tournamentId = Some(settlement.tournamentId)
-    )
-
-    val ranking = TournamentStageQueries.stageStandings(
-      connection,
-      settlement.tournamentId,
-      settlement.finalStageId,
-      settlement.settledAt
-    )
-    val resolvedPlayers =
-      resolveSettlementPlayers(connection, settlement, finalStage, ranking)
-    val previousSnapshot =
-      riichinexus.microservices.tournament.tables.settlement.TournamentSettlementTable.findByTournamentAndStage(connection, settlement.tournamentId, settlement.finalStageId)
-
-    supersedePreviousSnapshot(connection, previousSnapshot, settlement.settledAt)
-    completeTournamentIfReady(connection, tournament)
-
-    val snapshot = buildSettlementSnapshot(
-      connection = connection,
-      settlement = settlement,
-      ranking = ranking,
-      resolvedPlayers = resolvedPlayers,
-      previousSnapshot = previousSnapshot
-    )
-    commitSettlement(connection, settlement, snapshot)
+        val tournament = requireTournament(connection, settlement.tournamentId)
+        val finalStage = requireStage(tournament, settlement.finalStageId)
+        AuthorizationPolicyFunctions.requirePermission(authorizationService,
+          settlement.actor,
+          Permission.ManageTournamentStages,
+          tournamentId = Some(settlement.tournamentId)
+        )
+        val previousSnapshot =
+          riichinexus.microservices.tournament.tables.settlement.TournamentSettlementTable.findByTournamentAndStage(connection, settlement.tournamentId, settlement.finalStageId)
+        (tournament, finalStage, previousSnapshot)
+      }
+      (tournament, finalStage, previousSnapshot) = base
+      ranking <- TournamentStageQueries.stageStandings(
+        connection,
+        settlement.tournamentId,
+        settlement.finalStageId,
+        settlement.settledAt
+      )
+      resolvedPlayers <- resolveSettlementPlayers(connection, settlement, finalStage, ranking)
+      _ <- IO.blocking {
+        supersedePreviousSnapshot(connection, previousSnapshot, settlement.settledAt)
+        completeTournamentIfReady(connection, tournament)
+      }
+      snapshot <- buildSettlementSnapshot(
+        connection = connection,
+        settlement = settlement,
+        ranking = ranking,
+        resolvedPlayers = resolvedPlayers,
+        previousSnapshot = previousSnapshot
+      )
+      savedSnapshot <- IO.blocking(commitSettlement(connection, settlement, snapshot))
+    yield savedSnapshot
 
   private def validateSettlementInput(settlement: SettlementInput): Unit =
     require(settlement.prizePool >= 0L, "Prize pool must be non-negative")
@@ -155,19 +159,18 @@ final class TournamentSettlementCoordinator(
       settlement: SettlementInput,
       finalStage: TournamentStage,
       ranking: StageRankingSnapshot
-  ): Vector[PlayerId] =
+  ): IO[Vector[PlayerId]] =
     if isKnockoutStage(finalStage) then
       resolveKnockoutSettlementPlayers(connection, settlement, finalStage, ranking)
-    else ranking.entries.map(_.playerId)
+    else IO.pure(ranking.entries.map(_.playerId))
 
   private def resolveKnockoutSettlementPlayers(
       connection: Connection,
       settlement: SettlementInput,
       finalStage: TournamentStage,
       ranking: StageRankingSnapshot
-  ): Vector[PlayerId] =
-    val bracket =
-      TournamentStageQueries.stageKnockoutBracket(connection, settlement.tournamentId, settlement.finalStageId, settlement.settledAt)
+  ): IO[Vector[PlayerId]] =
+    TournamentStageQueries.stageKnockoutBracket(connection, settlement.tournamentId, settlement.finalStageId, settlement.settledAt).map { bracket =>
     val championshipFinal = bracket.rounds
       .flatMap(_.matches)
       .find(matchNode => matchNode.lane == KnockoutLane.Championship && matchNode.nextMatchId.isEmpty)
@@ -208,6 +211,7 @@ final class TournamentSettlementCoordinator(
     val bracketPlayers = championshipPlayers ++ bronzePlayers ++ repechagePlayers
 
     bracketPlayers ++ ranking.entries.map(_.playerId).filterNot(bracketPlayers.contains)
+    }
 
   private def supersedePreviousSnapshot(
       connection: Connection,
@@ -228,7 +232,7 @@ final class TournamentSettlementCoordinator(
       ranking: StageRankingSnapshot,
       resolvedPlayers: Vector[PlayerId],
       previousSnapshot: Option[TournamentSettlementSnapshot]
-  ): TournamentSettlementSnapshot =
+  ): IO[TournamentSettlementSnapshot] =
     val effectivePayoutRatios =
       if settlement.payoutRatios.nonEmpty then settlement.payoutRatios
       else TournamentRuntimeDefaults.settlementPayoutRatios
@@ -241,36 +245,38 @@ final class TournamentSettlementCoordinator(
     }
     val revision = previousSnapshot.map(_.revision + 1).getOrElse(1)
 
-    TournamentSettlementSnapshot(
-      id = TournamentIdGenerator.settlementSnapshotId(),
-      tournamentId = settlement.tournamentId,
-      stageId = settlement.finalStageId,
-      revision = revision,
-      status =
-        if settlement.finalizeSettlement then TournamentSettlementStatus.Finalized
-        else TournamentSettlementStatus.Draft,
-      generatedAt = settlement.settledAt,
-      finalizedAt = if settlement.finalizeSettlement then Some(settlement.settledAt) else None,
-      supersedesSettlementId = previousSnapshot.map(_.id),
-      championId = championId,
-      prizePool = settlement.prizePool,
-      houseFeeAmount = settlement.houseFeeAmount,
-      netPrizePool = netPrizePool,
-      clubShareRatio = settlement.clubShareRatio,
-      adjustments = settlement.adjustments,
-      entries = buildSettlementEntries(
+    buildSettlementEntries(
         connection = connection,
         settlement = settlement,
         resolvedPlayers = resolvedPlayers,
         baseAwards = baseAwards,
         rankingByPlayer = rankingByPlayer,
         adjustmentsByPlayer = adjustmentsByPlayer
-      ),
-      summary =
-        s"Champion ${championId.value} settled from stage ${settlement.finalStageId.value} " +
-          s"(revision $revision, status ${if settlement.finalizeSettlement then "finalized" else "draft"}) " +
-          s"with gross pool ${settlement.prizePool} and net pool $netPrizePool."
-    )
+      ).map { entries =>
+        TournamentSettlementSnapshot(
+          id = TournamentIdGenerator.settlementSnapshotId(),
+          tournamentId = settlement.tournamentId,
+          stageId = settlement.finalStageId,
+          revision = revision,
+          status =
+            if settlement.finalizeSettlement then TournamentSettlementStatus.Finalized
+            else TournamentSettlementStatus.Draft,
+          generatedAt = settlement.settledAt,
+          finalizedAt = if settlement.finalizeSettlement then Some(settlement.settledAt) else None,
+          supersedesSettlementId = previousSnapshot.map(_.id),
+          championId = championId,
+          prizePool = settlement.prizePool,
+          houseFeeAmount = settlement.houseFeeAmount,
+          netPrizePool = netPrizePool,
+          clubShareRatio = settlement.clubShareRatio,
+          adjustments = settlement.adjustments,
+          entries = entries,
+          summary =
+            s"Champion ${championId.value} settled from stage ${settlement.finalStageId.value} " +
+              s"(revision $revision, status ${if settlement.finalizeSettlement then "finalized" else "draft"}) " +
+              s"with gross pool ${settlement.prizePool} and net pool $netPrizePool."
+        )
+      }
 
   private def buildSettlementEntries(
       connection: Connection,
@@ -279,7 +285,11 @@ final class TournamentSettlementCoordinator(
       baseAwards: Vector[Long],
       rankingByPlayer: Map[PlayerId, StageStandingEntry],
       adjustmentsByPlayer: Map[PlayerId, Vector[TournamentSettlementAdjustment]]
-  ): Vector[TournamentSettlementEntry] =
+  ): IO[Vector[TournamentSettlementEntry]] =
+    ResolvePlayersPrivateAPIMessage(resolvedPlayers.distinct)
+      .plan(ApiPlanContext(bearerToken = None, connection = connection))
+      .map(players => players.map(player => player.id -> player).toMap)
+      .map { playersById =>
     resolvedPlayers.zipWithIndex.map { case (playerId, index) =>
       val standing = rankingByPlayer.getOrElse(
         playerId,
@@ -290,10 +300,7 @@ final class TournamentSettlementCoordinator(
       val deductionAmount =
         adjustmentsByPlayer.getOrElse(playerId, Vector.empty).filter(_.amount < 0L).map(adjustment => math.abs(adjustment.amount)).sum
       val netAwardAmount = baseAwards.lift(index).getOrElse(0L) + adjustmentAmount - deductionAmount
-      val clubId = ResolvePlayerPrivateAPIMessage(playerId)
-        .plan(ApiPlanContext(bearerToken = None, connection = connection))
-        .unsafeRunSync()
-        .flatMap(player => PlayerClubBindingFunctions.boundClubIds(player).headOption)
+      val clubId = playersById.get(playerId).flatMap(player => PlayerClubBindingFunctions.boundClubIds(player).headOption)
       val clubShareAmount =
         if clubId.nonEmpty then math.floor(netAwardAmount.toDouble * settlement.clubShareRatio).toLong
         else 0L
@@ -311,6 +318,7 @@ final class TournamentSettlementCoordinator(
         champion = index == 0
       )
     }
+      }
 
   private def commitSettlement(
       connection: Connection,

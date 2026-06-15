@@ -1,12 +1,10 @@
 package riichinexus.microservices.tournament.api
 import riichinexus.microservices.auth.objects.Permission
-import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
+import riichinexus.microservices.player.api.`private`.*
 
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
 import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
-import cats.effect.unsafe.implicits.global
-import riichinexus.system.api.ApiPlanContext
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
@@ -62,9 +60,9 @@ final case class ListPublicSchedulesAPIMessage(
       _ <- requirePublicSchedulePermission(context)
       query <- IO.blocking(resolveQuery(context))
       tournaments <- IO.blocking(publicTournaments(context))
-      lineupPlayersById <- IO.blocking(lineupPlayersById(context, tournaments))
+      lineupPlayersById <- lineupPlayersById(context, tournaments)
       tablesByStage <- IO.blocking(tablesByStageKey(context, tournaments))
-      clubsById <- IO.blocking(participatingClubsById(context, tournaments))
+      clubsById <- participatingClubsById(context, tournaments)
       schedules <- IO.blocking(publicScheduleViews(tournaments, lineupPlayersById, tablesByStage, clubsById))
       filteredSchedules <- IO.blocking(filterPublicScheduleViews(schedules, query))
     yield PagedResponse.fromItems(filteredSchedules, limit, offset, query.appliedFilters)(identity)
@@ -99,10 +97,11 @@ final case class ListPublicSchedulesAPIMessage(
   private def lineupPlayersById(
       context: ApiPlanContext,
       tournaments: Vector[Tournament]
-  ): Map[PlayerId, Player] =
-    PlayerPersistenceFunctions.findPlayersByIds(context.connection, tournaments.flatMap(_.stages.flatMap(_.lineupSubmissions.flatMap(_.seats.map(_.playerId)))).distinct)
-      .map(player => player.id -> player)
-      .toMap
+  ): IO[Map[PlayerId, Player]] =
+    ResolvePlayersPrivateAPIMessage(
+      tournaments.flatMap(_.stages.flatMap(_.lineupSubmissions.flatMap(_.seats.map(_.playerId)))).distinct
+    ).plan(context)
+      .map(_.map(player => player.id -> player).toMap)
 
   private def tablesByStageKey(
       context: ApiPlanContext,
@@ -115,12 +114,10 @@ final case class ListPublicSchedulesAPIMessage(
   private def participatingClubsById(
       context: ApiPlanContext,
       tournaments: Vector[Tournament]
-  ): Map[ClubId, Club] =
+  ): IO[Map[ClubId, Club]] =
     ResolveClubsPrivateAPIMessage(tournaments.flatMap(_.participatingClubs).distinct)
-      .plan(ApiPlanContext(bearerToken = None, connection = context.connection))
-      .unsafeRunSync()
-      .map(club => club.id -> club)
-      .toMap
+      .plan(context)
+      .map(_.map(club => club.id -> club).toMap)
 
   private def publicScheduleViews(
       tournaments: Vector[Tournament],

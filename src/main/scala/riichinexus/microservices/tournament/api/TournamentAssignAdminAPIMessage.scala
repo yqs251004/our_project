@@ -4,7 +4,7 @@ import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
 import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPIMessage
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
-import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
+import riichinexus.microservices.player.api.`private`.*
 
 import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
@@ -59,7 +59,7 @@ final case class TournamentAssignAdminAPIMessage(tournamentId: String, request: 
 
   override def plan(context: ApiPlanContext): IO[TournamentSummaryView] =
     for
-      actor <- IO.blocking(ResolveAccessPrincipal(PlayerId(request.operatorId)).resolve(context.connection))
+      actor <- ResolveAccessPrincipal(PlayerId(request.operatorId)).plan(context)
       grantedAt <- IO.realTimeInstant
       command = AssignTournamentAdminCommand(
         tournamentId = TournamentId(tournamentId),
@@ -67,24 +67,25 @@ final case class TournamentAssignAdminAPIMessage(tournamentId: String, request: 
         actor = actor,
         grantedAt = grantedAt
       )
-      savedTournament <- IO.blocking {
-        {
-          assignAdmin(context.connection, command)
-        }.getOrElse(throw NoSuchElementException("Resource not found"))
-      }
+      savedTournament <- assignAdmin(context, command).map(_.getOrElse(throw NoSuchElementException("Resource not found")))
       _ <- RecordAuditEventsPrivateAPIMessage(assignAdminAudit(command)).plan(context)
     yield TournamentSummaryView.fromDomain(savedTournament)
 
   private def assignAdmin(
-      connection: java.sql.Connection,
+      context: ApiPlanContext,
       command: AssignTournamentAdminCommand
-  ): Option[Tournament] =
+  ): IO[Option[Tournament]] =
+    val connection = context.connection
     for
-      tournament <- riichinexus.microservices.tournament.tables.tournaments.TournamentTable.findById(connection, command.tournamentId)
-      player <- PlayerPersistenceFunctions.findPlayer(connection, command.playerId)
-    yield
-      ensureAdminCanBeAssigned(player, command)
-      commitAdminAssignment(connection, tournament, player, command)
+      tournament <- IO.blocking(riichinexus.microservices.tournament.tables.tournaments.TournamentTable.findById(connection, command.tournamentId))
+      player <- ResolvePlayerPrivateAPIMessage(command.playerId).plan(context)
+        .map(_.getOrElse(throw NoSuchElementException(s"Player ${command.playerId.value} was not found")))
+      savedTournament <- tournament match
+        case None => IO.pure(None)
+        case Some(tournament) =>
+          ensureAdminCanBeAssigned(player, command)
+          commitAdminAssignment(context, tournament, player, command).map(Some(_))
+    yield savedTournament
 
   private def ensureAdminCanBeAssigned(
       player: Player,
@@ -99,22 +100,26 @@ final case class TournamentAssignAdminAPIMessage(tournamentId: String, request: 
     )
 
   private def commitAdminAssignment(
-      connection: java.sql.Connection,
+      context: ApiPlanContext,
       tournament: Tournament,
       player: Player,
       command: AssignTournamentAdminCommand
-  ): Tournament =
-    PlayerPersistenceFunctions.savePlayer(
-      connection,
-      PlayerRoleFunctions.grantRole(
-        player,
-        RoleGrantFunctions.tournamentAdmin(command.tournamentId, command.grantedAt, command.actor.playerId)
-      )
-    )
-    riichinexus.microservices.tournament.tables.tournaments.TournamentTable.save(
-      connection,
-      TournamentFunctions.assignAdmin(tournament, command.playerId)
-    )
+  ): IO[Tournament] =
+    val connection = context.connection
+    for
+      _ <- SavePlayerPrivateAPIMessage(
+        PlayerRoleFunctions.grantRole(
+          player,
+          RoleGrantFunctions.tournamentAdmin(command.tournamentId, command.grantedAt, command.actor.playerId)
+        )
+      ).plan(context)
+      savedTournament <- IO.blocking {
+        riichinexus.microservices.tournament.tables.tournaments.TournamentTable.save(
+          connection,
+          TournamentFunctions.assignAdmin(tournament, command.playerId)
+        )
+      }
+    yield savedTournament
 
   private def assignAdminAudit(command: AssignTournamentAdminCommand): Vector[AuditEvent] =
     Vector(

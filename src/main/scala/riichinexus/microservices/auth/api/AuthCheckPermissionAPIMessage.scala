@@ -67,7 +67,7 @@ final case class AuthCheckPermissionAPIMessage(
       case Some(value) => IO.pure(value)
       case None =>
         operatorId match
-          case Some(playerId) => ResolveAccessPrincipal(playerId).plan(context.connection)
+          case Some(playerId) => ResolveAccessPrincipal(playerId).plan(context)
           case None           => IO.raiseError(IllegalArgumentException("operatorId or principal is required"))
 
   private def checkPermission(operator: AccessPrincipal, input: ResolvedCheckPermissionInput): Boolean =

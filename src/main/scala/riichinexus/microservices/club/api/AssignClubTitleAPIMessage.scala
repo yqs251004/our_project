@@ -4,7 +4,7 @@ import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
 import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPIMessage
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
-import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
+import riichinexus.microservices.player.api.`private`.*
 
 import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.time.Instant
@@ -59,7 +59,7 @@ final case class AssignClubTitleAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
-      actor <- IO.blocking(ResolveAccessPrincipal(PlayerId(operatorId)).resolve(context.connection))
+      actor <- ResolveAccessPrincipal(PlayerId(operatorId)).plan(context)
       assignedAt <- IO.realTimeInstant
       command = AssignClubTitleCommand(
         clubId = ClubId(clubId),
@@ -69,25 +69,26 @@ final case class AssignClubTitleAPIMessage(
         note = note,
         assignedAt = assignedAt
       )
-      savedClub <- IO.blocking {
-        {
-          assignTitle(context.connection, command)
-        }.getOrElse(throw NoSuchElementException("Resource not found"))
-      }
+      savedClub <- assignTitle(context, command).map(_.getOrElse(throw NoSuchElementException("Resource not found")))
       _ <- RecordAuditEventsPrivateAPIMessage(assignTitleAudit(command)).plan(context)
       _ <- CreateNotificationPrivateAPIMessage(assignTitleNotification(savedClub, command)).plan(context)
     yield ClubView.fromDomain(savedClub)
 
   private def assignTitle(
-      connection: java.sql.Connection,
+      context: ApiPlanContext,
       command: AssignClubTitleCommand
-  ): Option[Club] =
+  ): IO[Option[Club]] =
+    val connection = context.connection
     for
-      club <- riichinexus.microservices.club.tables.clubs.ClubTable.findById(connection, command.clubId)
-      player <- PlayerPersistenceFunctions.findPlayer(connection, command.playerId)
-    yield
-      ensureTitleCanBeAssigned(club, player, command)
-      commitTitleAssignment(connection, club, command, assignedBy = command.actor.playerId.getOrElse(club.creator))
+      club <- IO.blocking(riichinexus.microservices.club.tables.clubs.ClubTable.findById(connection, command.clubId))
+      player <- ResolvePlayerPrivateAPIMessage(command.playerId).plan(context)
+        .map(_.getOrElse(throw NoSuchElementException(s"Player ${command.playerId.value} was not found")))
+      savedClub <- club match
+        case None => IO.pure(None)
+        case Some(club) =>
+          ensureTitleCanBeAssigned(club, player, command)
+          IO.blocking(Some(commitTitleAssignment(connection, club, command, assignedBy = command.actor.playerId.getOrElse(club.creator))))
+    yield savedClub
 
   private def ensureTitleCanBeAssigned(
       club: Club,

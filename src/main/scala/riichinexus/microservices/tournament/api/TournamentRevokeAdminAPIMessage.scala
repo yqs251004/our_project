@@ -4,7 +4,7 @@ import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
 import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPIMessage
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
-import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
+import riichinexus.microservices.player.api.`private`.*
 
 import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
@@ -58,7 +58,7 @@ final case class TournamentRevokeAdminAPIMessage(tournamentId: String, playerId:
 
   override def plan(context: ApiPlanContext): IO[TournamentSummaryView] =
     for
-      actor <- IO.blocking(resolveOperatorActor(context))
+      actor <- resolveOperatorActor(context)
       revokedAt <- IO.realTimeInstant
       command = RevokeTournamentAdminCommand(
         tournamentId = TournamentId(tournamentId),
@@ -66,29 +66,30 @@ final case class TournamentRevokeAdminAPIMessage(tournamentId: String, playerId:
         actor = actor,
         revokedAt = revokedAt
       )
-      savedTournament <- IO.blocking {
-        {
-          revokeAdmin(context.connection, command)
-        }.getOrElse(throw NoSuchElementException("Resource not found"))
-      }
+      savedTournament <- revokeAdmin(context, command).map(_.getOrElse(throw NoSuchElementException("Resource not found")))
       _ <- RecordAuditEventsPrivateAPIMessage(revokeAdminAudit(command)).plan(context)
     yield TournamentSummaryView.fromDomain(savedTournament)
 
-  private def resolveOperatorActor(context: ApiPlanContext): AccessPrincipal =
+  private def resolveOperatorActor(context: ApiPlanContext): IO[AccessPrincipal] =
     operatorId.map(PlayerId(_))
-      .map(ResolveAccessPrincipal(_).resolve(context.connection))
-      .getOrElse(AccessPrincipalFunctions.system)
+      .map(ResolveAccessPrincipal(_).plan(context))
+      .getOrElse(IO.pure(AccessPrincipalFunctions.system))
 
   private def revokeAdmin(
-      connection: java.sql.Connection,
+      context: ApiPlanContext,
       command: RevokeTournamentAdminCommand
-  ): Option[Tournament] =
+  ): IO[Option[Tournament]] =
+    val connection = context.connection
     for
-      tournament <- riichinexus.microservices.tournament.tables.tournaments.TournamentTable.findById(connection, command.tournamentId)
-      player <- PlayerPersistenceFunctions.findPlayer(connection, command.playerId)
-    yield
-      ensureAdminCanBeRevoked(tournament, command)
-      commitAdminRevocation(connection, tournament, player, command)
+      tournament <- IO.blocking(riichinexus.microservices.tournament.tables.tournaments.TournamentTable.findById(connection, command.tournamentId))
+      player <- ResolvePlayerPrivateAPIMessage(command.playerId).plan(context)
+        .map(_.getOrElse(throw NoSuchElementException(s"Player ${command.playerId.value} was not found")))
+      savedTournament <- tournament match
+        case None => IO.pure(None)
+        case Some(tournament) =>
+          ensureAdminCanBeRevoked(tournament, command)
+          commitAdminRevocation(context, tournament, player, command).map(Some(_))
+    yield savedTournament
 
   private def ensureAdminCanBeRevoked(
       tournament: Tournament,
@@ -109,16 +110,21 @@ final case class TournamentRevokeAdminAPIMessage(tournamentId: String, playerId:
       )
 
   private def commitAdminRevocation(
-      connection: java.sql.Connection,
+      context: ApiPlanContext,
       tournament: Tournament,
       player: Player,
       command: RevokeTournamentAdminCommand
-  ): Tournament =
-    PlayerPersistenceFunctions.savePlayer(connection, PlayerRoleFunctions.revokeTournamentAdmin(player, command.tournamentId))
-    riichinexus.microservices.tournament.tables.tournaments.TournamentTable.save(
-      connection,
-      tournament.copy(admins = tournament.admins.filterNot(_ == command.playerId))
-    )
+  ): IO[Tournament] =
+    val connection = context.connection
+    for
+      _ <- SavePlayerPrivateAPIMessage(PlayerRoleFunctions.revokeTournamentAdmin(player, command.tournamentId)).plan(context)
+      savedTournament <- IO.blocking {
+        riichinexus.microservices.tournament.tables.tournaments.TournamentTable.save(
+          connection,
+          tournament.copy(admins = tournament.admins.filterNot(_ == command.playerId))
+        )
+      }
+    yield savedTournament
 
   private def revokeAdminAudit(command: RevokeTournamentAdminCommand): Vector[AuditEvent] =
     Vector(
@@ -140,3 +146,4 @@ final case class TournamentRevokeAdminAPIMessage(tournamentId: String, playerId:
       actor: AccessPrincipal,
       revokedAt: Instant
   )
+

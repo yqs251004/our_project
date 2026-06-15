@@ -4,7 +4,7 @@ import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
 import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPIMessage
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
-import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
+import riichinexus.microservices.player.api.`private`.*
 
 import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
@@ -63,7 +63,7 @@ final case class PlatformAdminBanPlayerAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[PlatformAdminPlayerView] =
     for
-      actor <- IO.blocking(ResolveAccessPrincipal(operatorId).resolve(context.connection))
+      actor <- ResolveAccessPrincipal(operatorId).plan(context)
       _ <- requireBanPlayerPermission(context, actor)
       request = BanPlayerRequest(operatorId = operatorId, reason = reason)
       bannedAt <- IO.realTimeInstant
@@ -73,12 +73,8 @@ final case class PlatformAdminBanPlayerAPIMessage(
         reason = request.reason,
         bannedAt = bannedAt
       )
-      savedPlayer <- IO.blocking {
-        {
-            banPlayer(context.connection, command)
-          }
-          .getOrElse(throw NoSuchElementException(s"Player ${command.playerId.value} was not found"))
-      }
+      savedPlayer <- banPlayer(context, command)
+        .map(_.getOrElse(throw NoSuchElementException(s"Player ${command.playerId.value} was not found")))
       _ <- RecordAuditEventsPrivateAPIMessage(banPlayerAudit(command)).plan(context)
       _ <- ResetPlayerDashboardAPIMessage(command.playerId, command.bannedAt).plan(context)
       _ <- ResetPlayerAdvancedStatsBoardAPIMessage(command.playerId, command.bannedAt).plan(context)
@@ -86,14 +82,23 @@ final case class PlatformAdminBanPlayerAPIMessage(
         previous.flatMap(_ =>
           ResolveClubPrivateAPIMessage(clubId).plan(context).flatMap {
             case Some(club) =>
-              val refreshed = ClubFunctions.updatePowerRating(
-                club,
-                ClubPowerRatingService.calculate(club, PlayerPersistenceFunctions.findPlayer(context.connection, _))
-              )
-              SaveClubPrivateAPIMessage(refreshed).plan(context).flatMap { savedClub =>
-                RecordClubDashboardAPIMessage(savedClub, command.bannedAt).plan(context).flatMap(_ =>
-                  RecordClubAdvancedStatsBoardAPIMessage(savedClub, command.bannedAt).plan(context).map(_ => ())
+              club.members.foldLeft(IO.pure(Map.empty[PlayerId, Player])) { (playersIO, playerId) =>
+                playersIO.flatMap { playersById =>
+                  ResolvePlayerPrivateAPIMessage(playerId).plan(context).map {
+                    case Some(player) => playersById + (playerId -> player)
+                    case None         => playersById
+                  }
+                }
+              }.flatMap { playersById =>
+                val refreshed = ClubFunctions.updatePowerRating(
+                  club,
+                  ClubPowerRatingService.calculate(club, playerId => playersById.get(playerId))
                 )
+                SaveClubPrivateAPIMessage(refreshed).plan(context).flatMap { savedClub =>
+                  RecordClubDashboardAPIMessage(savedClub, command.bannedAt).plan(context).flatMap(_ =>
+                    RecordClubAdvancedStatsBoardAPIMessage(savedClub, command.bannedAt).plan(context).map(_ => ())
+                  )
+                }
               }
             case None =>
               IO.unit
@@ -112,13 +117,16 @@ final case class PlatformAdminBanPlayerAPIMessage(
     }
 
   private def banPlayer(
-      connection: java.sql.Connection,
+      context: ApiPlanContext,
       command: BanPlayerCommand
-  ): Option[Player] =
+  ): IO[Option[Player]] =
     require(command.reason.trim.nonEmpty, "Ban reason cannot be empty")
 
-    PlayerPersistenceFunctions.findPlayer(connection, command.playerId).map { player =>
-      PlayerPersistenceFunctions.savePlayer(connection, PlayerStatusFunctions.ban(player, command.reason))
+    ResolvePlayerPrivateAPIMessage(command.playerId).plan(context).flatMap {
+      case Some(player) =>
+        SavePlayerPrivateAPIMessage(PlayerStatusFunctions.ban(player, command.reason)).plan(context).map(Some(_))
+      case None =>
+        IO.pure(None)
     }
 
   private def banPlayerAudit(command: BanPlayerCommand): Vector[AuditEvent] =

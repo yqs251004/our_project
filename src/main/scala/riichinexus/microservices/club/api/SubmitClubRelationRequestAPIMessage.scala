@@ -14,7 +14,7 @@ import riichinexus.microservices.club.objects.relationmanagement.ClubRelationKin
 import riichinexus.microservices.notification.api.`private`.CreateBulkNotificationsPrivateAPIMessage
 import riichinexus.microservices.notification.objects.Notification
 import riichinexus.microservices.notification.objects.apiTypes.CreateNotificationRequest
-import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
+import riichinexus.microservices.player.api.`private`.*
 import riichinexus.microservices.player.objects.PlayerStatus
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
@@ -30,56 +30,58 @@ final case class SubmitClubRelationRequestAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[Vector[Notification]] =
     for
-      actor <- IO.blocking(ResolveAccessPrincipal(PlayerId(operatorId)).resolve(context.connection))
-      notificationRequests <- IO.blocking {
-        buildNotificationRequests(context.connection, actor)
-      }
+      actor <- ResolveAccessPrincipal(PlayerId(operatorId)).plan(context)
+      notificationRequests <- buildNotificationRequests(context, actor)
       notifications <- CreateBulkNotificationsPrivateAPIMessage(notificationRequests).plan(context)
     yield notifications
 
   private def buildNotificationRequests(
-      connection: Connection,
+      context: ApiPlanContext,
       actor: AccessPrincipal
-  ): Vector[CreateNotificationRequest] =
-    val sourceClub = resolveClub(connection, ClubId(clubId))
-    val targetClub = resolveClub(connection, ClubId(targetClubId))
+  ): IO[Vector[CreateNotificationRequest]] =
+    val connection = context.connection
+    for
+      sourceClub <- IO.blocking(resolveClub(connection, ClubId(clubId)))
+      targetClub <- IO.blocking(resolveClub(connection, ClubId(targetClubId)))
+      players <- ListAllPlayersPrivateAPIMessage().plan(context)
+      requests <- IO.blocking {
+        ensureRequestCanBeSubmitted(actor, sourceClub, targetClub)
 
-    ensureRequestCanBeSubmitted(actor, sourceClub, targetClub)
+        val superAdmins = players
+          .filter(player => player.status == PlayerStatus.Active && player.roleGrants.exists(_.role == Role.SuperAdmin))
 
-    val superAdmins = PlayerPersistenceFunctions
-      .findAllPlayers(connection)
-      .filter(player => player.status == PlayerStatus.Active && player.roleGrants.exists(_.role == Role.SuperAdmin))
+        if superAdmins.isEmpty then
+          throw IllegalStateException("No active super admin is available to review club relation requests")
 
-    if superAdmins.isEmpty then
-      throw IllegalStateException("No active super admin is available to review club relation requests")
+        val trimmedNote = note.map(_.trim).filter(_.nonEmpty)
+        val relationText = relationLabel(relation)
+        val body =
+          s"${sourceClub.name} 申请将与 ${targetClub.name} 的公开关系调整为 $relationText。" +
+            trimmedNote.fold("")(value => s" 备注：$value")
 
-    val trimmedNote = note.map(_.trim).filter(_.nonEmpty)
-    val relationText = relationLabel(relation)
-    val body =
-      s"${sourceClub.name} 申请将与 ${targetClub.name} 的公开关系调整为 $relationText。" +
-        trimmedNote.fold("")(value => s" 备注：$value")
-
-    superAdmins.map { superAdmin =>
-      CreateNotificationRequest(
-        recipientPlayerId = superAdmin.id.value,
-        notificationType = "ClubRelationChangeRequested",
-        title = "俱乐部关系调整申请",
-        body = body,
-        severity = Some("info"),
-        sourceService = "club",
-        sourceType = "club-relation-request",
-        sourceId = s"${sourceClub.id.value}:${targetClub.id.value}:${ClubRelationKind.toString(relation)}",
-        actionUrl = Some(s"/public/clubs/${sourceClub.id.value}"),
-        objects = Map(
-          "sourceClubId" -> sourceClub.id.value,
-          "sourceClubName" -> sourceClub.name,
-          "targetClubId" -> targetClub.id.value,
-          "targetClubName" -> targetClub.name,
-          "relation" -> ClubRelationKind.toString(relation),
-          "operatorId" -> operatorId
-        ) ++ trimmedNote.map(value => Map("note" -> value)).getOrElse(Map.empty)
-      )
-    }
+        superAdmins.map { superAdmin =>
+          CreateNotificationRequest(
+            recipientPlayerId = superAdmin.id.value,
+            notificationType = "ClubRelationChangeRequested",
+            title = "俱乐部关系调整申请",
+            body = body,
+            severity = Some("info"),
+            sourceService = "club",
+            sourceType = "club-relation-request",
+            sourceId = s"${sourceClub.id.value}:${targetClub.id.value}:${ClubRelationKind.toString(relation)}",
+            actionUrl = Some(s"/public/clubs/${sourceClub.id.value}"),
+            objects = Map(
+              "sourceClubId" -> sourceClub.id.value,
+              "sourceClubName" -> sourceClub.name,
+              "targetClubId" -> targetClub.id.value,
+              "targetClubName" -> targetClub.name,
+              "relation" -> ClubRelationKind.toString(relation),
+              "operatorId" -> operatorId
+            ) ++ trimmedNote.map(value => Map("note" -> value)).getOrElse(Map.empty)
+          )
+        }
+      }
+    yield requests
 
   private def resolveClub(connection: Connection, id: ClubId): Club =
     riichinexus.microservices.club.tables.clubs.ClubTable

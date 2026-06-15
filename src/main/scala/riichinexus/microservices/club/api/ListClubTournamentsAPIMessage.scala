@@ -68,25 +68,27 @@ final case class ListClubTournamentsAPIMessage(
   override def plan(context: ApiPlanContext): IO[PagedResponse[ClubTournamentParticipationView]] =
     for
       now <- IO.realTimeInstant
-      query <- IO.blocking(resolveQuery(context, now))
+      query <- resolveQuery(context, now)
       tournaments <- ListClubTournamentsPrivateAPIMessage(query.clubId).plan(context)
       items <- IO.blocking(listTournaments(context.connection, query, tournaments))
     yield pagedResponse(items, query)
 
-  private def resolveQuery(context: ApiPlanContext, now: Instant): ClubTournamentQuery =
+  private def resolveQuery(context: ApiPlanContext, now: Instant): IO[ClubTournamentQuery] =
     val parsedViewer = viewer.filter(_.nonEmpty).map(PlayerId(_))
-    ClubTournamentQuery(
-      clubId = ClubId(clubId),
-      scope = scope.filter(_.nonEmpty).getOrElse("recent"),
-      viewerPrincipal = parsedViewer.map(ResolveAccessPrincipal(_).resolve(context.connection)).getOrElse(AccessPrincipalFunctions.guest()),
-      limit = limit.getOrElse(20),
-      offset = offset.getOrElse(0),
-      recentThreshold = now.minus(recentTournamentWindow),
-      appliedFilters = Vector(
-        scope.filter(_.nonEmpty).map("scope" -> _),
-        viewer.filter(_.nonEmpty).map("viewer" -> _)
-      ).flatten.toMap
-    )
+    parsedViewer.map(ResolveAccessPrincipal(_).plan(context)).getOrElse(IO.pure(AccessPrincipalFunctions.guest())).map { viewerPrincipal =>
+      ClubTournamentQuery(
+        clubId = ClubId(clubId),
+        scope = scope.filter(_.nonEmpty).getOrElse("recent"),
+        viewerPrincipal = viewerPrincipal,
+        limit = limit.getOrElse(20),
+        offset = offset.getOrElse(0),
+        recentThreshold = now.minus(recentTournamentWindow),
+        appliedFilters = Vector(
+          scope.filter(_.nonEmpty).map("scope" -> _),
+          viewer.filter(_.nonEmpty).map("viewer" -> _)
+        ).flatten.toMap
+      )
+    }
 
   private def listTournaments(
       connection: java.sql.Connection,

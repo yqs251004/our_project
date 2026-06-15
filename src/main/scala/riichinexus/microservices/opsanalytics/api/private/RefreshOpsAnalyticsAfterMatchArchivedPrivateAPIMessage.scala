@@ -1,5 +1,5 @@
 package riichinexus.microservices.opsanalytics.api.`private`
-import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
+import riichinexus.microservices.player.api.`private`.*
 
 import cats.effect.IO
 
@@ -49,10 +49,12 @@ final case class RefreshOpsAnalyticsAfterMatchArchivedPrivateAPIMessage(
     val representedClubIds = matchRecord.seatResults.flatMap(_.clubId).distinct
 
     for
-      memberClubIds <- IO.blocking {
-        matchRecord.seatResults.flatMap { result =>
-          PlayerPersistenceFunctions.findPlayer(context.connection, result.playerId).toVector.flatMap(PlayerClubBindingFunctions.boundClubIds)
-        }.distinct
+      memberClubIds <- matchRecord.seatResults.foldLeft(IO.pure(Vector.empty[ClubId])) { (previous, result) =>
+        previous.flatMap { clubIds =>
+          ResolvePlayerPrivateAPIMessage(result.playerId).plan(context).map(player =>
+            (clubIds ++ player.toVector.flatMap(PlayerClubBindingFunctions.boundClubIds)).distinct
+          )
+        }
       }
       impactedClubIds = (representedClubIds ++ memberClubIds).distinct
       _ <- matchRecord.seatResults.foldLeft(IO.unit) { (previous, result) =>
@@ -71,18 +73,18 @@ final case class RefreshOpsAnalyticsAfterMatchArchivedPrivateAPIMessage(
               IO.unit
         }
       }
-      players <- IO.blocking {
-        matchRecord.seatResults.flatMap(result =>
-          PlayerPersistenceFunctions.findPlayer(context.connection, result.playerId)
-        )
+      players <- matchRecord.seatResults.foldLeft(IO.pure(Vector.empty[riichinexus.microservices.player.domain.Player])) { (previous, result) =>
+        previous.flatMap { players =>
+          ResolvePlayerPrivateAPIMessage(result.playerId).plan(context).map(player => players ++ player.toVector)
+        }
       }
       ratingDeltas = RatingService.calculateDeltas(players, matchRecord.seatResults)
       ratingNotificationRequests = eloChangeNotifications(matchRecord, players, ratingDeltas)
       _ <- ratingDeltas.foldLeft(IO.unit) { (previous, delta) =>
         previous.flatMap { _ =>
-          IO.blocking(PlayerPersistenceFunctions.findPlayer(context.connection, delta.playerId)).flatMap {
+          ResolvePlayerPrivateAPIMessage(delta.playerId).plan(context).flatMap {
             case Some(player) =>
-              IO.blocking(PlayerPersistenceFunctions.savePlayer(context.connection, PlayerRatingFunctions.applyElo(player, delta.delta))).map(_ => ())
+              SavePlayerPrivateAPIMessage(PlayerRatingFunctions.applyElo(player, delta.delta)).plan(context).map(_ => ())
             case None =>
               IO.unit
           }
@@ -93,11 +95,20 @@ final case class RefreshOpsAnalyticsAfterMatchArchivedPrivateAPIMessage(
         previous.flatMap { clubs =>
           ResolveClubPrivateAPIMessage(clubId).plan(context).flatMap {
             case Some(club) =>
-              val refreshed = ClubFunctions.updatePowerRating(
-                club,
-                ClubPowerRatingService.calculate(club, PlayerPersistenceFunctions.findPlayer(context.connection, _))
-              )
-              SaveClubPrivateAPIMessage(refreshed).plan(context).map(saved => clubs :+ saved)
+              club.members.foldLeft(IO.pure(Map.empty[PlayerId, riichinexus.microservices.player.domain.Player])) { (playersIO, playerId) =>
+                playersIO.flatMap { playersById =>
+                  ResolvePlayerPrivateAPIMessage(playerId).plan(context).map {
+                    case Some(player) => playersById + (playerId -> player)
+                    case None         => playersById
+                  }
+                }
+              }.flatMap { playersById =>
+                val refreshed = ClubFunctions.updatePowerRating(
+                  club,
+                  ClubPowerRatingService.calculate(club, playerId => playersById.get(playerId))
+                )
+                SaveClubPrivateAPIMessage(refreshed).plan(context).map(saved => clubs :+ saved)
+              }
             case None =>
               IO.pure(clubs)
           }

@@ -52,7 +52,7 @@ final case class UpdateClubRecruitmentPolicyAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
-      actor <- IO.blocking(ResolveAccessPrincipal(PlayerId(request.operatorId)).resolve(context.connection))
+      actor <- ResolveAccessPrincipal(PlayerId(request.operatorId)).plan(context)
       occurredAt <- IO.realTimeInstant
       command = UpdateClubRecruitmentPolicyCommand(
         clubId = ClubId(clubId),

@@ -56,7 +56,7 @@ final case class TournamentTableResetAPIMessage(tableId: String, request: ForceR
 
   override def plan(context: ApiPlanContext): IO[TournamentTableView] =
     for
-      actor <- IO.blocking(ResolveAccessPrincipal(PlayerId(request.operatorId)).resolve(context.connection))
+      actor <- ResolveAccessPrincipal(PlayerId(request.operatorId)).plan(context)
       resetAt <- IO.realTimeInstant
       command = ResetTableCommand(TableId(tableId), actor, request.note, resetAt)
       table <- IO.blocking {

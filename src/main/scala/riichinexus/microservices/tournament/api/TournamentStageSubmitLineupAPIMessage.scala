@@ -2,7 +2,7 @@ package riichinexus.microservices.tournament.api
 import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
-import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
+import riichinexus.microservices.player.api.`private`.*
 
 import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
@@ -10,7 +10,6 @@ import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFuncti
 import java.util.NoSuchElementException
 
 import cats.effect.IO
-import cats.effect.unsafe.implicits.global
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
@@ -70,24 +69,19 @@ final case class TournamentStageSubmitLineupAPIMessage(tournamentId: String, sta
 
   override def plan(context: ApiPlanContext): IO[TournamentMutationView] =
     for
-      actor <- IO.blocking(ResolveAccessPrincipal(PlayerId(request.operatorId)).resolve(context.connection))
+      actor <- ResolveAccessPrincipal(PlayerId(request.operatorId)).plan(context)
       command = SubmitStageLineupCommand(
         tournamentId = TournamentId(tournamentId),
         stageId = TournamentStageId(stageId),
         submission = stageLineupSubmission(request),
         actor = actor
       )
-      savedTournament <- IO.blocking {
-        {
-          submitLineup(context.connection, command)
-        }.getOrElse(throw NoSuchElementException("Resource not found"))
-      }
+      savedTournament <- submitLineup(context, command)
+        .map(_.getOrElse(throw NoSuchElementException("Resource not found")))
       _ <- publishLineupSubmitted(context, command)
       _ <- CreateBulkNotificationsPrivateAPIMessage(lineupSelectedNotifications(savedTournament, command)).plan(context)
-      view <- IO.blocking {
-        TournamentOperationViewAssembler.mutationView(context.connection, command.tournamentId, Vector.empty)
-        .getOrElse(throw NoSuchElementException("Resource not found"))
-      }
+      view <- TournamentOperationViewAssembler.mutationView(context, command.tournamentId, Vector.empty)
+        .map(_.getOrElse(throw NoSuchElementException("Resource not found")))
     yield view
 
   private def publishLineupSubmitted(
@@ -108,24 +102,37 @@ final case class TournamentStageSubmitLineupAPIMessage(tournamentId: String, sta
     )
 
   private def submitLineup(
-      connection: java.sql.Connection,
+      context: ApiPlanContext,
       command: SubmitStageLineupCommand
-  ): Option[Tournament] =
-    riichinexus.microservices.tournament.tables.tournaments.TournamentTable.findById(connection, command.tournamentId).map { tournament =>
-      val stage = requireStage(tournament, command.stageId)
-      ensureNoLineupConflict(stage, command)
-      val club = resolveActiveClub(connection, command.submission.clubId)
-      requireClubLineupCapability(command.actor, club)
-      ensureSubmitterMatchesActor(command.actor, command.submission)
-      ensureClubRegistered(tournament, command)
-      ensureLineupPlayersActiveMembers(connection, club, command.submission)
-      riichinexus.microservices.tournament.tables.tournaments.TournamentTable.save(connection, 
-        TournamentFunctions.updateStage(
-          tournament,
-          command.stageId,
-          stage => TournamentStageFunctions.submitLineup(stage, command.submission)
-        )
-      )
+  ): IO[Option[Tournament]] =
+    IO.blocking(
+      riichinexus.microservices.tournament.tables.tournaments.TournamentTable.findById(context.connection, command.tournamentId)
+    ).flatMap {
+      case Some(tournament) =>
+        for
+          stage <- IO.blocking {
+            val stage = requireStage(tournament, command.stageId)
+            ensureNoLineupConflict(stage, command)
+            stage
+          }
+          club <- resolveActiveClub(context, command.submission.clubId)
+          _ <- IO.blocking {
+            requireClubLineupCapability(command.actor, club)
+            ensureSubmitterMatchesActor(command.actor, command.submission)
+            ensureClubRegistered(tournament, command)
+          }
+          _ <- ensureLineupPlayersActiveMembers(context, club, command.submission)
+          savedTournament <- IO.blocking {
+            riichinexus.microservices.tournament.tables.tournaments.TournamentTable.save(context.connection,
+              TournamentFunctions.updateStage(
+                tournament,
+                command.stageId,
+                _ => TournamentStageFunctions.submitLineup(stage, command.submission)
+              )
+            )
+          }
+        yield Some(savedTournament)
+      case None => IO.pure(None)
     }
 
   private def requireStage(tournament: Tournament, stageId: TournamentStageId): TournamentStage =
@@ -180,13 +187,13 @@ final case class TournamentStageSubmitLineupAPIMessage(tournamentId: String, sta
         s"Stage ${command.stageId.value} already has player(s) assigned by another club: ${conflictingPlayers.mkString(", ")}"
       )
 
-  private def resolveActiveClub(connection: java.sql.Connection, clubId: ClubId): Club =
-    val club = ResolveClubPrivateAPIMessage(clubId)
-      .plan(ApiPlanContext(bearerToken = None, connection = connection))
-      .unsafeRunSync()
-      .getOrElse(throw NoSuchElementException(s"Club ${clubId.value} was not found"))
-    ensureClubActive(club)
-    club
+  private def resolveActiveClub(context: ApiPlanContext, clubId: ClubId): IO[Club] =
+    ResolveClubPrivateAPIMessage(clubId)
+      .plan(context)
+      .map(_.getOrElse(throw NoSuchElementException(s"Club ${clubId.value} was not found")))
+      .flatMap { club =>
+        IO.blocking(ensureClubActive(club)).as(club)
+      }
 
   private def ensureSubmitterMatchesActor(actor: AccessPrincipal, submission: StageLineupSubmission): Unit =
     if !AccessPrincipalFunctions.isSuperAdmin(actor) && actor.playerId.exists(_ != submission.submittedBy) then
@@ -201,22 +208,28 @@ final case class TournamentStageSubmitLineupAPIMessage(tournamentId: String, sta
       )
 
   private def ensureLineupPlayersActiveMembers(
-      connection: java.sql.Connection,
+      context: ApiPlanContext,
       club: Club,
       submission: StageLineupSubmission
-  ): Unit =
-    submission.seats.foreach { seat =>
-      val playerId = seat.playerId
-      if !club.members.contains(playerId) then
-        throw IllegalArgumentException(
-          s"Player ${playerId.value} is not a member of club ${submission.clubId.value}"
-        )
+  ): IO[Unit] =
+    val playerIds = submission.seats.map(_.playerId).distinct
+    for
+      players <- ResolvePlayersPrivateAPIMessage(playerIds).plan(context)
+      _ <- IO.blocking {
+        val playersById = players.map(player => player.id -> player).toMap
+        submission.seats.foreach { seat =>
+          val playerId = seat.playerId
+          if !club.members.contains(playerId) then
+            throw IllegalArgumentException(
+              s"Player ${playerId.value} is not a member of club ${submission.clubId.value}"
+            )
 
-      val player = PlayerPersistenceFunctions.findPlayer(connection, playerId)
-        .getOrElse(throw NoSuchElementException(s"Player ${playerId.value} was not found"))
-      if player.status != PlayerStatus.Active then
-        throw IllegalArgumentException(s"Player ${playerId.value} cannot be submitted to tournament lineups")
-    }
+          val player = playersById.getOrElse(playerId, throw NoSuchElementException(s"Player ${playerId.value} was not found"))
+          if player.status != PlayerStatus.Active then
+            throw IllegalArgumentException(s"Player ${playerId.value} cannot be submitted to tournament lineups")
+        }
+      }
+    yield ()
 
   private def ensureClubActive(club: Club): Unit =
     if club.dissolvedAt.nonEmpty then

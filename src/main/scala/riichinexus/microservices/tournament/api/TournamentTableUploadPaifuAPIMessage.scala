@@ -45,7 +45,7 @@ final case class TournamentTableUploadPaifuAPIMessage(tableId: String, request: 
 
   override def plan(context: ApiPlanContext): IO[TournamentTableView] =
     for
-      actor <- IO.blocking(resolveActor(context))
+      actor <- resolveActor(context)
       table <- IO.blocking {
         {
           TournamentPaifuArchiveService(AuthorizationPolicyFunctions.strict).archivePaifu(
@@ -58,5 +58,6 @@ final case class TournamentTableUploadPaifuAPIMessage(tableId: String, request: 
       }
     yield TournamentTableView.fromDomain(table)
 
-  private def resolveActor(context: ApiPlanContext): AccessPrincipal =
-    request.operatorId.filter(_.nonEmpty).map(PlayerId(_)).map(ResolveAccessPrincipal(_).resolve(context.connection)).getOrElse(AccessPrincipalFunctions.system)
+  private def resolveActor(context: ApiPlanContext): IO[AccessPrincipal] =
+    request.operatorId.filter(_.nonEmpty).map(PlayerId(_)).map(ResolveAccessPrincipal(_).plan(context)).getOrElse(IO.pure(AccessPrincipalFunctions.system))
+

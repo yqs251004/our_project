@@ -1,5 +1,4 @@
 package riichinexus.microservices.tournament.domain.rulesmanagement.functions.knockout
-import riichinexus.microservices.player.api.`private`.ResolvePlayersPrivateAPIMessage
 
 import riichinexus.microservices.tournament.domain.lineupmanagement.functions.*
 import riichinexus.microservices.tournament.domain.paifumanagement.functions.*
@@ -16,7 +15,7 @@ import java.sql.Connection
 import java.time.Instant
 import java.util.NoSuchElementException
 
-import cats.effect.unsafe.implicits.global
+import cats.effect.IO
 import riichinexus.system.api.ApiPlanContext
 import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
@@ -67,19 +66,23 @@ object KnockoutStageCoordinator:
       tournamentId: TournamentId,
       stageId: TournamentStageId,
       at: Instant = Instant.now()
-  ): KnockoutBracketSnapshot =
-    val tournament = TournamentTable
-      .findById(connection, tournamentId)
-      .getOrElse(throw NoSuchElementException(s"Tournament ${tournamentId.value} was not found"))
-    val stage = requireStage(tournament, stageId)
-    val participants = resolveParticipants(connection, tournament, stage)
-    val records = stageRecords(connection, tournamentId, stageId)
-    buildProgression(
+  ): IO[KnockoutBracketSnapshot] =
+    for
+      base <- IO.blocking {
+        val tournament = TournamentTable
+          .findById(connection, tournamentId)
+          .getOrElse(throw NoSuchElementException(s"Tournament ${tournamentId.value} was not found"))
+        val stage = requireStage(tournament, stageId)
+        (tournament, stage, stageRecords(connection, tournamentId, stageId), TournamentGameTable.findByTournamentAndStage(connection, tournamentId, stageId))
+      }
+      (tournament, stage, records, tables) = base
+      participants <- TournamentStageParticipantResolver.resolveParticipants(ApiPlanContext(bearerToken = None, connection = connection), tournament, stage)
+    yield buildProgression(
       tournament = tournament,
       stage = stage,
       participants = participants,
       records = records,
-      tables = TournamentGameTable.findByTournamentAndStage(connection, tournamentId, stageId),
+      tables = tables,
       at = at
     )
 
@@ -119,16 +122,19 @@ object KnockoutStageCoordinator:
       tournamentId: TournamentId,
       stageId: TournamentStageId,
       at: Instant = Instant.now()
-  ): Vector[Table] =
-    {
-      val tournament = TournamentTable
-        .findById(connection, tournamentId)
-        .getOrElse(throw NoSuchElementException(s"Tournament ${tournamentId.value} was not found"))
-      val stage = requireStage(tournament, stageId)
-      val existingTables = TournamentGameTable.findByTournamentAndStage(connection, tournamentId, stageId)
-      val participants = resolveParticipants(connection, tournament, stage)
+  ): IO[Vector[Table]] =
+    for
+      base <- IO.blocking {
+        val tournament = TournamentTable
+          .findById(connection, tournamentId)
+          .getOrElse(throw NoSuchElementException(s"Tournament ${tournamentId.value} was not found"))
+        val stage = requireStage(tournament, stageId)
+        (tournament, stage, TournamentGameTable.findByTournamentAndStage(connection, tournamentId, stageId), stageRecords(connection, tournamentId, stageId))
+      }
+      (tournament, stage, existingTables, records) = base
+      participants <- TournamentStageParticipantResolver.resolveParticipants(ApiPlanContext(bearerToken = None, connection = connection), tournament, stage)
+      savedTables <- IO.blocking {
       val participantsById = participants.map(player => player.id -> player).toMap
-      val records = stageRecords(connection, tournamentId, stageId)
       val progression = buildProgression(tournament, stage, participants, records, existingTables, at)
       val representedClubByPlayer = representativeClubMap(stage)
 
@@ -188,7 +194,8 @@ object KnockoutStageCoordinator:
         )
 
       savedTables
-    }
+      }
+    yield savedTables
 
   def reconcileAfterMatchMutation(
       connection: Connection,
@@ -196,11 +203,11 @@ object KnockoutStageCoordinator:
       stageId: TournamentStageId,
       mutatedMatchId: String,
       at: Instant = Instant.now()
-  ): Vector[Table] =
-    {
-      pruneDependentTables(connection, tournamentId, stageId, mutatedMatchId)
-      materializeUnlockedTables(connection, tournamentId, stageId, at)
-    }
+  ): IO[Vector[Table]] =
+    for
+      _ <- IO.blocking(pruneDependentTables(connection, tournamentId, stageId, mutatedMatchId))
+      tables <- materializeUnlockedTables(connection, tournamentId, stageId, at)
+    yield tables
 
   private def requireStage(
       tournament: Tournament,
@@ -216,43 +223,6 @@ object KnockoutStageCoordinator:
       stageId: TournamentStageId
   ): Vector[MatchRecord] =
     MatchRecordTable.findByTournamentAndStage(connection, tournamentId, stageId)
-
-  private def resolveParticipants(
-      connection: Connection,
-      tournament: Tournament,
-      stage: TournamentStage
-  ): Vector[Player] =
-    val clubIds = (tournament.participatingClubs ++ tournament.whitelist.flatMap(_.clubId)).distinct
-    val clubsById = ResolveClubsPrivateAPIMessage(clubIds)
-      .plan(ApiPlanContext(bearerToken = None, connection = connection))
-      .unsafeRunSync()
-      .map(club => club.id -> club)
-      .toMap
-
-    val fallbackPlayerIds =
-      val registeredClubMembers = tournament.participatingClubs.flatMap { clubId =>
-        clubsById.get(clubId).toVector.flatMap(_.members)
-      }
-      val whitelistedPlayers = tournament.whitelist.flatMap(_.playerId)
-      val whitelistedClubMembers = tournament.whitelist.flatMap { entry =>
-        entry.clubId.toVector.flatMap(clubId => clubsById.get(clubId).toVector.flatMap(_.members))
-      }
-
-      (tournament.participatingPlayers ++ whitelistedPlayers ++ registeredClubMembers ++ whitelistedClubMembers).distinct
-
-    val playersById = ResolvePlayersPrivateAPIMessage((stage.lineupSubmissions.flatMap(_.seats.map(_.playerId)) ++ fallbackPlayerIds).distinct)
-      .plan(ApiPlanContext(bearerToken = None, connection = connection))
-      .unsafeRunSync()
-      .map(player => player.id -> player)
-      .toMap
-    val stagePlayerIds = StageLineupResolver.resolveEligiblePlayers(stage, playersById.get)
-
-    val targetPlayerIds =
-      StageLineupResolver.resolveTargetPlayerIds(tournament, stagePlayerIds, fallbackPlayerIds)
-
-    targetPlayerIds.flatMap { playerId =>
-      playersById.get(playerId).filter(_.status == PlayerStatus.Active)
-    }
 
   private def pruneDependentTables(
       connection: Connection,

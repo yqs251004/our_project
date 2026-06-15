@@ -3,7 +3,6 @@ package riichinexus.microservices.tournament.api
 import riichinexus.microservices.tournament.objects.tournamentmanagement.{StageStatus, TournamentStatus}
 
 import cats.effect.IO
-import cats.effect.unsafe.implicits.global
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
@@ -53,7 +52,7 @@ final case class ListPublicTournamentsAPIMessage(
     for
       query <- IO.blocking(resolveQuery(context))
       tournaments <- IO.blocking(publicTournaments(context, query))
-      clubsById <- IO.blocking(publicRelatedClubsById(context, tournaments))
+      clubsById <- publicRelatedClubsById(context, tournaments)
       summaries <- IO.blocking(publicTournamentSummaryViews(tournaments, clubsById))
     yield PagedResponse.fromItems(summaries, limit, offset, query.appliedFilters)(identity)
 
@@ -85,12 +84,10 @@ final case class ListPublicTournamentsAPIMessage(
   private def publicRelatedClubsById(
       context: ApiPlanContext,
       tournaments: Vector[Tournament]
-  ): Map[ClubId, Club] =
+  ): IO[Map[ClubId, Club]] =
     ResolveClubsPrivateAPIMessage(tournaments.flatMap(relatedClubIds))
-      .plan(ApiPlanContext(bearerToken = None, connection = context.connection))
-      .unsafeRunSync()
-      .map(club => club.id -> club)
-      .toMap
+      .plan(context)
+      .map(_.map(club => club.id -> club).toMap)
 
   private def publicTournamentSummaryViews(
       tournaments: Vector[Tournament],

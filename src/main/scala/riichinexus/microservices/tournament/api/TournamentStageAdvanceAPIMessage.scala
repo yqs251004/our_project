@@ -56,7 +56,7 @@ final case class TournamentStageAdvanceAPIMessage(tournamentId: String, stageId:
 
   override def plan(context: ApiPlanContext): IO[Vector[TournamentTableView]] =
     for
-      actor <- IO.blocking(operatorId.filter(_.nonEmpty).map(PlayerId(_)).map(ResolveAccessPrincipal(_).resolve(context.connection)).getOrElse(AccessPrincipalFunctions.system))
+      actor <- operatorId.filter(_.nonEmpty).map(PlayerId(_)).map(ResolveAccessPrincipal(_).plan(context)).getOrElse(IO.pure(AccessPrincipalFunctions.system))
       at <- IO.realTimeInstant
       command = AdvanceKnockoutStageCommand(
         tournamentId = TournamentId(tournamentId),
@@ -64,35 +64,35 @@ final case class TournamentStageAdvanceAPIMessage(tournamentId: String, stageId:
         actor = actor,
         at = at
       )
-      tables <- IO.blocking {
-        {
-          advanceStage(context.connection, command)
-        }
-      }
+      tables <- advanceStage(context, command)
     yield tables.map(TournamentTableView.fromDomain)
 
   private def advanceStage(
-      connection: java.sql.Connection,
+      context: ApiPlanContext,
       command: AdvanceKnockoutStageCommand
-  ): Vector[Table] =
-    val tournament = riichinexus.microservices.tournament.tables.tournaments.TournamentTable
-      .findById(connection, command.tournamentId)
-      .getOrElse(throw NoSuchElementException(s"Tournament ${command.tournamentId.value} was not found"))
-    val stage = tournament.stages
-      .find(_.id == command.stageId)
-      .getOrElse(throw NoSuchElementException(s"Stage ${command.stageId.value} was not found"))
-    AuthorizationPolicyFunctions.requirePermission(AuthorizationPolicyFunctions.strict, 
-      command.actor,
-      Permission.ManageTournamentStages,
-      tournamentId = Some(command.tournamentId)
-    )
-    ensureKnockoutStage(stage, command.stageId)
-    KnockoutStageCoordinator.materializeUnlockedTables(
-      connection,
-      command.tournamentId,
-      command.stageId,
-      command.at
-    )
+  ): IO[Vector[Table]] =
+    for
+      _ <- IO.blocking {
+        val tournament = riichinexus.microservices.tournament.tables.tournaments.TournamentTable
+          .findById(context.connection, command.tournamentId)
+          .getOrElse(throw NoSuchElementException(s"Tournament ${command.tournamentId.value} was not found"))
+        val stage = tournament.stages
+          .find(_.id == command.stageId)
+          .getOrElse(throw NoSuchElementException(s"Stage ${command.stageId.value} was not found"))
+        AuthorizationPolicyFunctions.requirePermission(AuthorizationPolicyFunctions.strict,
+          command.actor,
+          Permission.ManageTournamentStages,
+          tournamentId = Some(command.tournamentId)
+        )
+        ensureKnockoutStage(stage, command.stageId)
+      }
+      tables <- KnockoutStageCoordinator.materializeUnlockedTables(
+        context.connection,
+        command.tournamentId,
+        command.stageId,
+        command.at
+      )
+    yield tables
 
   private def ensureKnockoutStage(stage: TournamentStage, stageId: TournamentStageId): Unit =
     val isKnockoutStage =

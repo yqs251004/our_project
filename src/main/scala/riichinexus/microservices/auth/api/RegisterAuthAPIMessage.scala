@@ -1,11 +1,10 @@
 package riichinexus.microservices.auth.api
 import riichinexus.microservices.auth.domain.AuthenticationFailure
-import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
+import riichinexus.microservices.player.api.`private`.*
 
 import java.time.Instant
 
 import cats.effect.IO
-import cats.effect.unsafe.implicits.global
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
@@ -57,11 +56,7 @@ final case class RegisterAuthAPIMessage(
         displayName = normalizeDisplayName(displayName),
         registeredAt = registeredAt
       )
-      result <- IO.blocking {
-        {
-          register(context, command)
-        }
-      }
+      result <- register(context, command)
     yield AuthSuccessView(
       userId = result.player.id.value,
       username = result.username,
@@ -70,44 +65,45 @@ final case class RegisterAuthAPIMessage(
       roles = registeredRoleFlags(result.player)
     )
 
-  private def register(context: ApiPlanContext, command: RegisterAuthCommand): RegisterAuthResult =
+  private def register(context: ApiPlanContext, command: RegisterAuthCommand): IO[RegisterAuthResult] =
     val connection = context.connection
-    validatePassword(command.password)
-    if AccountCredentialTable.findByUsername(connection, command.username).nonEmpty then
-      throw IllegalArgumentException(s"Username ${command.username} is already registered")
-
-    val player = resolveRegisteredPlayer(context, command)
-    ensureActivePlayer(player)
-    saveCredential(connection, command, player)
-    val session = AuthenticatedSessionTable.save(
-      connection,
-      AuthenticatedSessionFunctions.create(
-        username = command.username,
-        playerId = player.id,
-        createdAt = command.registeredAt,
-        ttl = SessionTtl
+    for
+      _ <- IO.blocking {
+        validatePassword(command.password)
+        if AccountCredentialTable.findByUsername(connection, command.username).nonEmpty then
+          throw IllegalArgumentException(s"Username ${command.username} is already registered")
+      }
+      player <- resolveRegisteredPlayer(context, command)
+      _ <- IO.blocking {
+        ensureActivePlayer(player)
+        saveCredential(connection, command, player)
+      }
+      session <- IO.blocking(
+        AuthenticatedSessionTable.save(
+          connection,
+          AuthenticatedSessionFunctions.create(
+            username = command.username,
+            playerId = player.id,
+            createdAt = command.registeredAt,
+            ttl = SessionTtl
+          )
+        )
       )
-    )
-    RegisterAuthResult(command.username, player, session)
+    yield RegisterAuthResult(command.username, player, session)
 
   private def resolveRegisteredPlayer(
       context: ApiPlanContext,
       command: RegisterAuthCommand
-  ): Player =
-    PlayerPersistenceFunctions.findAllPlayers(context.connection).find(_.userId.equalsIgnoreCase(command.username)) match
-      case Some(existing) if existing.nickname == command.displayName =>
-        existing
-      case Some(existing) =>
-        PlayerPersistenceFunctions.savePlayer(context.connection, existing.copy(nickname = command.displayName))
-      case None =>
-        PlayerPersistenceFunctions.createPlayer(
-          connection = context.connection,
-          userId = command.username,
-          nickname = command.displayName,
-          rank = DefaultRank,
-          registeredAt = command.registeredAt,
-          initialElo = 1500
-        )
+  ): IO[Player] =
+    ListAllPlayersPrivateAPIMessage().plan(context).flatMap { players =>
+      players.find(_.userId.equalsIgnoreCase(command.username)) match
+        case Some(existing) if existing.nickname == command.displayName =>
+          IO.pure(existing)
+        case Some(existing) =>
+          SavePlayerPrivateAPIMessage(existing.copy(nickname = command.displayName)).plan(context)
+        case None =>
+          CreatePlayerPrivateAPIMessage(command.username, command.displayName, DefaultRank, command.registeredAt, 1500).plan(context)
+    }
 
   private def saveCredential(
       connection: java.sql.Connection,

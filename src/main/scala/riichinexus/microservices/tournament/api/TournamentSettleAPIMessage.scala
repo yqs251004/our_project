@@ -47,27 +47,23 @@ final case class TournamentSettleAPIMessage(tournamentId: String, request: Settl
 
   override def plan(context: ApiPlanContext): IO[TournamentSettlementView] =
     for
-      actor <- IO.blocking(ResolveAccessPrincipal(PlayerId(request.operatorId)).resolve(context.connection))
+      actor <- ResolveAccessPrincipal(PlayerId(request.operatorId)).plan(context)
       settledAt <- IO.realTimeInstant
       _ = validateRequest()
-      snapshot <- IO.blocking {
-        {
-          TournamentSettlementCoordinator(AuthorizationPolicyFunctions.strict).settleTournament(
-            connection = context.connection,
-            tournamentId = TournamentId(tournamentId),
-            finalStageId = TournamentStageId(request.finalStageId),
-            actor = actor,
-            settledAt = settledAt,
-            prizePool = request.prizePool,
-            payoutRatios = request.payoutRatios,
-            houseFeeAmount = request.houseFeeAmount,
-            clubShareRatio = request.clubShareRatio,
-            adjustments = request.adjustments.map(settlementAdjustment),
-            finalizeSettlement = request.finalizeSettlement,
-            note = request.note
-          )
-        }
-      }
+      snapshot <- TournamentSettlementCoordinator(AuthorizationPolicyFunctions.strict).settleTournament(
+        connection = context.connection,
+        tournamentId = TournamentId(tournamentId),
+        finalStageId = TournamentStageId(request.finalStageId),
+        actor = actor,
+        settledAt = settledAt,
+        prizePool = request.prizePool,
+        payoutRatios = request.payoutRatios,
+        houseFeeAmount = request.houseFeeAmount,
+        clubShareRatio = request.clubShareRatio,
+        adjustments = request.adjustments.map(settlementAdjustment),
+        finalizeSettlement = request.finalizeSettlement,
+        note = request.note
+      )
       _ <- RecordAuditEventsPrivateAPIMessage(settleTournamentAudit(snapshot, actor, settledAt)).plan(context)
       notificationRequests <- IO.blocking {
         if snapshot.status == TournamentSettlementStatus.Finalized then settlementFinalizedNotifications(context.connection, snapshot)

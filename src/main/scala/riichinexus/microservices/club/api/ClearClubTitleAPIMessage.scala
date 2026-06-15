@@ -4,7 +4,7 @@ import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
 import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPIMessage
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
-import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
+import riichinexus.microservices.player.api.`private`.*
 
 import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.time.Instant
@@ -56,7 +56,7 @@ final case class ClearClubTitleAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
-      actor <- IO.blocking(ResolveAccessPrincipal(PlayerId(operatorId)).resolve(context.connection))
+      actor <- ResolveAccessPrincipal(PlayerId(operatorId)).plan(context)
       clearedAt <- IO.realTimeInstant
       command = ClearClubTitleCommand(
         clubId = ClubId(clubId),
@@ -65,28 +65,33 @@ final case class ClearClubTitleAPIMessage(
         note = note,
         clearedAt = clearedAt
       )
-      cleared <- IO.blocking {
-        {
-          clearTitle(context.connection, command)
-        }.getOrElse(throw NoSuchElementException("Resource not found"))
-      }
+      cleared <- clearTitle(context, command).map(_.getOrElse(throw NoSuchElementException("Resource not found")))
       _ <- RecordAuditEventsPrivateAPIMessage(clearTitleAudit(command, cleared.existingAssignment)).plan(context)
     yield ClubView.fromDomain(cleared.club)
 
   private def clearTitle(
-      connection: java.sql.Connection,
+      context: ApiPlanContext,
       command: ClearClubTitleCommand
-  ): Option[ClearedClubTitle] =
+  ): IO[Option[ClearedClubTitle]] =
+    val connection = context.connection
     for
-      club <- riichinexus.microservices.club.tables.clubs.ClubTable.findById(connection, command.clubId)
-      player <- PlayerPersistenceFunctions.findPlayer(connection, command.playerId)
-    yield
-      ensureTitleCanBeCleared(club, player, command)
-      val existingAssignment = resolveExistingAssignment(club, command)
-      ClearedClubTitle(
-        club = commitTitleClear(connection, club, command),
-        existingAssignment = existingAssignment
-      )
+      club <- IO.blocking(riichinexus.microservices.club.tables.clubs.ClubTable.findById(connection, command.clubId))
+      player <- ResolvePlayerPrivateAPIMessage(command.playerId).plan(context)
+        .map(_.getOrElse(throw NoSuchElementException(s"Player ${command.playerId.value} was not found")))
+      cleared <- club match
+        case None => IO.pure(None)
+        case Some(club) =>
+          ensureTitleCanBeCleared(club, player, command)
+          val existingAssignment = resolveExistingAssignment(club, command)
+          IO.blocking(
+            Some(
+              ClearedClubTitle(
+                club = commitTitleClear(connection, club, command),
+                existingAssignment = existingAssignment
+              )
+            )
+          )
+    yield cleared
 
   private def ensureTitleCanBeCleared(
       club: Club,

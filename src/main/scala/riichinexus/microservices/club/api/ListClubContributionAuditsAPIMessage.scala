@@ -49,7 +49,7 @@ final case class ListClubContributionAuditsAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[ClubContributionAuditEntry]] =
     for
-      operator <- IO.blocking(ResolveAccessPrincipal(query.operatorId).resolve(context.connection))
+      operator <- ResolveAccessPrincipal(query.operatorId).plan(context)
       _ <- requireContributionAuditPermission(context, operator)
       parsedClubId = ClubId(clubId)
       resolved = resolveQuery(parsedClubId, query)

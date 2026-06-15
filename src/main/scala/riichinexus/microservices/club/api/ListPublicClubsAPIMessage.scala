@@ -1,6 +1,6 @@
 package riichinexus.microservices.club.api
 import riichinexus.microservices.auth.objects.Permission
-import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
+import riichinexus.microservices.player.api.`private`.*
 
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
 import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
@@ -56,7 +56,7 @@ final case class ListPublicClubsAPIMessage(
       _ <- requirePublicDirectoryPermission(context)
       query <- IO.blocking(resolveQuery(context))
       clubs <- IO.blocking(publicClubs(context))
-      playersById <- IO.blocking(publicClubPlayersById(context, clubs))
+      playersById <- publicClubPlayersById(context, clubs)
       relatedClubsById <- IO.blocking(publicRelatedClubsById(context, clubs))
       entries <- IO.blocking(publicClubDirectoryEntries(clubs, playersById, relatedClubsById))
       filteredEntries <- IO.blocking(filterPublicClubDirectoryEntries(context, entries, query))
@@ -88,10 +88,10 @@ final case class ListPublicClubsAPIMessage(
   private def publicClubPlayersById(
       context: ApiPlanContext,
       clubs: Vector[Club]
-  ): Map[PlayerId, Player] =
-    PlayerPersistenceFunctions.findPlayersByIds(context.connection, clubs.flatMap(_.members).distinct)
-      .map(player => player.id -> player)
-      .toMap
+  ): IO[Map[PlayerId, Player]] =
+    ResolvePlayersPrivateAPIMessage(clubs.flatMap(_.members).distinct)
+      .plan(context)
+      .map(_.map(player => player.id -> player).toMap)
 
   private def publicRelatedClubsById(
       context: ApiPlanContext,

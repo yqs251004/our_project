@@ -30,7 +30,7 @@ import riichinexus.microservices.club.domain.relationmanagement.model.*
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.auth.objects.Role
 import riichinexus.microservices.player.domain.Player
-import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
+import riichinexus.microservices.player.api.`private`.*
 import riichinexus.microservices.player.domain.functions.PlayerRoleFunctions
 import riichinexus.microservices.player.objects.PlayerStatus
 import riichinexus.microservices.player.objects.apiTypes.{PlayerProfileView, PlayerRoleFlagsView}
@@ -49,7 +49,7 @@ final case class ListClubMembersAPIMessage(
   override def plan(context: ApiPlanContext): IO[PagedResponse[PlayerProfileView]] =
     for
       query <- IO.blocking(resolveQuery(context))
-      members <- IO.blocking(listMembers(context, query))
+      members <- listMembers(context, query)
     yield pagedResponse(members, query)
 
   private def resolveQuery(context: ApiPlanContext): ResolvedClubMembersQuery =
@@ -68,13 +68,15 @@ final case class ListClubMembersAPIMessage(
   private def listMembers(
       context: ApiPlanContext,
       query: ResolvedClubMembersQuery
-  ): Vector[PlayerProfileView] =
-    PlayerPersistenceFunctions
-      .findPlayersByClub(context.connection, query.clubId)
-      .filter(player => query.status.forall(_ == player.status))
-      .filter(player => query.nickname.forall(riichinexus.system.TextSearch.containsIgnoreCase(player.nickname, _)))
-      .sortBy(player => (player.nickname, player.id.value))
-      .map(playerProfileView)
+  ): IO[Vector[PlayerProfileView]] =
+    ListPlayersByClubPrivateAPIMessage(query.clubId)
+      .plan(context)
+      .map(
+        _.filter(player => query.status.forall(_ == player.status))
+          .filter(player => query.nickname.forall(riichinexus.system.TextSearch.containsIgnoreCase(player.nickname, _)))
+          .sortBy(player => (player.nickname, player.id.value))
+          .map(playerProfileView)
+      )
 
   private def playerProfileView(player: Player): PlayerProfileView =
     PlayerProfileView(

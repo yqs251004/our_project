@@ -48,7 +48,7 @@ final case class ApproveClubApplicationAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
-      actor <- IO.blocking(ResolveAccessPrincipal(PlayerId(operatorId)).resolve(context.connection))
+      actor <- ResolveAccessPrincipal(PlayerId(operatorId)).plan(context)
       approvedAt <- IO.realTimeInstant
       command = ApproveClubApplicationCommand(
         clubId = ClubId(clubId),
@@ -58,18 +58,15 @@ final case class ApproveClubApplicationAPIMessage(
         note = note,
         approvedAt = approvedAt
       )
-      club <- IO.blocking(
-        approveApplication(context.connection, command)
-          .getOrElse(throw NoSuchElementException("Resource not found"))
-      )
+      club <- approveApplication(context, command).map(_.getOrElse(throw NoSuchElementException("Resource not found")))
     yield ClubView.fromDomain(club)
 
   private def approveApplication(
-      connection: java.sql.Connection,
+      context: ApiPlanContext,
       command: ApproveClubApplicationCommand
-  ): Option[Club] =
+  ): IO[Option[Club]] =
     ClubApplicationReviewer.approve(
-      connection = connection,      parsedClubId = command.clubId,
+      context = context,      parsedClubId = command.clubId,
       parsedMembershipId = command.membershipId,
       parsedPlayerId = command.playerId,
       actor = command.actor,

@@ -56,11 +56,11 @@ final case class AppealAdjudicateAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[AppealTicketView] =
     for
-      actor <- IO.blocking(ResolveAccessPrincipal(PlayerId(request.operatorId)).resolve(context.connection))
+      actor <- ResolveAccessPrincipal(PlayerId(request.operatorId)).plan(context)
       adjudicatedAt <- IO.realTimeInstant
       service = AppealApplicationService(AuthorizationPolicyFunctions.strict)
       command <- IO.blocking(resolveCommand(actor, adjudicatedAt))
-      ticket <- IO.blocking(adjudicateAppeal(context.connection, service, command))
+      ticket <- adjudicateAppeal(context.connection, service, command)
       _ <- resetMahjongCoreIfNeeded(context, ticket, command)
       _ <- RecordAuditEventsPrivateAPIMessage(adjudicateAppealAudit(ticket, command)).plan(context)
       _ <- CreateBulkNotificationsPrivateAPIMessage(
@@ -89,7 +89,7 @@ final case class AppealAdjudicateAPIMessage(
       connection: java.sql.Connection,
       service: AppealApplicationService,
       command: AdjudicateAppealCommand
-  ): AppealTicket =
+  ): IO[AppealTicket] =
     service.adjudicateAppeal(
       connection = connection,
       ticketId = command.ticketId,
@@ -99,7 +99,7 @@ final case class AppealAdjudicateAPIMessage(
       adjudicatedAt = command.adjudicatedAt,
       tableResolution = command.tableResolution,
       note = command.note
-    ).getOrElse(throw NoSuchElementException("Resource not found"))
+    ).map(_.getOrElse(throw NoSuchElementException("Resource not found")))
 
   private def resetMahjongCoreIfNeeded(
       context: ApiPlanContext,

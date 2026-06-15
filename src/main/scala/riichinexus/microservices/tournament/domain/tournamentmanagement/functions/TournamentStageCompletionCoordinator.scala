@@ -23,7 +23,7 @@ import java.sql.Connection
 import java.time.Instant
 import java.util.NoSuchElementException
 
-import cats.effect.unsafe.implicits.global
+import cats.effect.IO
 import riichinexus.system.api.ApiPlanContext
 import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
@@ -75,23 +75,29 @@ final class TournamentStageCompletionCoordinator(
       stageId: TournamentStageId,
       actor: AccessPrincipal,
       completedAt: Instant
-  ): Option[StageAdvancementSnapshot] =
-    TournamentTable.findById(connection, tournamentId).map { tournament =>
-      AuthorizationPolicyFunctions.requirePermission(authorizationService, 
-        actor,
-        Permission.ManageTournamentStages,
-        tournamentId = Some(tournamentId)
-      )
+  ): IO[Option[StageAdvancementSnapshot]] =
+    IO.blocking(TournamentTable.findById(connection, tournamentId)).flatMap {
+      case Some(tournament) =>
+        for
+          stageAndTables <- IO.blocking {
+            AuthorizationPolicyFunctions.requirePermission(authorizationService,
+              actor,
+              Permission.ManageTournamentStages,
+              tournamentId = Some(tournamentId)
+            )
 
-      val stage = requireStage(tournament, stageId)
-      val stageTables = TournamentGameTable.findByTournamentAndStage(connection, tournamentId, stageId)
-      ensureStageCanComplete(connection, tournament, stage, stageTables, completedAt)
-
-      val advancement =
-        TournamentStageQueries.stageAdvancementPreview(connection, tournamentId, stageId, completedAt)
-
-      TournamentTable.save(connection, TournamentFunctions.updateStage(tournament, stageId, TournamentStageFunctions.complete))
-      advancement
+            val stage = requireStage(tournament, stageId)
+            val stageTables = TournamentGameTable.findByTournamentAndStage(connection, tournamentId, stageId)
+            ensureAllTablesMaterialized(stage, stageTables)
+            ensureAllTablesArchived(stage, stageTables)
+            (stage, stageTables)
+          }
+          (stage, stageTables) = stageAndTables
+          _ <- ensureStageCanComplete(connection, tournament, stage, stageTables, completedAt)
+          advancement <- TournamentStageQueries.stageAdvancementPreview(connection, tournamentId, stageId, completedAt)
+          _ <- IO.blocking(TournamentTable.save(connection, TournamentFunctions.updateStage(tournament, stageId, TournamentStageFunctions.complete)))
+        yield Some(advancement)
+      case None => IO.pure(None)
     }
 
   private def requireStage(tournament: Tournament, stageId: TournamentStageId): TournamentStage =
@@ -105,11 +111,10 @@ final class TournamentStageCompletionCoordinator(
       stage: TournamentStage,
       stageTables: Vector[Table],
       completedAt: Instant
-  ): Unit =
-    ensureAllTablesMaterialized(stage, stageTables)
-    ensureAllTablesArchived(stage, stageTables)
+  ): IO[Unit] =
     if !isKnockoutStage(stage) then
       ensureNonKnockoutRoundsComplete(connection, tournament, stage, stageTables, completedAt)
+    else IO.unit
 
   private def ensureAllTablesMaterialized(stage: TournamentStage, stageTables: Vector[Table]): Unit =
     if stageTables.size != stage.scheduledTableIds.size then
@@ -129,8 +134,10 @@ final class TournamentStageCompletionCoordinator(
       stage: TournamentStage,
       stageTables: Vector[Table],
       completedAt: Instant
-  ): Unit =
-    val participants = resolveParticipants(connection, tournament, stage)
+  ): IO[Unit] =
+    for
+      participants <- TournamentStageParticipantResolver.resolveParticipants(ApiPlanContext(bearerToken = None, connection = connection), tournament, stage)
+      _ <- IO.blocking {
     val records = MatchRecordTable.findByTournamentAndStage(connection, tournament.id, stage.id)
     val effectiveRoundLimit = StageLineupResolver.effectiveRoundLimit(stage)
     val requiredTablesPerRound =
@@ -150,48 +157,13 @@ final class TournamentStageCompletionCoordinator(
       throw IllegalArgumentException(
         s"Stage ${stage.id.value} cannot complete before all $effectiveRoundLimit rounds are fully scheduled and archived"
       )
+      }
+    yield ()
 
   private def isKnockoutStage(stage: TournamentStage): Boolean =
     stage.format == TournamentFormat.Knockout ||
       stage.format == TournamentFormat.Finals ||
       stage.advancementRule.ruleType == AdvancementRuleType.KnockoutElimination
-
-  private def resolveParticipants(
-      connection: Connection,
-      tournament: Tournament,
-      stage: TournamentStage
-  ): Vector[Player] =
-    val clubIds = (tournament.participatingClubs ++ tournament.whitelist.flatMap(_.clubId)).distinct
-    val clubsById = ResolveClubsPrivateAPIMessage(clubIds)
-      .plan(ApiPlanContext(bearerToken = None, connection = connection))
-      .unsafeRunSync()
-      .map(club => club.id -> club)
-      .toMap
-
-    val fallbackPlayerIds =
-      val registeredClubMembers = tournament.participatingClubs.flatMap { clubId =>
-        clubsById.get(clubId).toVector.flatMap(_.members)
-      }
-      val whitelistedPlayers = tournament.whitelist.flatMap(_.playerId)
-      val whitelistedClubMembers = tournament.whitelist.flatMap { entry =>
-        entry.clubId.toVector.flatMap(clubId => clubsById.get(clubId).toVector.flatMap(_.members))
-      }
-
-      (tournament.participatingPlayers ++ whitelistedPlayers ++ registeredClubMembers ++ whitelistedClubMembers).distinct
-
-    val playersById = ResolvePlayersPrivateAPIMessage((stage.lineupSubmissions.flatMap(_.seats.map(_.playerId)) ++ fallbackPlayerIds).distinct)
-      .plan(ApiPlanContext(bearerToken = None, connection = connection))
-      .unsafeRunSync()
-      .map(player => player.id -> player)
-      .toMap
-    val stagePlayerIds = StageLineupResolver.resolveEligiblePlayers(stage, playersById.get)
-
-    val targetPlayerIds =
-      StageLineupResolver.resolveTargetPlayerIds(tournament, stagePlayerIds, fallbackPlayerIds)
-
-    targetPlayerIds.flatMap { playerId =>
-      playersById.get(playerId).filter(_.status == PlayerStatus.Active)
-    }
 
   private def expectedTablesPerRound(
       tournament: Tournament,

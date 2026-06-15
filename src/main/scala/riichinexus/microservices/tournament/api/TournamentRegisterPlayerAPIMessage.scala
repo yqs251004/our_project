@@ -2,7 +2,7 @@ package riichinexus.microservices.tournament.api
 import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
-import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
+import riichinexus.microservices.player.api.`private`.*
 import riichinexus.microservices.notification.api.`private`.CreateBulkNotificationsPrivateAPIMessage
 import riichinexus.microservices.notification.objects.apiTypes.CreateNotificationRequest
 
@@ -57,48 +57,49 @@ final case class TournamentRegisterPlayerAPIMessage(tournamentId: String, player
 
   override def plan(context: ApiPlanContext): IO[TournamentSummaryView] =
     for
-      actor <- IO.blocking(resolveOperatorActor(context))
+      actor <- resolveOperatorActor(context)
       command = RegisterTournamentPlayerCommand(
         tournamentId = TournamentId(tournamentId),
         playerId = PlayerId(playerId),
         actor = actor
       )
-      registration <- IO.blocking {
-        {
-          registerPlayer(context.connection, command)
-        }.getOrElse(throw NoSuchElementException("Resource not found"))
-      }
+      registration <- registerPlayer(context, command).map(_.getOrElse(throw NoSuchElementException("Resource not found")))
       notificationRequests =
         if registration.wasNewInvitation then playerInvitationNotifications(registration.tournament, registration.player)
         else Vector.empty
       _ <- CreateBulkNotificationsPrivateAPIMessage(notificationRequests).plan(context)
     yield TournamentSummaryView.fromDomain(registration.tournament)
 
-  private def resolveOperatorActor(context: ApiPlanContext): AccessPrincipal =
+  private def resolveOperatorActor(context: ApiPlanContext): IO[AccessPrincipal] =
     operatorId.filter(_.nonEmpty).map(PlayerId(_))
-      .map(ResolveAccessPrincipal(_).resolve(context.connection))
-      .getOrElse(AccessPrincipalFunctions.system)
+      .map(ResolveAccessPrincipal(_).plan(context))
+      .getOrElse(IO.pure(AccessPrincipalFunctions.system))
 
   private def registerPlayer(
-      connection: java.sql.Connection,
+      context: ApiPlanContext,
       command: RegisterTournamentPlayerCommand
-  ): Option[PlayerInvitationResult] =
-    AuthorizationPolicyFunctions.requirePermission(AuthorizationPolicyFunctions.strict, 
-      command.actor,
-      Permission.ManageTournamentStages,
-      tournamentId = Some(command.tournamentId)
-    )
-    val player = PlayerPersistenceFunctions.findPlayer(connection, command.playerId)
-      .getOrElse(throw NoSuchElementException(s"Player ${command.playerId.value} was not found"))
-    ensurePlayerCanEnter(player, command)
-    riichinexus.microservices.tournament.tables.tournaments.TournamentTable.findById(connection, command.tournamentId).map { tournament =>
-      val wasNewInvitation =
-        !tournament.whitelist.exists(_.playerId.contains(command.playerId)) &&
-          !tournament.participatingPlayers.contains(command.playerId)
-      val updatedTournament =
-        riichinexus.microservices.tournament.tables.tournaments.TournamentTable.save(connection, TournamentFunctions.registerPlayer(tournament, command.playerId))
-      PlayerInvitationResult(updatedTournament, player, wasNewInvitation)
-    }
+  ): IO[Option[PlayerInvitationResult]] =
+    val connection = context.connection
+    for
+      player <- ResolvePlayerPrivateAPIMessage(command.playerId).plan(context)
+        .map(_.getOrElse(throw NoSuchElementException(s"Player ${command.playerId.value} was not found")))
+      result <- IO.blocking {
+        AuthorizationPolicyFunctions.requirePermission(AuthorizationPolicyFunctions.strict,
+          command.actor,
+          Permission.ManageTournamentStages,
+          tournamentId = Some(command.tournamentId)
+        )
+        ensurePlayerCanEnter(player, command)
+        riichinexus.microservices.tournament.tables.tournaments.TournamentTable.findById(connection, command.tournamentId).map { tournament =>
+          val wasNewInvitation =
+            !tournament.whitelist.exists(_.playerId.contains(command.playerId)) &&
+              !tournament.participatingPlayers.contains(command.playerId)
+          val updatedTournament =
+            riichinexus.microservices.tournament.tables.tournaments.TournamentTable.save(connection, TournamentFunctions.registerPlayer(tournament, command.playerId))
+          PlayerInvitationResult(updatedTournament, player, wasNewInvitation)
+        }
+      }
+    yield result
 
   private def playerInvitationNotifications(
       tournament: Tournament,
@@ -137,3 +138,4 @@ final case class TournamentRegisterPlayerAPIMessage(tournamentId: String, player
       player: Player,
       wasNewInvitation: Boolean
   )
+

@@ -51,7 +51,7 @@ final case class TournamentStartAPIMessage(tournamentId: String, operatorId: Opt
 
   override def plan(context: ApiPlanContext): IO[TournamentSummaryView] =
     for
-      actor <- IO.blocking(resolveOperatorActor(context))
+      actor <- resolveOperatorActor(context)
       command = StartTournamentCommand(TournamentId(tournamentId), actor)
       tournament <- IO.blocking {
         {
@@ -60,10 +60,10 @@ final case class TournamentStartAPIMessage(tournamentId: String, operatorId: Opt
       }
     yield TournamentSummaryView.fromDomain(tournament)
 
-  private def resolveOperatorActor(context: ApiPlanContext): AccessPrincipal =
+  private def resolveOperatorActor(context: ApiPlanContext): IO[AccessPrincipal] =
     operatorId.filter(_.nonEmpty).map(PlayerId(_))
-      .map(ResolveAccessPrincipal(_).resolve(context.connection))
-      .getOrElse(AccessPrincipalFunctions.system)
+      .map(ResolveAccessPrincipal(_).plan(context))
+      .getOrElse(IO.pure(AccessPrincipalFunctions.system))
 
   private def startTournament(
       connection: java.sql.Connection,
@@ -89,3 +89,4 @@ final case class TournamentStartAPIMessage(tournamentId: String, operatorId: Opt
       tournamentId: TournamentId,
       actor: AccessPrincipal
   )
+

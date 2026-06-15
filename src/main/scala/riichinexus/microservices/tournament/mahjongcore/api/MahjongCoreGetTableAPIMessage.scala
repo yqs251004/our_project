@@ -20,24 +20,27 @@ final case class MahjongCoreGetTableAPIMessage(
 ) extends APIMessage[MahjongTableView] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[MahjongTableView] =
-    IO.blocking {
-      val id = TableId(tableId)
-      val state = MahjongTableStateTable.findById(context.connection, id) match
-        case Some(current) =>
-          val normalized = MahjongGameStateTransitionFunctions.normalizeCurrentRoundState(current)
-          if current.status == MahjongTableStatus.Archived then normalized
-          else MahjongTableStateTable.save(context.connection, normalized)
-        case None => MahjongGameStateTransitionFunctions.notStartedTable(id, MahjongRuleset())
-      MahjongGameStateTransitionFunctions.toView(
-        state,
-        viewerPlayerId = query.viewerPlayerId.map(PlayerId(_)),
-        includeLegalActions = query.includeLegalActions,
-        revealAllHands = canRevealAllHands(context, query)
-      )
-    }
+    for
+      revealAllHands <- canRevealAllHands(context, query)
+      view <- IO.blocking {
+        val id = TableId(tableId)
+        val state = MahjongTableStateTable.findById(context.connection, id) match
+          case Some(current) =>
+            val normalized = MahjongGameStateTransitionFunctions.normalizeCurrentRoundState(current)
+            if current.status == MahjongTableStatus.Archived then normalized
+            else MahjongTableStateTable.save(context.connection, normalized)
+          case None => MahjongGameStateTransitionFunctions.notStartedTable(id, MahjongRuleset())
+        MahjongGameStateTransitionFunctions.toView(
+          state,
+          viewerPlayerId = query.viewerPlayerId.map(PlayerId(_)),
+          includeLegalActions = query.includeLegalActions,
+          revealAllHands = revealAllHands
+        )
+      }
+    yield view
 
-  private def canRevealAllHands(context: ApiPlanContext, query: MahjongTableQuery): Boolean =
+  private def canRevealAllHands(context: ApiPlanContext, query: MahjongTableQuery): IO[Boolean] =
     query.operatorId
       .map(PlayerId(_))
-      .flatMap(operatorId => scala.util.Try(ResolveAccessPrincipal(operatorId).resolve(context.connection)).toOption)
-      .exists(AccessPrincipalFunctions.isSuperAdmin)
+      .map(operatorId => ResolveAccessPrincipal(operatorId).plan(context).attempt.map(_.toOption.exists(AccessPrincipalFunctions.isSuperAdmin)))
+      .getOrElse(IO.pure(false))

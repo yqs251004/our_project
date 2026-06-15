@@ -1,5 +1,5 @@
 package riichinexus.microservices.opsanalytics.api.`private`
-import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
+import riichinexus.microservices.player.api.`private`.*
 
 import cats.effect.IO
 import java.time.Instant
@@ -21,9 +21,12 @@ final case class RecordClubAdvancedStatsBoardAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[AdvancedStatsBoard] =
     for
-      activeMemberIds <- IO.blocking {
-        club.members.filter { playerId =>
-          PlayerPersistenceFunctions.findPlayer(context.connection, playerId).exists(_.status == PlayerStatus.Active)
+      activeMemberIds <- club.members.foldLeft(IO.pure(Vector.empty[riichinexus.microservices.player.objects.playerprofile.PlayerId])) { (previous, playerId) =>
+        previous.flatMap { ids =>
+          ResolvePlayerPrivateAPIMessage(playerId).plan(context).map {
+            case Some(player) if player.status == PlayerStatus.Active => ids :+ playerId
+            case _                                                    => ids
+          }
         }
       }
       memberBoards <- activeMemberIds.foldLeft(IO.pure(Vector.empty[AdvancedStatsBoard])) { (previous, playerId) =>

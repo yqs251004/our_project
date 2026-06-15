@@ -46,9 +46,9 @@ final case class TournamentGetAPIMessage(tournamentId: String) extends APIMessag
   override def plan(context: ApiPlanContext): IO[TournamentDetailView] =
     for
       id <- IO.blocking(TournamentId(tournamentId))
-      view <- IO.blocking(resolveDetailView(context, id))
+      view <- resolveDetailView(context, id)
     yield view
 
-  private def resolveDetailView(context: ApiPlanContext, tournamentId: TournamentId): TournamentDetailView =
-    TournamentOperationViewAssembler.detailView(context.connection, tournamentId)
-      .getOrElse(throw NoSuchElementException("Resource not found"))
+  private def resolveDetailView(context: ApiPlanContext, tournamentId: TournamentId): IO[TournamentDetailView] =
+    TournamentOperationViewAssembler.detailView(context, tournamentId)
+      .map(_.getOrElse(throw NoSuchElementException("Resource not found")))

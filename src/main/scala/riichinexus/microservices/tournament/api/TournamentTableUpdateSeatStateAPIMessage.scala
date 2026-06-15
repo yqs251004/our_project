@@ -52,7 +52,7 @@ final case class TournamentTableUpdateSeatStateAPIMessage(tableId: String, seat:
 
   override def plan(context: ApiPlanContext): IO[TournamentTableView] =
     for
-      actor <- IO.blocking(ResolveAccessPrincipal(PlayerId(request.operatorId)).resolve(context.connection))
+      actor <- ResolveAccessPrincipal(PlayerId(request.operatorId)).plan(context)
       command = updateSeatStateCommand(actor)
       table <- IO.blocking {
         {

@@ -1,7 +1,7 @@
 package riichinexus.microservices.club.api
 import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
-import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
+import riichinexus.microservices.player.api.`private`.*
 
 import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.time.Instant
@@ -60,7 +60,7 @@ final case class ReviewClubApplicationAPIMessage(
   override def plan(context: ApiPlanContext): IO[ClubMembershipApplicationView] =
     for
       decision <- IO.blocking(resolveDecision(request.decision))
-      actor <- IO.blocking(ResolveAccessPrincipal(PlayerId(request.operatorId)).resolve(context.connection))
+      actor <- ResolveAccessPrincipal(PlayerId(request.operatorId)).plan(context)
       reviewedAt <- IO.realTimeInstant
       command = ReviewClubApplicationCommand(
         clubId = ClubId(clubId),
@@ -70,47 +70,52 @@ final case class ReviewClubApplicationAPIMessage(
         note = request.note,
         reviewedAt = reviewedAt
       )
-      result <- IO.blocking(reviewApplication(context.connection, command))
+      result <- reviewApplication(context, command)
       _ <- RecordAuditEventPrivateAPIMessage(reviewApplicationAudit(command)).plan(context)
       _ <- notifyApplicant(context, command, result)
-    yield ClubApplicationViewAssembler.applicationView(
-      context.connection,
-      result.club,
-      result.application,
-      command.actor
-    )
+      view <- ClubApplicationViewAssembler.applicationView(
+        context,
+        result.club,
+        result.application,
+        command.actor
+      )
+    yield view
 
   private def reviewApplication(
-      connection: java.sql.Connection,
+      context: ApiPlanContext,
       command: ReviewClubApplicationCommand
-  ): ReviewClubApplicationResult =
-    val reviewedClub = submitReview(connection, command)
-      .getOrElse(throw NoSuchElementException(s"Club ${command.clubId.value} was not found"))
-    val reviewedApplication = ClubFunctions.findApplication(reviewedClub, command.membershipId).getOrElse(
-      throw NoSuchElementException(
-        s"Membership application ${command.membershipId.value} was not found in club ${command.clubId.value}"
-      )
-    )
-    ReviewClubApplicationResult(reviewedClub, reviewedApplication)
+  ): IO[ReviewClubApplicationResult] =
+    for
+      reviewedClub <- submitReview(context, command)
+        .map(_.getOrElse(throw NoSuchElementException(s"Club ${command.clubId.value} was not found")))
+      reviewedApplication <- IO.blocking {
+        ClubFunctions.findApplication(reviewedClub, command.membershipId).getOrElse(
+          throw NoSuchElementException(
+            s"Membership application ${command.membershipId.value} was not found in club ${command.clubId.value}"
+          )
+        )
+      }
+    yield ReviewClubApplicationResult(reviewedClub, reviewedApplication)
 
   private def submitReview(
-      connection: java.sql.Connection,
+      context: ApiPlanContext,
       command: ReviewClubApplicationCommand
-  ): Option[Club] =
+  ): IO[Option[Club]] =
     command.decision match
       case ApplicationReviewDecision.Approve =>
-        val player = resolveApprovedPlayer(connection, command)
-        ClubApplicationReviewer.approve(
-          connection = connection,          parsedClubId = command.clubId,
-          parsedMembershipId = command.membershipId,
-          parsedPlayerId = player.id,
-          actor = command.actor,
-          note = command.note,
-          approvedAt = command.reviewedAt
-        )
+        resolveApprovedPlayer(context, command).flatMap { player =>
+          ClubApplicationReviewer.approve(
+            context = context,          parsedClubId = command.clubId,
+            parsedMembershipId = command.membershipId,
+            parsedPlayerId = player.id,
+            actor = command.actor,
+            note = command.note,
+            approvedAt = command.reviewedAt
+          )
+        }
       case ApplicationReviewDecision.Reject =>
         ClubApplicationReviewer.reject(
-          connection = connection,          parsedClubId = command.clubId,
+          context = context,          parsedClubId = command.clubId,
           parsedMembershipId = command.membershipId,
           actor = command.actor,
           note = command.note,
@@ -118,31 +123,39 @@ final case class ReviewClubApplicationAPIMessage(
         )
 
   private def resolveApprovedPlayer(
-      connection: java.sql.Connection,
+      context: ApiPlanContext,
       command: ReviewClubApplicationCommand
-  ): Player =
-    val club = ClubTable
-      .findById(connection, command.clubId)
-      .getOrElse(throw NoSuchElementException(s"Club ${command.clubId.value} was not found"))
-    val application = ClubFunctions.findApplication(club, command.membershipId).getOrElse(
-      throw NoSuchElementException(
-        s"Membership application ${command.membershipId.value} was not found in club ${command.clubId.value}"
-      )
-    )
-    resolveApplicantPlayer(connection, application)
-      .getOrElse(
-        throw IllegalArgumentException(
-          s"Membership application ${command.membershipId.value} applicant was not found"
+  ): IO[Player] =
+    for
+      application <- IO.blocking {
+        val club = ClubTable
+          .findById(context.connection, command.clubId)
+          .getOrElse(throw NoSuchElementException(s"Club ${command.clubId.value} was not found"))
+        ClubFunctions.findApplication(club, command.membershipId).getOrElse(
+          throw NoSuchElementException(
+            s"Membership application ${command.membershipId.value} was not found in club ${command.clubId.value}"
+          )
+        )
+      }
+      player <- resolveApplicantPlayer(context, application).map(
+        _.getOrElse(
+          throw IllegalArgumentException(
+            s"Membership application ${command.membershipId.value} applicant was not found"
+          )
         )
       )
+    yield player
 
   private def resolveApplicantPlayer(
-      connection: java.sql.Connection,
+      context: ApiPlanContext,
       application: ClubMembershipApplication
-  ): Option[Player] =
-    application.playerId
-      .flatMap(PlayerPersistenceFunctions.findPlayer(connection, _))
-      .orElse(application.applicantUserId.flatMap(PlayerPersistenceFunctions.findPlayerByUserId(connection, _)))
+  ): IO[Option[Player]] =
+    application.playerId match
+      case Some(playerId) => ResolvePlayerPrivateAPIMessage(playerId).plan(context)
+      case None =>
+        application.applicantUserId
+          .map(ResolvePlayerByUserIdPrivateAPIMessage(_).plan(context))
+          .getOrElse(IO.pure(None))
 
   private def resolveDecision(decision: ClubApplicationReviewDecision): ApplicationReviewDecision =
     decision match
@@ -171,19 +184,20 @@ final case class ReviewClubApplicationAPIMessage(
       command: ReviewClubApplicationCommand,
       result: ReviewClubApplicationResult
   ): IO[Unit] =
-    resolveApplicantRecipient(context.connection, command, result.application) match
+    resolveApplicantRecipient(context, command, result.application).flatMap {
       case Some(recipientPlayerId) =>
         CreateNotificationPrivateAPIMessage(
           reviewNotificationRequest(command, result, recipientPlayerId)
         ).plan(context).void
       case None => IO.unit
+    }
 
   private def resolveApplicantRecipient(
-      connection: java.sql.Connection,
+      context: ApiPlanContext,
       command: ReviewClubApplicationCommand,
       application: ClubMembershipApplication
-  ): Option[PlayerId] =
-    resolveApplicantPlayer(connection, application).map(_.id)
+  ): IO[Option[PlayerId]] =
+    resolveApplicantPlayer(context, application).map(_.map(_.id))
 
   private def reviewNotificationRequest(
       command: ReviewClubApplicationCommand,

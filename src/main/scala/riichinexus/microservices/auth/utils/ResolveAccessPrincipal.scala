@@ -1,7 +1,6 @@
 package riichinexus.microservices.auth.utils
-import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
+import riichinexus.microservices.player.api.`private`.*
 
-import java.sql.Connection
 import java.util.NoSuchElementException
 
 import cats.effect.IO
@@ -35,13 +34,12 @@ import riichinexus.microservices.player.domain.functions.PlayerPrincipalFunction
 final case class ResolveAccessPrincipal(
     playerId: PlayerId
 ):
-  def resolve(connection: Connection): AccessPrincipal =
-    PlayerPersistenceFunctions.findPlayer(connection, playerId)
-      .map(PlayerPrincipalFunctions.asPrincipal)
-      .getOrElse(throw NoSuchElementException(s"Player ${playerId.value} was not found"))
-
-  def plan(connection: Connection): IO[AccessPrincipal] =
-    IO.blocking(resolve(connection))
+  def plan(context: ApiPlanContext): IO[AccessPrincipal] =
+    ResolvePlayerPrivateAPIMessage(playerId).plan(context)
+      .map(
+        _.map(PlayerPrincipalFunctions.asPrincipal)
+          .getOrElse(throw NoSuchElementException(s"Player ${playerId.value} was not found"))
+      )
 
 final case class ResolveGuestAccessPrincipal(
     sessionId: GuestSessionId
@@ -64,5 +62,5 @@ final case class ResolveRequestActor(
         case Some(sessionId) => ResolveGuestAccessPrincipal(sessionId).plan(context)
         case None =>
           operatorId match
-            case Some(playerId) => ResolveAccessPrincipal(playerId).plan(context.connection)
+            case Some(playerId) => ResolveAccessPrincipal(playerId).plan(context)
             case None           => IO.pure(AccessPrincipalFunctions.guest())

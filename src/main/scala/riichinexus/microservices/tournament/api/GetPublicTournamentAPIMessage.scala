@@ -6,7 +6,6 @@ import riichinexus.microservices.tournament.objects.tournamentmanagement.{Tourna
 import java.util.NoSuchElementException
 
 import cats.effect.IO
-import cats.effect.unsafe.implicits.global
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
@@ -57,9 +56,10 @@ final case class GetPublicTournamentAPIMessage(
     for
       id <- IO.blocking(TournamentId(tournamentId))
       tournament <- IO.blocking(publicTournament(context, id))
-      clubsById <- IO.blocking(publicRelatedClubsById(context, tournament))
+      clubsById <- publicRelatedClubsById(context, tournament)
       tablesByStage <- IO.blocking(tablesByStageId(context, tournament))
-    yield publicTournamentView(context, tournament, clubsById, tablesByStage)
+      view <- publicTournamentView(context, tournament, clubsById, tablesByStage)
+    yield view
 
   private def publicTournament(
       context: ApiPlanContext,
@@ -73,12 +73,10 @@ final case class GetPublicTournamentAPIMessage(
   private def publicRelatedClubsById(
       context: ApiPlanContext,
       tournament: Tournament
-  ): Map[ClubId, Club] =
+  ): IO[Map[ClubId, Club]] =
     ResolveClubsPrivateAPIMessage(relatedClubIds(tournament))
-      .plan(ApiPlanContext(bearerToken = None, connection = context.connection))
-      .unsafeRunSync()
-      .map(club => club.id -> club)
-      .toMap
+      .plan(context)
+      .map(_.map(club => club.id -> club).toMap)
 
   private def tablesByStageId(
       context: ApiPlanContext,
@@ -94,50 +92,55 @@ final case class GetPublicTournamentAPIMessage(
       tournament: Tournament,
       clubsById: Map[ClubId, Club],
       tablesByStage: Map[TournamentStageId, Vector[Table]]
-  ): PublicTournamentDetailView =
-    PublicTournamentDetailView(
-      tournamentId = tournament.id,
-      name = tournament.name,
-      organizer = tournament.organizer,
-      status = tournament.status,
-      startsAt = tournament.startsAt,
-      endsAt = tournament.endsAt,
-      clubIds = tournament.participatingClubs.distinct,
-      playerIds = tournamentParticipantIds(tournament, clubsById),
-      whitelistCount = tournament.whitelist.size,
-      stages = tournament.stages.sortBy(_.order).map { stage =>
-        publicStageView(context, tournament, stage, tablesByStage(stage.id))
-      }
-    )
+  ): IO[PublicTournamentDetailView] =
+    sequenceVector(tournament.stages.sortBy(_.order).map { stage =>
+      publicStageView(context, tournament, stage, tablesByStage(stage.id))
+    }).map { stages =>
+      PublicTournamentDetailView(
+        tournamentId = tournament.id,
+        name = tournament.name,
+        organizer = tournament.organizer,
+        status = tournament.status,
+        startsAt = tournament.startsAt,
+        endsAt = tournament.endsAt,
+        clubIds = tournament.participatingClubs.distinct,
+        playerIds = tournamentParticipantIds(tournament, clubsById),
+        whitelistCount = tournament.whitelist.size,
+        stages = stages
+      )
+    }
 
   private def publicStageView(
       context: ApiPlanContext,
       tournament: Tournament,
       stage: TournamentStage,
       tables: Vector[Table]
-  ): PublicTournamentStageView =
-    PublicTournamentStageView(
-      stageId = stage.id,
-      name = stage.name,
-      format = stage.format,
-      order = stage.order,
-      status = stage.status,
-      currentRound = stage.currentRound,
-      roundCount = stage.roundCount,
-      schedulingPoolSize = stage.schedulingPoolSize,
-      tableCount = tables.size,
-      archivedTableCount = tables.count(_.status == TableStatus.Archived),
-      pendingTablePlanCount = stage.pendingTablePlans.size,
-      standings = Some(publicStageStandings(context, tournament, stage)),
-      bracket = publicStageBracket(context, tournament, stage),
-      advancementRule = stage.advancementRule,
-      swissRule = stage.swissRule,
-      knockoutRule = stage.knockoutRule,
-      mahjongRuleset = stage.mahjongRuleset,
-      lineupSubmissions = stage.lineupSubmissions
-        .sortBy(_.submittedAt)
-        .map(lineupSubmissionView)
-    )
+  ): IO[PublicTournamentStageView] =
+    for
+      standings <- publicStageStandings(context, tournament, stage)
+      bracket <- publicStageBracket(context, tournament, stage)
+    yield PublicTournamentStageView(
+        stageId = stage.id,
+        name = stage.name,
+        format = stage.format,
+        order = stage.order,
+        status = stage.status,
+        currentRound = stage.currentRound,
+        roundCount = stage.roundCount,
+        schedulingPoolSize = stage.schedulingPoolSize,
+        tableCount = tables.size,
+        archivedTableCount = tables.count(_.status == TableStatus.Archived),
+        pendingTablePlanCount = stage.pendingTablePlans.size,
+        standings = Some(standings),
+        bracket = bracket,
+        advancementRule = stage.advancementRule,
+        swissRule = stage.swissRule,
+        knockoutRule = stage.knockoutRule,
+        mahjongRuleset = stage.mahjongRuleset,
+        lineupSubmissions = stage.lineupSubmissions
+          .sortBy(_.submittedAt)
+          .map(lineupSubmissionView)
+      )
 
   private def lineupSubmissionView(
       submission: StageLineupSubmission
@@ -156,17 +159,17 @@ final case class GetPublicTournamentAPIMessage(
       context: ApiPlanContext,
       tournament: Tournament,
       stage: TournamentStage
-  ): StageRankingSnapshot =
+  ): IO[StageRankingSnapshot] =
     TournamentStageQueries.stageStandings(context.connection, tournament.id, stage.id)
 
   private def publicStageBracket(
       context: ApiPlanContext,
       tournament: Tournament,
       stage: TournamentStage
-  ): Option[KnockoutBracketSnapshot] =
+  ): IO[Option[KnockoutBracketSnapshot]] =
     if stage.format == TournamentFormat.Knockout || stage.format == TournamentFormat.Finals then
-      Some(TournamentStageQueries.stageKnockoutBracket(context.connection, tournament.id, stage.id))
-    else None
+      TournamentStageQueries.stageKnockoutBracket(context.connection, tournament.id, stage.id).map(Some(_))
+    else IO.pure(None)
 
   private def tournamentParticipantIds(
       tournament: Tournament,
@@ -184,3 +187,11 @@ final case class GetPublicTournamentAPIMessage(
 
   private def relatedClubIds(tournament: Tournament): Vector[ClubId] =
     (tournament.participatingClubs ++ tournament.whitelist.flatMap(_.clubId)).distinct
+
+  private def sequenceVector[A](values: Vector[IO[A]]): IO[Vector[A]] =
+    values.foldLeft(IO.pure(Vector.empty[A])) { (collected, next) =>
+      for
+        items <- collected
+        item <- next
+      yield items :+ item
+    }

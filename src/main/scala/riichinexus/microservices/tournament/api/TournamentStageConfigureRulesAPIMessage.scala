@@ -56,7 +56,7 @@ final case class TournamentStageConfigureRulesAPIMessage(tournamentId: String, s
 
   override def plan(context: ApiPlanContext): IO[TournamentSummaryView] =
     for
-      actor <- IO.blocking(ResolveAccessPrincipal(PlayerId(request.operatorId)).resolve(context.connection))
+      actor <- ResolveAccessPrincipal(PlayerId(request.operatorId)).plan(context)
       command = ConfigureStageRulesCommand(
         tournamentId = TournamentId(tournamentId),
         stageId = TournamentStageId(stageId),

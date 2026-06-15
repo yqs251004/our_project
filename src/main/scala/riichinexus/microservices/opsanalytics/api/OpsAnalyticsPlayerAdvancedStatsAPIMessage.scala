@@ -43,7 +43,7 @@ final case class OpsAnalyticsPlayerAdvancedStatsAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[AdvancedStatsBoard] =
     for
-      operator <- IO.blocking(ResolveAccessPrincipal(operatorId).resolve(context.connection))
+      operator <- ResolveAccessPrincipal(operatorId).plan(context)
       _ <- requireDashboardPermission(context, operator)
       board <- IO.blocking(findAdvancedStatsBoard(context))
     yield board

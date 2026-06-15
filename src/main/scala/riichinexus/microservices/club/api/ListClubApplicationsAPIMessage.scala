@@ -51,7 +51,7 @@ final case class ListClubApplicationsAPIMessage(
     for
       resolved <- IO.blocking(resolveQuery(context))
       actor <- ResolveRequestActor(guestSessionId = None, operatorId = resolved.operatorId).plan(context)
-      page <- IO.blocking(listApplications(context, resolved, actor))
+      page <- listApplications(context, resolved, actor)
     yield page
 
   private def resolveQuery(context: ApiPlanContext): ResolvedClubApplicationListQuery =
@@ -75,19 +75,27 @@ final case class ListClubApplicationsAPIMessage(
       context: ApiPlanContext,
       query: ResolvedClubApplicationListQuery,
       actor: AccessPrincipal
-  ): PagedResponse[ClubMembershipApplicationView] =
-    val club = ClubTable
-      .findById(context.connection, query.clubId)
-      .getOrElse(throw NoSuchElementException(s"Club ${query.clubId.value} was not found"))
-    ClubAuthorization.requireClubApplicationManager(actor, club)
+  ): IO[PagedResponse[ClubMembershipApplicationView]] =
+    for
+      resolved <- IO.blocking {
+        val club = ClubTable
+          .findById(context.connection, query.clubId)
+          .getOrElse(throw NoSuchElementException(s"Club ${query.clubId.value} was not found"))
+        ClubAuthorization.requireClubApplicationManager(actor, club)
 
-    val applications = club.membershipApplications
-      .filter(application => query.status.forall(_ == application.status))
-      .filter(application => query.playerId.forall(application.playerId.contains))
-      .filter(application => query.displayName.forall(riichinexus.system.TextSearch.containsIgnoreCase(application.displayName, _)))
-      .sortBy(_.submittedAt)
-      .map(application => ClubApplicationViewAssembler.applicationView(context.connection, club, application, actor))
-    pagedResponse(applications, query)
+        val applications = club.membershipApplications
+          .filter(application => query.status.forall(_ == application.status))
+          .filter(application => query.playerId.forall(application.playerId.contains))
+          .filter(application => query.displayName.forall(riichinexus.system.TextSearch.containsIgnoreCase(application.displayName, _)))
+          .sortBy(_.submittedAt)
+        (club, applications)
+      }
+      (club, applications) = resolved
+      views <- applications.foldLeft(IO.pure(Vector.empty[ClubMembershipApplicationView])) { (previous, application) =>
+        previous.flatMap(views => ClubApplicationViewAssembler.applicationView(context, club, application, actor).map(view => views :+ view))
+      }
+      page <- IO.blocking(pagedResponse(views, query))
+    yield page
 
   private def pagedResponse(
       applications: Vector[ClubMembershipApplicationView],

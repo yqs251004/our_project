@@ -42,7 +42,7 @@ final case class OpsAnalyticsListAdvancedStatsTasksAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[AdvancedStatsRecomputeTask]] =
     for
-      operator <- IO.blocking(ResolveAccessPrincipal(operatorId).resolve(context.connection))
+      operator <- ResolveAccessPrincipal(operatorId).plan(context)
       _ <- requireOpsAdmin(context, operator)
       query = resolveQuery
       tasks <- IO.blocking(listTasks(context, query))

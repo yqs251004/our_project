@@ -54,7 +54,7 @@ final case class UpdateClubRankTreeAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
-      actor <- IO.blocking(ResolveAccessPrincipal(PlayerId(operatorId)).resolve(context.connection))
+      actor <- ResolveAccessPrincipal(PlayerId(operatorId)).plan(context)
       occurredAt <- IO.realTimeInstant
       command = UpdateClubRankTreeCommand(
         clubId = ClubId(clubId),

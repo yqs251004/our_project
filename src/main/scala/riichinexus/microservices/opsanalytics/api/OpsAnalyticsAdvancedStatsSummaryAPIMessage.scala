@@ -46,7 +46,7 @@ final case class OpsAnalyticsAdvancedStatsSummaryAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[AdvancedStatsTaskQueueSummary] =
     for
-      operator <- IO.blocking(ResolveAccessPrincipal(operatorId).resolve(context.connection))
+      operator <- ResolveAccessPrincipal(operatorId).plan(context)
       _ <- requireOpsAdmin(context, operator)
       resolvedAsOf <- resolveAsOf
       tasks <- IO.blocking(AdvancedStatsRecomputeTaskTable.findAll(context.connection))

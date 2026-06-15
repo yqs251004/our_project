@@ -1,5 +1,4 @@
 package riichinexus.microservices.tournament.domain.tablemanagement.functions
-import riichinexus.microservices.player.api.`private`.ResolvePlayersPrivateAPIMessage
 
 import riichinexus.microservices.tournament.domain.lineupmanagement.functions.*
 import riichinexus.microservices.tournament.domain.paifumanagement.functions.*
@@ -12,7 +11,7 @@ import riichinexus.microservices.tournament.domain.rulesmanagement.functions.swi
 import riichinexus.microservices.tournament.domain.settlementmanagement.functions.*
 import riichinexus.microservices.tournament.domain.tablemanagement.functions.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.functions.*
-import cats.effect.unsafe.implicits.global
+import cats.effect.IO
 import riichinexus.system.api.ApiPlanContext
 import java.sql.Connection
 import java.util.NoSuchElementException
@@ -64,7 +63,7 @@ object TournamentStageTableScheduler:
       connection: Connection,
       table: Table,
       at: Instant = Instant.now()
-  ): Vector[Table] =
+  ): IO[Vector[Table]] =
     schedule(
       connection = connection,
       tournamentId = table.tournamentId,
@@ -77,100 +76,112 @@ object TournamentStageTableScheduler:
       tournamentId: TournamentId,
       stageId: TournamentStageId,
       at: Instant = Instant.now()
-  ): Vector[Table] =
-    val tournament = riichinexus.microservices.tournament.tables.tournaments.TournamentTable
-      .findById(connection, tournamentId)
-      .getOrElse(throw IllegalArgumentException(s"Tournament ${tournamentId.value} was not found"))
+  ): IO[Vector[Table]] =
+    IO.blocking {
+      val tournament = riichinexus.microservices.tournament.tables.tournaments.TournamentTable
+        .findById(connection, tournamentId)
+        .getOrElse(throw IllegalArgumentException(s"Tournament ${tournamentId.value} was not found"))
 
-    val stage = tournament.stages
-      .find(_.id == stageId)
-      .getOrElse(throw IllegalArgumentException(s"Stage ${stageId.value} was not found"))
+      val stage = tournament.stages
+        .find(_.id == stageId)
+        .getOrElse(throw IllegalArgumentException(s"Stage ${stageId.value} was not found"))
 
-    if tournament.status == TournamentStatus.Draft then
-      throw IllegalArgumentException(
-        s"Tournament ${tournamentId.value} must be published before scheduling tables"
-      )
+      if tournament.status == TournamentStatus.Draft then
+        throw IllegalArgumentException(
+          s"Tournament ${tournamentId.value} must be published before scheduling tables"
+        )
 
-    val isKnockoutStage =
-      stage.format == TournamentFormat.Knockout ||
-        stage.format == TournamentFormat.Finals ||
-        stage.advancementRule.ruleType == AdvancementRuleType.KnockoutElimination
+      val isKnockoutStage =
+        stage.format == TournamentFormat.Knockout ||
+          stage.format == TournamentFormat.Finals ||
+          stage.advancementRule.ruleType == AdvancementRuleType.KnockoutElimination
 
-    if isKnockoutStage then
-      KnockoutStageCoordinator.materializeUnlockedTables(connection, tournamentId, stageId, at)
-      ensureScheduledTournamentWithTablesIsActive(connection, tournamentId, stageId)
-      riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.findByTournamentAndStage(connection, tournamentId, stageId).sortBy(table =>
-        (table.stageRoundNumber, table.tableNo, table.id.value)
-      )
-    else
-      scheduleNonKnockoutStage(connection, tournament, stage)
+      (tournament, stage, isKnockoutStage)
+    }.flatMap { case (tournament, stage, isKnockoutStage) =>
+      if isKnockoutStage then
+        for
+          _ <- KnockoutStageCoordinator.materializeUnlockedTables(connection, tournamentId, stageId, at)
+          tables <- IO.blocking {
+            ensureScheduledTournamentWithTablesIsActive(connection, tournamentId, stageId)
+            riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.findByTournamentAndStage(connection, tournamentId, stageId).sortBy(table =>
+              (table.stageRoundNumber, table.tableNo, table.id.value)
+            )
+          }
+        yield tables
+      else
+        scheduleNonKnockoutStage(connection, tournament, stage)
+    }
 
   private def scheduleNonKnockoutStage(
       connection: Connection,
       tournament: Tournament,
       stage: TournamentStage
-  ): Vector[Table] =
-    val tournamentPlayers = resolveParticipants(connection, tournament, stage)
-    if tournamentPlayers.size < 4 then
-      throw IllegalArgumentException(
-        s"Stage ${stage.id.value} needs at least four active players before scheduling"
-      )
-    if stage.format != TournamentFormat.Custom && tournamentPlayers.size % 4 != 0 then
-      throw IllegalArgumentException(
-        s"Stage ${stage.id.value} requires player counts divisible by four; got ${tournamentPlayers.size}"
-      )
-
-    val existingTables = riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.findByTournamentAndStage(connection, tournament.id, stage.id)
-    val preparedTournament =
-      prepareNonKnockoutRoundIfNeeded(
+  ): IO[Vector[Table]] =
+    for
+      tournamentPlayers <- TournamentStageParticipantResolver.resolveParticipants(ApiPlanContext(bearerToken = None, connection = connection), tournament, stage)
+      tables <- IO.blocking {
+        if tournamentPlayers.size < 4 then
+          throw IllegalArgumentException(
+            s"Stage ${stage.id.value} needs at least four active players before scheduling"
+          )
+        if stage.format != TournamentFormat.Custom && tournamentPlayers.size % 4 != 0 then
+          throw IllegalArgumentException(
+            s"Stage ${stage.id.value} requires player counts divisible by four; got ${tournamentPlayers.size}"
+          )
+        riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.findByTournamentAndStage(connection, tournament.id, stage.id)
+      }
+      preparedTournament <- prepareNonKnockoutRoundIfNeeded(
         connection = connection,
         tournament = tournament,
         stage = stage,
         participants = tournamentPlayers,
-        existingTables = existingTables
+        existingTables = tables
       )
-    val preparedStage = requireStage(preparedTournament, stage.id)
-    val refreshedTables = riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.findByTournamentAndStage(connection, tournament.id, stage.id)
-    val activePoolUsage = refreshedTables.count(_.status != TableStatus.Archived)
-    val availablePoolSlots = math.max(0, preparedStage.schedulingPoolSize - activePoolUsage)
+      scheduledTables <- IO.blocking {
+        val preparedStage = requireStage(preparedTournament, stage.id)
+        val refreshedTables = riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.findByTournamentAndStage(connection, tournament.id, stage.id)
+        val activePoolUsage = refreshedTables.count(_.status != TableStatus.Archived)
+        val availablePoolSlots = math.max(0, preparedStage.schedulingPoolSize - activePoolUsage)
 
-    val materializedTables =
-      if availablePoolSlots <= 0 || preparedStage.pendingTablePlans.isEmpty then Vector.empty
-      else
-        val plansToMaterialize = preparedStage.pendingTablePlans.take(availablePoolSlots)
-        val createdTables = plansToMaterialize.map { plan =>
-          riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.save(connection, 
-            Table(
-              id = TournamentIdGenerator.tableId(),
-              tableNo = plan.tableNo,
-              tournamentId = tournament.id,
-              stageId = stage.id,
-              seats = plan.seats,
-              stageRoundNumber = plan.roundNumber
+        val materializedTables =
+          if availablePoolSlots <= 0 || preparedStage.pendingTablePlans.isEmpty then Vector.empty
+          else
+            val plansToMaterialize = preparedStage.pendingTablePlans.take(availablePoolSlots)
+            val createdTables = plansToMaterialize.map { plan =>
+              riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.save(connection,
+                Table(
+                  id = TournamentIdGenerator.tableId(),
+                  tableNo = plan.tableNo,
+                  tournamentId = tournament.id,
+                  stageId = stage.id,
+                  seats = plan.seats,
+                  stageRoundNumber = plan.roundNumber
+                )
+              )
+            }
+
+            val activatedTournament = TournamentFunctions.activateStage(preparedTournament, stage.id)
+            val updatedTournament = TournamentFunctions.updateStage(
+              activatedTournament,
+              stage.id,
+              currentStage => TournamentStageFunctions.consumePendingPlans(currentStage, plansToMaterialize, createdTables.map(_.id))
             )
+            riichinexus.microservices.tournament.tables.tournaments.TournamentTable.save(connection,
+              if updatedTournament.status == TournamentStatus.RegistrationOpen then TournamentFunctions.markScheduled(updatedTournament)
+              else updatedTournament
+            )
+            createdTables
+
+        if materializedTables.isEmpty && tables.nonEmpty then
+          ensureScheduledTournamentWithTablesIsActive(connection, tournament.id, stage.id)
+
+        if materializedTables.nonEmpty || tables.nonEmpty || preparedStage.pendingTablePlans.nonEmpty then
+          riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.findByTournamentAndStage(connection, tournament.id, stage.id).sortBy(table =>
+            (table.stageRoundNumber, table.tableNo, table.id.value)
           )
-        }
-
-        val activatedTournament = TournamentFunctions.activateStage(preparedTournament, stage.id)
-        val updatedTournament = TournamentFunctions.updateStage(
-          activatedTournament,
-          stage.id,
-          currentStage => TournamentStageFunctions.consumePendingPlans(currentStage, plansToMaterialize, createdTables.map(_.id))
-        )
-        riichinexus.microservices.tournament.tables.tournaments.TournamentTable.save(connection, 
-          if updatedTournament.status == TournamentStatus.RegistrationOpen then TournamentFunctions.markScheduled(updatedTournament)
-          else updatedTournament
-        )
-        createdTables
-
-    if materializedTables.isEmpty && existingTables.nonEmpty then
-      ensureScheduledTournamentWithTablesIsActive(connection, tournament.id, stage.id)
-
-    if materializedTables.nonEmpty || existingTables.nonEmpty || preparedStage.pendingTablePlans.nonEmpty then
-      riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.findByTournamentAndStage(connection, tournament.id, stage.id).sortBy(table =>
-        (table.stageRoundNumber, table.tableNo, table.id.value)
-      )
-    else Vector.empty
+        else Vector.empty
+      }
+    yield scheduledTables
 
   private def ensureScheduledTournamentWithTablesIsActive(
       connection: Connection,
@@ -188,51 +199,14 @@ object TournamentStageTableScheduler:
           )
       }
 
-  private def resolveParticipants(
-      connection: Connection,
-      tournament: Tournament,
-      stage: TournamentStage
-  ): Vector[Player] =
-    val clubIds = (tournament.participatingClubs ++ tournament.whitelist.flatMap(_.clubId)).distinct
-    val clubsById = ResolveClubsPrivateAPIMessage(clubIds)
-      .plan(ApiPlanContext(bearerToken = None, connection = connection))
-      .unsafeRunSync()
-      .map(club => club.id -> club)
-      .toMap
-
-    val fallbackPlayerIds =
-      val registeredClubMembers = tournament.participatingClubs.flatMap { clubId =>
-        clubsById.get(clubId).toVector.flatMap(_.members)
-      }
-      val whitelistedPlayers = tournament.whitelist.flatMap(_.playerId)
-      val whitelistedClubMembers = tournament.whitelist.flatMap { entry =>
-        entry.clubId.toVector.flatMap(clubId => clubsById.get(clubId).toVector.flatMap(_.members))
-      }
-
-      (tournament.participatingPlayers ++ whitelistedPlayers ++ registeredClubMembers ++ whitelistedClubMembers).distinct
-
-    val playersById = ResolvePlayersPrivateAPIMessage((stage.lineupSubmissions.flatMap(_.seats.map(_.playerId)) ++ fallbackPlayerIds).distinct)
-      .plan(ApiPlanContext(bearerToken = None, connection = connection))
-      .unsafeRunSync()
-      .map(player => player.id -> player)
-      .toMap
-    val stagePlayerIds = StageLineupResolver.resolveEligiblePlayers(stage, playersById.get)
-
-    val targetPlayerIds =
-      StageLineupResolver.resolveTargetPlayerIds(tournament, stagePlayerIds, fallbackPlayerIds)
-
-    targetPlayerIds.flatMap { playerId =>
-      playersById.get(playerId).filter(_.status == PlayerStatus.Active)
-    }
-
   private def prepareNonKnockoutRoundIfNeeded(
       connection: Connection,
       tournament: Tournament,
       stage: TournamentStage,
       participants: Vector[Player],
       existingTables: Vector[Table]
-  ): Tournament =
-    if stage.pendingTablePlans.nonEmpty then tournament
+  ): IO[Tournament] =
+    if stage.pendingTablePlans.nonEmpty then IO.pure(tournament)
     else
       val effectiveRoundLimit = StageLineupResolver.effectiveRoundLimit(stage)
       val tablesPerRound = participants.size / 4
@@ -249,36 +223,45 @@ object TournamentStageTableScheduler:
         else None
 
       targetRound match
-        case None => tournament
+        case None => IO.pure(tournament)
         case Some(roundNumber) =>
-          val tournamentHistory =
-            riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTable.findByTournamentAndStage(connection, tournament.id, stage.id)
-          val planningStage =
-            if roundNumber == stage.currentRound then stage
-            else TournamentStageFunctions.advanceRound(stage, roundNumber)
-          val startingTableNo = existingTables.map(_.tableNo).foldLeft(0)(math.max)
-          val plans = plannedTablesForStage(
-            connection = connection,
-            tournament = tournament,
-            stage = planningStage,
-            participants = participants,
-            history = tournamentHistory,
-            roundNumber = roundNumber
-          )
-            .zipWithIndex
-            .map { case (planned, index) =>
-              planned.copy(tableNo = startingTableNo + index + 1)
+          for
+            planningInput <- IO.blocking {
+              val tournamentHistory =
+                riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTable.findByTournamentAndStage(connection, tournament.id, stage.id)
+              val planningStage =
+                if roundNumber == stage.currentRound then stage
+                else TournamentStageFunctions.advanceRound(stage, roundNumber)
+              val startingTableNo = existingTables.map(_.tableNo).foldLeft(0)(math.max)
+              (tournamentHistory, planningStage, startingTableNo)
             }
+            (tournamentHistory, planningStage, startingTableNo) = planningInput
+            plans <- plannedTablesForStage(
+              connection = connection,
+              tournament = tournament,
+              stage = planningStage,
+              participants = participants,
+              history = tournamentHistory,
+              roundNumber = roundNumber
+            )
+            savedTournament <- IO.blocking {
+              val numberedPlans = plans
+                .zipWithIndex
+                .map { case (planned, index) =>
+                  planned.copy(tableNo = startingTableNo + index + 1)
+                }
 
-          val updatedTournament = TournamentFunctions.updateStage(
-            tournament,
-            stage.id,
-            currentStage => TournamentStageFunctions.queueRoundPlans(currentStage, roundNumber, plans)
-          )
-          riichinexus.microservices.tournament.tables.tournaments.TournamentTable.save(connection, 
-            if updatedTournament.status == TournamentStatus.RegistrationOpen then TournamentFunctions.markScheduled(updatedTournament)
-            else updatedTournament
-          )
+              val updatedTournament = TournamentFunctions.updateStage(
+                tournament,
+                stage.id,
+                currentStage => TournamentStageFunctions.queueRoundPlans(currentStage, roundNumber, numberedPlans)
+              )
+              riichinexus.microservices.tournament.tables.tournaments.TournamentTable.save(connection,
+                if updatedTournament.status == TournamentStatus.RegistrationOpen then TournamentFunctions.markScheduled(updatedTournament)
+                else updatedTournament
+              )
+            }
+          yield savedTournament
 
   private def plannedTablesForStage(
       connection: Connection,
@@ -287,18 +270,17 @@ object TournamentStageTableScheduler:
       participants: Vector[Player],
       history: Vector[MatchRecord],
       roundNumber: Int
-  ): Vector[StageTablePlan] =
-    val clubRelations = buildClubRelationIndex(
-      ListClubsPrivateAPIMessage(activeOnly = true).plan(ApiPlanContext(bearerToken = None, connection = connection)).unsafeRunSync()
-    )
-    stage.format match
-      case TournamentFormat.RoundRobin =>
-        buildRoundRobinTables(participants, stage, roundNumber)
-      case TournamentFormat.Custom =>
-        val selectedPlayers = selectCustomStageParticipants(tournament, stage, participants, history, roundNumber)
-        SeatingPolicy.planTables(selectedPlayers, stage, roundNumber, history, clubRelations)
-      case _ =>
-        SeatingPolicy.planTables(participants, stage, roundNumber, history, clubRelations)
+  ): IO[Vector[StageTablePlan]] =
+    TournamentStageParticipantResolver.resolveClubRelationIndex(ApiPlanContext(bearerToken = None, connection = connection)).map { clubRelations =>
+      stage.format match
+        case TournamentFormat.RoundRobin =>
+          buildRoundRobinTables(participants, stage, roundNumber)
+        case TournamentFormat.Custom =>
+          val selectedPlayers = selectCustomStageParticipants(tournament, stage, participants, history, roundNumber)
+          SeatingPolicy.planTables(selectedPlayers, stage, roundNumber, history, clubRelations)
+        case _ =>
+          SeatingPolicy.planTables(participants, stage, roundNumber, history, clubRelations)
+    }
 
   private def buildClubRelationIndex(
       clubs: Vector[Club]

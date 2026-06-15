@@ -2,7 +2,7 @@ package riichinexus.microservices.tournament.api
 import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
-import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
+import riichinexus.microservices.player.api.`private`.*
 
 import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
@@ -55,35 +55,36 @@ final case class TournamentWhitelistPlayerAPIMessage(tournamentId: String, playe
 
   override def plan(context: ApiPlanContext): IO[TournamentSummaryView] =
     for
-      actor <- IO.blocking(resolveOperatorActor(context))
+      actor <- resolveOperatorActor(context)
       command = WhitelistPlayerCommand(TournamentId(tournamentId), PlayerId(playerId), actor)
-      tournament <- IO.blocking {
-        {
-          whitelistPlayer(context.connection, command)
-        }.getOrElse(throw NoSuchElementException("Resource not found"))
-      }
+      tournament <- whitelistPlayer(context, command).map(_.getOrElse(throw NoSuchElementException("Resource not found")))
     yield TournamentSummaryView.fromDomain(tournament)
 
-  private def resolveOperatorActor(context: ApiPlanContext): AccessPrincipal =
+  private def resolveOperatorActor(context: ApiPlanContext): IO[AccessPrincipal] =
     operatorId.map(PlayerId(_))
-      .map(ResolveAccessPrincipal(_).resolve(context.connection))
-      .getOrElse(AccessPrincipalFunctions.system)
+      .map(ResolveAccessPrincipal(_).plan(context))
+      .getOrElse(IO.pure(AccessPrincipalFunctions.system))
 
   private def whitelistPlayer(
-      connection: java.sql.Connection,
+      context: ApiPlanContext,
       command: WhitelistPlayerCommand
-  ): Option[Tournament] =
-    AuthorizationPolicyFunctions.requirePermission(AuthorizationPolicyFunctions.strict, 
-      command.actor,
-      Permission.ManageTournamentStages,
-      tournamentId = Some(command.tournamentId)
-    )
-    val player = PlayerPersistenceFunctions.findPlayer(connection, command.playerId)
-      .getOrElse(throw NoSuchElementException(s"Player ${command.playerId.value} was not found"))
-    ensurePlayerCanBeWhitelisted(player, command.playerId)
-    riichinexus.microservices.tournament.tables.tournaments.TournamentTable.findById(connection, command.tournamentId).map { tournament =>
-      riichinexus.microservices.tournament.tables.tournaments.TournamentTable.save(connection, TournamentFunctions.whitelistPlayer(tournament, command.playerId))
-    }
+  ): IO[Option[Tournament]] =
+    val connection = context.connection
+    for
+      player <- ResolvePlayerPrivateAPIMessage(command.playerId).plan(context)
+        .map(_.getOrElse(throw NoSuchElementException(s"Player ${command.playerId.value} was not found")))
+      tournament <- IO.blocking {
+        AuthorizationPolicyFunctions.requirePermission(AuthorizationPolicyFunctions.strict,
+          command.actor,
+          Permission.ManageTournamentStages,
+          tournamentId = Some(command.tournamentId)
+        )
+        ensurePlayerCanBeWhitelisted(player, command.playerId)
+        riichinexus.microservices.tournament.tables.tournaments.TournamentTable.findById(connection, command.tournamentId).map { tournament =>
+          riichinexus.microservices.tournament.tables.tournaments.TournamentTable.save(connection, TournamentFunctions.whitelistPlayer(tournament, command.playerId))
+        }
+      }
+    yield tournament
 
   private def ensurePlayerCanBeWhitelisted(player: Player, playerId: PlayerId): Unit =
     if player.status != PlayerStatus.Active then
@@ -94,3 +95,4 @@ final case class TournamentWhitelistPlayerAPIMessage(tournamentId: String, playe
       playerId: PlayerId,
       actor: AccessPrincipal
   )
+

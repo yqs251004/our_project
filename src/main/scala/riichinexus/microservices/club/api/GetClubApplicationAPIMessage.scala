@@ -50,7 +50,7 @@ final case class GetClubApplicationAPIMessage(
     for
       input <- IO.blocking(resolveInput)
       actor <- resolveActor(context, input)
-      view <- IO.blocking(getApplicationView(context, input, actor))
+      view <- getApplicationView(context, input, actor)
     yield view
 
   private def resolveInput: GetClubApplicationInput =
@@ -70,11 +70,17 @@ final case class GetClubApplicationAPIMessage(
       context: ApiPlanContext,
       input: GetClubApplicationInput,
       actor: AccessPrincipal
-  ): ClubMembershipApplicationView =
-    val club = resolveClub(context.connection, input.clubId)
-    val application = resolveApplication(club, input)
-    requireClubApplicationViewer(context, actor, club, application)
-    ClubApplicationViewAssembler.applicationView(context.connection, club, application, actor)
+  ): IO[ClubMembershipApplicationView] =
+    for
+      resolved <- IO.blocking {
+        val club = resolveClub(context.connection, input.clubId)
+        val application = resolveApplication(club, input)
+        (club, application)
+      }
+      (club, application) = resolved
+      _ <- requireClubApplicationViewer(context, actor, club, application)
+      view <- ClubApplicationViewAssembler.applicationView(context, club, application, actor)
+    yield view
 
   private def resolveClub(connection: java.sql.Connection, clubId: ClubId): Club =
     ClubTable
@@ -96,11 +102,13 @@ final case class GetClubApplicationAPIMessage(
       actor: AccessPrincipal,
       club: Club,
       application: ClubMembershipApplication
-  ): Unit =
-    if !ClubApplicationViewAssembler.canManageClubApplications(actor, club) &&
-        !ClubApplicationViewAssembler.canWithdrawClubApplication(context.connection, actor, application)
-    then
-      throw AuthorizationFailure(s"${actor.displayName} cannot view membership application ${application.id.value}")
+  ): IO[Unit] =
+    if ClubApplicationViewAssembler.canManageClubApplications(actor, club) then IO.unit
+    else
+      ClubApplicationViewAssembler.canWithdrawClubApplication(context, actor, application).flatMap { canWithdraw =>
+        if canWithdraw then IO.unit
+        else IO.raiseError(AuthorizationFailure(s"${actor.displayName} cannot view membership application ${application.id.value}"))
+      }
 
   private final case class GetClubApplicationInput(
       clubId: ClubId,

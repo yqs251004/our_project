@@ -2,7 +2,7 @@ package riichinexus.microservices.club.api
 import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
-import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
+import riichinexus.microservices.player.api.`private`.*
 
 import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
@@ -39,6 +39,7 @@ import riichinexus.microservices.club.domain.membershipmanagement.functions.Club
 import riichinexus.microservices.club.domain.membershipmanagement.model.*
 import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
 import riichinexus.microservices.club.domain.relationmanagement.model.*
+import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.auth.domain.*
 import riichinexus.microservices.audit.api.`private`.RecordAuditEventPrivateAPIMessage
 import riichinexus.microservices.audit.domain.auditevent.AuditEvent
@@ -66,11 +67,7 @@ final case class WithdrawClubApplicationAPIMessage(
         note = note,
         withdrawnAt = withdrawnAt
       )
-      application <- IO.blocking {
-        {
-          withdrawApplication(context.connection, command)
-        }.getOrElse(throw NoSuchElementException("Resource not found"))
-      }
+      application <- withdrawApplication(context, command).map(_.getOrElse(throw NoSuchElementException("Resource not found")))
       _ <- RecordAuditEventPrivateAPIMessage(withdrawApplicationAudit(command, application)).plan(context)
     yield ClubMembershipApplicationResponse.fromDomain(application)
 
@@ -81,22 +78,30 @@ final case class WithdrawClubApplicationAPIMessage(
     ).plan(context)
 
   private def withdrawApplication(
-      connection: java.sql.Connection,
+      context: ApiPlanContext,
       command: WithdrawClubApplicationCommand
-  ): Option[ClubMembershipApplication] =
-    AuthorizationPolicyFunctions.requirePermission(AuthorizationPolicyFunctions.strict, command.actor, Permission.WithdrawClubApplication)
-    riichinexus.microservices.club.tables.clubs.ClubTable.findById(connection, command.clubId).map { club =>
-      ClubAuthorization.ensureClubActive(club)
-      val application = resolveApplication(club, command)
-      ensureApplicationPending(application, command.membershipId)
-      requireApplicationOwnership(connection, application, command.actor)
-      val updatedApplication = ClubMembershipApplicationFunctions.withdraw(application, command.actor.principalId, command.withdrawnAt, command.note)
-      riichinexus.microservices.club.tables.clubs.ClubTable.save(
-        connection,
-        ClubFunctions.reviewApplication(club, command.membershipId, _ => updatedApplication)
-      )
-      updatedApplication
-    }
+  ): IO[Option[ClubMembershipApplication]] =
+    val connection = context.connection
+    for
+      actorPlayer <- command.actor.playerId
+        .map(playerId => ResolvePlayerPrivateAPIMessage(playerId).plan(context))
+        .getOrElse(IO.pure(None))
+      application <- IO.blocking {
+        AuthorizationPolicyFunctions.requirePermission(AuthorizationPolicyFunctions.strict, command.actor, Permission.WithdrawClubApplication)
+        riichinexus.microservices.club.tables.clubs.ClubTable.findById(connection, command.clubId).map { club =>
+          ClubAuthorization.ensureClubActive(club)
+          val application = resolveApplication(club, command)
+          ensureApplicationPending(application, command.membershipId)
+          requireApplicationOwnership(application, command.actor, actorPlayer)
+          val updatedApplication = ClubMembershipApplicationFunctions.withdraw(application, command.actor.principalId, command.withdrawnAt, command.note)
+          riichinexus.microservices.club.tables.clubs.ClubTable.save(
+            connection,
+            ClubFunctions.reviewApplication(club, command.membershipId, _ => updatedApplication)
+          )
+          updatedApplication
+        }
+      }
+    yield application
 
   private def resolveApplication(
       club: Club,
@@ -120,14 +125,12 @@ final case class WithdrawClubApplicationAPIMessage(
       )
 
   private def requireApplicationOwnership(
-      connection: java.sql.Connection,
       application: ClubMembershipApplication,
-      actor: AccessPrincipal
+      actor: AccessPrincipal,
+      actorPlayer: Option[Player]
   ): Unit =
     val ownedByRegisteredPlayer =
-      actor.playerId.flatMap(playerId =>
-        PlayerPersistenceFunctions.findPlayer(connection, playerId)
-      ).exists(player =>
+      actorPlayer.exists(player =>
         application.playerId.contains(player.id) ||
           application.applicantUserId.contains(player.userId)
       )

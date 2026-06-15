@@ -52,23 +52,21 @@ final case class TournamentPublishAPIMessage(tournamentId: String, operatorId: O
 
   override def plan(context: ApiPlanContext): IO[TournamentMutationView] =
     for
-      actor <- IO.blocking(resolveOperatorActor(context))
+      actor <- resolveOperatorActor(context)
       command = PublishTournamentCommand(TournamentId(tournamentId), actor)
       _ <- IO.blocking {
         {
           publishTournament(context.connection, command)
         }
       }
-      view <- IO.blocking {
-        TournamentOperationViewAssembler.mutationView(context.connection, command.tournamentId, Vector.empty)
-        .getOrElse(throw NoSuchElementException("Resource not found"))
-      }
+      view <- TournamentOperationViewAssembler.mutationView(context, command.tournamentId, Vector.empty)
+        .map(_.getOrElse(throw NoSuchElementException("Resource not found")))
     yield view
 
-  private def resolveOperatorActor(context: ApiPlanContext): AccessPrincipal =
+  private def resolveOperatorActor(context: ApiPlanContext): IO[AccessPrincipal] =
     operatorId.filter(_.nonEmpty).map(PlayerId(_))
-      .map(ResolveAccessPrincipal(_).resolve(context.connection))
-      .getOrElse(AccessPrincipalFunctions.system)
+      .map(ResolveAccessPrincipal(_).plan(context))
+      .getOrElse(IO.pure(AccessPrincipalFunctions.system))
 
   private def publishTournament(
       connection: java.sql.Connection,
@@ -94,3 +92,4 @@ final case class TournamentPublishAPIMessage(tournamentId: String, operatorId: O
       tournamentId: TournamentId,
       actor: AccessPrincipal
   )
+

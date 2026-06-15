@@ -1,5 +1,5 @@
 package riichinexus.microservices.auth.api
-import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
+import riichinexus.microservices.player.api.`private`.*
 
 import java.util.NoSuchElementException
 
@@ -65,10 +65,11 @@ final case class CurrentSessionAuthAPIMessage(
     else
       input.operatorId match
         case Some(playerId) =>
-          IO.blocking(
-            PlayerPersistenceFunctions.findPlayer(context.connection, playerId)
-              .map(registeredPlayerView)
-              .getOrElse(throw NoSuchElementException(s"Player ${playerId.value} was not found"))
+          ResolvePlayerPrivateAPIMessage(playerId)
+            .plan(context)
+            .map(
+              _.map(registeredPlayerView)
+                .getOrElse(throw NoSuchElementException(s"Player ${playerId.value} was not found"))
           )
         case None =>
           input.guestSessionId match

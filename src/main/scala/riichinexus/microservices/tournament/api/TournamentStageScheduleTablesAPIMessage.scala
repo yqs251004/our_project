@@ -56,46 +56,45 @@ final case class TournamentStageScheduleTablesAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[TournamentMutationView] =
     for
-      actor <- IO.blocking(resolveOperatorActor(context))
+      actor <- resolveOperatorActor(context)
       command = ScheduleStageTablesCommand(
         tournamentId = TournamentId(tournamentId),
         stageId = TournamentStageId(stageId),
         actor = actor
       )
-      scheduledTables <- IO.blocking {
-        {
-          scheduleTables(context.connection, command)
-        }
-      }
-      view <- IO.blocking {
-        TournamentOperationViewAssembler
-        .mutationView(context.connection, command.tournamentId, scheduledTables)
-        .getOrElse(throw NoSuchElementException("Resource not found"))
-      }
+      scheduledTables <- scheduleTables(context, command)
+      view <- TournamentOperationViewAssembler
+        .mutationView(context, command.tournamentId, scheduledTables)
+        .map(_.getOrElse(throw NoSuchElementException("Resource not found")))
     yield view
 
-  private def resolveOperatorActor(context: ApiPlanContext): AccessPrincipal =
+  private def resolveOperatorActor(context: ApiPlanContext): IO[AccessPrincipal] =
     operatorId.filter(_.nonEmpty).map(PlayerId(_))
-      .map(ResolveAccessPrincipal(_).resolve(context.connection))
-      .getOrElse(AccessPrincipalFunctions.system)
+      .map(ResolveAccessPrincipal(_).plan(context))
+      .getOrElse(IO.pure(AccessPrincipalFunctions.system))
 
   private def scheduleTables(
-      connection: java.sql.Connection,
+      context: ApiPlanContext,
       command: ScheduleStageTablesCommand
-  ): Vector[Table] =
-    AuthorizationPolicyFunctions.requirePermission(AuthorizationPolicyFunctions.strict, 
-      command.actor,
-      Permission.ManageTournamentStages,
-      tournamentId = Some(command.tournamentId)
-    )
-    TournamentStageTableScheduler.schedule(
-      connection = connection,
-      tournamentId = command.tournamentId,
-      stageId = command.stageId
-    )
+  ): IO[Vector[Table]] =
+    for
+      _ <- IO.blocking {
+        AuthorizationPolicyFunctions.requirePermission(AuthorizationPolicyFunctions.strict,
+          command.actor,
+          Permission.ManageTournamentStages,
+          tournamentId = Some(command.tournamentId)
+        )
+      }
+      tables <- TournamentStageTableScheduler.schedule(
+        connection = context.connection,
+        tournamentId = command.tournamentId,
+        stageId = command.stageId
+      )
+    yield tables
 
   private final case class ScheduleStageTablesCommand(
       tournamentId: TournamentId,
       stageId: TournamentStageId,
       actor: AccessPrincipal
   )
+

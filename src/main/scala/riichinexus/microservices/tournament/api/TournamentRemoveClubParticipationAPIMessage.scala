@@ -8,7 +8,6 @@ import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions
 import java.util.NoSuchElementException
 
 import cats.effect.IO
-import cats.effect.unsafe.implicits.global
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
@@ -59,41 +58,40 @@ final case class TournamentRemoveClubParticipationAPIMessage(tournamentId: Strin
 
   override def plan(context: ApiPlanContext): IO[TournamentMutationView] =
     for
-      actor <- IO.blocking(resolveOperatorActor(context))
+      actor <- resolveOperatorActor(context)
       command = RemoveClubParticipationCommand(TournamentId(tournamentId), ClubId(clubId), actor)
-      _ <- IO.blocking {
-        {
-          removeClubParticipation(context.connection, command)
-        }
-      }
-      view <- IO.blocking {
-        TournamentOperationViewAssembler.mutationView(context.connection, command.tournamentId, Vector.empty)
-        .getOrElse(throw NoSuchElementException("Resource not found"))
-      }
+      _ <- removeClubParticipation(context, command)
+      view <- TournamentOperationViewAssembler.mutationView(context, command.tournamentId, Vector.empty)
+        .map(_.getOrElse(throw NoSuchElementException("Resource not found")))
     yield view
 
-  private def resolveOperatorActor(context: ApiPlanContext): AccessPrincipal =
+  private def resolveOperatorActor(context: ApiPlanContext): IO[AccessPrincipal] =
     operatorId.filter(_.nonEmpty).map(PlayerId(_))
-      .map(ResolveAccessPrincipal(_).resolve(context.connection))
-      .getOrElse(AccessPrincipalFunctions.system)
+      .map(ResolveAccessPrincipal(_).plan(context))
+      .getOrElse(IO.pure(AccessPrincipalFunctions.system))
 
   private def removeClubParticipation(
-      connection: java.sql.Connection,
+      context: ApiPlanContext,
       command: RemoveClubParticipationCommand
-  ): Unit =
-    AuthorizationPolicyFunctions.requirePermission(AuthorizationPolicyFunctions.strict, 
-      command.actor,
-      Permission.ManageTournamentStages,
-      tournamentId = Some(command.tournamentId)
-    )
-    ResolveClubPrivateAPIMessage(command.clubId)
-      .plan(ApiPlanContext(bearerToken = None, connection = connection))
-      .unsafeRunSync()
-      .getOrElse(throw NoSuchElementException(s"Club ${command.clubId.value} was not found"))
-    riichinexus.microservices.tournament.tables.tournaments.TournamentTable.findById(connection, command.tournamentId).foreach { tournament =>
-      ensureClubTracked(tournament, command)
-      riichinexus.microservices.tournament.tables.tournaments.TournamentTable.save(connection, TournamentFunctions.removeClub(tournament, command.clubId))
-    }
+  ): IO[Unit] =
+    for
+      _ <- IO.blocking {
+        AuthorizationPolicyFunctions.requirePermission(AuthorizationPolicyFunctions.strict,
+          command.actor,
+          Permission.ManageTournamentStages,
+          tournamentId = Some(command.tournamentId)
+        )
+      }
+      _ <- ResolveClubPrivateAPIMessage(command.clubId)
+        .plan(context)
+        .map(_.getOrElse(throw NoSuchElementException(s"Club ${command.clubId.value} was not found")))
+      _ <- IO.blocking {
+        riichinexus.microservices.tournament.tables.tournaments.TournamentTable.findById(context.connection, command.tournamentId).foreach { tournament =>
+          ensureClubTracked(tournament, command)
+          riichinexus.microservices.tournament.tables.tournaments.TournamentTable.save(context.connection, TournamentFunctions.removeClub(tournament, command.clubId))
+        }
+      }
+    yield ()
 
   private def ensureClubTracked(
       tournament: Tournament,
@@ -112,3 +110,4 @@ final case class TournamentRemoveClubParticipationAPIMessage(tournamentId: Strin
       clubId: ClubId,
       actor: AccessPrincipal
   )
+

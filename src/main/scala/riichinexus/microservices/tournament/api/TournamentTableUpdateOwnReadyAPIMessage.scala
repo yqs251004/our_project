@@ -54,7 +54,7 @@ final case class TournamentTableUpdateOwnReadyAPIMessage(tableId: String, reques
 
   override def plan(context: ApiPlanContext): IO[TournamentTableView] =
     for
-      actor <- IO.blocking(ResolveAccessPrincipal(PlayerId(request.operatorId)).resolve(context.connection))
+      actor <- ResolveAccessPrincipal(PlayerId(request.operatorId)).plan(context)
       command = UpdateOwnReadyCommand(TableId(tableId), actor, request.ready, request.note)
       table <- IO.blocking {
         {

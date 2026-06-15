@@ -58,7 +58,7 @@ final case class TournamentSettlementFinalizeAPIMessage(tournamentId: String, se
 
   override def plan(context: ApiPlanContext): IO[TournamentSettlementView] =
     for
-      actor <- IO.blocking(ResolveAccessPrincipal(PlayerId(request.operatorId)).resolve(context.connection))
+      actor <- ResolveAccessPrincipal(PlayerId(request.operatorId)).plan(context)
       finalizedAt <- IO.realTimeInstant
       command = FinalizeSettlementCommand(
         tournamentId = TournamentId(tournamentId),

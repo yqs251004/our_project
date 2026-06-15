@@ -59,7 +59,7 @@ final case class TournamentStageCreateAPIMessage(tournamentId: String, request: 
 
   override def plan(context: ApiPlanContext): IO[TournamentSummaryView] =
     for
-      actor <- IO.blocking(request.operatorId.map(PlayerId(_)).map(ResolveAccessPrincipal(_).resolve(context.connection)).getOrElse(AccessPrincipalFunctions.system))
+      actor <- request.operatorId.map(PlayerId(_)).map(ResolveAccessPrincipal(_).plan(context)).getOrElse(IO.pure(AccessPrincipalFunctions.system))
       command = CreateStageCommand(
         tournamentId = TournamentId(tournamentId),
         actor = actor,

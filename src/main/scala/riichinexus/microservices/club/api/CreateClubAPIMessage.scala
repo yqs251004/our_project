@@ -1,7 +1,7 @@
 package riichinexus.microservices.club.api
 import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
-import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
+import riichinexus.microservices.player.api.`private`.*
 
 import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
@@ -55,7 +55,7 @@ final case class CreateClubAPIMessage(
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
       parsedCreatorId <- IO.blocking(PlayerId(creatorId))
-      actor <- IO.blocking(ResolveAccessPrincipal(parsedCreatorId).resolve(context.connection))
+      actor <- ResolveAccessPrincipal(parsedCreatorId).plan(context)
       createdAt <- IO.realTimeInstant
       command = CreateClubCommand(
         name = name,
@@ -63,31 +63,31 @@ final case class CreateClubAPIMessage(
         actor = actor,
         createdAt = createdAt
       )
-      club <- IO.blocking {
-        {
-          createClub(context.connection, command)
-        }
-      }
+      club <- createClub(context, command)
     yield ClubView.fromDomain(club)
 
-  private def createClub(connection: java.sql.Connection, command: CreateClubCommand): Club =
+  private def createClub(context: ApiPlanContext, command: CreateClubCommand): IO[Club] =
+    val connection = context.connection
     val normalizedName = command.name.trim
     require(normalizedName.nonEmpty, "Club name cannot be empty")
 
-    val creator = PlayerPersistenceFunctions.findPlayer(connection, command.creatorId)
-      .getOrElse(throw NoSuchElementException(s"Player ${command.creatorId.value} was not found"))
-    requireActivePlayer(creator, s"Player ${command.creatorId.value} cannot create a club")
-    ensureCreatorCanCreateClub(command.actor, command.creatorId)
-
-    val club = resolveClubToCreate(connection, normalizedName, command.creatorId, command.createdAt)
-    val updatedCreator = PlayerRoleFunctions.grantRole(
-      PlayerClubBindingFunctions.joinClub(creator, club.id),
-      RoleGrantFunctions.clubAdmin(club.id, command.createdAt, command.actor.playerId)
-    )
-
-    val savedCreator = PlayerPersistenceFunctions.savePlayer(connection, updatedCreator)
-    ClubProjectionRefresher.ensurePlayerDashboard(connection, savedCreator.id, command.createdAt)
-    riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, ClubProjectionRefresher.refreshClubProjection(connection, club, command.createdAt))
+    for
+      creator <- ResolvePlayerPrivateAPIMessage(command.creatorId).plan(context)
+        .map(_.getOrElse(throw NoSuchElementException(s"Player ${command.creatorId.value} was not found")))
+      _ <- IO.blocking {
+        requireActivePlayer(creator, s"Player ${command.creatorId.value} cannot create a club")
+        ensureCreatorCanCreateClub(command.actor, command.creatorId)
+      }
+      club <- IO.blocking(resolveClubToCreate(connection, normalizedName, command.creatorId, command.createdAt))
+      updatedCreator = PlayerRoleFunctions.grantRole(
+        PlayerClubBindingFunctions.joinClub(creator, club.id),
+        RoleGrantFunctions.clubAdmin(club.id, command.createdAt, command.actor.playerId)
+      )
+      savedCreator <- SavePlayerPrivateAPIMessage(updatedCreator).plan(context)
+      _ <- ClubProjectionRefresher.ensurePlayerDashboard(context, savedCreator.id, command.createdAt)
+      refreshedClub <- ClubProjectionRefresher.refreshClubProjection(context, club, command.createdAt)
+      savedClub <- IO.blocking(riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, refreshedClub))
+    yield savedClub
 
   private def resolveClubToCreate(
       connection: java.sql.Connection,

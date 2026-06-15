@@ -1,9 +1,10 @@
 package riichinexus.microservices.club.api.`private`
-import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
+import riichinexus.microservices.player.api.`private`.*
 
 import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
-import java.sql.Connection
+import cats.effect.IO
+import riichinexus.system.api.ApiPlanContext
 
 import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
@@ -48,57 +49,70 @@ object ClubApplicationViewAssembler:
     ClubAuthorization.canManageClubApplications(actor, club)
 
   def ownsClubApplication(
-      connection: Connection,
+      context: ApiPlanContext,
       actor: AccessPrincipal,
       application: ClubMembershipApplication
-  ): Boolean =
-    actor.playerId.flatMap(PlayerPersistenceFunctions.findPlayer(connection, _)).exists { player =>
-      application.playerId.contains(player.id) ||
-        application.applicantUserId.contains(player.userId)
-    }
+  ): IO[Boolean] =
+    actor.playerId
+      .map(playerId => ResolvePlayerPrivateAPIMessage(playerId).plan(context))
+      .getOrElse(IO.pure(None))
+      .map(_.exists { player =>
+        application.playerId.contains(player.id) ||
+          application.applicantUserId.contains(player.userId)
+      })
 
   def canWithdrawClubApplication(
-      connection: Connection,
+      context: ApiPlanContext,
       actor: AccessPrincipal,
       application: ClubMembershipApplication
-  ): Boolean =
-    AccessPrincipalFunctions.isSuperAdmin(actor) || ownsClubApplication(connection, actor, application)
+  ): IO[Boolean] =
+    if AccessPrincipalFunctions.isSuperAdmin(actor) then IO.pure(true)
+    else ownsClubApplication(context, actor, application)
 
   def applicationView(
-      connection: Connection,
+      context: ApiPlanContext,
       club: Club,
       application: ClubMembershipApplication,
       actor: AccessPrincipal
-  ): ClubMembershipApplicationView =
-    val applicantPlayer = resolveApplicantPlayer(connection, application)
-    ClubMembershipApplicationView(
-      applicationId = application.id.value,
-      clubId = club.id.value,
-      clubName = club.name,
-      applicant = ClubMembershipApplicantView(
-        playerId = applicantPlayer.map(_.id.value),
-        displayName = application.displayName,
-        playerStatus = applicantPlayer.map(_.status.toString),
-        currentRank = applicantPlayer.map(_.currentRank),
-        elo = applicantPlayer.map(_.elo),
-        clubIds = applicantPlayer.map(player => PlayerClubBindingFunctions.boundClubIds(player).map(_.value)).getOrElse(Vector.empty)
-      ),
-      submittedAt = application.submittedAt.toString,
-      message = application.message,
-      status = ClubApplicationStatus.toString(application.status),
-      reviewedBy = application.reviewedBy.map(_.value),
-      reviewedByDisplayName = application.reviewedBy.flatMap(playerId => PlayerPersistenceFunctions.findPlayer(connection, playerId).map(_.nickname)),
-      reviewedAt = application.reviewedAt.map(_.toString),
-      reviewNote = application.reviewNote,
-      withdrawnByPrincipalId = application.withdrawnByPrincipalId,
-      canReview = ClubMembershipApplicationFunctions.isPending(application) && canManageClubApplications(actor, club),
-      canWithdraw = ClubMembershipApplicationFunctions.isPending(application) && canWithdrawClubApplication(connection, actor, application)
-    )
+  ): IO[ClubMembershipApplicationView] =
+    for
+      applicantPlayer <- resolveApplicantPlayer(context, application)
+      reviewedByDisplayName <- application.reviewedBy
+        .map(playerId => ResolvePlayerPrivateAPIMessage(playerId).plan(context).map(_.map(_.nickname)))
+        .getOrElse(IO.pure(None))
+      canWithdraw <- canWithdrawClubApplication(context, actor, application)
+    yield
+      ClubMembershipApplicationView(
+        applicationId = application.id.value,
+        clubId = club.id.value,
+        clubName = club.name,
+        applicant = ClubMembershipApplicantView(
+          playerId = applicantPlayer.map(_.id.value),
+          displayName = application.displayName,
+          playerStatus = applicantPlayer.map(_.status.toString),
+          currentRank = applicantPlayer.map(_.currentRank),
+          elo = applicantPlayer.map(_.elo),
+          clubIds = applicantPlayer.map(player => PlayerClubBindingFunctions.boundClubIds(player).map(_.value)).getOrElse(Vector.empty)
+        ),
+        submittedAt = application.submittedAt.toString,
+        message = application.message,
+        status = ClubApplicationStatus.toString(application.status),
+        reviewedBy = application.reviewedBy.map(_.value),
+        reviewedByDisplayName = reviewedByDisplayName,
+        reviewedAt = application.reviewedAt.map(_.toString),
+        reviewNote = application.reviewNote,
+        withdrawnByPrincipalId = application.withdrawnByPrincipalId,
+        canReview = ClubMembershipApplicationFunctions.isPending(application) && canManageClubApplications(actor, club),
+        canWithdraw = ClubMembershipApplicationFunctions.isPending(application) && canWithdraw
+      )
 
   private def resolveApplicantPlayer(
-      connection: Connection,
+      context: ApiPlanContext,
       application: ClubMembershipApplication
-  ) =
-    application.playerId
-      .flatMap(PlayerPersistenceFunctions.findPlayer(connection, _))
-      .orElse(application.applicantUserId.flatMap(PlayerPersistenceFunctions.findPlayerByUserId(connection, _)))
+  ): IO[Option[riichinexus.microservices.player.domain.Player]] =
+    application.playerId match
+      case Some(playerId) => ResolvePlayerPrivateAPIMessage(playerId).plan(context)
+      case None =>
+        application.applicantUserId
+          .map(ResolvePlayerByUserIdPrivateAPIMessage(_).plan(context))
+          .getOrElse(IO.pure(None))

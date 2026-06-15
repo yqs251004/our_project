@@ -3,7 +3,7 @@ import riichinexus.microservices.audit.domain.auditevent.AuditEvent
 import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
 import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPIMessage
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
-import riichinexus.microservices.player.domain.functions.PlayerPersistenceFunctions
+import riichinexus.microservices.player.api.`private`.*
 
 import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
@@ -52,7 +52,7 @@ final case class PlatformAdminGrantSuperAdminAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[PlatformAdminPlayerView] =
     for
-      actor <- IO.blocking(ResolveAccessPrincipal(operatorId).resolve(context.connection))
+      actor <- ResolveAccessPrincipal(operatorId).plan(context)
       request = GrantSuperAdminRequest(operatorId = operatorId)
       grantedAt <- IO.realTimeInstant
       command = GrantSuperAdminCommand(
@@ -60,26 +60,23 @@ final case class PlatformAdminGrantSuperAdminAPIMessage(
         actor = actor,
         grantedAt = grantedAt
       )
-      savedPlayer <- IO.blocking {
-        {
-            grantSuperAdmin(context.connection, command)
-          }
-          .getOrElse(throw NoSuchElementException(s"Player ${command.playerId.value} was not found"))
-      }
+      savedPlayer <- grantSuperAdmin(context, command)
+        .map(_.getOrElse(throw NoSuchElementException(s"Player ${command.playerId.value} was not found")))
       _ <- RecordAuditEventsPrivateAPIMessage(grantSuperAdminAudit(command)).plan(context)
     yield platformAdminPlayerView(savedPlayer)
 
   private def grantSuperAdmin(
-      connection: java.sql.Connection,
+      context: ApiPlanContext,
     command: GrantSuperAdminCommand
-  ): Option[Player] =
+  ): IO[Option[Player]] =
     ensureSuperAdmin(command.actor)
-    PlayerPersistenceFunctions.findPlayer(connection, command.playerId).map { player =>
-      val savedPlayer = PlayerPersistenceFunctions.savePlayer(
-        connection,
-        PlayerRoleFunctions.grantRole(player, RoleGrantFunctions.superAdmin(command.grantedAt, command.actor.playerId))
-      )
-      savedPlayer
+    ResolvePlayerPrivateAPIMessage(command.playerId).plan(context).flatMap {
+      case Some(player) =>
+        SavePlayerPrivateAPIMessage(
+          PlayerRoleFunctions.grantRole(player, RoleGrantFunctions.superAdmin(command.grantedAt, command.actor.playerId))
+        ).plan(context).map(Some(_))
+      case None =>
+        IO.pure(None)
     }
 
   private def grantSuperAdminAudit(command: GrantSuperAdminCommand): Vector[AuditEvent] =
