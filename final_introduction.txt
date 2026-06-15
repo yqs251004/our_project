@@ -6,7 +6,7 @@ domain 是后端领域模型，前端不需要的类型和函数放在这里，�
 table 是读写表操作，riichinexus/microservices/tournament/mahjongcore/tables/tablestate/MahjongTableStateJsonCodecs.scala 这种奇怪的文件不应该在这里
 按惯例应该在 system 的对应位置，现在 system 这个 json 处理文件太大了，可以考虑按功能拆开
 
-- 奇怪的文件：
+- 奇怪的文件(每个 api 做自己的事情！)：
 riichinexus/microservices/tournament/api/private/TournamentOperationViewAssembler.scala
 riichinexus/microservices/tournament/appeal/api/AppealNotificationRequests.scala
 
