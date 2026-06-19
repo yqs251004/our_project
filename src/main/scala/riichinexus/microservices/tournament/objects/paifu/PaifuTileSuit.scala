@@ -1,7 +1,5 @@
 package riichinexus.microservices.tournament.objects.paifu
 
-import upickle.default.{ReadWriter, readwriter}
-
 /** Public paifu tile suit values encoded as m, p, s, and z. */
 
 enum PaifuTileSuit:
@@ -28,6 +26,3 @@ object PaifuTileSuit:
         throw IllegalArgumentException(
           s"Unsupported PaifuTileSuit value: $other"
         )
-
-  given ReadWriter[PaifuTileSuit] =
-    readwriter[String].bimap(toString, fromString)

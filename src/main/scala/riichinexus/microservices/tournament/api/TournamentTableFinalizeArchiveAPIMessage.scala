@@ -1,5 +1,6 @@
 package riichinexus.microservices.tournament.api
 
+import riichinexus.microservices.tournament.domain.functions.TournamentViewFunctions
 import java.time.Instant
 import java.util.NoSuchElementException
 
@@ -20,13 +21,11 @@ import riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTable
 import riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 
-import upickle.default.ReadWriter
-
 /** 归档已计分牌桌并刷新赛后统计。 */
 final case class TournamentTableFinalizeArchiveAPIMessage(
     tableId: String,
     operatorId: String
-) extends APIMessage[TournamentTableView] derives ReadWriter:
+) extends APIMessage[TournamentTableView]:
 
   override def plan(context: ApiPlanContext): IO[TournamentTableView] =
     for
@@ -54,7 +53,7 @@ final case class TournamentTableFinalizeArchiveAPIMessage(
         matchRecord = TournamentPrivateViewFunctions.fromMatchRecord(archived.matchRecord),
         occurredAt = archived.matchRecord.generatedAt
       ).plan(context)
-    yield TournamentTableView.fromDomain(archived.table)
+    yield TournamentViewFunctions.tableView(archived.table)
 
   private def finalizeArchive(
       context: ApiPlanContext,

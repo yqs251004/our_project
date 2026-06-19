@@ -6,13 +6,11 @@ import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.ReadWriter
-
 /** 供后端服务从请求上下文解析访问主体。 */
 final case class ResolveRequestActorPrivateAPIMessage(
     guestSessionId: Option[GuestSessionId],
     operatorId: Option[PlayerId]
-) extends APIMessage[AccessPrincipalPrivateView] derives ReadWriter:
+) extends APIMessage[AccessPrincipalPrivateView]:
 
   override def plan(context: ApiPlanContext): IO[AccessPrincipalPrivateView] =
     if guestSessionId.nonEmpty && operatorId.nonEmpty then

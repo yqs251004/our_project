@@ -22,13 +22,11 @@ import riichinexus.microservices.opsanalytics.objects.{AdvancedStatsBoard, Advan
 import riichinexus.microservices.opsanalytics.tables.advancedstatsboard.AdvancedStatsBoardTable
 import riichinexus.microservices.opsanalytics.tables.advancedstatsrecomputetask.AdvancedStatsRecomputeTaskTable
 import riichinexus.microservices.tournament.api.`private`.{LoadPlayerMatchRecordsForOpsAnalyticsPrivateAPIMessage, LoadPlayerPaifusForOpsAnalyticsPrivateAPIMessage}
-import upickle.default.ReadWriter
-
 /** 处理高级统计重算任务队列。 */
 final case class OpsAnalyticsProcessAdvancedStatsAPIMessage(
     operatorId: PlayerId,
     limit: Int = 50
-) extends APIMessage[Vector[AdvancedStatsRecomputeTask]] derives ReadWriter:
+) extends APIMessage[Vector[AdvancedStatsRecomputeTask]]:
 
   override def plan(context: ApiPlanContext): IO[Vector[AdvancedStatsRecomputeTask]] =
     for

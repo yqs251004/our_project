@@ -1,9 +1,11 @@
 package riichinexus.microservices.tournament.api
+import riichinexus.microservices.tournament.domain.functions.TournamentViewFunctions
 import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.api.`private`.{RequirePermissionPrivateAPIMessage, ResolveAccessPrincipalPrivateAPIMessage}
 import riichinexus.microservices.auth.api.`private`.ResolveSystemAccessPrincipalPrivateAPIMessage
 import riichinexus.microservices.player.api.`private`.ResolvePlayerPrivateAPIMessage
 import riichinexus.microservices.notification.api.`private`.RecordBulkNotificationsPrivateAPIMessage
+import riichinexus.microservices.notification.objects.NotificationType
 import riichinexus.microservices.notification.objects.`private`.CreateNotificationRequest
 
 import java.util.NoSuchElementException
@@ -20,10 +22,8 @@ import riichinexus.microservices.player.objects.PlayerStatus
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.tournament.objects.competition.apiTypes.TournamentSummaryView
 
-import upickle.default.ReadWriter
-
 /** 登记选手参与赛事并发送邀请通知。 */
-final case class TournamentRegisterPlayerAPIMessage(tournamentId: String, playerId: String, operatorId: Option[String] = None) extends APIMessage[TournamentSummaryView] derives ReadWriter:
+final case class TournamentRegisterPlayerAPIMessage(tournamentId: String, playerId: String, operatorId: Option[String] = None) extends APIMessage[TournamentSummaryView]:
 
   override def plan(context: ApiPlanContext): IO[TournamentSummaryView] =
     for
@@ -38,7 +38,7 @@ final case class TournamentRegisterPlayerAPIMessage(tournamentId: String, player
         if registration.wasNewInvitation then playerInvitationNotifications(registration.tournament, registration.player)
         else Vector.empty
       _ <- RecordBulkNotificationsPrivateAPIMessage(notificationRequests).plan(context)
-    yield TournamentSummaryView.fromDomain(registration.tournament)
+    yield TournamentViewFunctions.tournamentSummaryView(registration.tournament)
 
   private def resolveOperatorActor(context: ApiPlanContext): IO[AccessPrincipalPrivateView] =
     operatorId.filter(_.nonEmpty).map(PlayerId(_))
@@ -74,7 +74,7 @@ final case class TournamentRegisterPlayerAPIMessage(tournamentId: String, player
     Vector(
       CreateNotificationRequest(
         recipientPlayerId = player.id.value,
-        notificationType = "TournamentPlayerInvited",
+        notificationType = NotificationType.TournamentPlayerInvited,
         title = "收到赛事邀请",
         body = "你被邀请参加赛事 " + tournament.name + "。",
         severity = Some("info"),

@@ -13,10 +13,8 @@ import riichinexus.microservices.tournament.domain.competition.model.Tournament
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.tournament.objects.competition.apiTypes.TournamentMutationView
 
-import upickle.default.ReadWriter
-
 /** 发布赛事供前端公开查看。 */
-final case class TournamentPublishAPIMessage(tournamentId: String, operatorId: Option[String] = None) extends APIMessage[TournamentMutationView] derives ReadWriter:
+final case class TournamentPublishAPIMessage(tournamentId: String, operatorId: Option[String] = None) extends APIMessage[TournamentMutationView]:
 
   override def plan(context: ApiPlanContext): IO[TournamentMutationView] =
     for

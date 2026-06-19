@@ -16,15 +16,13 @@ import riichinexus.microservices.player.objects.{RankPlatform, RankSnapshot}
 import riichinexus.microservices.player.api.CreatePlayerAPIMessage
 import riichinexus.microservices.player.objects.apiTypes.CreatePlayerRequest
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import upickle.default.ReadWriter
-
 import java.time.Instant
 import java.util.NoSuchElementException
 
 /** 初始化系统超级管理员账号。 */
 final case class BootstrapSuperAdminAuthAPIMessage(
     request: BootstrapSuperAdminRequest
-) extends APIMessage[AuthSuccessView] derives ReadWriter:
+) extends APIMessage[AuthSuccessView]:
 
   private val DefaultRank = RankSnapshot(RankPlatform.Custom, "Unranked")
   private val SessionTtl = java.time.Duration.ofDays(30)
@@ -46,7 +44,7 @@ final case class BootstrapSuperAdminAuthAPIMessage(
 
   private def buildCommand(initializedAt: Instant): BootstrapSuperAdminAuthCommand =
     BootstrapSuperAdminAuthCommand(
-      bootstrapKey = Option(request.bootstrapKey).map(_.trim).getOrElse(""),
+      bootstrapKey = normalizeBootstrapKey(request.bootstrapKey),
       username = AccountCredentialFunctions.normalizeUsername(request.username),
       password = request.password,
       displayName = normalizeDisplayName(request.displayName),
@@ -178,6 +176,12 @@ final case class BootstrapSuperAdminAuthAPIMessage(
   private def validateBootstrapKey(value: String, configuredKey: String): Unit =
     if value != configuredKey then
       throw AuthenticationFailure("Invalid super admin bootstrap key", "invalid_bootstrap_key")
+
+  private def normalizeBootstrapKey(value: String): String =
+    Option(value)
+      .map(_.trim)
+      .filter(_.nonEmpty)
+      .getOrElse(throw AuthenticationFailure("Invalid super admin bootstrap key", "invalid_bootstrap_key"))
 
   private def ensureNoSuperAdmin(context: ApiPlanContext): IO[Unit] =
     ListAllPlayersPrivateAPIMessage().plan(context).map { players =>

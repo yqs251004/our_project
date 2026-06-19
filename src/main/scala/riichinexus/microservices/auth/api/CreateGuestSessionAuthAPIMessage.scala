@@ -1,4 +1,5 @@
 package riichinexus.microservices.auth.api
+import riichinexus.microservices.audit.objects.`private`.AuditEventType
 import riichinexus.microservices.audit.objects.`private`.AuditEventDraft
 import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPIMessage
 
@@ -13,14 +14,12 @@ import riichinexus.microservices.auth.domain.model.GuestAccessSession
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.auth.objects.apiTypes.GuestSessionResponse
 import riichinexus.microservices.auth.tables.guestsession.GuestSessionTable
-import upickle.default.ReadWriter
-
 /** 创建游客访问会话。 */
 final case class CreateGuestSessionAuthAPIMessage(
     displayName: Option[String] = None,
     ttlHours: Option[Int] = None,
     deviceFingerprint: Option[String] = None
-) extends APIMessage[GuestSessionResponse] derives ReadWriter:
+) extends APIMessage[GuestSessionResponse]:
 
   override def plan(context: ApiPlanContext): IO[GuestSessionResponse] =
     for
@@ -59,7 +58,7 @@ final case class CreateGuestSessionAuthAPIMessage(
       AuditEventDraft(
         aggregateType = "guest-session",
         aggregateId = savedSession.id.value,
-        eventType = "GuestSessionCreated",
+        eventType = AuditEventType.GuestSessionCreated,
         occurredAt = command.createdAt,
         actorId = None,
         details = Map(

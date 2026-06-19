@@ -12,14 +12,12 @@ import riichinexus.microservices.tournament.mahjongcore.tables.tablestate.Mahjon
 import riichinexus.microservices.tournament.objects.stage.table.TableId
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 
-import riichinexus.system.realtime.objects.RealtimeEvent
-import upickle.default.{ReadWriter, writeJs}
-
+import riichinexus.system.realtime.objects.{RealtimeEvent, RealtimeEventType}
 /** 提交玩家实时麻将行动并返回最新桌面。 */
 final case class MahjongCoreSubmitActionAPIMessage(
     tableId: String,
     request: SubmitMahjongActionRequest
-) extends APIMessage[MahjongActionResponse] derives ReadWriter:
+) extends APIMessage[MahjongActionResponse]:
 
   override def plan(context: ApiPlanContext): IO[MahjongActionResponse] =
     for
@@ -72,14 +70,14 @@ final case class MahjongCoreSubmitActionAPIMessage(
       context.realtimeEventBus.publish(
         RealtimeEvent(
           id = s"mahjong-action:${tableId}:${event.sequenceNo}",
-          eventType = "MahjongActionAccepted",
+          eventType = RealtimeEventType.MahjongActionAccepted,
           aggregateType = "mahjongTable",
           aggregateId = tableId,
           occurredAt = occurredAt,
           sourceEventType = event.actionType.toString,
           actorId = event.actor.map(_.value),
           actionUrl = Some(s"/tables/${tableId}"),
-          data = Some(writeJs(event))
+          data = Some(RealtimeEvent.data(event))
         )
       )
     )

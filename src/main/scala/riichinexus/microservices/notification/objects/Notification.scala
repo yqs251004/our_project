@@ -11,7 +11,7 @@ import upickle.default.ReadWriter
 final case class Notification(
     id: NotificationId,
     recipientPlayerId: PlayerId,
-    notificationType: String,
+    notificationType: NotificationType,
     title: String,
     body: String,
     severity: String,

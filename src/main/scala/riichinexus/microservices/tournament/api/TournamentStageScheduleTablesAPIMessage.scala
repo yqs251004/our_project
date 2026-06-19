@@ -1,4 +1,5 @@
 package riichinexus.microservices.tournament.api
+import riichinexus.microservices.tournament.domain.functions.TournamentViewFunctions
 import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.api.`private`.{RequirePermissionPrivateAPIMessage, ResolveAccessPrincipalPrivateAPIMessage}
 import riichinexus.microservices.auth.api.`private`.ResolveSystemAccessPrincipalPrivateAPIMessage
@@ -13,14 +14,12 @@ import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.tournament.domain.stage.functions.scheduling.TournamentStageTableScheduler
 import riichinexus.microservices.tournament.objects.stage.table.apiTypes.TournamentTableView
 import riichinexus.microservices.tournament.objects.competition.apiTypes.TournamentMutationView
-import upickle.default.ReadWriter
-
 /** 为赛事阶段生成牌桌安排。 */
 final case class TournamentStageScheduleTablesAPIMessage(
     tournamentId: String,
     stageId: String,
     operatorId: Option[String] = None
-) extends APIMessage[TournamentMutationView] derives ReadWriter:
+) extends APIMessage[TournamentMutationView]:
 
   override def plan(context: ApiPlanContext): IO[TournamentMutationView] =
     for
@@ -36,7 +35,7 @@ final case class TournamentStageScheduleTablesAPIMessage(
       tournament = detail,
       scheduledTables = scheduledTables
         .sortBy(table => (table.stageRoundNumber, table.tableNo, table.id.value))
-        .map(TournamentTableView.fromDomain)
+        .map(TournamentViewFunctions.tableView)
     )
 
   private def resolveOperatorActor(context: ApiPlanContext): IO[AccessPrincipalPrivateView] =

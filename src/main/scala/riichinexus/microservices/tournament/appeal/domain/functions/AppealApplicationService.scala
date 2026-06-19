@@ -12,7 +12,8 @@ import riichinexus.microservices.tournament.objects.identity.{TournamentId, Tour
 
 import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
 import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
-import riichinexus.microservices.tournament.appeal.domain.model.{AppealAttachment, AppealDecisionType, AppealPriority, AppealStatus, AppealTableResolution, AppealTicket}
+import riichinexus.microservices.tournament.appeal.domain.model.{AppealAttachment, AppealTicket}
+import riichinexus.microservices.tournament.appeal.objects.{AppealDecisionType, AppealPriority, AppealStatus, AppealTableResolution}
 
 import riichinexus.microservices.tournament.domain.stage.functions.rules.knockout.KnockoutStageCoordinator
 import riichinexus.microservices.tournament.domain.stage.functions.scheduling.TableFunctions

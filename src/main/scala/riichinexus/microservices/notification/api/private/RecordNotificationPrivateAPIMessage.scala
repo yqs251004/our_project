@@ -7,15 +7,13 @@ import riichinexus.microservices.notification.objects.{Notification, Notificatio
 import riichinexus.microservices.notification.objects.`private`.CreateNotificationRequest
 import riichinexus.microservices.notification.tables.notifications.NotificationTable
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.system.realtime.objects.RealtimeEvent
+import riichinexus.system.realtime.objects.{RealtimeEvent, RealtimeEventType}
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-
-import upickle.default.ReadWriter
 
 /** 供后端服务记录单条通知。 */
 final case class RecordNotificationPrivateAPIMessage(
     request: CreateNotificationRequest
-) extends APIMessage[Notification] derives ReadWriter:
+) extends APIMessage[Notification]:
 
   override def plan(context: ApiPlanContext): IO[Notification] =
     for
@@ -48,11 +46,11 @@ final case class RecordNotificationPrivateAPIMessage(
   private def publishNotification(context: ApiPlanContext, notification: Notification): IO[Unit] =
     val event = RealtimeEvent(
       id = notification.id.value,
-      eventType = "NotificationCreated",
+      eventType = RealtimeEventType.NotificationCreated,
       aggregateType = "notification",
       aggregateId = notification.id.value,
       occurredAt = notification.createdAt,
-      sourceEventType = notification.notificationType,
+      sourceEventType = notification.notificationType.toString,
       recipientPlayerId = Some(notification.recipientPlayerId.value),
       title = Some(notification.title),
       body = Some(notification.body),

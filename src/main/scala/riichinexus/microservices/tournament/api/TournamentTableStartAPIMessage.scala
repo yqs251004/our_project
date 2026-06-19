@@ -1,4 +1,5 @@
 package riichinexus.microservices.tournament.api
+import riichinexus.microservices.tournament.domain.functions.TournamentViewFunctions
 import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.api.`private`.{RequirePermissionPrivateAPIMessage, ResolveAccessPrincipalPrivateAPIMessage}
 import riichinexus.microservices.auth.api.`private`.ResolveSystemAccessPrincipalPrivateAPIMessage
@@ -12,6 +13,7 @@ import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.tournament.objects.stage.table.TableId
 import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
 import riichinexus.microservices.notification.api.`private`.RecordBulkNotificationsPrivateAPIMessage
+import riichinexus.microservices.notification.objects.NotificationType
 import riichinexus.microservices.notification.objects.`private`.CreateNotificationRequest
 import riichinexus.microservices.tournament.mahjongcore.api.`private`.{InitializeMahjongTableStatePrivateAPIMessage, InitializeMahjongTableStateRequest}
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.MahjongRuleset
@@ -21,10 +23,8 @@ import riichinexus.microservices.tournament.domain.stage.model.Table
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.tournament.objects.stage.table.apiTypes.TournamentTableView
 
-import upickle.default.ReadWriter
-
 /** 开始赛事牌桌并初始化对局状态。 */
-final case class TournamentTableStartAPIMessage(tableId: String, operatorId: Option[String] = None) extends APIMessage[TournamentTableView] derives ReadWriter:
+final case class TournamentTableStartAPIMessage(tableId: String, operatorId: Option[String] = None) extends APIMessage[TournamentTableView]:
 
   override def plan(context: ApiPlanContext): IO[TournamentTableView] =
     for
@@ -34,7 +34,7 @@ final case class TournamentTableStartAPIMessage(tableId: String, operatorId: Opt
       table <- startTable(context, command).map(_.getOrElse(throw NoSuchElementException("Resource not found")))
       notificationRequests <- IO.blocking(tableStartedNotifications(context.connection, table))
       _ <- RecordBulkNotificationsPrivateAPIMessage(notificationRequests).plan(context)
-    yield TournamentTableView.fromDomain(table)
+    yield TournamentViewFunctions.tableView(table)
 
   private def resolveOperatorActor(context: ApiPlanContext): IO[AccessPrincipalPrivateView] =
     operatorId.filter(_.nonEmpty).map(PlayerId(_))
@@ -103,7 +103,7 @@ final case class TournamentTableStartAPIMessage(tableId: String, operatorId: Opt
     table.seats.map { seat =>
       CreateNotificationRequest(
         recipientPlayerId = seat.playerId.value,
-        notificationType = "TournamentTableStarted",
+        notificationType = NotificationType.TournamentTableStarted,
         title = "\u8d5b\u4e8b\u724c\u684c\u5df2\u5f00\u59cb",
         body =
           s"${tournament.name} / ${stage.name} \u7684\u7b2c ${table.tableNo} \u684c\u5df2\u7ecf\u5f00\u59cb\uff0c\u8bf7\u8fdb\u5165\u724c\u684c\u5bf9\u5c40\u3002",

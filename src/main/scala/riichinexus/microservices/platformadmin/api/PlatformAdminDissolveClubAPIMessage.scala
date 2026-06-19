@@ -1,4 +1,5 @@
 package riichinexus.microservices.platformadmin.api
+import riichinexus.microservices.audit.objects.`private`.AuditEventType
 import riichinexus.microservices.audit.objects.`private`.AuditEventDraft
 import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.api.`private`.ResolveAccessPrincipalPrivateAPIMessage
@@ -22,13 +23,11 @@ import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.opsanalytics.api.`private`.{ResetAdvancedStatsBoardPrivateAPIMessage, ResetDashboardPrivateAPIMessage}
 import riichinexus.microservices.opsanalytics.objects.DashboardOwner
 import riichinexus.microservices.platformadmin.objects.apiTypes.PlatformAdminClubView
-import upickle.default.ReadWriter
-
 /** 平台管理员解散俱乐部并清理关联投影。 */
 final case class PlatformAdminDissolveClubAPIMessage(
     clubId: ClubId,
     operatorId: PlayerId
-) extends APIMessage[PlatformAdminClubView] derives ReadWriter:
+) extends APIMessage[PlatformAdminClubView]:
 
   override def plan(context: ApiPlanContext): IO[PlatformAdminClubView] =
     for
@@ -116,7 +115,7 @@ final case class PlatformAdminDissolveClubAPIMessage(
       AuditEventDraft(
         aggregateType = "club",
         aggregateId = command.clubId.value,
-        eventType = "ClubDissolved",
+        eventType = AuditEventType.ClubDissolved,
         occurredAt = command.dissolvedAt,
         actorId = command.actor.playerId,
         details = Map("memberCount" -> club.members.size.toString),

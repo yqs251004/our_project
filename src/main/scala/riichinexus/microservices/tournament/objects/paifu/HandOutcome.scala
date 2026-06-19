@@ -1,7 +1,5 @@
 package riichinexus.microservices.tournament.objects.paifu
 
-import upickle.default.{ReadWriter, readwriter}
-
 /** HandOutcome 枚举手牌Outcome 可使用的公开取值。 */
 
 enum HandOutcome:
@@ -11,5 +9,8 @@ enum HandOutcome:
   case AbortiveDraw
 
 object HandOutcome:
-  given ReadWriter[HandOutcome] =
-    readwriter[String].bimap(_.toString, HandOutcome.valueOf)
+  def toString(outcome: HandOutcome): String =
+    outcome.toString
+
+  def fromString(value: String): HandOutcome =
+    HandOutcome.valueOf(value)

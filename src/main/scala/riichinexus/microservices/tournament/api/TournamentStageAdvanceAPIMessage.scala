@@ -1,4 +1,5 @@
 package riichinexus.microservices.tournament.api
+import riichinexus.microservices.tournament.domain.functions.TournamentViewFunctions
 import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.api.`private`.{RequirePermissionPrivateAPIMessage, ResolveAccessPrincipalPrivateAPIMessage}
 import riichinexus.microservices.auth.api.`private`.ResolveSystemAccessPrincipalPrivateAPIMessage
@@ -21,10 +22,8 @@ import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.tournament.domain.stage.model.Table
 import riichinexus.microservices.tournament.objects.stage.table.apiTypes.TournamentTableView
 
-import upickle.default.ReadWriter
-
 /** 推进淘汰阶段并物化已解锁的牌桌。 */
-final case class TournamentStageAdvanceAPIMessage(tournamentId: String, stageId: String, operatorId: Option[String] = None) extends APIMessage[Vector[TournamentTableView]] derives ReadWriter:
+final case class TournamentStageAdvanceAPIMessage(tournamentId: String, stageId: String, operatorId: Option[String] = None) extends APIMessage[Vector[TournamentTableView]]:
 
   override def plan(context: ApiPlanContext): IO[Vector[TournamentTableView]] =
     for
@@ -37,7 +36,7 @@ final case class TournamentStageAdvanceAPIMessage(tournamentId: String, stageId:
         at = at
       )
       tables <- advanceStage(context, command)
-    yield tables.map(TournamentTableView.fromDomain)
+    yield tables.map(TournamentViewFunctions.tableView)
 
   private def advanceStage(
       context: ApiPlanContext,

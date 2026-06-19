@@ -1,5 +1,6 @@
 package riichinexus.microservices.tournament.api
 
+import riichinexus.microservices.tournament.domain.functions.TournamentViewFunctions
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.tournament.objects.identity.TournamentId
@@ -9,19 +10,17 @@ import riichinexus.microservices.tournament.objects.finalization.apiTypes.{Tourn
 
 import riichinexus.microservices.tournament.tables.settlement.TournamentSettlementTable
 import riichinexus.system.objects.PagedResponse
-import upickle.default.ReadWriter
-
 /** 列出赛事结算记录。 */
 final case class TournamentSettlementListAPIMessage(
     tournamentId: String,
     query: TournamentSettlementQuery = TournamentSettlementQuery()
-) extends APIMessage[PagedResponse[TournamentSettlementView]] derives ReadWriter:
+) extends APIMessage[PagedResponse[TournamentSettlementView]]:
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[TournamentSettlementView]] =
     for
       resolved <- IO.blocking(resolveQuery)
       settlements <- IO.blocking(listSettlements(context, resolved))
-    yield page(settlements.map(TournamentSettlementView.fromDomain), resolved)
+    yield page(settlements.map(TournamentViewFunctions.settlementView), resolved)
 
   private def resolveQuery: ResolvedSettlementListQuery =
     ResolvedSettlementListQuery(

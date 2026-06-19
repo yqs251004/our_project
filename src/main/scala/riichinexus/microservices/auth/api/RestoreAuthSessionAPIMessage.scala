@@ -13,10 +13,8 @@ import riichinexus.microservices.auth.objects.Role
 import riichinexus.microservices.auth.objects.apiTypes.{AuthSessionView, CurrentSessionRoleFlags}
 import riichinexus.microservices.player.objects.`private`.PlayerPrivateView
 import riichinexus.microservices.auth.tables.authenticatedsession.AuthenticatedSessionTable
-import upickle.default.ReadWriter
-
 /** 从 token 恢复登录会话。 */
-final case class RestoreAuthSessionAPIMessage() extends APIWithTokenMessage[AuthSessionView] derives ReadWriter:
+final case class RestoreAuthSessionAPIMessage() extends APIWithTokenMessage[AuthSessionView]:
 
   override def plan(context: ApiPlanContext): IO[AuthSessionView] =
     for

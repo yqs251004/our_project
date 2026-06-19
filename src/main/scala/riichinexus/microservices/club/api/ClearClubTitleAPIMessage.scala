@@ -1,4 +1,6 @@
 package riichinexus.microservices.club.api
+import riichinexus.microservices.club.domain.functions.ClubViewFunctions
+import riichinexus.microservices.audit.objects.`private`.AuditEventType
 import riichinexus.microservices.audit.objects.`private`.AuditEventDraft
 import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.api.`private`.ResolveAccessPrincipalPrivateAPIMessage
@@ -21,15 +23,13 @@ import riichinexus.microservices.player.objects.PlayerStatus
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubAuthorization
 import riichinexus.microservices.club.objects.clubmanagement.ClubView
-import upickle.default.ReadWriter
-
 /** 清除俱乐部成员头衔。 */
 final case class ClearClubTitleAPIMessage(
     clubId: String,
     playerId: String,
     operatorId: String,
     note: Option[String] = None
-) extends APIMessage[ClubView] derives ReadWriter:
+) extends APIMessage[ClubView]:
 
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
@@ -44,7 +44,7 @@ final case class ClearClubTitleAPIMessage(
       )
       cleared <- clearTitle(context, command).map(_.getOrElse(throw NoSuchElementException("Resource not found")))
       _ <- RecordAuditEventsPrivateAPIMessage(clearTitleAudit(command, cleared.existingAssignment)).plan(context)
-    yield ClubView.fromDomain(cleared.club)
+    yield ClubViewFunctions.clubView(cleared.club)
 
   private def clearTitle(
       context: ApiPlanContext,
@@ -109,7 +109,7 @@ final case class ClearClubTitleAPIMessage(
       AuditEventDraft(
         aggregateType = "club",
         aggregateId = command.clubId.value,
-        eventType = "ClubTitleCleared",
+        eventType = AuditEventType.ClubTitleCleared,
         occurredAt = command.clearedAt,
         actorId = command.actor.playerId,
         details = Map(

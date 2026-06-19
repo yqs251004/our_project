@@ -1,4 +1,5 @@
 package riichinexus.microservices.club.api
+import riichinexus.microservices.club.domain.functions.ClubViewFunctions
 import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.player.api.`private`.ResolvePlayersPrivateAPIMessage
 
@@ -17,15 +18,13 @@ import riichinexus.microservices.player.objects.PlayerStatus
 import riichinexus.microservices.club.objects.clubmanagement.apiTypes.PublicClubDirectoryEntry
 import riichinexus.system.objects.PagedResponse
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.ReadWriter
-
 /** 列出前端公开俱乐部。 */
 final case class ListPublicClubsAPIMessage(
     name: Option[String] = None,
     relation: Option[ClubRelationKind] = None,
     limit: Option[Int] = None,
     offset: Option[Int] = None
-) extends APIMessage[PagedResponse[PublicClubDirectoryEntry]] derives ReadWriter:
+) extends APIMessage[PagedResponse[PublicClubDirectoryEntry]]:
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[PublicClubDirectoryEntry]] =
     for
@@ -111,7 +110,7 @@ final case class ListPublicClubsAPIMessage(
         strongestRivalClubId = strongestRival.map(_.id),
         strongestRivalPower = strongestRival.map(rival => round2(rival.powerRating)),
         honorTitles = club.honors.map(_.title).sorted,
-        relations = club.relations.map(ClubRelationView.fromDomain)
+        relations = club.relations.map(ClubViewFunctions.relationView)
       )
     }
 

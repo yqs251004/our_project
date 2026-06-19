@@ -6,12 +6,10 @@ import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.tournament.objects.paifu.Paifu
 import riichinexus.microservices.tournament.tables.paifu.PaifuTable
-import upickle.default.ReadWriter
-
 /** 供 opsanalytics 后端统计读取某玩家完整牌谱 domain 列表。 */
 final case class LoadPlayerPaifusForOpsAnalyticsPrivateAPIMessage(
     playerId: PlayerId
-) extends APIMessage[Vector[Paifu]] derives ReadWriter:
+) extends APIMessage[Vector[Paifu]]:
 
   override def plan(context: ApiPlanContext): IO[Vector[Paifu]] =
     for

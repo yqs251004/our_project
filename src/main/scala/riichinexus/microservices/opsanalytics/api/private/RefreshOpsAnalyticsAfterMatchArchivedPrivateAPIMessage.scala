@@ -11,15 +11,14 @@ import riichinexus.microservices.opsanalytics.domain.functions.RatingService
 import riichinexus.microservices.opsanalytics.domain.model.RatingChange
 import riichinexus.microservices.player.objects.`private`.PlayerPrivateView
 import riichinexus.microservices.notification.api.`private`.RecordBulkNotificationsPrivateAPIMessage
+import riichinexus.microservices.notification.objects.NotificationType
 import riichinexus.microservices.notification.objects.`private`.CreateNotificationRequest
 import riichinexus.microservices.tournament.objects.`private`.matchrecord.MatchRecordPrivateView
-import upickle.default.ReadWriter
-
 /** 供赛事归档流程刷新赛后运营分析读模型。 */
 final case class RefreshOpsAnalyticsAfterMatchArchivedPrivateAPIMessage(
     matchRecord: MatchRecordPrivateView,
     occurredAt: java.time.Instant
-) extends APIMessage[Unit] derives ReadWriter:
+) extends APIMessage[Unit]:
 
   override def plan(context: ApiPlanContext): IO[Unit] =
     val impactedPlayerIds = matchRecord.seatResults.map(_.playerId).distinct
@@ -134,7 +133,7 @@ final case class RefreshOpsAnalyticsAfterMatchArchivedPrivateAPIMessage(
           else delta.delta.toString
         CreateNotificationRequest(
           recipientPlayerId = delta.playerId.value,
-          notificationType = "PlayerEloChanged",
+          notificationType = NotificationType.PlayerEloChanged,
           title = "ELO 已更新",
           body = s"本场对局结算后，你的 ELO $deltaText，当前 ELO $nextElo。",
           severity = Some("info"),

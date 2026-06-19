@@ -1,7 +1,5 @@
 package riichinexus.microservices.tournament.objects.paifu
 
-import upickle.default.{ReadWriter, readwriter}
-
 /** MahjongYakuKind 枚举麻将役种类型 可使用的公开取值。 */
 
 enum MahjongYakuKind:
@@ -58,5 +56,8 @@ enum MahjongYakuKind:
     Yaku(this, han)
 
 object MahjongYakuKind:
-  given ReadWriter[MahjongYakuKind] =
-    readwriter[String].bimap(_.productPrefix, MahjongYakuKind.valueOf)
+  def toString(kind: MahjongYakuKind): String =
+    kind.productPrefix
+
+  def fromString(value: String): MahjongYakuKind =
+    MahjongYakuKind.valueOf(value)

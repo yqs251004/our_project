@@ -1,4 +1,5 @@
 package riichinexus.microservices.club.api
+import riichinexus.microservices.club.domain.functions.ClubViewFunctions
 import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.api.`private`.ResolveAccessPrincipalPrivateAPIMessage
 import riichinexus.microservices.player.api.`private`.{RecordPlayerClubAdminGrantPrivateAPIMessage, ResolvePlayerPrivateAPIMessage}
@@ -18,14 +19,12 @@ import riichinexus.microservices.player.objects.PlayerStatus
 
 import riichinexus.microservices.club.domain.ClubAuthorization
 import riichinexus.microservices.club.objects.clubmanagement.ClubView
-import upickle.default.ReadWriter
-
 /** 授予玩家俱乐部管理员身份。 */
 final case class AssignClubAdminAPIMessage(
     clubId: String,
     playerId: String,
     operatorId: String
-) extends APIMessage[ClubView] derives ReadWriter:
+) extends APIMessage[ClubView]:
 
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
@@ -38,7 +37,7 @@ final case class AssignClubAdminAPIMessage(
         grantedAt = grantedAt
       )
       club <- assignAdmin(context, command).map(_.getOrElse(throw NoSuchElementException("Resource not found")))
-    yield ClubView.fromDomain(club)
+    yield ClubViewFunctions.clubView(club)
 
   private def assignAdmin(
       context: ApiPlanContext,

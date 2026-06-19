@@ -13,13 +13,11 @@ import riichinexus.microservices.auth.objects.apiTypes.{CurrentSessionGuestSessi
 import riichinexus.microservices.auth.api.`private`.ResolveGuestSessionAuthPrivateAPIMessage
 import riichinexus.microservices.player.objects.`private`.PlayerPrivateView
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.ReadWriter
-
 /** 获取当前访问会话信息。 */
 final case class CurrentSessionAuthAPIMessage(
     operatorId: Option[String] = None,
     guestSessionId: Option[String] = None
-) extends APIMessage[CurrentSessionView] derives ReadWriter:
+) extends APIMessage[CurrentSessionView]:
 
   override def plan(context: ApiPlanContext): IO[CurrentSessionView] =
     for

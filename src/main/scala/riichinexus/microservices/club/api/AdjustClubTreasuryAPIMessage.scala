@@ -1,4 +1,6 @@
 package riichinexus.microservices.club.api
+import riichinexus.microservices.club.domain.functions.ClubViewFunctions
+import riichinexus.microservices.audit.objects.`private`.AuditEventType
 import riichinexus.microservices.audit.objects.`private`.AuditEventDraft
 import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.api.`private`.ResolveAccessPrincipalPrivateAPIMessage
@@ -18,15 +20,13 @@ import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubAuthorization
 import riichinexus.microservices.club.objects.rankprivilegemanagement.ClubPrivilegeCode
 import riichinexus.microservices.club.objects.clubmanagement.ClubView
-import upickle.default.ReadWriter
-
 /** 调整俱乐部财务余额。 */
 final case class AdjustClubTreasuryAPIMessage(
     clubId: String,
     operatorId: String,
     delta: Long,
     note: Option[String] = None
-) extends APIMessage[ClubView] derives ReadWriter:
+) extends APIMessage[ClubView]:
 
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
@@ -45,7 +45,7 @@ final case class AdjustClubTreasuryAPIMessage(
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
       _ <- RecordAuditEventsPrivateAPIMessage(adjustTreasuryAudit(savedClub, command)).plan(context)
-    yield ClubView.fromDomain(savedClub)
+    yield ClubViewFunctions.clubView(savedClub)
 
   private def adjustTreasury(
       connection: java.sql.Connection,
@@ -76,7 +76,7 @@ final case class AdjustClubTreasuryAPIMessage(
       AuditEventDraft(
         aggregateType = "club",
         aggregateId = updatedClub.id.value,
-        eventType = "ClubTreasuryAdjusted",
+        eventType = AuditEventType.ClubTreasuryAdjusted,
         occurredAt = command.occurredAt,
         actorId = command.actor.playerId,
         details = Map(

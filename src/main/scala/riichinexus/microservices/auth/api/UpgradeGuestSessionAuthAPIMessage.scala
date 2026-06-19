@@ -1,4 +1,5 @@
 package riichinexus.microservices.auth.api
+import riichinexus.microservices.audit.objects.`private`.AuditEventType
 import riichinexus.microservices.audit.objects.`private`.AuditEventDraft
 import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPIMessage
 import riichinexus.microservices.player.api.`private`.ResolvePlayerPrivateAPIMessage
@@ -17,13 +18,11 @@ import riichinexus.microservices.player.objects.PlayerStatus
 
 import riichinexus.microservices.auth.objects.apiTypes.GuestSessionResponse
 import riichinexus.microservices.auth.tables.guestsession.GuestSessionTable
-import upickle.default.ReadWriter
-
 /** 将游客会话升级绑定到玩家。 */
 final case class UpgradeGuestSessionAuthAPIMessage(
     sessionId: String,
     playerId: String
-) extends APIMessage[GuestSessionResponse] derives ReadWriter:
+) extends APIMessage[GuestSessionResponse]:
 
   override def plan(context: ApiPlanContext): IO[GuestSessionResponse] =
     for
@@ -70,7 +69,7 @@ final case class UpgradeGuestSessionAuthAPIMessage(
       AuditEventDraft(
         aggregateType = "guest-session",
         aggregateId = savedSession.id.value,
-        eventType = "GuestSessionUpgraded",
+        eventType = AuditEventType.GuestSessionUpgraded,
         occurredAt = command.upgradedAt,
         actorId = Some(command.playerId),
         details = Map("playerId" -> command.playerId.value),

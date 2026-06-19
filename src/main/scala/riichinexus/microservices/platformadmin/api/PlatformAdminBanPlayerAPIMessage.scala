@@ -1,4 +1,5 @@
 package riichinexus.microservices.platformadmin.api
+import riichinexus.microservices.audit.objects.`private`.AuditEventType
 import riichinexus.microservices.audit.objects.`private`.AuditEventDraft
 import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.api.`private`.ResolveAccessPrincipalPrivateAPIMessage
@@ -23,14 +24,12 @@ import riichinexus.microservices.opsanalytics.objects.DashboardOwner
 import riichinexus.microservices.player.objects.`private`.PlayerPrivateView
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.platformadmin.objects.apiTypes.PlatformAdminPlayerView
-import upickle.default.ReadWriter
-
 /** 平台管理员封禁玩家并刷新相关投影。 */
 final case class PlatformAdminBanPlayerAPIMessage(
     playerId: PlayerId,
     operatorId: PlayerId,
     reason: String
-) extends APIMessage[PlatformAdminPlayerView] derives ReadWriter:
+) extends APIMessage[PlatformAdminPlayerView]:
 
   override def plan(context: ApiPlanContext): IO[PlatformAdminPlayerView] =
     for
@@ -100,7 +99,7 @@ final case class PlatformAdminBanPlayerAPIMessage(
       AuditEventDraft(
         aggregateType = "player",
         aggregateId = command.playerId.value,
-        eventType = "PlayerBanned",
+        eventType = AuditEventType.PlayerBanned,
         occurredAt = command.bannedAt,
         actorId = command.actor.playerId,
         details = Map("reason" -> command.reason),

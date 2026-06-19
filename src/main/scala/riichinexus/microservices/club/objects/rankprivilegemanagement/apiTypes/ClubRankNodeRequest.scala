@@ -1,6 +1,7 @@
 package riichinexus.microservices.club.objects.rankprivilegemanagement.apiTypes
 
 import riichinexus.microservices.club.objects.rankprivilegemanagement.ClubPrivilegeCode
+import riichinexus.system.json.ClubJsonCodecs.given
 import upickle.default.{ReadWriter, macroRW}
 
 /** ClubRankNodeRequest 表示俱乐部等级节点请求 的前端请求参数。 */

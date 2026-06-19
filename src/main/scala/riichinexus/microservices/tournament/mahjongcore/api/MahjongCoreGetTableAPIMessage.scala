@@ -10,13 +10,11 @@ import riichinexus.microservices.tournament.mahjongcore.tables.tablestate.Mahjon
 import riichinexus.microservices.tournament.objects.stage.table.TableId
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 
-import upickle.default.ReadWriter
-
 /** 查询 tableId 对应比赛桌的实时麻将桌面视图。 */
 final case class MahjongCoreGetTableAPIMessage(
     tableId: String,
     query: MahjongTableQuery = MahjongTableQuery()
-) extends APIMessage[MahjongTableView] derives ReadWriter:
+) extends APIMessage[MahjongTableView]:
 
   override def plan(context: ApiPlanContext): IO[MahjongTableView] =
     for

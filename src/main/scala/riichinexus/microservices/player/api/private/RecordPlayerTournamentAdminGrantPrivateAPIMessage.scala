@@ -11,15 +11,13 @@ import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.tournament.objects.identity.TournamentId
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.ReadWriter
-
 /** 供赛事流程校验后记录玩家赛事管理员授权。 */
 final case class RecordPlayerTournamentAdminGrantPrivateAPIMessage(
     playerId: PlayerId,
     tournamentId: TournamentId,
     grantedAt: Instant,
     grantedBy: Option[PlayerId]
-) extends APIMessage[Option[Player]] derives ReadWriter:
+) extends APIMessage[Option[Player]]:
 
   override def plan(context: ApiPlanContext): IO[Option[Player]] =
     PlayerDomainRecord.find(context, playerId).flatMap {

@@ -1,7 +1,5 @@
 package riichinexus.microservices.tournament.objects.stage.rules.knockout
 
-import upickle.default.{ReadWriter, readwriter}
-
 /** KnockoutLane 枚举KnockoutLane 可使用的公开取值。 */
 
 enum KnockoutLane:
@@ -10,4 +8,8 @@ enum KnockoutLane:
   case Repechage
 
 object KnockoutLane:
-  given ReadWriter[KnockoutLane] = readwriter[String].bimap(_.toString, KnockoutLane.valueOf)
+  def toString(lane: KnockoutLane): String =
+    lane.toString
+
+  def fromString(value: String): KnockoutLane =
+    KnockoutLane.valueOf(value)

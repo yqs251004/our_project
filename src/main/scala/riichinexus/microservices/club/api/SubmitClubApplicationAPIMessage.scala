@@ -1,4 +1,6 @@
 package riichinexus.microservices.club.api
+import riichinexus.microservices.club.domain.functions.ClubViewFunctions
+import riichinexus.microservices.audit.objects.`private`.AuditEventType
 import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.api.`private`.ResolveRequestActorPrivateAPIMessage
 import riichinexus.microservices.auth.api.`private`.RequirePermissionPrivateAPIMessage
@@ -22,17 +24,16 @@ import riichinexus.system.api.AuthorizationFailure
 import riichinexus.microservices.audit.api.`private`.RecordAuditEventPrivateAPIMessage
 import riichinexus.microservices.audit.objects.`private`.AuditEventDraft
 import riichinexus.microservices.notification.api.`private`.RecordBulkNotificationsPrivateAPIMessage
+import riichinexus.microservices.notification.objects.NotificationType
 import riichinexus.microservices.notification.objects.`private`.CreateNotificationRequest
 
 import riichinexus.microservices.club.domain.ClubAuthorization
 import riichinexus.microservices.club.objects.membershipmanagement.apiTypes.{ClubMembershipApplicationResponse, ClubMembershipApplicationRequest}
-import upickle.default.ReadWriter
-
 /** 提交加入俱乐部申请。 */
 final case class SubmitClubApplicationAPIMessage(
     clubId: String,
     request: ClubMembershipApplicationRequest
-) extends APIMessage[ClubMembershipApplicationResponse] derives ReadWriter:
+) extends APIMessage[ClubMembershipApplicationResponse]:
 
   override def plan(context: ApiPlanContext): IO[ClubMembershipApplicationResponse] =
     for
@@ -53,7 +54,7 @@ final case class SubmitClubApplicationAPIMessage(
       result <- submitApplication(context, command, applicantPlayer, applicantClubIds)
       _ <- RecordAuditEventPrivateAPIMessage(submitApplicationAudit(command, result.application)).plan(context)
       _ <- notifyClubAdmins(context, result)
-    yield ClubMembershipApplicationResponse.fromDomain(result.application)
+    yield ClubViewFunctions.membershipApplicationResponse(result.application)
 
   private def resolveApplicantInput(
       context: ApiPlanContext,
@@ -168,7 +169,7 @@ final case class SubmitClubApplicationAPIMessage(
     AuditEventDraft(
       aggregateType = "club-application",
       aggregateId = command.clubId.value,
-      eventType = "ClubApplicationSubmitted",
+      eventType = AuditEventType.ClubApplicationSubmitted,
       occurredAt = command.submittedAt,
       actorId = command.actor.playerId,
       details = Map(
@@ -187,7 +188,7 @@ final case class SubmitClubApplicationAPIMessage(
     recipients.map { recipient =>
       CreateNotificationRequest(
         recipientPlayerId = recipient.value,
-        notificationType = "ClubApplicationSubmitted",
+        notificationType = NotificationType.ClubApplicationSubmitted,
         title = "新的俱乐部申请",
         body = s"${application.displayName} 提交了加入 ${club.name} 的申请。",
         severity = Some("info"),

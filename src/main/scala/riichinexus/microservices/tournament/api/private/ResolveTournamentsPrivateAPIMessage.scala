@@ -8,12 +8,10 @@ import riichinexus.microservices.tournament.domain.competition.model.Tournament
 import riichinexus.microservices.tournament.domain.functions.TournamentPrivateViewFunctions
 import riichinexus.microservices.tournament.objects.`private`.competition.TournamentPrivateView
 import riichinexus.microservices.tournament.tables.tournaments.TournamentTable
-import upickle.default.ReadWriter
-
 /** 供后端服务按 id 批量读取赛事 private read model。 */
 final case class ResolveTournamentsPrivateAPIMessage(
     tournamentIds: Vector[TournamentId]
-) extends APIMessage[Vector[TournamentPrivateView]] derives ReadWriter:
+) extends APIMessage[Vector[TournamentPrivateView]]:
 
   override def plan(context: ApiPlanContext): IO[Vector[TournamentPrivateView]] =
     for

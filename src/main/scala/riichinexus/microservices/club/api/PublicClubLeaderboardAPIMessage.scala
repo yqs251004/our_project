@@ -12,14 +12,12 @@ import riichinexus.microservices.club.tables.clubs.ClubTable
 import riichinexus.microservices.club.objects.clubmanagement.apiTypes.ClubLeaderboardEntry
 import riichinexus.system.objects.PagedResponse
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.ReadWriter
-
 /** 获取前端公开俱乐部排行榜。 */
 final case class PublicClubLeaderboardAPIMessage(
     name: Option[String] = None,
     limit: Option[Int] = None,
     offset: Option[Int] = None
-) extends APIMessage[PagedResponse[ClubLeaderboardEntry]] derives ReadWriter:
+) extends APIMessage[PagedResponse[ClubLeaderboardEntry]]:
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[ClubLeaderboardEntry]] =
     for

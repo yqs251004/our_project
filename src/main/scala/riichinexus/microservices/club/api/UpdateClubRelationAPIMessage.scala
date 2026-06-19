@@ -1,4 +1,6 @@
 package riichinexus.microservices.club.api
+import riichinexus.microservices.club.domain.functions.ClubViewFunctions
+import riichinexus.microservices.audit.objects.`private`.AuditEventType
 import riichinexus.microservices.audit.objects.`private`.AuditEventDraft
 import riichinexus.microservices.auth.api.`private`.ResolveAccessPrincipalPrivateAPIMessage
 import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPIMessage
@@ -20,8 +22,6 @@ import riichinexus.microservices.club.objects.relationmanagement.ClubRelationKin
 import riichinexus.microservices.club.domain.ClubAuthorization
 import riichinexus.microservices.club.objects.clubmanagement.ClubView
 import riichinexus.microservices.club.tables.clubs.ClubTable
-import upickle.default.ReadWriter
-
 /** 更新俱乐部关系状态。 */
 final case class UpdateClubRelationAPIMessage(
     clubId: String,
@@ -29,7 +29,7 @@ final case class UpdateClubRelationAPIMessage(
     targetClubId: String,
     relation: ClubRelationKind,
     note: Option[String] = None
-) extends APIMessage[ClubView] derives ReadWriter:
+) extends APIMessage[ClubView]:
 
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
@@ -39,7 +39,7 @@ final case class UpdateClubRelationAPIMessage(
       _ <- IO.blocking(ensureRelationCanBeUpdated(sourceClub, command))
       savedClub <- saveRelationUpdate(context, sourceClub, targetClub, command)
       _ <- RecordAuditEventsPrivateAPIMessage(updateRelationAudit(command)).plan(context)
-    yield ClubView.fromDomain(savedClub)
+    yield ClubViewFunctions.clubView(savedClub)
 
   private def buildCommand(context: ApiPlanContext): IO[UpdateClubRelationCommand] =
     for
@@ -109,7 +109,7 @@ final case class UpdateClubRelationAPIMessage(
       AuditEventDraft(
         aggregateType = "club",
         aggregateId = command.clubId.value,
-        eventType = "ClubRelationUpdated",
+        eventType = AuditEventType.ClubRelationUpdated,
         occurredAt = command.occurredAt,
         actorId = command.actor.playerId,
         details = Map(

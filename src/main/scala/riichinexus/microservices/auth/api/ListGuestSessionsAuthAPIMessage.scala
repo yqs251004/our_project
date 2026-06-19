@@ -10,14 +10,12 @@ import riichinexus.microservices.auth.domain.model.GuestAccessSession
 import riichinexus.microservices.auth.objects.apiTypes.GuestSessionResponse
 import riichinexus.microservices.auth.tables.guestsession.GuestSessionTable
 import riichinexus.system.objects.PagedResponse
-import upickle.default.ReadWriter
-
 /** 列出游客访问会话。 */
 final case class ListGuestSessionsAuthAPIMessage(
     activeOnly: Option[Boolean] = None,
     limit: Option[Int] = None,
     offset: Option[Int] = None
-) extends APIMessage[PagedResponse[GuestSessionResponse]] derives ReadWriter:
+) extends APIMessage[PagedResponse[GuestSessionResponse]]:
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[GuestSessionResponse]] =
     for

@@ -11,13 +11,11 @@ import riichinexus.microservices.tournament.mahjongcore.tables.tablestate.Mahjon
 import riichinexus.microservices.tournament.objects.stage.table.TableId
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 
-import upickle.default.ReadWriter
-
 /** 将已完成的实时麻将桌归档为 Paifu 和 MatchRecord。 */
 final case class MahjongCoreArchiveTableAPIMessage(
     tableId: String,
     request: ArchiveMahjongTableRequest
-) extends APIMessage[MahjongActionResponse] derives ReadWriter:
+) extends APIMessage[MahjongActionResponse]:
 
   override def plan(context: ApiPlanContext): IO[MahjongActionResponse] =
     for

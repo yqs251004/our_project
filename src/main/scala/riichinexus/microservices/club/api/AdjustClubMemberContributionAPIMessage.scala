@@ -1,4 +1,6 @@
 package riichinexus.microservices.club.api
+import riichinexus.microservices.club.domain.functions.ClubViewFunctions
+import riichinexus.microservices.audit.objects.`private`.AuditEventType
 import riichinexus.microservices.audit.objects.`private`.AuditEventDraft
 import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.api.`private`.ResolveAccessPrincipalPrivateAPIMessage
@@ -22,9 +24,8 @@ import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubAuthorization
 import riichinexus.microservices.club.objects.clubmanagement.ClubView
 import riichinexus.microservices.notification.api.`private`.RecordNotificationPrivateAPIMessage
+import riichinexus.microservices.notification.objects.NotificationType
 import riichinexus.microservices.notification.objects.`private`.CreateNotificationRequest
-import upickle.default.ReadWriter
-
 /** 调整俱乐部成员贡献值。 */
 final case class AdjustClubMemberContributionAPIMessage(
     clubId: String,
@@ -32,7 +33,7 @@ final case class AdjustClubMemberContributionAPIMessage(
     playerId: String,
     delta: Int,
     note: Option[String] = None
-) extends APIMessage[ClubView] derives ReadWriter:
+) extends APIMessage[ClubView]:
 
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
@@ -49,7 +50,7 @@ final case class AdjustClubMemberContributionAPIMessage(
       savedClub <- adjustMemberContribution(context, command).map(_.getOrElse(throw NoSuchElementException("Resource not found")))
       _ <- RecordAuditEventsPrivateAPIMessage(adjustMemberContributionAudit(savedClub, command)).plan(context)
       _ <- RecordNotificationPrivateAPIMessage(adjustMemberContributionNotification(savedClub, command)).plan(context)
-    yield ClubView.fromDomain(savedClub)
+    yield ClubViewFunctions.clubView(savedClub)
 
   private def adjustMemberContribution(
       context: ApiPlanContext,
@@ -118,7 +119,7 @@ final case class AdjustClubMemberContributionAPIMessage(
       AuditEventDraft(
         aggregateType = "club",
         aggregateId = updatedClub.id.value,
-        eventType = "ClubMemberContributionAdjusted",
+        eventType = AuditEventType.ClubMemberContributionAdjusted,
         occurredAt = command.occurredAt,
         actorId = command.actor.playerId,
         details = Map(
@@ -141,7 +142,7 @@ final case class AdjustClubMemberContributionAPIMessage(
       else command.delta.toString
     CreateNotificationRequest(
       recipientPlayerId = command.playerId.value,
-      notificationType = "ClubMemberContributionAdjusted",
+      notificationType = NotificationType.ClubMemberContributionAdjusted,
       title = "俱乐部贡献值已调整",
       body = s"你在 ${updatedClub.name} 的贡献值调整了 $deltaText，当前贡献值为 $nextContribution。",
       severity = Some("info"),

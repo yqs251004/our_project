@@ -15,13 +15,11 @@ import riichinexus.microservices.tournament.objects.competition.apiTypes.Tournam
 
 import riichinexus.microservices.tournament.tables.tournaments.TournamentTable
 import riichinexus.system.objects.PagedResponse
-import upickle.default.ReadWriter
-
 /** 列出赛事白名单。 */
 final case class TournamentWhitelistListAPIMessage(
     tournamentId: String,
     query: TournamentWhitelistQuery = TournamentWhitelistQuery()
-) extends APIMessage[PagedResponse[TournamentWhitelistEntry]] derives ReadWriter:
+) extends APIMessage[PagedResponse[TournamentWhitelistEntry]]:
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[TournamentWhitelistEntry]] =
     for

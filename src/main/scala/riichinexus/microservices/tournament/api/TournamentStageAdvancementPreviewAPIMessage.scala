@@ -6,10 +6,8 @@ import riichinexus.microservices.tournament.objects.identity.{TournamentId, Tour
 import riichinexus.microservices.tournament.domain.stage.functions.rules.TournamentStageQueries
 
 import riichinexus.microservices.tournament.objects.stage.rules.progression.StageAdvancementSnapshot
-import upickle.default.ReadWriter
-
 /** 预览赛事阶段晋级结果。 */
-final case class TournamentStageAdvancementPreviewAPIMessage(tournamentId: String, stageId: String) extends APIMessage[StageAdvancementSnapshot] derives ReadWriter:
+final case class TournamentStageAdvancementPreviewAPIMessage(tournamentId: String, stageId: String) extends APIMessage[StageAdvancementSnapshot]:
 
   override def plan(context: ApiPlanContext): IO[StageAdvancementSnapshot] =
     for

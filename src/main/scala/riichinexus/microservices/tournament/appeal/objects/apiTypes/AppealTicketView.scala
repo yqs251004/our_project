@@ -1,6 +1,5 @@
 package riichinexus.microservices.tournament.appeal.objects.apiTypes
 
-import riichinexus.microservices.tournament.appeal.domain.model.AppealTicket
 import riichinexus.microservices.tournament.appeal.objects.{AppealDecisionLog, AppealPriority, AppealStatus}
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.{ReadWriter, macroRW}
@@ -27,24 +26,4 @@ final case class AppealTicketView(
 )
 
 object AppealTicketView:
-  def fromDomain(ticket: AppealTicket): AppealTicketView =
-    AppealTicketView(
-      appealId = ticket.id.value,
-      tableId = ticket.tableId.value,
-      tournamentId = ticket.tournamentId.value,
-      stageId = ticket.stageId.value,
-      openedBy = ticket.openedBy.value,
-      description = ticket.description,
-      attachments = ticket.attachments.map(AppealAttachmentView.fromDomain),
-      priority = AppealPriority.fromDomain(ticket.priority),
-      assigneeId = ticket.assigneeId.map(_.value),
-      dueAt = ticket.dueAt.map(_.toString),
-      status = AppealStatus.fromDomain(ticket.status),
-      logs = ticket.logs,
-      reopenCount = ticket.reopenCount,
-      createdAt = ticket.createdAt.toString,
-      updatedAt = ticket.updatedAt.toString,
-      resolution = ticket.resolution
-    )
-
   given ReadWriter[AppealTicketView] = macroRW

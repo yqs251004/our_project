@@ -1,6 +1,7 @@
-package riichinexus.system.objects
+package riichinexus.system.json
 
-import riichinexus.system.json.JsonCodecs.given
+import riichinexus.system.objects.{ErrorResponse, HealthResponse, PagedResponse}
+import riichinexus.system.json.SharedJsonCodecs.given
 import upickle.default.{ReadWriter, Reader, Writer, macroR, macroRW, macroW}
 
 object SharedResponseCodecs:

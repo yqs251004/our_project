@@ -8,12 +8,10 @@ import riichinexus.microservices.player.domain.functions.PlayerPrincipalFunction
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.ReadWriter
-
 /** 供认证服务解析玩家访问主体素材。 */
 final case class ResolvePlayerPrincipalPrivateAPIMessage(
     playerId: PlayerId
-) extends APIMessage[AccessPrincipalPrivateView] derives ReadWriter:
+) extends APIMessage[AccessPrincipalPrivateView]:
 
   override def plan(context: ApiPlanContext): IO[AccessPrincipalPrivateView] =
     PlayerDomainRecord.find(context, playerId)

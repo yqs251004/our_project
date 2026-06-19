@@ -8,10 +8,8 @@ import riichinexus.system.api.{APIWithTokenMessage, ApiPlanContext}
 import riichinexus.microservices.auth.domain.functions.AuthenticatedSessionFunctions
 import riichinexus.microservices.auth.objects.apiTypes.LogoutResponse
 import riichinexus.microservices.auth.tables.authenticatedsession.AuthenticatedSessionTable
-import upickle.default.ReadWriter
-
 /** 注销当前 token 对应的登录会话。 */
-final case class LogoutAuthAPIMessage() extends APIWithTokenMessage[LogoutResponse] derives ReadWriter:
+final case class LogoutAuthAPIMessage() extends APIWithTokenMessage[LogoutResponse]:
 
   override def plan(context: ApiPlanContext): IO[LogoutResponse] =
     for

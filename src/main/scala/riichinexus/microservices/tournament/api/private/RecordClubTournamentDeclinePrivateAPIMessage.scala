@@ -8,13 +8,11 @@ import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.tournament.domain.competition.functions.TournamentFunctions
 import riichinexus.microservices.tournament.domain.competition.model.Tournament
 import riichinexus.microservices.tournament.tables.tournaments.TournamentTable
-import upickle.default.ReadWriter
-
 /** 供 club 公共 API 校验后记录俱乐部拒绝赛事邀请。 */
 final case class RecordClubTournamentDeclinePrivateAPIMessage(
     tournamentId: TournamentId,
     clubId: ClubId
-) extends APIMessage[Unit] derives ReadWriter:
+) extends APIMessage[Unit]:
 
   override def plan(context: ApiPlanContext): IO[Unit] =
     for

@@ -7,13 +7,11 @@ import riichinexus.microservices.tournament.mahjongcore.tables.tablestate.Mahjon
 import riichinexus.microservices.tournament.objects.stage.table.TableId
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 
-import upickle.default.ReadWriter
-
 /** 供后端重置流程清空并重建实时麻将状态。 */
 final case class ResetMahjongTableStatePrivateAPIMessage(
     tableId: String,
     request: ResetMahjongTableStateRequest
-) extends APIMessage[MahjongTableView] derives ReadWriter:
+) extends APIMessage[MahjongTableView]:
 
   override def plan(context: ApiPlanContext): IO[MahjongTableView] =
     IO.blocking {

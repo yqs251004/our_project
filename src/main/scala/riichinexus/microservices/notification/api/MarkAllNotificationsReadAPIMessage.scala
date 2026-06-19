@@ -4,12 +4,10 @@ import cats.effect.IO
 import riichinexus.microservices.notification.objects.apiTypes.MarkAllNotificationsReadResponse
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import upickle.default.ReadWriter
-
 /** 将玩家所有通知标记为已读。 */
 final case class MarkAllNotificationsReadAPIMessage(
     operatorId: String
-) extends APIMessage[MarkAllNotificationsReadResponse] derives ReadWriter:
+) extends APIMessage[MarkAllNotificationsReadResponse]:
 
   override def plan(context: ApiPlanContext): IO[MarkAllNotificationsReadResponse] =
     for

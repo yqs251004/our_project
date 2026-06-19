@@ -9,7 +9,7 @@ import MahjongYakuCheckSupport.{MahjongYakuCheckState, YakuCheck, isDragonMeld, 
 
 /** MahjongShapeYakuCheckFunctions 提供麻将牌型役种检查函数 相关的领域校验和权限判断。 */
 
-private[functions] object MahjongShapeYakuCheckFunctions:
+private[mahjongcore] object MahjongShapeYakuCheckFunctions:
 
   val plan: Vector[YakuCheck] =
     Vector(

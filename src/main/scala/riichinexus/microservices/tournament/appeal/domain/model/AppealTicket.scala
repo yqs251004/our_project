@@ -6,7 +6,7 @@ import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.tournament.objects.stage.table.TableId
 import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}
 import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
-import riichinexus.microservices.tournament.appeal.objects.AppealDecisionLog
+import riichinexus.microservices.tournament.appeal.objects.{AppealDecisionLog, AppealPriority, AppealStatus}
 
 import riichinexus.system.json.JsonCodecs.given
 /** AppealTicket 表示后端领域中的申诉工单 状态，包含 ID、牌桌 ID、赛事 ID、阶段 ID、openedBy、description等。 */

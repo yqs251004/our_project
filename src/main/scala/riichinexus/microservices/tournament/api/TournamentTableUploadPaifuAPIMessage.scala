@@ -1,4 +1,5 @@
 package riichinexus.microservices.tournament.api
+import riichinexus.microservices.tournament.domain.functions.TournamentViewFunctions
 import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.api.`private`.{RequirePermissionPrivateAPIMessage, ResolveAccessPrincipalPrivateAPIMessage}
 import riichinexus.microservices.auth.api.`private`.ResolveSystemAccessPrincipalPrivateAPIMessage
@@ -16,10 +17,8 @@ import riichinexus.microservices.tournament.domain.paifu.functions.TournamentPai
 import riichinexus.microservices.tournament.objects.paifu.apiTypes.UploadPaifuRequest
 import riichinexus.microservices.tournament.objects.stage.table.apiTypes.TournamentTableView
 
-import upickle.default.ReadWriter
-
 /** 上传赛事牌桌牌谱并生成比赛记录。 */
-final case class TournamentTableUploadPaifuAPIMessage(tableId: String, request: UploadPaifuRequest) extends APIMessage[TournamentTableView] derives ReadWriter:
+final case class TournamentTableUploadPaifuAPIMessage(tableId: String, request: UploadPaifuRequest) extends APIMessage[TournamentTableView]:
 
   override def plan(context: ApiPlanContext): IO[TournamentTableView] =
     for
@@ -40,7 +39,7 @@ final case class TournamentTableUploadPaifuAPIMessage(tableId: String, request: 
           )
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
-    yield TournamentTableView.fromDomain(table)
+    yield TournamentViewFunctions.tableView(table)
 
   private def resolveActor(context: ApiPlanContext): IO[AccessPrincipalPrivateView] =
     request.operatorId.filter(_.nonEmpty).map(PlayerId(_)).map(ResolveAccessPrincipalPrivateAPIMessage(_).plan(context)).getOrElse(ResolveSystemAccessPrincipalPrivateAPIMessage().plan(context))

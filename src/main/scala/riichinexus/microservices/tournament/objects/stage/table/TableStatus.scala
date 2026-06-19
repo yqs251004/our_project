@@ -1,7 +1,5 @@
 package riichinexus.microservices.tournament.objects.stage.table
 
-import upickle.default.{ReadWriter, readwriter}
-
 /** TableStatus 枚举牌桌状态 可使用的公开取值。 */
 
 enum TableStatus:
@@ -12,7 +10,8 @@ enum TableStatus:
   case AppealInProgress
 
 object TableStatus:
-  val Pending: TableStatus = WaitingPreparation
-  val Finished: TableStatus = Archived
+  def toString(status: TableStatus): String =
+    status.toString
 
-  given ReadWriter[TableStatus] = readwriter[String].bimap(_.toString, TableStatus.valueOf)
+  def fromString(value: String): TableStatus =
+    TableStatus.valueOf(value)

@@ -44,7 +44,7 @@ object NotificationTable:
     Using.resource(connection.prepareStatement(upsertSql)) { statement =>
       statement.setString(1, notification.id.value)
       statement.setString(2, notification.recipientPlayerId.value)
-      statement.setString(3, notification.notificationType)
+      statement.setString(3, notification.notificationType.toString)
       statement.setString(4, notification.sourceService)
       statement.setString(5, notification.sourceType)
       statement.setString(6, notification.sourceId)

@@ -5,10 +5,8 @@ import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.club.domain.rankprivilegemanagement.functions.ClubPrivilegeRegistry
 
 import riichinexus.microservices.club.objects.rankprivilegemanagement.ClubPrivilegeDefinition
-import upickle.default.ReadWriter
-
 /** 获取俱乐部权限定义。 */
-final case class ClubPrivilegeDefinitionsAPIMessage() extends APIMessage[Vector[ClubPrivilegeDefinition]] derives ReadWriter:
+final case class ClubPrivilegeDefinitionsAPIMessage() extends APIMessage[Vector[ClubPrivilegeDefinition]]:
 
   override def plan(context: ApiPlanContext): IO[Vector[ClubPrivilegeDefinition]] =
     IO.pure(ClubPrivilegeRegistry.definitions)

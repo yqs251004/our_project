@@ -1,7 +1,5 @@
 package riichinexus.microservices.tournament.objects.paifu
 
-import upickle.default.{ReadWriter, readwriter}
-
 /** PaifuActionType 枚举牌谱动作类型 可使用的公开取值。 */
 
 enum PaifuActionType:
@@ -19,5 +17,8 @@ enum PaifuActionType:
   case OpenKan
 
 object PaifuActionType:
-  given ReadWriter[PaifuActionType] =
-    readwriter[String].bimap(_.toString, PaifuActionType.valueOf)
+  def toString(actionType: PaifuActionType): String =
+    actionType.toString
+
+  def fromString(value: String): PaifuActionType =
+    PaifuActionType.valueOf(value)

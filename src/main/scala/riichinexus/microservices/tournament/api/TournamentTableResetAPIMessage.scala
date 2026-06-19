@@ -1,4 +1,5 @@
 package riichinexus.microservices.tournament.api
+import riichinexus.microservices.tournament.domain.functions.TournamentViewFunctions
 import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.api.`private`.{RequirePermissionPrivateAPIMessage, ResolveAccessPrincipalPrivateAPIMessage}
 
@@ -18,10 +19,8 @@ import riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTable
 import riichinexus.microservices.tournament.tables.paifu.PaifuTable
 import riichinexus.microservices.tournament.objects.stage.table.apiTypes.{ForceResetTableRequest, TournamentTableView}
 
-import upickle.default.ReadWriter
-
 /** 强制重置赛事牌桌状态。 */
-final case class TournamentTableResetAPIMessage(tableId: String, request: ForceResetTableRequest) extends APIMessage[TournamentTableView] derives ReadWriter:
+final case class TournamentTableResetAPIMessage(tableId: String, request: ForceResetTableRequest) extends APIMessage[TournamentTableView]:
 
   override def plan(context: ApiPlanContext): IO[TournamentTableView] =
     for
@@ -32,7 +31,7 @@ final case class TournamentTableResetAPIMessage(tableId: String, request: ForceR
       _ <- IO.blocking {
         ResetMahjongTableStatePrivateAPIMessage.resetAndSave(context.connection, command.tableId)
       }
-    yield TournamentTableView.fromDomain(table)
+    yield TournamentViewFunctions.tableView(table)
 
   private def resetTable(context: ApiPlanContext, command: ResetTableCommand): IO[Option[Table]] =
     loadTable(context, command.tableId).flatMap {

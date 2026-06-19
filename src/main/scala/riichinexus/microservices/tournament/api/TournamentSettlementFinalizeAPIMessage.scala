@@ -1,4 +1,6 @@
 package riichinexus.microservices.tournament.api
+import riichinexus.microservices.tournament.domain.functions.TournamentViewFunctions
+import riichinexus.microservices.audit.objects.`private`.AuditEventType
 import riichinexus.microservices.audit.objects.`private`.AuditEventDraft
 import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.api.`private`.{RequirePermissionPrivateAPIMessage, ResolveAccessPrincipalPrivateAPIMessage}
@@ -20,10 +22,8 @@ import riichinexus.microservices.notification.api.`private`.RecordBulkNotificati
 
 import riichinexus.microservices.tournament.objects.finalization.apiTypes.{FinalizeTournamentSettlementRequest, TournamentSettlementView}
 
-import upickle.default.ReadWriter
-
 /** 确认已有赛事结算并按需通知选手。 */
-final case class TournamentSettlementFinalizeAPIMessage(tournamentId: String, settlementId: String, request: FinalizeTournamentSettlementRequest) extends APIMessage[TournamentSettlementView] derives ReadWriter:
+final case class TournamentSettlementFinalizeAPIMessage(tournamentId: String, settlementId: String, request: FinalizeTournamentSettlementRequest) extends APIMessage[TournamentSettlementView]:
 
   override def plan(context: ApiPlanContext): IO[TournamentSettlementView] =
     for
@@ -52,7 +52,7 @@ final case class TournamentSettlementFinalizeAPIMessage(tournamentId: String, se
         else Vector.empty
       }
       _ <- RecordBulkNotificationsPrivateAPIMessage(notificationRequests).plan(context)
-    yield TournamentSettlementView.fromDomain(result.snapshot)
+    yield TournamentViewFunctions.settlementView(result.snapshot)
 
   private def finalizeSettlement(
       connection: java.sql.Connection,
@@ -86,7 +86,7 @@ final case class TournamentSettlementFinalizeAPIMessage(tournamentId: String, se
       AuditEventDraft(
         aggregateType = "tournament",
         aggregateId = finalized.tournamentId.value,
-        eventType = "TournamentSettlementFinalized",
+        eventType = AuditEventType.TournamentSettlementFinalized,
         occurredAt = command.finalizedAt,
         actorId = command.actor.playerId,
         details = Map(

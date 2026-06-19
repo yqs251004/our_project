@@ -3,7 +3,7 @@ package riichinexus.system.json
 import java.time.Instant
 import scala.annotation.targetName
 
-import riichinexus.microservices.audit.domain.auditevent.{AuditEvent, AuditEventId}
+import riichinexus.microservices.audit.domain.auditevent.AuditEventId
 import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
 import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
@@ -16,7 +16,7 @@ import riichinexus.microservices.tournament.objects.matchrecord.MatchRecordId
 import riichinexus.microservices.tournament.objects.finalization.SettlementSnapshotId
 import riichinexus.microservices.tournament.objects.stage.table.TableId
 import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}
-import upickle.default.{ReadWriter, macroRW, read, readwriter, writeJs}
+import upickle.default.{ReadWriter, read, readwriter, writeJs}
 
 object SharedJsonCodecs:
   given [A: ReadWriter]: ReadWriter[Option[A]] =
@@ -72,5 +72,3 @@ object SharedJsonCodecs:
     readwriter[String].bimap[AuditEventId](_.value, AuditEventId(_))
   given ReadWriter[AdvancedStatsRecomputeTaskId] =
     readwriter[String].bimap[AdvancedStatsRecomputeTaskId](_.value, AdvancedStatsRecomputeTaskId(_))
-
-  given ReadWriter[AuditEvent] = macroRW

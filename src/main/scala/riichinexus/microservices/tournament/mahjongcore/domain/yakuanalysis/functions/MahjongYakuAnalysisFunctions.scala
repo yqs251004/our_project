@@ -1,5 +1,6 @@
 package riichinexus.microservices.tournament.mahjongcore.domain.yakuanalysis.functions
 
+import riichinexus.microservices.tournament.mahjongcore.domain.gamestate.functions.MahjongRulesetFunctions
 import riichinexus.microservices.tournament.mahjongcore.domain.handanalysis.functions.MahjongHandAnalysisFunctions
 import riichinexus.microservices.tournament.mahjongcore.domain.handanalysis.model.{MahjongHandDecomposition, MahjongHandMeld, MahjongHandMeldType}
 import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.MahjongTileFunctions.{Chun, Haku, Nan, Pei, Sha, Ton, countsOf, indexOf, isYaochu}
@@ -101,7 +102,7 @@ private[mahjongcore] object MahjongYakuAnalysisFunctions:
     if yaku.isEmpty then None
     else
       val baseHan = yaku.map(_.han).sum
-      if baseHan < context.ruleset.normalizedMinHan then None
+      if baseHan < MahjongRulesetFunctions.normalizedMinHan(context.ruleset) then None
       else
         val yakuWithDora =
           if includeDora then MahjongYakuCheckFunctions.addDora(yaku, concealedCounts, allCounts, allTiles, context, fixedMelds, closedHand)

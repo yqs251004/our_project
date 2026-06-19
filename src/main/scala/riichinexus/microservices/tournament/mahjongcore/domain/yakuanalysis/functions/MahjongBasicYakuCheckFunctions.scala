@@ -8,7 +8,7 @@ import MahjongYakuCheckSupport.{MahjongYakuCheckState, YakuCheck, tripletLike, w
 
 /** MahjongBasicYakuCheckFunctions 提供麻将基础役种检查函数 相关的领域校验和权限判断。 */
 
-private[functions] object MahjongBasicYakuCheckFunctions:
+private[mahjongcore] object MahjongBasicYakuCheckFunctions:
 
   val plan: Vector[YakuCheck] =
     Vector(

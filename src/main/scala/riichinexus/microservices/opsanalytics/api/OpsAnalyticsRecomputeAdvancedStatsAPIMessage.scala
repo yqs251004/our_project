@@ -20,12 +20,10 @@ import riichinexus.microservices.opsanalytics.objects.{AdvancedStatsBackfillMode
 import riichinexus.microservices.opsanalytics.objects.apiTypes.AdvancedStatsRecomputeRequest
 import riichinexus.microservices.opsanalytics.tables.advancedstatsboard.AdvancedStatsBoardTable
 import riichinexus.microservices.opsanalytics.tables.advancedstatsrecomputetask.AdvancedStatsRecomputeTaskTable
-import upickle.default.ReadWriter
-
 /** 创建高级统计重算任务。 */
 final case class OpsAnalyticsRecomputeAdvancedStatsAPIMessage(
     request: AdvancedStatsRecomputeRequest
-) extends APIMessage[Vector[AdvancedStatsRecomputeTask]] derives ReadWriter:
+) extends APIMessage[Vector[AdvancedStatsRecomputeTask]]:
 
   override def plan(context: ApiPlanContext): IO[Vector[AdvancedStatsRecomputeTask]] =
     for

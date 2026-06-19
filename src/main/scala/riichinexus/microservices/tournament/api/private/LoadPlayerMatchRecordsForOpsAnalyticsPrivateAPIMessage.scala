@@ -7,12 +7,10 @@ import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.tournament.domain.functions.TournamentPrivateViewFunctions
 import riichinexus.microservices.tournament.objects.`private`.matchrecord.MatchRecordPrivateView
 import riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTable
-import upickle.default.ReadWriter
-
 /** 供 opsanalytics 后端统计读取某玩家完整比赛记录 private read model 列表。 */
 final case class LoadPlayerMatchRecordsForOpsAnalyticsPrivateAPIMessage(
     playerId: PlayerId
-) extends APIMessage[Vector[MatchRecordPrivateView]] derives ReadWriter:
+) extends APIMessage[Vector[MatchRecordPrivateView]]:
 
   override def plan(context: ApiPlanContext): IO[Vector[MatchRecordPrivateView]] =
     for

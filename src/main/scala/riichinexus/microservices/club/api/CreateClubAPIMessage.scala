@@ -1,4 +1,5 @@
 package riichinexus.microservices.club.api
+import riichinexus.microservices.club.domain.functions.ClubViewFunctions
 import riichinexus.microservices.auth.api.`private`.{CheckSuperAdminPrivateAPIMessage, ResolveAccessPrincipalPrivateAPIMessage}
 import riichinexus.microservices.player.api.`private`.{RecordPlayerClubAdminGrantPrivateAPIMessage, RecordPlayerClubJoinPrivateAPIMessage, ResolvePlayerPrivateAPIMessage}
 
@@ -18,13 +19,11 @@ import riichinexus.system.api.AuthorizationFailure
 
 import riichinexus.microservices.club.domain.{ClubAuthorization, ClubProjectionRefresher}
 import riichinexus.microservices.club.objects.clubmanagement.ClubView
-import upickle.default.ReadWriter
-
 /** 创建俱乐部。 */
 final case class CreateClubAPIMessage(
     name: String,
     creatorId: String
-) extends APIMessage[ClubView] derives ReadWriter:
+) extends APIMessage[ClubView]:
 
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
@@ -47,7 +46,7 @@ final case class CreateClubAPIMessage(
       savedCreator <- grantCreatorClubAdmin(context, creator, clubToCreate, command)
       _ <- ClubProjectionRefresher.ensurePlayerDashboard(context, savedCreator.id, command.createdAt)
       savedClub <- refreshAndSaveClub(context, clubToCreate, command.createdAt)
-    yield ClubView.fromDomain(savedClub)
+    yield ClubViewFunctions.clubView(savedClub)
 
   private def resolveCreatorPlayer(context: ApiPlanContext, command: CreateClubCommand): IO[PlayerPrivateView] =
     ResolvePlayerPrivateAPIMessage(command.creatorId).plan(context)

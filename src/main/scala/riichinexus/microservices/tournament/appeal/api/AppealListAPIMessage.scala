@@ -3,24 +3,23 @@ package riichinexus.microservices.tournament.appeal.api
 import cats.effect.IO
 
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
+import riichinexus.microservices.tournament.appeal.domain.functions.AppealViewFunctions
 import riichinexus.microservices.tournament.appeal.domain.model.AppealTicket
 
 import riichinexus.microservices.tournament.appeal.objects.apiTypes.{AppealListQuery, AppealTicketView}
 import riichinexus.microservices.tournament.appeal.tables.appealticket.AppealTicketTable
 import riichinexus.system.objects.PagedResponse
-import upickle.default.ReadWriter
-
 /** 按筛选条件分页列出申诉工单。 */
 final case class AppealListAPIMessage(
     query: AppealListQuery = AppealListQuery()
-) extends APIMessage[PagedResponse[AppealTicketView]] derives ReadWriter:
+) extends APIMessage[PagedResponse[AppealTicketView]]:
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[AppealTicketView]] =
     for
       now <- IO.realTimeInstant
       resolved <- IO.delay(resolveQuery(now))
       appeals <- IO.blocking(listAppeals(context, resolved))
-    yield page(appeals.map(AppealTicketView.fromDomain), resolved)
+    yield page(appeals.map(AppealViewFunctions.ticketView), resolved)
 
   private def resolveQuery(now: java.time.Instant): ResolvedAppealListQuery =
     ResolvedAppealListQuery(
@@ -43,8 +42,8 @@ final case class AppealListAPIMessage(
 
   private def listAppeals(context: ApiPlanContext, resolved: ResolvedAppealListQuery): Vector[AppealTicket] =
     AppealTicketTable.findAll(context.connection)
-      .filter(ticket => resolved.query.status.forall(_.toDomain == ticket.status))
-      .filter(ticket => resolved.query.priority.forall(_.toDomain == ticket.priority))
+      .filter(ticket => resolved.query.status.forall(_ == ticket.status))
+      .filter(ticket => resolved.query.priority.forall(_ == ticket.priority))
       .filter(ticket => resolved.query.tournamentId.forall(_ == ticket.tournamentId))
       .filter(ticket => resolved.query.stageId.forall(_ == ticket.stageId))
       .filter(ticket => resolved.query.tableId.forall(_ == ticket.tableId))

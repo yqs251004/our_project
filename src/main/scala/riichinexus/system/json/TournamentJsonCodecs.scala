@@ -2,23 +2,25 @@ package riichinexus.system.json
 
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.tournament.appeal.domain.model.{AppealAttachment, AppealAttachmentMediaKind, AppealAttachmentStorageKind, AppealDecisionType, AppealPriority, AppealStatus, AppealTableResolution, AppealTicket}
-import riichinexus.microservices.tournament.appeal.objects.AppealDecisionLog
+import riichinexus.microservices.tournament.appeal.domain.model.{AppealAttachment, AppealTicket}
+import riichinexus.microservices.tournament.appeal.objects.{AppealAttachmentMediaKind, AppealAttachmentStorageKind, AppealDecisionLog, AppealDecisionType, AppealPriority, AppealStatus, AppealTableResolution}
 import riichinexus.microservices.tournament.domain.stage.model.{StageLineupSeat, StageLineupSubmission, StageTablePlan, Table, TournamentStage}
 import riichinexus.microservices.tournament.domain.matchrecord.model.{MatchRecord, MatchRecordSeatResult}
 import riichinexus.microservices.tournament.domain.finalization.model.TournamentSettlementSnapshot
 import riichinexus.microservices.tournament.domain.competition.model.Tournament
-import riichinexus.microservices.tournament.objects.paifu.{AgariResult, AgariWinResult, FinalStanding, HandOutcome, KyokuDescriptor, MahjongYakuKind, Paifu, PaifuAction, PaifuActionType, PaifuHand, PaifuMetadata, PaifuPlayerTrack, PaifuRound, PaifuRoundPlayer, PaifuTile, PaifuTimeline, RoundSettlement, RoundSettlementNote, ScoreChange, Yaku}
+import riichinexus.microservices.tournament.objects.paifu.{AgariResult, AgariWinResult, FinalStanding, HandOutcome, KyokuDescriptor, MahjongYakuKind, Paifu, PaifuAction, PaifuActionType, PaifuHand, PaifuMetadata, PaifuPlayerTrack, PaifuRound, PaifuRoundPlayer, PaifuTile, PaifuTileSuit, PaifuTimeline, RoundSettlement, RoundSettlementNote, ScoreChange, Yaku}
 import riichinexus.microservices.tournament.objects.`private`.matchrecord.{MatchRecordPrivateView, MatchRecordSeatResultPrivateView}
 import riichinexus.microservices.tournament.objects.`private`.stage.{StageLineupSeatPrivateView, StageLineupSubmissionPrivateView, TournamentStagePrivateView}
 import riichinexus.microservices.tournament.objects.`private`.competition.TournamentPrivateView
-import riichinexus.microservices.tournament.objects.stage.rules.knockout.{KnockoutLane, KnockoutRuleConfig}
+import riichinexus.microservices.tournament.objects.stage.rules.knockout.{KnockoutLane, KnockoutRuleConfig, KnockoutSeedingPolicy}
 import riichinexus.microservices.tournament.objects.stage.rules.progression.{AdvancementRule, AdvancementRuleType}
-import riichinexus.microservices.tournament.objects.stage.rules.swiss.SwissRuleConfig
+import riichinexus.microservices.tournament.objects.stage.rules.swiss.{SwissPairingMethod, SwissRuleConfig}
 import riichinexus.microservices.tournament.objects.finalization.{TournamentSettlementAdjustment, TournamentSettlementEntry, TournamentSettlementStatus}
 import riichinexus.microservices.tournament.objects.stage.table.{SeatWind, TableSeat, TableStatus}
 import riichinexus.microservices.tournament.objects.stage.StageStatus
 import riichinexus.microservices.tournament.objects.competition.{TournamentFormat, TournamentParticipantKind, TournamentStatus, TournamentWhitelistEntry}
+import riichinexus.microservices.tournament.mahjongcore.objects.action.MahjongCommandType
+import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.{MahjongGameLength, MahjongMeldType, MahjongRoundPhase, MahjongRuleset, MahjongTableStatus}
 import riichinexus.system.json.JsonCodecSupport.{eitherStringEnumReadWriter, stringEnumReadWriter}
 import riichinexus.system.json.SharedJsonCodecs.given
 import scala.util.Try
@@ -26,35 +28,81 @@ import upickle.default.{ReadWriter, macroRW, read, readwriter, writeJs}
 
 object TournamentJsonCodecs:
   given ReadWriter[TournamentStatus] =
-    stringEnumReadWriter(TournamentStatus.valueOf, _.toString)
+    stringEnumReadWriter(TournamentStatus.fromString, TournamentStatus.toString)
   given ReadWriter[TournamentFormat] =
     eitherStringEnumReadWriter(
       TournamentFormat.fromString,
       TournamentFormat.toString
     )
   given ReadWriter[StageStatus] =
-    stringEnumReadWriter(StageStatus.valueOf, _.toString)
+    stringEnumReadWriter(StageStatus.fromString, StageStatus.toString)
   given ReadWriter[AdvancementRuleType] =
-    stringEnumReadWriter(AdvancementRuleType.valueOf, _.toString)
+    stringEnumReadWriter(AdvancementRuleType.fromString, AdvancementRuleType.toString)
   given ReadWriter[AdvancementRule] = macroRW
+  given ReadWriter[SwissPairingMethod] =
+    stringEnumReadWriter(SwissPairingMethod.fromString, SwissPairingMethod.toString)
   given ReadWriter[SwissRuleConfig] = macroRW
+  given ReadWriter[KnockoutSeedingPolicy] =
+    stringEnumReadWriter(KnockoutSeedingPolicy.fromString, KnockoutSeedingPolicy.toString)
   given ReadWriter[KnockoutRuleConfig] = macroRW
   given ReadWriter[KnockoutLane] =
-    stringEnumReadWriter(KnockoutLane.valueOf, _.toString)
+    stringEnumReadWriter(KnockoutLane.fromString, KnockoutLane.toString)
   given ReadWriter[SeatWind] =
     eitherStringEnumReadWriter(
       SeatWind.fromString,
       SeatWind.toString
     )
+  given ReadWriter[MahjongGameLength] =
+    stringEnumReadWriter(MahjongGameLength.fromString, MahjongGameLength.toString)
+  given ReadWriter[MahjongRuleset] =
+    readwriter[ujson.Value].bimap[MahjongRuleset](
+      ruleset =>
+        ujson.Obj(
+          "gameLength" -> writeJs(ruleset.gameLength),
+          "initialPoints" -> ruleset.initialPoints,
+          "targetPoints" -> ruleset.targetPoints,
+          "akaDora" -> ruleset.akaDora,
+          "akaDoraCount" -> ruleset.akaDoraCount,
+          "openTanyao" -> ruleset.openTanyao,
+          "doubleRon" -> ruleset.doubleRon,
+          "tripleRonAbortiveDraw" -> ruleset.tripleRonAbortiveDraw,
+          "nagashiMangan" -> ruleset.nagashiMangan,
+          "allowMultipleYakuman" -> ruleset.allowMultipleYakuman,
+          "bankruptcyEnd" -> ruleset.bankruptcyEnd,
+          "allLastDealerFinishAsTop" -> ruleset.allLastDealerFinishAsTop,
+          "minHan" -> ruleset.minHan
+        ),
+      {
+        case obj: ujson.Obj =>
+          val akaDora = obj.value.get("akaDora").fold(true)(read[Boolean](_))
+          MahjongRuleset(
+            gameLength = obj.value.get("gameLength").fold(MahjongGameLength.Hanchan)(read[MahjongGameLength](_)),
+            initialPoints = obj.value.get("initialPoints").fold(25000)(read[Int](_)),
+            targetPoints = obj.value.get("targetPoints").fold(30000)(read[Int](_)),
+            akaDora = akaDora,
+            akaDoraCount = obj.value.get("akaDoraCount").fold(if akaDora then 3 else 0)(read[Int](_)),
+            openTanyao = obj.value.get("openTanyao").fold(true)(read[Boolean](_)),
+            doubleRon = obj.value.get("doubleRon").fold(true)(read[Boolean](_)),
+            tripleRonAbortiveDraw = obj.value.get("tripleRonAbortiveDraw").fold(false)(read[Boolean](_)),
+            nagashiMangan = obj.value.get("nagashiMangan").fold(true)(read[Boolean](_)),
+            allowMultipleYakuman = obj.value.get("allowMultipleYakuman").fold(true)(read[Boolean](_)),
+            bankruptcyEnd = obj.value.get("bankruptcyEnd").fold(true)(read[Boolean](_)),
+            allLastDealerFinishAsTop = obj.value.get("allLastDealerFinishAsTop").fold(false)(read[Boolean](_)),
+            minHan = obj.value.get("minHan").fold(1)(read[Int](_))
+          )
+        case json =>
+          throw upickle.core.Abort(s"Expected MahjongRuleset object, got $json")
+      }
+    )
   given ReadWriter[StageLineupSeat] = macroRW
   given ReadWriter[StageLineupSubmission] = macroRW
   given ReadWriter[StageTablePlan] = macroRW
   given ReadWriter[TournamentParticipantKind] =
-    stringEnumReadWriter(TournamentParticipantKind.valueOf, _.toString)
+    stringEnumReadWriter(TournamentParticipantKind.fromString, TournamentParticipantKind.toString)
   given ReadWriter[TournamentWhitelistEntry] = macroRW
   given ReadWriter[TournamentStage] = macroRW
   given ReadWriter[TournamentSettlementStatus] =
-    stringEnumReadWriter(TournamentSettlementStatus.valueOf, _.toString)
+    stringEnumReadWriter(TournamentSettlementStatus.fromString, TournamentSettlementStatus.toString)
   given ReadWriter[TournamentSettlementAdjustment] = macroRW
   given ReadWriter[TournamentSettlementEntry] = macroRW
   given ReadWriter[TournamentSettlementSnapshot] = macroRW
@@ -85,9 +133,9 @@ object TournamentJsonCodecs:
       }
     )
   given ReadWriter[TableStatus] =
-    stringEnumReadWriter(TableStatus.valueOf, _.toString)
+    stringEnumReadWriter(TableStatus.fromString, TableStatus.toString)
   given ReadWriter[AppealTableResolution] =
-    stringEnumReadWriter(AppealTableResolution.valueOf, _.toString)
+    stringEnumReadWriter(AppealTableResolution.fromString, AppealTableResolution.toString)
   given ReadWriter[Table] = macroRW
   given ReadWriter[MatchRecordSeatResult] = macroRW
   given ReadWriter[MatchRecord] = macroRW
@@ -98,23 +146,26 @@ object TournamentJsonCodecs:
   given ReadWriter[MatchRecordSeatResultPrivateView] = macroRW
   given ReadWriter[MatchRecordPrivateView] = macroRW
   given ReadWriter[AppealAttachmentStorageKind] =
-    stringEnumReadWriter(AppealAttachmentStorageKind.valueOf, _.toString)
+    stringEnumReadWriter(AppealAttachmentStorageKind.fromString, AppealAttachmentStorageKind.toString)
   given ReadWriter[AppealAttachmentMediaKind] =
-    stringEnumReadWriter(AppealAttachmentMediaKind.valueOf, _.toString)
+    stringEnumReadWriter(AppealAttachmentMediaKind.fromString, AppealAttachmentMediaKind.toString)
   given ReadWriter[AppealAttachment] = macroRW
   given ReadWriter[AppealDecisionLog] = macroRW
   given ReadWriter[AppealPriority] =
-    stringEnumReadWriter(AppealPriority.valueOf, _.toString)
+    stringEnumReadWriter(AppealPriority.fromString, AppealPriority.toString)
   given ReadWriter[AppealStatus] =
-    stringEnumReadWriter(AppealStatus.valueOf, _.toString)
+    stringEnumReadWriter(AppealStatus.fromString, AppealStatus.toString)
   given ReadWriter[AppealDecisionType] =
-    stringEnumReadWriter(AppealDecisionType.valueOf, _.toString)
+    stringEnumReadWriter(AppealDecisionType.fromString, AppealDecisionType.toString)
   given ReadWriter[AppealTicket] = macroRW
 
   given ReadWriter[HandOutcome] =
-    stringEnumReadWriter(HandOutcome.valueOf, _.toString)
+    stringEnumReadWriter(HandOutcome.fromString, HandOutcome.toString)
   given ReadWriter[MahjongYakuKind] =
-    stringEnumReadWriter(MahjongYakuKind.valueOf, _.productPrefix)
+    stringEnumReadWriter(MahjongYakuKind.fromString, MahjongYakuKind.toString)
+  given ReadWriter[PaifuTileSuit] =
+    stringEnumReadWriter(PaifuTileSuit.fromString, PaifuTileSuit.toString)
+  given ReadWriter[PaifuTile] = macroRW
   given ReadWriter[Yaku] =
     readwriter[ujson.Value].bimap[Yaku](
       yaku =>
@@ -160,7 +211,7 @@ object TournamentJsonCodecs:
   given ReadWriter[AgariWinResult] = macroRW
   given ReadWriter[AgariResult] = macroRW
   given ReadWriter[PaifuActionType] =
-    stringEnumReadWriter(PaifuActionType.valueOf, _.toString)
+    stringEnumReadWriter(PaifuActionType.fromString, PaifuActionType.toString)
   given ReadWriter[PaifuAction] =
     readwriter[ujson.Value].bimap[PaifuAction](
       action =>
@@ -238,6 +289,14 @@ object TournamentJsonCodecs:
   given ReadWriter[FinalStanding] = macroRW
   given ReadWriter[PaifuMetadata] = macroRW
   given ReadWriter[Paifu] = macroRW
+  given ReadWriter[MahjongCommandType] =
+    stringEnumReadWriter(MahjongCommandType.fromString, MahjongCommandType.toString)
+  given ReadWriter[MahjongMeldType] =
+    stringEnumReadWriter(MahjongMeldType.fromString, MahjongMeldType.toString)
+  given ReadWriter[MahjongRoundPhase] =
+    stringEnumReadWriter(MahjongRoundPhase.fromString, MahjongRoundPhase.toString)
+  given ReadWriter[MahjongTableStatus] =
+    stringEnumReadWriter(MahjongTableStatus.fromString, MahjongTableStatus.toString)
 
   private val legacyYakuKindByName: Map[String, MahjongYakuKind] =
     Map(

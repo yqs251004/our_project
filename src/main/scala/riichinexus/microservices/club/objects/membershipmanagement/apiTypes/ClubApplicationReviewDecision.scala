@@ -1,7 +1,5 @@
 package riichinexus.microservices.club.objects.membershipmanagement.apiTypes
 
-import upickle.default.{ReadWriter, readwriter}
-
 /** ClubApplicationReviewDecision 枚举俱乐部申请Review裁定 可使用的公开取值。 */
 
 enum ClubApplicationReviewDecision:
@@ -9,9 +7,6 @@ enum ClubApplicationReviewDecision:
   case Reject
 
 object ClubApplicationReviewDecision:
-  given ReadWriter[ClubApplicationReviewDecision] =
-    readwriter[String].bimap(toString, fromString)
-
   def toString(decision: ClubApplicationReviewDecision): String =
     decision match
       case Approve => "approve"

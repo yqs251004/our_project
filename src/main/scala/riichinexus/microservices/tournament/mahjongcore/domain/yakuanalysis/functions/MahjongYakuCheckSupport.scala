@@ -9,7 +9,7 @@ import riichinexus.microservices.tournament.objects.stage.table.SeatWind
 
 /** MahjongYakuCheckSupport 提供麻将役种检查支撑 相关的领域校验和权限判断。 */
 
-private[functions] object MahjongYakuCheckSupport:
+private[mahjongcore] object MahjongYakuCheckSupport:
 
   final case class MahjongYakuCheckState(
       concealedCounts: Array[Int],

@@ -10,12 +10,10 @@ import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.domain.functions.PlayerRoleFunctions
 import riichinexus.microservices.player.objects.apiTypes.{PlayerProfileView, PlayerRoleFlagsView}
 import riichinexus.microservices.player.tables.players.PlayerTable
-import upickle.default.ReadWriter
-
 /** 获取玩家档案。 */
 final case class GetPlayerAPIMessage(
     playerId: String
-) extends APIMessage[PlayerProfileView] derives ReadWriter:
+) extends APIMessage[PlayerProfileView]:
 
   override def plan(context: ApiPlanContext): IO[PlayerProfileView] =
     for

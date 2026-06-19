@@ -1,4 +1,5 @@
 package riichinexus.microservices.tournament.appeal.api
+import riichinexus.microservices.audit.objects.`private`.AuditEventType
 import riichinexus.microservices.audit.objects.`private`.AuditEventDraft
 import riichinexus.microservices.auth.api.`private`.{RequirePermissionPrivateAPIMessage, ResolveAccessPrincipalPrivateAPIMessage}
 import riichinexus.microservices.auth.objects.Permission
@@ -14,21 +15,21 @@ import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.tournament.appeal.domain.functions.AppealApplicationService
 import riichinexus.microservices.tournament.appeal.domain.functions.AppealNotificationRequestFunctions
+import riichinexus.microservices.tournament.appeal.domain.functions.AppealViewFunctions
 import riichinexus.microservices.tournament.appeal.tables.appealticket.AppealTicketTable
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
 import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
 import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
-import riichinexus.microservices.tournament.appeal.domain.model.{AppealDecisionType as DomainAppealDecisionType, AppealTableResolution as DomainAppealTableResolution, AppealTicket}
+import riichinexus.microservices.tournament.appeal.domain.model.AppealTicket
+import riichinexus.microservices.tournament.appeal.objects.{AppealDecisionType, AppealTableResolution}
 
 import riichinexus.microservices.tournament.appeal.objects.apiTypes.{AdjudicateAppealRequest, AppealTicketView}
-import upickle.default.ReadWriter
-
 /** 裁决申诉工单并按处理结果更新牌桌。 */
 final case class AppealAdjudicateAPIMessage(
     appealId: String,
     request: AdjudicateAppealRequest
-) extends APIMessage[AppealTicketView] derives ReadWriter:
+) extends APIMessage[AppealTicketView]:
 
   override def plan(context: ApiPlanContext): IO[AppealTicketView] =
     for
@@ -57,15 +58,15 @@ final case class AppealAdjudicateAPIMessage(
         )
       )
       _ <- RecordBulkNotificationsPrivateAPIMessage(notifications).plan(context)
-    yield AppealTicketView.fromDomain(ticket)
+    yield AppealViewFunctions.ticketView(ticket)
 
   private def resolveCommand(actor: AccessPrincipalPrivateView, adjudicatedAt: Instant): AdjudicateAppealCommand =
     AdjudicateAppealCommand(
       ticketId = AppealTicketId(appealId),
-      decision = request.decision.toDomain,
+      decision = request.decision,
       verdict = request.verdict,
       actor = actor,
-      tableResolution = request.tableResolution.map(_.toDomain),
+      tableResolution = request.tableResolution,
       note = request.note,
       adjudicatedAt = adjudicatedAt
     )
@@ -93,7 +94,7 @@ final case class AppealAdjudicateAPIMessage(
       ticket: AppealTicket,
       command: AdjudicateAppealCommand
   ): IO[Unit] =
-    if command.tableResolution.contains(DomainAppealTableResolution.ForceReset) then
+    if command.tableResolution.contains(AppealTableResolution.ForceReset) then
       IO.blocking {
         ResetMahjongTableStatePrivateAPIMessage.resetAndSave(context.connection, ticket.tableId)
         ()
@@ -108,7 +109,7 @@ final case class AppealAdjudicateAPIMessage(
       AuditEventDraft(
         aggregateType = "appeal",
         aggregateId = command.ticketId.value,
-        eventType = "AppealTicketAdjudicated",
+        eventType = AuditEventType.AppealTicketAdjudicated,
         occurredAt = command.adjudicatedAt,
         actorId = command.actor.playerId,
         details = Map(
@@ -123,10 +124,10 @@ final case class AppealAdjudicateAPIMessage(
 
   private final case class AdjudicateAppealCommand(
       ticketId: AppealTicketId,
-      decision: DomainAppealDecisionType,
+      decision: AppealDecisionType,
       verdict: String,
       actor: AccessPrincipalPrivateView,
-      tableResolution: Option[DomainAppealTableResolution],
+      tableResolution: Option[AppealTableResolution],
       note: Option[String],
       adjudicatedAt: Instant
   )

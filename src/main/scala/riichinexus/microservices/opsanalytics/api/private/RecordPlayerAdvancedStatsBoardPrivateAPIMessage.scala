@@ -10,13 +10,11 @@ import riichinexus.microservices.opsanalytics.domain.functions.AdvancedStatsBoar
 import riichinexus.microservices.opsanalytics.objects.{AdvancedStatsBoard, DashboardOwner}
 import riichinexus.microservices.opsanalytics.tables.advancedstatsboard.AdvancedStatsBoardTable
 import riichinexus.microservices.tournament.api.`private`.{LoadPlayerMatchRecordsForOpsAnalyticsPrivateAPIMessage, LoadPlayerPaifusForOpsAnalyticsPrivateAPIMessage}
-import upickle.default.ReadWriter
-
 /** 供后端服务计算并记录玩家高级统计读模型。 */
 final case class RecordPlayerAdvancedStatsBoardPrivateAPIMessage(
     playerId: PlayerId,
     at: Instant
-) extends APIMessage[AdvancedStatsBoard] derives ReadWriter:
+) extends APIMessage[AdvancedStatsBoard]:
 
   override def plan(context: ApiPlanContext): IO[AdvancedStatsBoard] =
     for

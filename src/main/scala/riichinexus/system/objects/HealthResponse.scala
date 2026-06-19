@@ -10,4 +10,4 @@ final case class HealthResponse(
 )
 
 object HealthResponse:
-  export SharedResponseCodecs.given
+  export riichinexus.system.json.SharedResponseCodecs.given

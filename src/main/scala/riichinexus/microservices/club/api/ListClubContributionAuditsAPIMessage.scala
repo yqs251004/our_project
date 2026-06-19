@@ -1,4 +1,5 @@
 package riichinexus.microservices.club.api
+import riichinexus.microservices.audit.objects.`private`.AuditEventType
 import riichinexus.microservices.audit.objects.`private`.AuditEventPrivateView
 import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.api.`private`.ResolveAccessPrincipalPrivateAPIMessage
@@ -13,13 +14,11 @@ import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateVi
 
 import riichinexus.microservices.club.objects.auditreadmodel.apiTypes.{ClubContributionAuditEntry, ClubContributionAuditQuery}
 import riichinexus.system.objects.PagedResponse
-import upickle.default.ReadWriter
-
 /** 列出俱乐部贡献审计记录。 */
 final case class ListClubContributionAuditsAPIMessage(
     clubId: String,
     query: ClubContributionAuditQuery
-) extends APIMessage[PagedResponse[ClubContributionAuditEntry]] derives ReadWriter:
+) extends APIMessage[PagedResponse[ClubContributionAuditEntry]]:
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[ClubContributionAuditEntry]] =
     for
@@ -63,7 +62,7 @@ final case class ListClubContributionAuditsAPIMessage(
     ListAuditEventsPrivateAPIMessage(
       aggregateType = Some("club"),
       aggregateId = Some(query.clubId.value),
-      eventType = Some("ClubMemberContributionAdjusted"),
+      eventType = Some(AuditEventType.ClubMemberContributionAdjusted),
       oldestFirst = true
     ).plan(context)
 

@@ -1,4 +1,6 @@
 package riichinexus.microservices.tournament.api
+import riichinexus.microservices.tournament.domain.functions.TournamentViewFunctions
+import riichinexus.microservices.audit.objects.`private`.AuditEventType
 import riichinexus.microservices.audit.objects.`private`.AuditEventDraft
 import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.api.`private`.{RequirePermissionPrivateAPIMessage, ResolveAccessPrincipalPrivateAPIMessage}
@@ -20,10 +22,8 @@ import riichinexus.microservices.player.objects.PlayerStatus
 
 import riichinexus.microservices.tournament.objects.competition.apiTypes.{AssignTournamentAdminRequest, TournamentSummaryView}
 import riichinexus.microservices.tournament.objects.competition.apiTypes.AssignTournamentAdminRequest.given
-import upickle.default.ReadWriter
-
 /** 授予玩家指定赛事的管理员身份。 */
-final case class TournamentAssignAdminAPIMessage(tournamentId: String, request: AssignTournamentAdminRequest) extends APIMessage[TournamentSummaryView] derives ReadWriter:
+final case class TournamentAssignAdminAPIMessage(tournamentId: String, request: AssignTournamentAdminRequest) extends APIMessage[TournamentSummaryView]:
 
   override def plan(context: ApiPlanContext): IO[TournamentSummaryView] =
     for
@@ -37,7 +37,7 @@ final case class TournamentAssignAdminAPIMessage(tournamentId: String, request: 
       )
       savedTournament <- assignAdmin(context, command).map(_.getOrElse(throw NoSuchElementException("Resource not found")))
       _ <- RecordAuditEventsPrivateAPIMessage(assignAdminAudit(command)).plan(context)
-    yield TournamentSummaryView.fromDomain(savedTournament)
+    yield TournamentViewFunctions.tournamentSummaryView(savedTournament)
 
   private def assignAdmin(
       context: ApiPlanContext,
@@ -96,7 +96,7 @@ final case class TournamentAssignAdminAPIMessage(tournamentId: String, request: 
       AuditEventDraft(
         aggregateType = "tournament",
         aggregateId = command.tournamentId.value,
-        eventType = "TournamentAdminAssigned",
+        eventType = AuditEventType.TournamentAdminAssigned,
         occurredAt = command.grantedAt,
         actorId = command.actor.playerId,
         details = Map("playerId" -> command.playerId.value),

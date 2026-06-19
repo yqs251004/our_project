@@ -7,12 +7,10 @@ import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.player.tables.players.PlayerTable
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.ReadWriter
-
 /** 供后端服务按 id 批量读取玩家 private read model。 */
 final case class ResolvePlayerReadModelsPrivateAPIMessage(
     playerIds: Vector[PlayerId]
-) extends APIMessage[Vector[PlayerPrivateView]] derives ReadWriter:
+) extends APIMessage[Vector[PlayerPrivateView]]:
 
   override def plan(context: ApiPlanContext): IO[Vector[PlayerPrivateView]] =
     IO.blocking(PlayerTable.findByIds(context.connection, playerIds).map(PlayerPrivateViewFunctions.fromPlayer))

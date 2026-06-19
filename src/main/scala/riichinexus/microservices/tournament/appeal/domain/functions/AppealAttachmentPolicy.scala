@@ -3,7 +3,8 @@ package riichinexus.microservices.tournament.appeal.domain.functions
 import java.net.URI
 import java.time.{Duration, Instant}
 
-import riichinexus.microservices.tournament.appeal.domain.model.{AppealAttachment, AppealAttachmentMediaKind, AppealAttachmentStorageKind}
+import riichinexus.microservices.tournament.appeal.domain.model.AppealAttachment
+import riichinexus.microservices.tournament.appeal.objects.{AppealAttachmentMediaKind, AppealAttachmentStorageKind}
 
 private object AppealAttachmentPolicy:
   private val MaxAttachmentCount = 12

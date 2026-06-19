@@ -13,12 +13,12 @@ import riichinexus.microservices.club.objects.clubmanagement.ClubId
 import riichinexus.microservices.club.objects.relationmanagement.ClubRelationKind
 import riichinexus.microservices.notification.api.`private`.RecordBulkNotificationsPrivateAPIMessage
 import riichinexus.microservices.notification.objects.Notification
+import riichinexus.microservices.notification.objects.NotificationType
 import riichinexus.microservices.notification.objects.`private`.CreateNotificationRequest
 import riichinexus.microservices.player.api.`private`.ListAllPlayersPrivateAPIMessage
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import upickle.default.ReadWriter
-
+import riichinexus.system.json.ClubJsonCodecs.given
 /** 提交俱乐部关系申请。 */
 final case class SubmitClubRelationRequestAPIMessage(
     clubId: String,
@@ -26,7 +26,7 @@ final case class SubmitClubRelationRequestAPIMessage(
     targetClubId: String,
     relation: ClubRelationKind,
     note: Option[String] = None
-) extends APIMessage[Vector[Notification]] derives ReadWriter:
+) extends APIMessage[Vector[Notification]]:
 
   override def plan(context: ApiPlanContext): IO[Vector[Notification]] =
     for
@@ -86,7 +86,7 @@ final case class SubmitClubRelationRequestAPIMessage(
     superAdminIds.map { superAdminId =>
       CreateNotificationRequest(
         recipientPlayerId = superAdminId.value,
-        notificationType = "ClubRelationChangeRequested",
+        notificationType = NotificationType.ClubRelationChangeRequested,
         title = "俱乐部关系调整申请",
         body = body,
         severity = Some("info"),

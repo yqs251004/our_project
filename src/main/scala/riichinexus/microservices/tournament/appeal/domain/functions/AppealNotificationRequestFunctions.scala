@@ -3,8 +3,10 @@ package riichinexus.microservices.tournament.appeal.domain.functions
 import java.sql.Connection
 import java.util.NoSuchElementException
 
+import riichinexus.microservices.notification.objects.NotificationType
 import riichinexus.microservices.notification.objects.`private`.CreateNotificationRequest
-import riichinexus.microservices.tournament.appeal.domain.model.{AppealDecisionType, AppealTableResolution, AppealTicket}
+import riichinexus.microservices.tournament.appeal.domain.model.AppealTicket
+import riichinexus.microservices.tournament.appeal.objects.{AppealDecisionType, AppealTableResolution}
 import riichinexus.microservices.tournament.domain.stage.model.Table
 import riichinexus.microservices.tournament.domain.competition.model.Tournament
 import riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable
@@ -18,7 +20,7 @@ private[appeal] object AppealNotificationRequestFunctions:
     context.tournament.admins.distinct.map { admin =>
       CreateNotificationRequest(
         recipientPlayerId = admin.value,
-        notificationType = "TournamentAppealFiled",
+        notificationType = NotificationType.TournamentAppealFiled,
         title = "赛事申诉待处理",
         body = s"${context.tournament.name} / ${context.stageName} 的第 ${context.table.tableNo} 桌收到新的申诉，请及时处理。",
         severity = Some("warning"),
@@ -44,7 +46,7 @@ private[appeal] object AppealNotificationRequestFunctions:
     Vector(
       CreateNotificationRequest(
         recipientPlayerId = ticket.openedBy.value,
-        notificationType = "TournamentAppealAdjudicated",
+        notificationType = NotificationType.TournamentAppealAdjudicated,
         title = s"赛事申诉$decisionText",
         body =
           s"${context.tournament.name} / ${context.stageName} 的第 ${context.table.tableNo} 桌申诉$decisionText。处理意见：${brief(verdict)}",

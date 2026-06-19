@@ -6,11 +6,9 @@ import riichinexus.microservices.auth.domain.functions.AccessPrincipalPrivateVie
 import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 
-import upickle.default.ReadWriter
-
 /** 供后端服务解析系统访问主体。 */
 final case class ResolveSystemAccessPrincipalPrivateAPIMessage()
-    extends APIMessage[AccessPrincipalPrivateView] derives ReadWriter:
+    extends APIMessage[AccessPrincipalPrivateView]:
 
   override def plan(context: ApiPlanContext): IO[AccessPrincipalPrivateView] =
     IO.blocking(AccessPrincipalPrivateViewFunctions.toPrivateView(AccessPrincipalFunctions.system))

@@ -1,4 +1,5 @@
 package riichinexus.microservices.tournament.appeal.api
+import riichinexus.microservices.audit.objects.`private`.AuditEventType
 import riichinexus.microservices.audit.objects.`private`.AuditEventDraft
 import riichinexus.microservices.auth.api.`private`.{RequirePermissionPrivateAPIMessage, ResolveAccessPrincipalPrivateAPIMessage}
 import riichinexus.microservices.auth.objects.Permission
@@ -11,6 +12,7 @@ import cats.effect.IO
 
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.tournament.appeal.domain.functions.AppealApplicationService
+import riichinexus.microservices.tournament.appeal.domain.functions.AppealViewFunctions
 import riichinexus.microservices.tournament.appeal.tables.appealticket.AppealTicketTable
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
@@ -19,15 +21,13 @@ import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateVi
 import riichinexus.microservices.tournament.appeal.domain.model.AppealTicket
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.tournament.appeal.objects.apiTypes.{AppealTicketView, ReopenAppealRequest}
-import upickle.default.ReadWriter
-
 /** 重新打开已处理的申诉工单。 */
 final case class AppealReopenAPIMessage(
     appealId: String,
     operatorId: String,
     reason: String,
     note: Option[String] = None
-) extends APIMessage[AppealTicketView] derives ReadWriter:
+) extends APIMessage[AppealTicketView]:
 
   override def plan(context: ApiPlanContext): IO[AppealTicketView] =
     for
@@ -46,7 +46,7 @@ final case class AppealReopenAPIMessage(
       ).plan(context)
       ticket <- IO.blocking(reopenAppeal(context.connection, command))
       _ <- RecordAuditEventsPrivateAPIMessage(reopenAppealAudit(ticket, command)).plan(context)
-    yield AppealTicketView.fromDomain(ticket)
+    yield AppealViewFunctions.ticketView(ticket)
 
   private def resolveInput: ReopenAppealRequest =
     ReopenAppealRequest(operatorId, reason, note)
@@ -75,7 +75,7 @@ final case class AppealReopenAPIMessage(
       AuditEventDraft(
         aggregateType = "appeal",
         aggregateId = command.ticketId.value,
-        eventType = "AppealTicketReopened",
+        eventType = AuditEventType.AppealTicketReopened,
         occurredAt = command.reopenedAt,
         actorId = command.actor.playerId,
         details = Map(

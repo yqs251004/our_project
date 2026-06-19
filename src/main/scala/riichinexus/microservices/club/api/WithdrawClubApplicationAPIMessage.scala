@@ -1,4 +1,6 @@
 package riichinexus.microservices.club.api
+import riichinexus.microservices.club.domain.functions.ClubViewFunctions
+import riichinexus.microservices.audit.objects.`private`.AuditEventType
 import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.api.`private`.ResolveRequestActorPrivateAPIMessage
 import riichinexus.microservices.auth.api.`private`.RequirePermissionPrivateAPIMessage
@@ -25,15 +27,13 @@ import riichinexus.microservices.audit.objects.`private`.AuditEventDraft
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubAuthorization
 import riichinexus.microservices.club.objects.membershipmanagement.apiTypes.ClubMembershipApplicationResponse
-import upickle.default.ReadWriter
-
 /** 撤回俱乐部申请。 */
 final case class WithdrawClubApplicationAPIMessage(
     clubId: String,
     membershipId: String,
     operatorId: Option[String] = None,
     note: Option[String] = None
-) extends APIMessage[ClubMembershipApplicationResponse] derives ReadWriter:
+) extends APIMessage[ClubMembershipApplicationResponse]:
 
   override def plan(context: ApiPlanContext): IO[ClubMembershipApplicationResponse] =
     for
@@ -48,7 +48,7 @@ final case class WithdrawClubApplicationAPIMessage(
       )
       application <- withdrawApplication(context, command).map(_.getOrElse(throw NoSuchElementException("Resource not found")))
       _ <- RecordAuditEventPrivateAPIMessage(withdrawApplicationAudit(command, application)).plan(context)
-    yield ClubMembershipApplicationResponse.fromDomain(application)
+    yield ClubViewFunctions.membershipApplicationResponse(application)
 
   private def resolveActor(context: ApiPlanContext): IO[AccessPrincipalPrivateView] =
     ResolveRequestActorPrivateAPIMessage(
@@ -140,7 +140,7 @@ final case class WithdrawClubApplicationAPIMessage(
     AuditEventDraft(
       aggregateType = "club-application",
       aggregateId = command.clubId.value,
-      eventType = "ClubApplicationWithdrawn",
+      eventType = AuditEventType.ClubApplicationWithdrawn,
       occurredAt = command.withdrawnAt,
       actorId = command.actor.playerId,
       details = Map(

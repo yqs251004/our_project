@@ -2,6 +2,7 @@ package riichinexus.microservices.auth.router
 import riichinexus.system.api.RegisteredAPIMessage
 
 
+import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.auth.api.{AuthCheckPermissionAPIMessage, BootstrapSuperAdminAuthAPIMessage, CreateGuestSessionAuthAPIMessage, CurrentSessionAuthAPIMessage, GetGuestSessionAuthAPIMessage, ListGuestSessionsAuthAPIMessage, LoginAuthAPIMessage, LogoutAuthAPIMessage, RegisterAuthAPIMessage, RestoreAuthSessionAPIMessage, RevokeGuestSessionAuthAPIMessage, UpgradeGuestSessionAuthAPIMessage}
 import riichinexus.microservices.auth.objects.apiTypes.{AuthSessionView, AuthSuccessView, CurrentSessionView, GuestSessionResponse, LogoutResponse}
 import riichinexus.system.objects.PagedResponse

@@ -11,7 +11,7 @@ import riichinexus.microservices.tournament.domain.competition.model.Tournament
 
 /** TournamentAdvancementProjector 负责赛事Advancement投影器 相关的领域编排、构建或投影计算。 */
 
-private[domain] object TournamentAdvancementProjector:
+private[tournament] object TournamentAdvancementProjector:
   private final case class CustomAdvancementPolicy(
       topCount: Option[Int] = None,
       topPercent: Option[Double] = None,

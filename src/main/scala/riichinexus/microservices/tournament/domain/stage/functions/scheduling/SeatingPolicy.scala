@@ -9,6 +9,7 @@ import riichinexus.microservices.tournament.objects.stage.table.TableSeat
 import riichinexus.microservices.club.objects.relationmanagement.ClubRelationKind
 import riichinexus.microservices.player.objects.`private`.PlayerPrivateView
 import riichinexus.microservices.tournament.objects.stage.table.SeatWind
+import riichinexus.microservices.tournament.objects.stage.rules.swiss.SwissPairingMethod
 
 /** SeatingPolicy 提供Seating策略 相关的领域校验和权限判断。 */
 
@@ -41,9 +42,9 @@ private[tournament] object SeatingPolicy:
 
     val opponentCounts = buildOpponentCounts(historicalRecords)
     val groupedPlayers = normalizedPairingMethod(stage) match
-      case "balanced-elo" =>
+      case SwissPairingMethod.BalancedElo =>
         buildOptimalGroups(sortedPlayers, opponentCounts, representedClubByPlayer, clubRelations)
-      case "snake"        => buildSnakeGroups(sortedPlayers)
+      case SwissPairingMethod.Snake       => buildSnakeGroups(sortedPlayers)
       case method =>
         throw IllegalArgumentException(s"Unsupported swiss pairing method: $method")
 
@@ -61,8 +62,8 @@ private[tournament] object SeatingPolicy:
       }
       .toVector
 
-  private def normalizedPairingMethod(stage: TournamentStage): String =
-    stage.swissRule.map(_.pairingMethod.trim.toLowerCase).getOrElse("balanced-elo")
+  private def normalizedPairingMethod(stage: TournamentStage): SwissPairingMethod =
+    stage.swissRule.map(_.pairingMethod).getOrElse(SwissPairingMethod.BalancedElo)
 
   private def buildSnakeGroups(players: Vector[PlayerPrivateView]): Vector[Vector[PlayerPrivateView]] =
     val tableCount = players.size / 4

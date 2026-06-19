@@ -9,10 +9,8 @@ import riichinexus.microservices.tournament.objects.paifu.PaifuId
 import riichinexus.microservices.tournament.objects.paifu.Paifu
 
 import riichinexus.microservices.tournament.tables.paifu.PaifuTable
-import upickle.default.ReadWriter
-
 /** 获取赛事牌谱详情。 */
-final case class TournamentPaifuGetAPIMessage(paifuId: String) extends APIMessage[Paifu] derives ReadWriter:
+final case class TournamentPaifuGetAPIMessage(paifuId: String) extends APIMessage[Paifu]:
 
   override def plan(context: ApiPlanContext): IO[Paifu] =
     for

@@ -6,13 +6,11 @@ import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFuncti
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.ReadWriter
-
 /** 供后端结算或统计流程应用俱乐部积分变化。 */
 final case class ApplyClubPointDeltaPrivateAPIMessage(
     clubId: ClubId,
     points: Int
-) extends APIMessage[Option[Club]] derives ReadWriter:
+) extends APIMessage[Option[Club]]:
 
   override def plan(context: ApiPlanContext): IO[Option[Club]] =
     ResolveClubPrivateAPIMessage(clubId).plan(context).flatMap {

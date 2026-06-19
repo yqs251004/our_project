@@ -1,7 +1,5 @@
 package riichinexus.microservices.club.objects.rankprivilegemanagement
 
-import upickle.default.ReadWriter
-
 /** ClubRankNode 表示前后端共享的俱乐部等级节点 数据结构，包含code、label、minimumContribution、privileges。 */
 
 final case class ClubRankNode(
@@ -9,4 +7,4 @@ final case class ClubRankNode(
     label: String,
     minimumContribution: Int,
     privileges: Vector[ClubPrivilegeCode] = Vector.empty
-) derives ReadWriter
+)

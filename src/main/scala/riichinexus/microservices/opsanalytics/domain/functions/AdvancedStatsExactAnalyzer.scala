@@ -7,7 +7,7 @@ import riichinexus.microservices.opsanalytics.domain.model.{ExactDefenseState, E
 
 /** AdvancedStatsExactAnalyzer 提供高级统计ExactAnalyzer 相关的领域计算、校验和转换函数。 */
 
-private[functions] object AdvancedStatsExactAnalyzer:
+private[opsanalytics] object AdvancedStatsExactAnalyzer:
   private val TerminalAndHonorIndices =
     Set(0, 8, 9, 17, 18, 26, 27, 28, 29, 30, 31, 32, 33)
 

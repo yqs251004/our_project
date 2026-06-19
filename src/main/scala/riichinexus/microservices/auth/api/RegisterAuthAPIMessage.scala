@@ -18,14 +18,12 @@ import riichinexus.microservices.auth.tables.accountcredential.AccountCredential
 import riichinexus.microservices.auth.tables.authenticatedsession.AuthenticatedSessionTable
 import riichinexus.microservices.player.api.CreatePlayerAPIMessage
 import riichinexus.microservices.player.objects.apiTypes.CreatePlayerRequest
-import upickle.default.ReadWriter
-
 /** 注册账号并创建或绑定玩家档案。 */
 final case class RegisterAuthAPIMessage(
     username: String,
     password: String,
     displayName: String
-) extends APIMessage[AuthSuccessView] derives ReadWriter:
+) extends APIMessage[AuthSuccessView]:
 
   private val DefaultRank = RankSnapshot(RankPlatform.Custom, "Unranked")
   private val SessionTtl = java.time.Duration.ofDays(30)

@@ -10,12 +10,10 @@ import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.auth.domain.functions.GuestAccessSessionFunctions
 import riichinexus.microservices.auth.domain.model.GuestAccessSession
 import riichinexus.microservices.auth.tables.guestsession.GuestSessionTable
-import upickle.default.ReadWriter
-
 /** 供后端服务解析游客会话记录。 */
 final case class ResolveGuestSessionAuthPrivateAPIMessage(
     sessionId: GuestSessionId
-) extends APIMessage[GuestAccessSession] derives ReadWriter:
+) extends APIMessage[GuestAccessSession]:
 
   override def plan(context: ApiPlanContext): IO[GuestAccessSession] =
     for

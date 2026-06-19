@@ -19,10 +19,8 @@ import riichinexus.microservices.tournament.objects.competition.apiTypes.{Tourna
 import riichinexus.microservices.tournament.objects.stage.apiTypes.TournamentOperationsStageView
 
 import riichinexus.microservices.tournament.tables.tournaments.TournamentTable
-import upickle.default.ReadWriter
-
 /** 获取管理视角的赛事详情。 */
-final case class TournamentGetAPIMessage(tournamentId: String) extends APIMessage[TournamentDetailView] derives ReadWriter:
+final case class TournamentGetAPIMessage(tournamentId: String) extends APIMessage[TournamentDetailView]:
 
   override def plan(context: ApiPlanContext): IO[TournamentDetailView] =
     for

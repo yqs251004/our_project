@@ -8,8 +8,11 @@ import riichinexus.microservices.club.domain.membershipmanagement.model.{ClubMem
 import riichinexus.microservices.club.domain.rankprivilegemanagement.model.ClubMemberPrivilegeSnapshot
 import riichinexus.microservices.club.domain.relationmanagement.model.ClubRelation
 import riichinexus.microservices.club.objects.membershipmanagement.{ClubApplicationStatus, MembershipApplicationId}
+import riichinexus.microservices.club.objects.membershipmanagement.apiTypes.ClubApplicationReviewDecision
+import riichinexus.microservices.club.objects.rankprivilegemanagement.ClubPrivilegeCode
 import riichinexus.microservices.club.objects.rankprivilegemanagement.ClubRankNode
 import riichinexus.microservices.club.objects.relationmanagement.ClubRelationKind
+import riichinexus.microservices.club.objects.tournamentparticipation.{ClubTournamentParticipationStatus, ClubTournamentScope}
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.system.json.JsonCodecSupport.stringEnumReadWriter
 import riichinexus.system.json.SharedJsonCodecs.given
@@ -60,12 +63,26 @@ object ClubJsonCodecs:
           throw upickle.core.Abort(s"Expected ClubMembershipApplication object, got $json")
       }
     )
+  given ReadWriter[ClubPrivilegeCode] =
+    stringEnumReadWriter(ClubPrivilegeCode.fromString, ClubPrivilegeCode.toString)
   given ReadWriter[ClubRankNode] = macroRW
   given ReadWriter[ClubMemberContribution] = macroRW
   given ReadWriter[ClubMemberPrivilegeSnapshot] = macroRW
   given ReadWriter[ClubTitleAssignment] = macroRW
   given ReadWriter[ClubRelationKind] =
     stringEnumReadWriter(ClubRelationKind.fromString, ClubRelationKind.toString)
+  given ReadWriter[ClubTournamentScope] =
+    stringEnumReadWriter(ClubTournamentScope.fromString, ClubTournamentScope.toString)
+  given ReadWriter[ClubTournamentParticipationStatus] =
+    stringEnumReadWriter(
+      ClubTournamentParticipationStatus.fromString,
+      ClubTournamentParticipationStatus.toString
+    )
+  given ReadWriter[ClubApplicationReviewDecision] =
+    stringEnumReadWriter(
+      ClubApplicationReviewDecision.fromString,
+      ClubApplicationReviewDecision.toString
+    )
   given ReadWriter[ClubRelation] = macroRW
   given ReadWriter[ClubRecruitmentPolicy] = macroRW
   given ReadWriter[ClubHonor] = macroRW

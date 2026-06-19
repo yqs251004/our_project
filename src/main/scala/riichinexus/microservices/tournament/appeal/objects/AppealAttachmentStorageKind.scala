@@ -1,8 +1,5 @@
 package riichinexus.microservices.tournament.appeal.objects
 
-import riichinexus.microservices.tournament.appeal.domain.model.{AppealAttachmentStorageKind as DomainAppealAttachmentStorageKind}
-import upickle.default.{ReadWriter, readwriter}
-
 /** AppealAttachmentStorageKind 枚举申诉附件存储类型 可使用的公开取值。 */
 
 enum AppealAttachmentStorageKind:
@@ -11,12 +8,9 @@ enum AppealAttachmentStorageKind:
   case SignedUrl
   case InternalReference
 
-  def toDomain: DomainAppealAttachmentStorageKind =
-    DomainAppealAttachmentStorageKind.valueOf(toString)
-
 object AppealAttachmentStorageKind:
-  given ReadWriter[AppealAttachmentStorageKind] =
-    readwriter[String].bimap(_.toString, AppealAttachmentStorageKind.valueOf)
+  def toString(storageKind: AppealAttachmentStorageKind): String =
+    storageKind.toString
 
-  def fromDomain(storageKind: DomainAppealAttachmentStorageKind): AppealAttachmentStorageKind =
-    AppealAttachmentStorageKind.valueOf(storageKind.toString)
+  def fromString(value: String): AppealAttachmentStorageKind =
+    AppealAttachmentStorageKind.valueOf(value)

@@ -1,4 +1,5 @@
 package riichinexus.microservices.auth.api
+import riichinexus.microservices.audit.objects.`private`.AuditEventType
 import riichinexus.microservices.audit.objects.`private`.AuditEventDraft
 import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPIMessage
 
@@ -13,13 +14,11 @@ import riichinexus.microservices.auth.domain.model.GuestAccessSession
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.auth.objects.apiTypes.GuestSessionResponse
 import riichinexus.microservices.auth.tables.guestsession.GuestSessionTable
-import upickle.default.ReadWriter
-
 /** 撤销游客访问会话。 */
 final case class RevokeGuestSessionAuthAPIMessage(
     sessionId: String,
     reason: Option[String] = None
-) extends APIMessage[GuestSessionResponse] derives ReadWriter:
+) extends APIMessage[GuestSessionResponse]:
 
   override def plan(context: ApiPlanContext): IO[GuestSessionResponse] =
     for
@@ -56,7 +55,7 @@ final case class RevokeGuestSessionAuthAPIMessage(
       AuditEventDraft(
         aggregateType = "guest-session",
         aggregateId = updated.id.value,
-        eventType = "GuestSessionRevoked",
+        eventType = AuditEventType.GuestSessionRevoked,
         occurredAt = command.revokedAt,
         actorId = None,
         details = Map("reason" -> updated.revokedReason.getOrElse(command.input.reason)),

@@ -1,4 +1,5 @@
 package riichinexus.microservices.tournament.api
+import riichinexus.microservices.tournament.domain.functions.TournamentViewFunctions
 import riichinexus.microservices.player.api.`private`.{RecordPlayerTournamentAdminGrantPrivateAPIMessage, ResolvePlayerPrivateAPIMessage}
 
 import java.time.Instant
@@ -18,17 +19,15 @@ import riichinexus.microservices.player.objects.PlayerStatus
 import riichinexus.microservices.tournament.domain.competition.functions.TournamentRuntimeDefaults
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.MahjongRuleset
 import riichinexus.microservices.tournament.objects.stage.rules.progression.{AdvancementRule, AdvancementRuleType}
-import riichinexus.microservices.tournament.objects.stage.rules.knockout.KnockoutRuleConfig
-import riichinexus.microservices.tournament.objects.stage.rules.swiss.SwissRuleConfig
+import riichinexus.microservices.tournament.objects.stage.rules.knockout.{KnockoutRuleConfig, KnockoutSeedingPolicy}
+import riichinexus.microservices.tournament.objects.stage.rules.swiss.{SwissPairingMethod, SwissRuleConfig}
 import riichinexus.microservices.tournament.objects.stage.apiTypes.CreateTournamentStageRequest
 import riichinexus.microservices.tournament.objects.competition.apiTypes.{CreateTournamentRequest, TournamentSummaryView}
-
-import upickle.default.ReadWriter
 
 /** 创建新的赛事草稿。 */
 final case class TournamentCreateAPIMessage(
     request: CreateTournamentRequest
-) extends APIMessage[TournamentSummaryView] derives ReadWriter:
+) extends APIMessage[TournamentSummaryView]:
 
   override def plan(context: ApiPlanContext): IO[TournamentSummaryView] =
     for
@@ -40,7 +39,7 @@ final case class TournamentCreateAPIMessage(
       _ <- ensureTournamentNameAvailable(context, input)
       _ <- grantAdminRole(context, tournament, input, adminPlayer)
       savedTournament <- saveTournament(context, tournament)
-    yield TournamentSummaryView.fromDomain(savedTournament)
+    yield TournamentViewFunctions.tournamentSummaryView(savedTournament)
 
   private def resolveInput: CreateTournamentInput =
     CreateTournamentInput(
@@ -62,7 +61,7 @@ final case class TournamentCreateAPIMessage(
       advancementRule = request.advancementRuleType
         .map(rule =>
           AdvancementRule(
-            ruleType = AdvancementRuleType.valueOf(rule),
+            ruleType = rule,
             cutSize = request.cutSize,
             thresholdScore = request.thresholdScore,
             targetTableCount = request.targetTableCount,
@@ -86,7 +85,7 @@ final case class TournamentCreateAPIMessage(
     if request.pairingMethod.isDefined || request.carryOverPoints.isDefined || request.maxRounds.isDefined then
       Some(
         SwissRuleConfig(
-          pairingMethod = request.pairingMethod.map(_.trim.toLowerCase).getOrElse("balanced-elo"),
+          pairingMethod = request.pairingMethod.getOrElse(SwissPairingMethod.BalancedElo),
           carryOverPoints = request.carryOverPoints.getOrElse(true),
           maxRounds = request.maxRounds
         )
@@ -99,7 +98,7 @@ final case class TournamentCreateAPIMessage(
         KnockoutRuleConfig(
           bracketSize = request.bracketSize,
           thirdPlaceMatch = request.thirdPlaceMatch.getOrElse(false),
-          seedingPolicy = request.seedingPolicy.map(_.trim.toLowerCase).getOrElse("rating"),
+          seedingPolicy = request.seedingPolicy.getOrElse(KnockoutSeedingPolicy.Rating),
           repechageEnabled = request.repechageEnabled.getOrElse(false)
         )
       )

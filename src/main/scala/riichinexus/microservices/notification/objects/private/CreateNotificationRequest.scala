@@ -2,6 +2,7 @@ package riichinexus.microservices.notification.objects.`private`
 
 import java.time.Instant
 
+import riichinexus.microservices.notification.objects.NotificationType
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.ReadWriter
 
@@ -9,7 +10,7 @@ import upickle.default.ReadWriter
 
 final case class CreateNotificationRequest(
     recipientPlayerId: String,
-    notificationType: String,
+    notificationType: NotificationType,
     title: String,
     body: String,
     severity: Option[String] = None,

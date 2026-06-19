@@ -7,4 +7,4 @@ final case class ErrorResponse(
 )
 
 object ErrorResponse:
-  export SharedResponseCodecs.given
+  export riichinexus.system.json.SharedResponseCodecs.given

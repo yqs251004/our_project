@@ -1,6 +1,5 @@
 package riichinexus.microservices.tournament.appeal.objects.apiTypes
 
-import riichinexus.microservices.tournament.appeal.domain.model.AppealAttachment
 import riichinexus.microservices.tournament.appeal.objects.{AppealAttachmentMediaKind, AppealAttachmentStorageKind}
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.{ReadWriter, macroRW}
@@ -18,15 +17,4 @@ final case class AppealAttachmentView(
 )
 
 object AppealAttachmentView:
-  def fromDomain(attachment: AppealAttachment): AppealAttachmentView =
-    AppealAttachmentView(
-      name = attachment.name,
-      uri = attachment.uri,
-      contentType = attachment.contentType,
-      storageKind = AppealAttachmentStorageKind.fromDomain(attachment.storageKind),
-      mediaKind = AppealAttachmentMediaKind.fromDomain(attachment.mediaKind),
-      sizeBytes = attachment.sizeBytes,
-      uploadedAt = attachment.uploadedAt.map(_.toString)
-    )
-
   given ReadWriter[AppealAttachmentView] = macroRW

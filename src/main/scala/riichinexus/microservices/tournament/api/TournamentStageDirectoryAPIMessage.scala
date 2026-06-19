@@ -11,10 +11,8 @@ import riichinexus.microservices.tournament.domain.stage.model.TournamentStage
 import riichinexus.microservices.tournament.objects.stage.apiTypes.TournamentStageDirectoryEntry
 
 import riichinexus.microservices.tournament.tables.tournaments.TournamentTable
-import upickle.default.ReadWriter
-
 /** 获取赛事阶段目录。 */
-final case class TournamentStageDirectoryAPIMessage(tournamentId: String) extends APIMessage[Vector[TournamentStageDirectoryEntry]] derives ReadWriter:
+final case class TournamentStageDirectoryAPIMessage(tournamentId: String) extends APIMessage[Vector[TournamentStageDirectoryEntry]]:
 
   override def plan(context: ApiPlanContext): IO[Vector[TournamentStageDirectoryEntry]] =
     for

@@ -13,13 +13,11 @@ import riichinexus.microservices.opsanalytics.domain.functions.DashboardFunction
 import riichinexus.microservices.opsanalytics.objects.{Dashboard, DashboardOwner}
 import riichinexus.microservices.opsanalytics.tables.dashboard.DashboardTable
 import riichinexus.microservices.player.objects.PlayerStatus
-import upickle.default.ReadWriter
-
 /** 供后端服务计算并记录俱乐部仪表盘读模型。 */
 final case class RecordClubDashboardPrivateAPIMessage(
     clubId: ClubId,
     at: Instant
-) extends APIMessage[Dashboard] derives ReadWriter:
+) extends APIMessage[Dashboard]:
 
   override def plan(context: ApiPlanContext): IO[Dashboard] =
     for

@@ -1,4 +1,6 @@
 package riichinexus.microservices.tournament.api
+import riichinexus.microservices.tournament.domain.functions.TournamentViewFunctions
+import riichinexus.microservices.audit.objects.`private`.AuditEventType
 import riichinexus.microservices.audit.objects.`private`.AuditEventDraft
 import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.api.`private`.{RequirePermissionPrivateAPIMessage, ResolveAccessPrincipalPrivateAPIMessage}
@@ -19,10 +21,8 @@ import riichinexus.microservices.player.objects.`private`.PlayerPrivateView
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.tournament.objects.competition.apiTypes.TournamentSummaryView
 
-import upickle.default.ReadWriter
-
 /** 撤销玩家指定赛事的管理员身份。 */
-final case class TournamentRevokeAdminAPIMessage(tournamentId: String, playerId: String, operatorId: Option[String] = None) extends APIMessage[TournamentSummaryView] derives ReadWriter:
+final case class TournamentRevokeAdminAPIMessage(tournamentId: String, playerId: String, operatorId: Option[String] = None) extends APIMessage[TournamentSummaryView]:
 
   override def plan(context: ApiPlanContext): IO[TournamentSummaryView] =
     for
@@ -36,7 +36,7 @@ final case class TournamentRevokeAdminAPIMessage(tournamentId: String, playerId:
       )
       savedTournament <- revokeAdmin(context, command).map(_.getOrElse(throw NoSuchElementException("Resource not found")))
       _ <- RecordAuditEventsPrivateAPIMessage(revokeAdminAudit(command)).plan(context)
-    yield TournamentSummaryView.fromDomain(savedTournament)
+    yield TournamentViewFunctions.tournamentSummaryView(savedTournament)
 
   private def resolveOperatorActor(context: ApiPlanContext): IO[AccessPrincipalPrivateView] =
     operatorId.map(PlayerId(_))
@@ -101,7 +101,7 @@ final case class TournamentRevokeAdminAPIMessage(tournamentId: String, playerId:
       AuditEventDraft(
         aggregateType = "tournament",
         aggregateId = command.tournamentId.value,
-        eventType = "TournamentAdminRevoked",
+        eventType = AuditEventType.TournamentAdminRevoked,
         occurredAt = command.revokedAt,
         actorId = command.actor.playerId,
         details = Map("playerId" -> command.playerId.value),
@@ -115,4 +115,3 @@ final case class TournamentRevokeAdminAPIMessage(tournamentId: String, playerId:
       actor: AccessPrincipalPrivateView,
       revokedAt: Instant
   )
-

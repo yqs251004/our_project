@@ -1,4 +1,5 @@
 package riichinexus.microservices.club.api
+import riichinexus.microservices.club.domain.functions.ClubViewFunctions
 import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.api.`private`.ResolveAccessPrincipalPrivateAPIMessage
 import riichinexus.microservices.auth.api.`private`.ResolveSystemAccessPrincipalPrivateAPIMessage
@@ -16,14 +17,12 @@ import riichinexus.microservices.club.domain.Club
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubAuthorization
 import riichinexus.microservices.club.objects.clubmanagement.ClubView
-import upickle.default.ReadWriter
-
 /** 撤销玩家俱乐部管理员身份。 */
 final case class RevokeClubAdminAPIMessage(
     clubId: String,
     playerId: String,
     operatorId: Option[String] = None
-) extends APIMessage[ClubView] derives ReadWriter:
+) extends APIMessage[ClubView]:
 
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
@@ -34,7 +33,7 @@ final case class RevokeClubAdminAPIMessage(
         actor = actor
       )
       club <- revokeAdmin(context, command).map(_.getOrElse(throw NoSuchElementException("Resource not found")))
-    yield ClubView.fromDomain(club)
+    yield ClubViewFunctions.clubView(club)
 
   private def resolveOperatorActor(context: ApiPlanContext): IO[AccessPrincipalPrivateView] =
     operatorId.filter(_.nonEmpty)

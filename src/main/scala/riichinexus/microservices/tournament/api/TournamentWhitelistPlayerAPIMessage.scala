@@ -1,4 +1,5 @@
 package riichinexus.microservices.tournament.api
+import riichinexus.microservices.tournament.domain.functions.TournamentViewFunctions
 import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.api.`private`.{RequirePermissionPrivateAPIMessage, ResolveAccessPrincipalPrivateAPIMessage}
 import riichinexus.microservices.auth.api.`private`.ResolveSystemAccessPrincipalPrivateAPIMessage
@@ -18,17 +19,15 @@ import riichinexus.microservices.player.objects.PlayerStatus
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.tournament.objects.competition.apiTypes.TournamentSummaryView
 
-import upickle.default.ReadWriter
-
 /** 将选手加入赛事白名单。 */
-final case class TournamentWhitelistPlayerAPIMessage(tournamentId: String, playerId: String, operatorId: Option[String] = None) extends APIMessage[TournamentSummaryView] derives ReadWriter:
+final case class TournamentWhitelistPlayerAPIMessage(tournamentId: String, playerId: String, operatorId: Option[String] = None) extends APIMessage[TournamentSummaryView]:
 
   override def plan(context: ApiPlanContext): IO[TournamentSummaryView] =
     for
       actor <- resolveOperatorActor(context)
       command = WhitelistPlayerCommand(TournamentId(tournamentId), PlayerId(playerId), actor)
       tournament <- whitelistPlayer(context, command).map(_.getOrElse(throw NoSuchElementException("Resource not found")))
-    yield TournamentSummaryView.fromDomain(tournament)
+    yield TournamentViewFunctions.tournamentSummaryView(tournament)
 
   private def resolveOperatorActor(context: ApiPlanContext): IO[AccessPrincipalPrivateView] =
     operatorId.map(PlayerId(_))

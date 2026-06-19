@@ -12,14 +12,12 @@ import riichinexus.microservices.tournament.objects.identity.{TournamentId, Tour
 import riichinexus.microservices.tournament.domain.stage.functions.TournamentStageCompletionCoordinator
 import riichinexus.microservices.tournament.objects.stage.rules.progression.StageAdvancementSnapshot
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.ReadWriter
-
 /** 完成赛事阶段并生成晋级快照。 */
 final case class TournamentStageCompleteAPIMessage(
     tournamentId: String,
     stageId: String,
     operatorId: Option[String] = None
-) extends APIMessage[StageAdvancementSnapshot] derives ReadWriter:
+) extends APIMessage[StageAdvancementSnapshot]:
 
   override def plan(context: ApiPlanContext): IO[StageAdvancementSnapshot] =
     for

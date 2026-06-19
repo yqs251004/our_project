@@ -1,6 +1,5 @@
 package riichinexus.microservices.tournament.objects.matchrecord.apiTypes
 
-import riichinexus.microservices.tournament.domain.matchrecord.model.MatchRecordSeatResult
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.{ReadWriter, macroRW}
 
@@ -18,17 +17,4 @@ final case class TournamentMatchRecordSeatResultView(
 )
 
 object TournamentMatchRecordSeatResultView:
-  def fromDomain(result: MatchRecordSeatResult): TournamentMatchRecordSeatResultView =
-    TournamentMatchRecordSeatResultView(
-      playerId = result.playerId.value,
-      seat = result.seat.toString,
-      clubId = result.clubId.map(_.value),
-      finalPoints = result.finalPoints,
-      placement = result.placement,
-      scoreDelta = result.scoreDelta,
-      uma = result.uma,
-      oka = result.oka
-    )
-
   given ReadWriter[TournamentMatchRecordSeatResultView] = macroRW
-

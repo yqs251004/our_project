@@ -15,16 +15,15 @@ import riichinexus.microservices.tournament.domain.competition.model.Tournament
 import riichinexus.microservices.tournament.objects.identity.TournamentId
 import riichinexus.microservices.tournament.objects.competition.apiTypes.TournamentMutationView
 import riichinexus.microservices.notification.api.`private`.RecordBulkNotificationsPrivateAPIMessage
+import riichinexus.microservices.notification.objects.NotificationType
 import riichinexus.microservices.notification.objects.`private`.CreateNotificationRequest
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.ReadWriter
-
 /** 邀请俱乐部参与赛事。 */
 final case class TournamentInviteClubAPIMessage(
     tournamentId: String,
     clubId: String,
     operatorId: Option[String] = None
-) extends APIMessage[TournamentMutationView] derives ReadWriter:
+) extends APIMessage[TournamentMutationView]:
 
   override def plan(context: ApiPlanContext): IO[TournamentMutationView] =
     for
@@ -82,7 +81,7 @@ final case class TournamentInviteClubAPIMessage(
     (club.creator +: club.admins).distinct.map { recipient =>
       CreateNotificationRequest(
         recipientPlayerId = recipient.value,
-        notificationType = "TournamentClubInvited",
+        notificationType = NotificationType.TournamentClubInvited,
         title = "俱乐部收到赛事邀请",
         body = s"${club.name} 被邀请参加赛事 ${tournament.name}。",
         severity = Some("info"),

@@ -14,15 +14,13 @@ import riichinexus.microservices.player.tables.players.PlayerTable
 import riichinexus.microservices.player.objects.apiTypes.PlayerLeaderboardEntry
 import riichinexus.system.objects.PagedResponse
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.ReadWriter
-
 /** 获取前端公开玩家排行榜。 */
 final case class PublicPlayerLeaderboardAPIMessage(
     clubId: Option[String] = None,
     status: Option[String] = None,
     limit: Option[Int] = None,
     offset: Option[Int] = None
-) extends APIMessage[PagedResponse[PlayerLeaderboardEntry]] derives ReadWriter:
+) extends APIMessage[PagedResponse[PlayerLeaderboardEntry]]:
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[PlayerLeaderboardEntry]] =
     for

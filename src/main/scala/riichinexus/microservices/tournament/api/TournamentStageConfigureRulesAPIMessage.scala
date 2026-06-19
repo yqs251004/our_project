@@ -1,4 +1,5 @@
 package riichinexus.microservices.tournament.api
+import riichinexus.microservices.tournament.domain.functions.TournamentViewFunctions
 import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.api.`private`.{RequirePermissionPrivateAPIMessage, ResolveAccessPrincipalPrivateAPIMessage}
 
@@ -17,15 +18,13 @@ import riichinexus.microservices.tournament.domain.competition.model.Tournament
 import riichinexus.microservices.tournament.domain.competition.functions.TournamentRuntimeDefaults
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.MahjongRuleset
 import riichinexus.microservices.tournament.objects.stage.rules.progression.{AdvancementRule, AdvancementRuleType}
-import riichinexus.microservices.tournament.objects.stage.rules.knockout.KnockoutRuleConfig
-import riichinexus.microservices.tournament.objects.stage.rules.swiss.SwissRuleConfig
+import riichinexus.microservices.tournament.objects.stage.rules.knockout.{KnockoutRuleConfig, KnockoutSeedingPolicy}
+import riichinexus.microservices.tournament.objects.stage.rules.swiss.{SwissPairingMethod, SwissRuleConfig}
 import riichinexus.microservices.tournament.objects.stage.apiTypes.ConfigureStageRulesRequest
 import riichinexus.microservices.tournament.objects.competition.apiTypes.TournamentSummaryView
 
-import upickle.default.ReadWriter
-
 /** 配置指定赛事阶段的规则。 */
-final case class TournamentStageConfigureRulesAPIMessage(tournamentId: String, stageId: String, request: ConfigureStageRulesRequest) extends APIMessage[TournamentSummaryView] derives ReadWriter:
+final case class TournamentStageConfigureRulesAPIMessage(tournamentId: String, stageId: String, request: ConfigureStageRulesRequest) extends APIMessage[TournamentSummaryView]:
 
   override def plan(context: ApiPlanContext): IO[TournamentSummaryView] =
     for
@@ -42,7 +41,7 @@ final case class TournamentStageConfigureRulesAPIMessage(tournamentId: String, s
           configureStageRules(context.connection, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
-    yield TournamentSummaryView.fromDomain(tournament)
+    yield TournamentViewFunctions.tournamentSummaryView(tournament)
 
   private def configureStageRules(
       connection: java.sql.Connection,
@@ -83,7 +82,7 @@ final case class TournamentStageConfigureRulesAPIMessage(tournamentId: String, s
 
   private def advancementRule(request: ConfigureStageRulesRequest): AdvancementRule =
     AdvancementRule(
-      ruleType = request.advancementRuleType.map(AdvancementRuleType.valueOf).getOrElse(AdvancementRuleType.Custom),
+      ruleType = request.advancementRuleType.getOrElse(AdvancementRuleType.Custom),
       cutSize = request.cutSize,
       thresholdScore = request.thresholdScore,
       targetTableCount = request.targetTableCount,
@@ -95,7 +94,7 @@ final case class TournamentStageConfigureRulesAPIMessage(tournamentId: String, s
     if request.pairingMethod.isDefined || request.carryOverPoints.isDefined || request.maxRounds.isDefined then
       Some(
         SwissRuleConfig(
-          pairingMethod = request.pairingMethod.map(_.trim.toLowerCase).getOrElse("balanced-elo"),
+          pairingMethod = request.pairingMethod.getOrElse(SwissPairingMethod.BalancedElo),
           carryOverPoints = request.carryOverPoints.getOrElse(true),
           maxRounds = request.maxRounds
         )
@@ -108,17 +107,13 @@ final case class TournamentStageConfigureRulesAPIMessage(tournamentId: String, s
         KnockoutRuleConfig(
           bracketSize = request.bracketSize,
           thirdPlaceMatch = request.thirdPlaceMatch.getOrElse(false),
-          seedingPolicy = request.seedingPolicy.map(_.trim.toLowerCase).getOrElse("rating"),
+          seedingPolicy = request.seedingPolicy.getOrElse(KnockoutSeedingPolicy.Rating),
           repechageEnabled = request.repechageEnabled.getOrElse(false)
         )
       )
     else None
 
   private def validateRequest(request: ConfigureStageRulesRequest): Unit =
-    require(
-      request.advancementRuleType.forall(_.trim.nonEmpty),
-      "advancementRuleType must not be blank"
-    )
     require(
       request.ruleTemplateKey.forall(_.trim.nonEmpty),
       "ruleTemplateKey must not be blank"

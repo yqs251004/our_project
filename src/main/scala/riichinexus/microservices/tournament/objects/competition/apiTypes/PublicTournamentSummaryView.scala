@@ -4,6 +4,7 @@ import java.time.Instant
 
 import riichinexus.microservices.tournament.objects.identity.TournamentId
 import riichinexus.microservices.tournament.objects.competition.TournamentStatus
+import riichinexus.system.json.TournamentJsonCodecs.given
 import upickle.default.{ReadWriter, macroRW}
 
 /** PublicTournamentSummaryView 表示公开赛事摘要视图 的前端展示视图，包含赛事 ID、名称、organizer、状态、startsAt、endsAt等。 */

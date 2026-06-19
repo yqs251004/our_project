@@ -6,10 +6,8 @@ import riichinexus.microservices.tournament.objects.identity.{TournamentId, Tour
 import riichinexus.microservices.tournament.domain.stage.functions.rules.TournamentStageQueries
 
 import riichinexus.microservices.tournament.objects.stage.rules.knockout.KnockoutBracketSnapshot
-import upickle.default.ReadWriter
-
 /** 获取赛事阶段的淘汰赛签表。 */
-final case class TournamentStageKnockoutBracketAPIMessage(tournamentId: String, stageId: String) extends APIMessage[KnockoutBracketSnapshot] derives ReadWriter:
+final case class TournamentStageKnockoutBracketAPIMessage(tournamentId: String, stageId: String) extends APIMessage[KnockoutBracketSnapshot]:
 
   override def plan(context: ApiPlanContext): IO[KnockoutBracketSnapshot] =
     for

@@ -7,9 +7,9 @@ import java.time.Instant
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
 import riichinexus.microservices.tournament.objects.identity.TournamentId
-import riichinexus.microservices.tournament.domain.competition.model.Tournament
 import riichinexus.microservices.tournament.objects.competition.TournamentStatus
 import riichinexus.microservices.tournament.objects.stage.apiTypes.TournamentStageSummaryView
+import riichinexus.system.json.TournamentJsonCodecs.given
 
 /** TournamentSummaryView 表示赛事摘要视图 的前端展示视图，包含赛事 ID、名称、organizer、startsAt、endsAt、状态等。 */
 
@@ -55,19 +55,4 @@ object TournamentSummaryView:
       adminIds = adminIds.map(_.value),
       whitelistCount = whitelistCount,
       stages = stages
-    )
-
-  def fromDomain(tournament: Tournament): TournamentSummaryView =
-    TournamentSummaryView(
-      tournamentId = tournament.id.value,
-      name = tournament.name,
-      organizer = tournament.organizer,
-      startsAt = tournament.startsAt.toString,
-      endsAt = tournament.endsAt.toString,
-      status = tournament.status,
-      participatingClubIds = tournament.participatingClubs.map(_.value),
-      participatingPlayerIds = tournament.participatingPlayers.map(_.value),
-      adminIds = tournament.admins.map(_.value),
-      whitelistCount = tournament.whitelist.size,
-      stages = tournament.stages.sortBy(_.order).map(TournamentStageSummaryView.fromDomain)
     )

@@ -7,13 +7,11 @@ import riichinexus.microservices.notification.tables.notifications.NotificationT
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 
-import upickle.default.ReadWriter
-
 /** 列出玩家通知。 */
 final case class ListNotificationsAPIMessage(
     operatorId: String,
     query: NotificationListQuery = NotificationListQuery()
-) extends APIMessage[Vector[Notification]] derives ReadWriter:
+) extends APIMessage[Vector[Notification]]:
 
   override def plan(context: ApiPlanContext): IO[Vector[Notification]] =
     IO.blocking {

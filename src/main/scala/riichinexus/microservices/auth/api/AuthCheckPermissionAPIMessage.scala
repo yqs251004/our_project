@@ -12,8 +12,6 @@ import riichinexus.microservices.auth.domain.functions.AccessPrincipalPrivateVie
 import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
 import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.ReadWriter
-
 /** 检查访问主体是否拥有指定权限。 */
 final case class AuthCheckPermissionAPIMessage(
     operatorId: Option[String] = None,
@@ -22,7 +20,7 @@ final case class AuthCheckPermissionAPIMessage(
     clubId: Option[String] = None,
     tournamentId: Option[String] = None,
     subjectPlayerId: Option[String] = None
-) extends APIMessage[Boolean] derives ReadWriter:
+) extends APIMessage[Boolean]:
 
   override def plan(context: ApiPlanContext): IO[Boolean] =
     for

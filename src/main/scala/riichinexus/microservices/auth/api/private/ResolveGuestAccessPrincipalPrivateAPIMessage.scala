@@ -7,12 +7,10 @@ import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateVi
 import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.ReadWriter
-
 /** 供后端服务解析游客会话访问主体。 */
 final case class ResolveGuestAccessPrincipalPrivateAPIMessage(
     sessionId: GuestSessionId
-) extends APIMessage[AccessPrincipalPrivateView] derives ReadWriter:
+) extends APIMessage[AccessPrincipalPrivateView]:
 
   override def plan(context: ApiPlanContext): IO[AccessPrincipalPrivateView] =
     ResolveGuestSessionAuthPrivateAPIMessage(sessionId).plan(context)

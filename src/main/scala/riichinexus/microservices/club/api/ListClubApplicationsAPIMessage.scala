@@ -20,13 +20,11 @@ import riichinexus.microservices.club.objects.membershipmanagement.apiTypes.{Clu
 import riichinexus.microservices.club.objects.membershipmanagement.apiTypes.ClubApplicationListQuery
 import riichinexus.microservices.club.tables.clubs.ClubTable
 import riichinexus.system.objects.PagedResponse
-import upickle.default.ReadWriter
-
 /** 列出俱乐部申请。 */
 final case class ListClubApplicationsAPIMessage(
     clubId: String,
     query: ClubApplicationListQuery
-) extends APIMessage[PagedResponse[ClubMembershipApplicationView]] derives ReadWriter:
+) extends APIMessage[PagedResponse[ClubMembershipApplicationView]]:
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[ClubMembershipApplicationView]] =
     for

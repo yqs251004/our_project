@@ -7,13 +7,11 @@ import riichinexus.microservices.player.domain.functions.PlayerClubBindingFuncti
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.ReadWriter
-
 /** 供俱乐部流程校验后记录玩家加入俱乐部。 */
 final case class RecordPlayerClubJoinPrivateAPIMessage(
     playerId: PlayerId,
     clubId: ClubId
-) extends APIMessage[Option[Player]] derives ReadWriter:
+) extends APIMessage[Option[Player]]:
 
   override def plan(context: ApiPlanContext): IO[Option[Player]] =
     PlayerDomainRecord.find(context, playerId).flatMap {

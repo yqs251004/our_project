@@ -2,6 +2,7 @@ package riichinexus.microservices.tournament.appeal.router
 import riichinexus.system.api.RegisteredAPIMessage
 
 
+import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.tournament.appeal.api.{AppealAdjudicateAPIMessage, AppealFileAPIMessage, AppealGetAPIMessage, AppealListAPIMessage, AppealReopenAPIMessage, AppealUpdateWorkflowAPIMessage}
 import riichinexus.microservices.tournament.appeal.objects.apiTypes.AppealTicketView
 import riichinexus.system.objects.PagedResponse

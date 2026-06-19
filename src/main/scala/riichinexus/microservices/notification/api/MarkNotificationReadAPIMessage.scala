@@ -6,13 +6,11 @@ import riichinexus.microservices.notification.tables.notifications.NotificationT
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 
-import upickle.default.ReadWriter
-
 /** 将单条玩家通知标记为已读。 */
 final case class MarkNotificationReadAPIMessage(
     notificationId: String,
     operatorId: String
-) extends APIMessage[Option[Notification]] derives ReadWriter:
+) extends APIMessage[Option[Notification]]:
 
   override def plan(context: ApiPlanContext): IO[Option[Notification]] =
     for

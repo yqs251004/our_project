@@ -5,6 +5,6 @@ package riichinexus.microservices.tournament.objects.stage.rules.knockout
 final case class KnockoutRuleConfig(
     bracketSize: Option[Int] = None,
     thirdPlaceMatch: Boolean = false,
-    seedingPolicy: String = "rating",
+    seedingPolicy: KnockoutSeedingPolicy = KnockoutSeedingPolicy.Rating,
     repechageEnabled: Boolean = false
 )

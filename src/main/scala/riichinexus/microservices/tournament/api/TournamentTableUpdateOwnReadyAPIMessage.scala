@@ -1,4 +1,5 @@
 package riichinexus.microservices.tournament.api
+import riichinexus.microservices.tournament.domain.functions.TournamentViewFunctions
 import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.api.`private`.{RequirePermissionPrivateAPIMessage, ResolveAccessPrincipalPrivateAPIMessage}
 
@@ -16,17 +17,15 @@ import riichinexus.microservices.tournament.domain.stage.model.Table
 import riichinexus.microservices.tournament.objects.stage.table.TableSeat
 import riichinexus.microservices.tournament.objects.stage.table.apiTypes.{TournamentTableView, UpdateOwnTableReadyStateRequest}
 
-import upickle.default.ReadWriter
-
 /** 更新当前玩家在牌桌上的准备状态。 */
-final case class TournamentTableUpdateOwnReadyAPIMessage(tableId: String, request: UpdateOwnTableReadyStateRequest) extends APIMessage[TournamentTableView] derives ReadWriter:
+final case class TournamentTableUpdateOwnReadyAPIMessage(tableId: String, request: UpdateOwnTableReadyStateRequest) extends APIMessage[TournamentTableView]:
 
   override def plan(context: ApiPlanContext): IO[TournamentTableView] =
     for
       actor <- ResolveAccessPrincipalPrivateAPIMessage(PlayerId(request.operatorId)).plan(context)
       command = UpdateOwnReadyCommand(TableId(tableId), actor, request.ready, request.note)
       table <- updateOwnReady(context, command).map(_.getOrElse(throw NoSuchElementException("Resource not found")))
-    yield TournamentTableView.fromDomain(table)
+    yield TournamentViewFunctions.tableView(table)
 
   private def updateOwnReady(context: ApiPlanContext, command: UpdateOwnReadyCommand): IO[Option[Table]] =
     loadTable(context, command.tableId).flatMap {

@@ -24,15 +24,13 @@ import riichinexus.microservices.tournament.tables.tournaments.TournamentTable
 import riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable
 import riichinexus.system.objects.PagedResponse
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.ReadWriter
-
 /** 列出前端公开赛程。 */
 final case class ListPublicSchedulesAPIMessage(
     tournamentStatus: Option[String] = None,
     stageStatus: Option[String] = None,
     limit: Option[Int] = None,
     offset: Option[Int] = None
-) extends APIMessage[PagedResponse[PublicScheduleView]] derives ReadWriter:
+) extends APIMessage[PagedResponse[PublicScheduleView]]:
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[PublicScheduleView]] =
     for

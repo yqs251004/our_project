@@ -7,12 +7,10 @@ import riichinexus.microservices.club.objects.clubmanagement.ClubId
 import riichinexus.microservices.player.api.`private`.ResolvePlayersPrivateAPIMessage
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.ReadWriter
-
 /** 供后端统计流程刷新俱乐部战力评分。 */
 final case class RefreshClubPowerRatingPrivateAPIMessage(
     clubId: ClubId
-) extends APIMessage[Option[Club]] derives ReadWriter:
+) extends APIMessage[Option[Club]]:
 
   override def plan(context: ApiPlanContext): IO[Option[Club]] =
     ResolveClubPrivateAPIMessage(clubId).plan(context).flatMap {

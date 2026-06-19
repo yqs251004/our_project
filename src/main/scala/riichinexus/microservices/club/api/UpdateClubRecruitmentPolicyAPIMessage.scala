@@ -1,4 +1,6 @@
 package riichinexus.microservices.club.api
+import riichinexus.microservices.club.domain.functions.ClubViewFunctions
+import riichinexus.microservices.audit.objects.`private`.AuditEventType
 import riichinexus.microservices.audit.objects.`private`.AuditEventDraft
 import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.api.`private`.ResolveAccessPrincipalPrivateAPIMessage
@@ -20,13 +22,11 @@ import riichinexus.microservices.club.domain.ClubAuthorization
 import riichinexus.microservices.club.objects.rankprivilegemanagement.ClubPrivilegeCode
 import riichinexus.microservices.club.objects.clubmanagement.ClubView
 import riichinexus.microservices.club.objects.membershipmanagement.apiTypes.UpdateClubRecruitmentPolicyRequest
-import upickle.default.ReadWriter
-
 /** 更新俱乐部招募策略。 */
 final case class UpdateClubRecruitmentPolicyAPIMessage(
     clubId: String,
     request: UpdateClubRecruitmentPolicyRequest
-) extends APIMessage[ClubView] derives ReadWriter:
+) extends APIMessage[ClubView]:
 
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
@@ -45,7 +45,7 @@ final case class UpdateClubRecruitmentPolicyAPIMessage(
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
       _ <- RecordAuditEventsPrivateAPIMessage(updateRecruitmentPolicyAudit(command)).plan(context)
-    yield ClubView.fromDomain(savedClub)
+    yield ClubViewFunctions.clubView(savedClub)
 
   private def updateRecruitmentPolicy(
       connection: java.sql.Connection,
@@ -73,7 +73,7 @@ final case class UpdateClubRecruitmentPolicyAPIMessage(
       AuditEventDraft(
         aggregateType = "club",
         aggregateId = command.clubId.value,
-        eventType = "ClubRecruitmentPolicyUpdated",
+        eventType = AuditEventType.ClubRecruitmentPolicyUpdated,
         occurredAt = command.occurredAt,
         actorId = command.actor.playerId,
         details = Map(

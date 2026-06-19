@@ -13,7 +13,7 @@ import riichinexus.microservices.tournament.domain.competition.model.Tournament
 
 /** TournamentStageRankingBuilder 负责赛事阶段Ranking构建器 相关的领域编排、构建或投影计算。 */
 
-private[domain] object TournamentStageRankingBuilder:
+private[tournament] object TournamentStageRankingBuilder:
   def build(
       tournament: Tournament,
       stage: TournamentStage,

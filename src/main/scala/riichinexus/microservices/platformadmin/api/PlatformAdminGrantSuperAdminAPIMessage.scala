@@ -1,4 +1,5 @@
 package riichinexus.microservices.platformadmin.api
+import riichinexus.microservices.audit.objects.`private`.AuditEventType
 import riichinexus.microservices.audit.objects.`private`.AuditEventDraft
 import riichinexus.microservices.auth.api.`private`.{CheckSuperAdminPrivateAPIMessage, ResolveAccessPrincipalPrivateAPIMessage}
 import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPIMessage
@@ -18,13 +19,11 @@ import riichinexus.microservices.player.objects.`private`.PlayerPrivateView
 import riichinexus.system.api.AuthorizationFailure
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.platformadmin.objects.apiTypes.PlatformAdminPlayerView
-import upickle.default.ReadWriter
-
 /** 平台管理员授予玩家超级管理员身份。 */
 final case class PlatformAdminGrantSuperAdminAPIMessage(
     playerId: PlayerId,
     operatorId: PlayerId
-) extends APIMessage[PlatformAdminPlayerView] derives ReadWriter:
+) extends APIMessage[PlatformAdminPlayerView]:
 
   override def plan(context: ApiPlanContext): IO[PlatformAdminPlayerView] =
     for
@@ -55,7 +54,7 @@ final case class PlatformAdminGrantSuperAdminAPIMessage(
       AuditEventDraft(
         aggregateType = "player",
         aggregateId = command.playerId.value,
-        eventType = "SuperAdminGranted",
+        eventType = AuditEventType.SuperAdminGranted,
         occurredAt = command.grantedAt,
         actorId = command.actor.playerId,
         details = Map("playerId" -> command.playerId.value),

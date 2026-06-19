@@ -1,5 +1,6 @@
 package riichinexus.microservices.club.api
 
+import riichinexus.microservices.club.domain.functions.ClubViewFunctions
 import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.util.NoSuchElementException
 
@@ -12,19 +13,17 @@ import riichinexus.microservices.club.domain.rankprivilegemanagement.model.ClubM
 
 import riichinexus.microservices.club.objects.rankprivilegemanagement.apiTypes.ClubMemberPrivilegeSnapshotView
 import riichinexus.microservices.club.tables.clubs.ClubTable
-import upickle.default.ReadWriter
-
 /** 获取俱乐部成员权限。 */
 final case class GetClubMemberPrivilegeAPIMessage(
     clubId: String,
     playerId: String
-) extends APIMessage[ClubMemberPrivilegeSnapshotView] derives ReadWriter:
+) extends APIMessage[ClubMemberPrivilegeSnapshotView]:
 
   override def plan(context: ApiPlanContext): IO[ClubMemberPrivilegeSnapshotView] =
     for
       input <- IO.pure(GetClubMemberPrivilegeInput(ClubId(clubId), PlayerId(playerId)))
       snapshot <- IO.blocking(resolveSnapshot(context, input))
-    yield ClubMemberPrivilegeSnapshotView.fromDomain(snapshot)
+    yield ClubViewFunctions.memberPrivilegeSnapshotView(snapshot)
 
   private def resolveSnapshot(
       context: ApiPlanContext,

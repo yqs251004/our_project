@@ -5,8 +5,6 @@ import riichinexus.microservices.notification.objects.Notification
 import riichinexus.microservices.notification.objects.apiTypes.{MarkAllNotificationsReadResponse, NotificationUnreadCountView}
 import riichinexus.system.api.RegisteredAPIMessage
 import riichinexus.system.json.JsonCodecs.given
-
-
 object NotificationAPIMessageRegistry:
 
   val apiMessages: Vector[RegisteredAPIMessage] =

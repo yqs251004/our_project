@@ -8,8 +8,6 @@ import riichinexus.microservices.player.objects.PlayerStatus
 import riichinexus.microservices.player.objects.apiTypes.PlayerProfileView
 import riichinexus.microservices.player.api.ListPlayersAPIMessage
 import riichinexus.system.objects.PagedResponse
-import upickle.default.ReadWriter
-
 /** 列出俱乐部成员。 */
 final case class ListClubMembersAPIMessage(
     clubId: String,
@@ -17,7 +15,7 @@ final case class ListClubMembersAPIMessage(
     nickname: Option[String] = None,
     limit: Option[Int] = None,
     offset: Option[Int] = None
-) extends APIMessage[PagedResponse[PlayerProfileView]] derives ReadWriter:
+) extends APIMessage[PagedResponse[PlayerProfileView]]:
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[PlayerProfileView]] =
     for

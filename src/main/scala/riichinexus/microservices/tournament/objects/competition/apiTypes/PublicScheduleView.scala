@@ -5,6 +5,7 @@ import java.time.Instant
 import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}
 import riichinexus.microservices.tournament.objects.stage.StageStatus
 import riichinexus.microservices.tournament.objects.competition.TournamentStatus
+import riichinexus.system.json.TournamentJsonCodecs.given
 import upickle.default.{ReadWriter, macroRW}
 
 /** PublicScheduleView 表示公开赛程视图 的前端展示视图，包含赛事 ID、tournamentName、tournamentStatus、阶段 ID、stageName、stageStatus等。 */

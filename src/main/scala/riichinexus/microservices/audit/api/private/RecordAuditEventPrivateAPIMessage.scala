@@ -10,12 +10,10 @@ import riichinexus.microservices.audit.objects.`private`.{AuditEventDraft, Audit
 import riichinexus.microservices.audit.tables.auditevent.AuditEventTable
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.system.realtime.domain.AuditRealtimeMapper
-import upickle.default.ReadWriter
-
 /** 供后端服务记录单个审计事件。 */
 final case class RecordAuditEventPrivateAPIMessage(
     event: AuditEventDraft
-) extends APIMessage[AuditEventPrivateView] derives ReadWriter:
+) extends APIMessage[AuditEventPrivateView]:
 
   override def plan(context: ApiPlanContext): IO[AuditEventPrivateView] =
     for

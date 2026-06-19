@@ -1,7 +1,6 @@
 package riichinexus.microservices.tournament.objects.stage.table.apiTypes
 
 import riichinexus.system.json.JsonCodecs.given
-import riichinexus.microservices.tournament.domain.stage.model.Table
 import riichinexus.microservices.tournament.objects.stage.table.TableSeat
 import riichinexus.microservices.tournament.objects.stage.table.TableStatus
 import upickle.default.{ReadWriter, macroRW}
@@ -28,24 +27,4 @@ final case class TournamentTableView(
 )
 
 object TournamentTableView:
-  def fromDomain(table: Table): TournamentTableView =
-    TournamentTableView(
-      tableId = table.id.value,
-      tableNo = table.tableNo,
-      tournamentId = table.tournamentId.value,
-      stageId = table.stageId.value,
-      seats = table.seats,
-      stageRoundNumber = table.stageRoundNumber,
-      bracketMatchId = table.bracketMatchId,
-      bracketRoundNumber = table.bracketRoundNumber,
-      status = table.status,
-      startedAt = table.startedAt.map(_.toString),
-      scoringStartedAt = table.scoringStartedAt.map(_.toString),
-      endedAt = table.endedAt.map(_.toString),
-      paifuId = table.paifuId.map(_.value),
-      matchRecordId = table.matchRecordId.map(_.value),
-      appealTicketIds = table.appealTicketIds.map(_.value),
-      resetCount = table.resetCount
-    )
-
   given ReadWriter[TournamentTableView] = macroRW

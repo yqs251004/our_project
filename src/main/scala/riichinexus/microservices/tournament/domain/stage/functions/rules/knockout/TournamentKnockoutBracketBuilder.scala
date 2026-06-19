@@ -2,7 +2,7 @@ package riichinexus.microservices.tournament.domain.stage.functions.rules.knocko
 
 
 import riichinexus.microservices.tournament.objects.stage.rules.progression.{AdvancementRuleType, StageAdvancementSnapshot}
-import riichinexus.microservices.tournament.objects.stage.rules.knockout.{KnockoutBracketMatch, KnockoutBracketResult, KnockoutBracketRound, KnockoutBracketSlot, KnockoutBracketSnapshot, KnockoutLane}
+import riichinexus.microservices.tournament.objects.stage.rules.knockout.{KnockoutBracketMatch, KnockoutBracketResult, KnockoutBracketRound, KnockoutBracketSlot, KnockoutBracketSnapshot, KnockoutLane, KnockoutSeedingPolicy}
 import riichinexus.microservices.tournament.objects.stage.table.TableStatus
 import riichinexus.microservices.tournament.objects.competition.TournamentFormat
 
@@ -16,7 +16,7 @@ import riichinexus.microservices.player.objects.`private`.PlayerPrivateView
 
 /** TournamentKnockoutBracketBuilder 负责赛事KnockoutBracket构建器 相关的领域编排、构建或投影计算。 */
 
-private[domain] object TournamentKnockoutBracketBuilder:
+private[tournament] object TournamentKnockoutBracketBuilder:
   def build(
       tournament: Tournament,
       stage: TournamentStage,
@@ -113,14 +113,14 @@ private[domain] object TournamentKnockoutBracketBuilder:
       qualifiedPlayerIds = qualified,
       rounds = allRounds,
       summary =
-        s"Knockout progression seeded ${qualified.size} players using ${normalizedSeedingPolicy(stage)} and unlocked ${allRounds.flatMap(_.matches).count(_.unlocked)} matches."
+        s"Knockout progression seeded ${qualified.size} players using ${KnockoutSeedingPolicy.toString(normalizedSeedingPolicy(stage))} and unlocked ${allRounds.flatMap(_.matches).count(_.unlocked)} matches."
     )
 
-  private[domain] def normalizedSeedingPolicy(stage: TournamentStage): String =
-    stage.knockoutRule.map(_.seedingPolicy.trim.toLowerCase).getOrElse("rating") match
-      case "elo"       => "rating"
-      case "standings" => "ranking"
-      case value       => value
+  private[domain] def normalizedSeedingPolicy(stage: TournamentStage): KnockoutSeedingPolicy =
+    stage.knockoutRule.map(_.seedingPolicy).getOrElse(KnockoutSeedingPolicy.Rating) match
+      case KnockoutSeedingPolicy.Elo       => KnockoutSeedingPolicy.Rating
+      case KnockoutSeedingPolicy.Standings => KnockoutSeedingPolicy.Ranking
+      case value                           => value
 
   private def resolveKnockoutSeeds(
       stage: TournamentStage,
@@ -134,12 +134,12 @@ private[domain] object TournamentKnockoutBracketBuilder:
     val participantById = participants.map(player => player.id -> player).toMap
 
     normalizedSeedingPolicy(stage) match
-      case "ranking" =>
+      case KnockoutSeedingPolicy.Ranking =>
         advancement.standings
           .filter(entry => qualifiedIds.contains(entry.playerId))
           .sortBy(entry => (entry.seed.getOrElse(Int.MaxValue), rankingIndex.getOrElse(entry.playerId, Int.MaxValue)))
           .map(_.playerId)
-      case "rating" =>
+      case KnockoutSeedingPolicy.Rating =>
         qualifiedIds.sortBy { playerId =>
           val player = participantById.get(playerId)
           (

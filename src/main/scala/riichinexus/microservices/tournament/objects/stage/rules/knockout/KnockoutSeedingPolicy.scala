@@ -1,7 +1,5 @@
 package riichinexus.microservices.tournament.objects.stage.rules.knockout
 
-import upickle.default.{ReadWriter, readwriter}
-
 /** KnockoutSeedingPolicy 枚举KnockoutSeeding策略 可使用的公开取值。 */
 
 enum KnockoutSeedingPolicy:
@@ -10,18 +8,15 @@ enum KnockoutSeedingPolicy:
   case Ranking
   case Standings
 
-  def value: String =
-    this match
+object KnockoutSeedingPolicy:
+  def toString(policy: KnockoutSeedingPolicy): String =
+    policy match
       case Rating    => "rating"
       case Elo       => "elo"
       case Ranking   => "ranking"
       case Standings => "standings"
 
-object KnockoutSeedingPolicy:
-  given ReadWriter[KnockoutSeedingPolicy] =
-    readwriter[String].bimap(_.value, fromValue)
-
-  def fromValue(value: String): KnockoutSeedingPolicy =
+  def fromString(value: String): KnockoutSeedingPolicy =
     value match
       case "rating"    => Rating
       case "elo"       => Elo

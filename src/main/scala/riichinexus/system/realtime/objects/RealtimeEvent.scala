@@ -3,11 +3,11 @@ package riichinexus.system.realtime.objects
 import java.time.Instant
 
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.ReadWriter
+import upickle.default.{ReadWriter, Writer, writeJs}
 
 final case class RealtimeEvent(
     id: String,
-    eventType: String,
+    eventType: RealtimeEventType,
     aggregateType: String,
     aggregateId: String,
     occurredAt: Instant,
@@ -20,3 +20,7 @@ final case class RealtimeEvent(
     actionUrl: Option[String] = None,
     data: Option[ujson.Value] = None
 ) derives ReadWriter
+
+object RealtimeEvent:
+  def data[A: Writer](value: A): ujson.Value =
+    writeJs(value)

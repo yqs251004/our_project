@@ -1,4 +1,5 @@
 package riichinexus.microservices.tournament.appeal.api
+import riichinexus.microservices.audit.objects.`private`.AuditEventType
 import riichinexus.microservices.audit.objects.`private`.AuditEventDraft
 import riichinexus.microservices.auth.api.`private`.{RequirePermissionPrivateAPIMessage, ResolveAccessPrincipalPrivateAPIMessage}
 import riichinexus.microservices.auth.objects.Permission
@@ -13,20 +14,20 @@ import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.tournament.appeal.domain.functions.AppealApplicationService
 import riichinexus.microservices.tournament.appeal.domain.functions.AppealNotificationRequestFunctions
+import riichinexus.microservices.tournament.appeal.domain.functions.AppealViewFunctions
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.tournament.objects.stage.table.TableId
 import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
 import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
-import riichinexus.microservices.tournament.appeal.domain.model.{AppealAttachment, AppealAttachmentMediaKind as DomainAppealAttachmentMediaKind, AppealAttachmentStorageKind as DomainAppealAttachmentStorageKind, AppealPriority as DomainAppealPriority, AppealTicket}
+import riichinexus.microservices.tournament.appeal.domain.model.{AppealAttachment, AppealTicket}
+import riichinexus.microservices.tournament.appeal.objects.{AppealAttachmentMediaKind, AppealAttachmentStorageKind, AppealPriority}
 
 import riichinexus.microservices.tournament.appeal.objects.apiTypes.{AppealAttachmentRequest, AppealTicketView, FileAppealRequest}
-import upickle.default.ReadWriter
-
 /** 提交牌桌申诉工单。 */
 final case class AppealFileAPIMessage(
     tableId: String,
     request: FileAppealRequest
-) extends APIMessage[AppealTicketView] derives ReadWriter:
+) extends APIMessage[AppealTicketView]:
 
   override def plan(context: ApiPlanContext): IO[AppealTicketView] =
     for
@@ -42,7 +43,7 @@ final case class AppealFileAPIMessage(
       _ <- RecordAuditEventsPrivateAPIMessage(fileAppealAudit(ticket, command)).plan(context)
       notifications <- IO.blocking(AppealNotificationRequestFunctions.appealFiled(context.connection, ticket))
       _ <- RecordBulkNotificationsPrivateAPIMessage(notifications).plan(context)
-    yield AppealTicketView.fromDomain(ticket)
+    yield AppealViewFunctions.ticketView(ticket)
 
   private def resolveCommand(actor: AccessPrincipalPrivateView, createdAt: Instant): FileAppealCommand =
     FileAppealCommand(
@@ -50,7 +51,7 @@ final case class AppealFileAPIMessage(
       openedBy = PlayerId(request.playerId),
       description = request.description,
       attachments = request.attachments.map(appealAttachment),
-      priority = request.priority.map(_.toDomain).getOrElse(DomainAppealPriority.Normal),
+      priority = request.priority.getOrElse(AppealPriority.Normal),
       dueAt = request.dueAt.map(Instant.parse),
       actor = actor,
       createdAt = createdAt
@@ -61,8 +62,8 @@ final case class AppealFileAPIMessage(
       name = request.name,
       uri = request.uri,
       contentType = request.contentType,
-      storageKind = request.storageKind.map(_.toDomain).getOrElse(DomainAppealAttachmentStorageKind.ExternalUrl),
-      mediaKind = request.mediaKind.map(_.toDomain).getOrElse(DomainAppealAttachmentMediaKind.Other),
+      storageKind = request.storageKind.getOrElse(AppealAttachmentStorageKind.ExternalUrl),
+      mediaKind = request.mediaKind.getOrElse(AppealAttachmentMediaKind.Other),
       checksum = request.checksum,
       checksumAlgorithm = request.checksumAlgorithm,
       sizeBytes = request.sizeBytes,
@@ -97,7 +98,7 @@ final case class AppealFileAPIMessage(
       AuditEventDraft(
         aggregateType = "appeal",
         aggregateId = ticket.id.value,
-        eventType = "AppealTicketFiled",
+        eventType = AuditEventType.AppealTicketFiled,
         occurredAt = command.createdAt,
         actorId = Some(command.openedBy),
         details = Map(
@@ -114,7 +115,7 @@ final case class AppealFileAPIMessage(
       openedBy: PlayerId,
       description: String,
       attachments: Vector[AppealAttachment],
-      priority: DomainAppealPriority,
+      priority: AppealPriority,
       dueAt: Option[Instant],
       actor: AccessPrincipalPrivateView,
       createdAt: Instant

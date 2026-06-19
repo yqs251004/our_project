@@ -14,13 +14,11 @@ import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.opsanalytics.domain.functions.AdvancedStatsRecomputeTaskFunctions
 import riichinexus.microservices.opsanalytics.objects.{AdvancedStatsRecomputeTask, AdvancedStatsRecomputeTaskStatus, AdvancedStatsTaskQueueSummary}
 import riichinexus.microservices.opsanalytics.tables.advancedstatsrecomputetask.AdvancedStatsRecomputeTaskTable
-import upickle.default.ReadWriter
-
 /** 获取运营分析高级统计总览。 */
 final case class OpsAnalyticsAdvancedStatsSummaryAPIMessage(
     operatorId: PlayerId,
     asOf: Option[Instant] = None
-) extends APIMessage[AdvancedStatsTaskQueueSummary] derives ReadWriter:
+) extends APIMessage[AdvancedStatsTaskQueueSummary]:
 
   override def plan(context: ApiPlanContext): IO[AdvancedStatsTaskQueueSummary] =
     for

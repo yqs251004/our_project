@@ -2,6 +2,7 @@ package riichinexus.microservices.player.router
 import riichinexus.system.api.RegisteredAPIMessage
 
 
+import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage, PublicPlayerLeaderboardAPIMessage}
 import riichinexus.microservices.player.objects.apiTypes.{PlayerLeaderboardEntry, PlayerProfileView}
 import riichinexus.system.objects.PagedResponse

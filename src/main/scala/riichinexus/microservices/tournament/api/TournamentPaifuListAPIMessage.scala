@@ -9,12 +9,10 @@ import riichinexus.microservices.tournament.objects.paifu.apiTypes.{PaifuListQue
 
 import riichinexus.microservices.tournament.tables.paifu.PaifuTable
 import riichinexus.system.objects.PagedResponse
-import upickle.default.ReadWriter
-
 /** 列出赛事牌谱摘要。 */
 final case class TournamentPaifuListAPIMessage(
     query: PaifuListQuery = PaifuListQuery()
-) extends APIMessage[PagedResponse[PaifuSummary]] derives ReadWriter:
+) extends APIMessage[PagedResponse[PaifuSummary]]:
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[PaifuSummary]] =
     for

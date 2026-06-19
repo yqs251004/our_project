@@ -1,4 +1,6 @@
 package riichinexus.microservices.club.api
+import riichinexus.microservices.club.domain.functions.ClubViewFunctions
+import riichinexus.microservices.audit.objects.`private`.AuditEventType
 import riichinexus.microservices.audit.objects.`private`.AuditEventDraft
 import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.api.`private`.ResolveAccessPrincipalPrivateAPIMessage
@@ -19,15 +21,13 @@ import riichinexus.microservices.club.domain.ClubAuthorization
 import riichinexus.microservices.club.objects.rankprivilegemanagement.ClubRankNode
 import riichinexus.microservices.club.objects.clubmanagement.ClubView
 import riichinexus.microservices.club.objects.rankprivilegemanagement.apiTypes.ClubRankNodeRequest
-import upickle.default.ReadWriter
-
 /** 更新俱乐部段位树。 */
 final case class UpdateClubRankTreeAPIMessage(
     clubId: String,
     operatorId: String,
     ranks: Vector[ClubRankNodeRequest],
     note: Option[String] = None
-) extends APIMessage[ClubView] derives ReadWriter:
+) extends APIMessage[ClubView]:
 
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
@@ -46,7 +46,7 @@ final case class UpdateClubRankTreeAPIMessage(
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
       _ <- RecordAuditEventsPrivateAPIMessage(updateRankTreeAudit(savedClub, command)).plan(context)
-    yield ClubView.fromDomain(savedClub)
+    yield ClubViewFunctions.clubView(savedClub)
 
   private def updateRankTree(
       connection: java.sql.Connection,
@@ -76,7 +76,7 @@ final case class UpdateClubRankTreeAPIMessage(
       AuditEventDraft(
         aggregateType = "club",
         aggregateId = updatedClub.id.value,
-        eventType = "ClubRankTreeUpdated",
+        eventType = AuditEventType.ClubRankTreeUpdated,
         occurredAt = command.occurredAt,
         actorId = command.actor.playerId,
         details = Map("rankCount" -> updatedClub.rankTree.size.toString),

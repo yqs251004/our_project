@@ -17,14 +17,12 @@ import riichinexus.microservices.tournament.api.TournamentGetAPIMessage
 import riichinexus.microservices.club.domain.ClubAuthorization
 import riichinexus.microservices.tournament.api.`private`.RecordClubTournamentDeclinePrivateAPIMessage
 import riichinexus.microservices.tournament.objects.competition.apiTypes.TournamentMutationView
-import upickle.default.ReadWriter
-
 /** 俱乐部拒绝赛事邀请。 */
 final case class DeclineClubTournamentAPIMessage(
     clubId: String,
     tournamentId: String,
     operatorId: Option[String] = None
-) extends APIMessage[TournamentMutationView] derives ReadWriter:
+) extends APIMessage[TournamentMutationView]:
 
   override def plan(context: ApiPlanContext): IO[TournamentMutationView] =
     for

@@ -17,10 +17,8 @@ import riichinexus.microservices.club.api.`private`.ResolveClubReadModelsPrivate
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.tournament.objects.competition.apiTypes.TournamentMutationView
 
-import upickle.default.ReadWriter
-
 /** 移除俱乐部在赛事中的邀请或参与记录。 */
-final case class TournamentRemoveClubParticipationAPIMessage(tournamentId: String, clubId: String, operatorId: Option[String] = None) extends APIMessage[TournamentMutationView] derives ReadWriter:
+final case class TournamentRemoveClubParticipationAPIMessage(tournamentId: String, clubId: String, operatorId: Option[String] = None) extends APIMessage[TournamentMutationView]:
 
   override def plan(context: ApiPlanContext): IO[TournamentMutationView] =
     for

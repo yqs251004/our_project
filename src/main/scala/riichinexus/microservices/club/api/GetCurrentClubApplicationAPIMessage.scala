@@ -18,13 +18,11 @@ import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.club.objects.membershipmanagement.ClubApplicationStatus
 import riichinexus.microservices.club.objects.membershipmanagement.apiTypes.{ClubMembershipApplicantView, ClubMembershipApplicationView}
 import riichinexus.microservices.club.tables.clubs.ClubTable
-import upickle.default.ReadWriter
-
 /** 获取当前玩家对指定俱乐部的申请。 */
 final case class GetCurrentClubApplicationAPIMessage(
     clubId: String,
     operatorId: Option[String] = None
-) extends APIMessage[ClubMembershipApplicationView] derives ReadWriter:
+) extends APIMessage[ClubMembershipApplicationView]:
 
   override def plan(context: ApiPlanContext): IO[ClubMembershipApplicationView] =
     for

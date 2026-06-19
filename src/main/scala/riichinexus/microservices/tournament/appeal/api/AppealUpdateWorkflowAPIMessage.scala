@@ -1,4 +1,5 @@
 package riichinexus.microservices.tournament.appeal.api
+import riichinexus.microservices.audit.objects.`private`.AuditEventType
 import riichinexus.microservices.audit.objects.`private`.AuditEventDraft
 import riichinexus.microservices.auth.api.`private`.{RequirePermissionPrivateAPIMessage, ResolveAccessPrincipalPrivateAPIMessage}
 import riichinexus.microservices.auth.objects.Permission
@@ -11,22 +12,22 @@ import cats.effect.IO
 
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.tournament.appeal.domain.functions.AppealApplicationService
+import riichinexus.microservices.tournament.appeal.domain.functions.AppealViewFunctions
 import riichinexus.microservices.tournament.appeal.tables.appealticket.AppealTicketTable
 import riichinexus.microservices.player.api.`private`.ResolvePlayerReadModelsPrivateAPIMessage
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
 import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
 import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
-import riichinexus.microservices.tournament.appeal.domain.model.{AppealPriority as DomainAppealPriority, AppealTicket}
+import riichinexus.microservices.tournament.appeal.domain.model.AppealTicket
+import riichinexus.microservices.tournament.appeal.objects.AppealPriority
 
 import riichinexus.microservices.tournament.appeal.objects.apiTypes.{AppealTicketView, UpdateAppealWorkflowRequest}
-import upickle.default.ReadWriter
-
 /** 更新申诉工单的分派、优先级或截止时间。 */
 final case class AppealUpdateWorkflowAPIMessage(
     appealId: String,
     request: UpdateAppealWorkflowRequest
-) extends APIMessage[AppealTicketView] derives ReadWriter:
+) extends APIMessage[AppealTicketView]:
 
   override def plan(context: ApiPlanContext): IO[AppealTicketView] =
     for
@@ -45,7 +46,7 @@ final case class AppealUpdateWorkflowAPIMessage(
       _ <- requireActiveAssignee(context, command.assigneeId)
       ticket <- updateWorkflow(context.connection, command)
       _ <- RecordAuditEventsPrivateAPIMessage(updateWorkflowAudit(ticket, command)).plan(context)
-    yield AppealTicketView.fromDomain(ticket)
+    yield AppealViewFunctions.ticketView(ticket)
 
   private def resolveCommand(actor: AccessPrincipalPrivateView, updatedAt: Instant): UpdateAppealWorkflowCommand =
     validateRequest()
@@ -54,7 +55,7 @@ final case class AppealUpdateWorkflowAPIMessage(
       actor = actor,
       assigneeId = request.assigneeId.map(PlayerId(_)),
       clearAssignee = request.clearAssignee,
-      priority = request.priority.map(_.toDomain),
+      priority = request.priority,
       dueAt = request.dueAt.map(Instant.parse),
       clearDueAt = request.clearDueAt,
       note = request.note,
@@ -113,7 +114,7 @@ final case class AppealUpdateWorkflowAPIMessage(
       AuditEventDraft(
         aggregateType = "appeal",
         aggregateId = command.ticketId.value,
-        eventType = "AppealTicketWorkflowUpdated",
+        eventType = AuditEventType.AppealTicketWorkflowUpdated,
         occurredAt = command.updatedAt,
         actorId = command.actor.playerId,
         details = Map(
@@ -132,7 +133,7 @@ final case class AppealUpdateWorkflowAPIMessage(
       actor: AccessPrincipalPrivateView,
       assigneeId: Option[PlayerId],
       clearAssignee: Boolean,
-      priority: Option[DomainAppealPriority],
+      priority: Option[AppealPriority],
       dueAt: Option[Instant],
       clearDueAt: Boolean,
       note: Option[String],

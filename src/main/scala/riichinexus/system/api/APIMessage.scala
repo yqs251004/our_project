@@ -5,9 +5,10 @@ import java.sql.Connection
 import cats.effect.IO
 import riichinexus.system.realtime.domain.RealtimeEventBus
 import riichinexus.microservices.auth.domain.AuthenticationFailure
-import upickle.default.{Reader, Writer, read, writeJs}
+import upickle.default.{Reader, Writer, macroRW, read, writeJs}
 
 import scala.collection.mutable.ArrayBuffer
+import scala.deriving.Mirror
 import scala.reflect.ClassTag
 
 trait APIMessage[Response]:
@@ -70,33 +71,49 @@ object ApiPlanContext:
 
 object RegisteredAPIMessage:
 
-  def api[Message <: APIMessage[Response], Response](using
-      Reader[Message],
+  inline def api[Message <: APIMessage[Response], Response](using
       Writer[Response],
-      ClassTag[Message]
+      ClassTag[Message],
+      Mirror.ProductOf[Message]
   ): RegisteredAPIMessage =
-    build[Message, Response](requiresBearerToken = false, successStatus = ApiSuccessStatus.Ok)
+    build[Message, Response](requiresBearerToken = false, successStatus = ApiSuccessStatus.Ok)(
+      using macroRW[Message],
+      summon[Writer[Response]],
+      summon[ClassTag[Message]]
+    )
 
-  def created[Message <: APIMessage[Response], Response](using
-      Reader[Message],
+  inline def created[Message <: APIMessage[Response], Response](using
       Writer[Response],
-      ClassTag[Message]
+      ClassTag[Message],
+      Mirror.ProductOf[Message]
   ): RegisteredAPIMessage =
-    build[Message, Response](requiresBearerToken = false, successStatus = ApiSuccessStatus.Created)
+    build[Message, Response](requiresBearerToken = false, successStatus = ApiSuccessStatus.Created)(
+      using macroRW[Message],
+      summon[Writer[Response]],
+      summon[ClassTag[Message]]
+    )
 
-  def accepted[Message <: APIMessage[Response], Response](using
-      Reader[Message],
+  inline def accepted[Message <: APIMessage[Response], Response](using
       Writer[Response],
-      ClassTag[Message]
+      ClassTag[Message],
+      Mirror.ProductOf[Message]
   ): RegisteredAPIMessage =
-    build[Message, Response](requiresBearerToken = false, successStatus = ApiSuccessStatus.Accepted)
+    build[Message, Response](requiresBearerToken = false, successStatus = ApiSuccessStatus.Accepted)(
+      using macroRW[Message],
+      summon[Writer[Response]],
+      summon[ClassTag[Message]]
+    )
 
-  def apiWithToken[Message <: APIWithTokenMessage[Response], Response](using
-      Reader[Message],
+  inline def apiWithToken[Message <: APIWithTokenMessage[Response], Response](using
       Writer[Response],
-      ClassTag[Message]
+      ClassTag[Message],
+      Mirror.ProductOf[Message]
   ): RegisteredAPIMessage =
-    build[Message, Response](requiresBearerToken = true, successStatus = ApiSuccessStatus.Ok)
+    build[Message, Response](requiresBearerToken = true, successStatus = ApiSuccessStatus.Ok)(
+      using macroRW[Message],
+      summon[Writer[Response]],
+      summon[ClassTag[Message]]
+    )
 
   private def build[Message <: APIMessage[Response], Response](
       requiresBearerToken: Boolean,

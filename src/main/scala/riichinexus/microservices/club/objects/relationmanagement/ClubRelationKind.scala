@@ -1,7 +1,5 @@
 package riichinexus.microservices.club.objects.relationmanagement
 
-import upickle.default.{ReadWriter, readwriter}
-
 /** ClubRelationKind 枚举俱乐部关系类型 可使用的公开取值。 */
 
 enum ClubRelationKind:
@@ -10,9 +8,6 @@ enum ClubRelationKind:
   case Neutral
 
 object ClubRelationKind:
-  given ReadWriter[ClubRelationKind] =
-    readwriter[String].bimap(toString, fromString)
-
   def toString(kind: ClubRelationKind): String =
     kind match
       case Alliance => "Alliance"

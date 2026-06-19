@@ -8,7 +8,7 @@ import java.util.NoSuchElementException
 import riichinexus.microservices.tournament.objects.paifu.PaifuId
 import riichinexus.microservices.tournament.objects.matchrecord.MatchRecordId
 import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
-import riichinexus.microservices.tournament.appeal.domain.model.AppealTableResolution
+import riichinexus.microservices.tournament.appeal.objects.AppealTableResolution
 import riichinexus.microservices.tournament.objects.stage.table.{SeatWind, TableSeat, TableStatus}
 
 /** TableFunctions 提供牌桌相关的领域计算、校验和转换函数。 */

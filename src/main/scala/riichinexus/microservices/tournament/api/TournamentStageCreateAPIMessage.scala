@@ -1,11 +1,12 @@
 package riichinexus.microservices.tournament.api
+import riichinexus.microservices.tournament.domain.functions.TournamentViewFunctions
 import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.api.`private`.{RequirePermissionPrivateAPIMessage, ResolveAccessPrincipalPrivateAPIMessage}
 import riichinexus.microservices.auth.api.`private`.ResolveSystemAccessPrincipalPrivateAPIMessage
 
 import riichinexus.microservices.tournament.objects.stage.rules.progression.{AdvancementRule, AdvancementRuleType}
-import riichinexus.microservices.tournament.objects.stage.rules.knockout.KnockoutRuleConfig
-import riichinexus.microservices.tournament.objects.stage.rules.swiss.SwissRuleConfig
+import riichinexus.microservices.tournament.objects.stage.rules.knockout.{KnockoutRuleConfig, KnockoutSeedingPolicy}
+import riichinexus.microservices.tournament.objects.stage.rules.swiss.{SwissPairingMethod, SwissRuleConfig}
 import riichinexus.microservices.tournament.objects.competition.TournamentStatus
 
 import java.util.NoSuchElementException
@@ -26,10 +27,8 @@ import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.Mahjon
 import riichinexus.microservices.tournament.objects.stage.apiTypes.CreateTournamentStageRequest
 import riichinexus.microservices.tournament.objects.competition.apiTypes.TournamentSummaryView
 
-import upickle.default.ReadWriter
-
 /** 为赛事新增阶段。 */
-final case class TournamentStageCreateAPIMessage(tournamentId: String, request: CreateTournamentStageRequest) extends APIMessage[TournamentSummaryView] derives ReadWriter:
+final case class TournamentStageCreateAPIMessage(tournamentId: String, request: CreateTournamentStageRequest) extends APIMessage[TournamentSummaryView]:
 
   override def plan(context: ApiPlanContext): IO[TournamentSummaryView] =
     for
@@ -50,7 +49,7 @@ final case class TournamentStageCreateAPIMessage(tournamentId: String, request: 
           createStage(context.connection, command)
         }.getOrElse(throw NoSuchElementException("Resource not found"))
       }
-    yield TournamentSummaryView.fromDomain(tournament)
+    yield TournamentViewFunctions.tournamentSummaryView(tournament)
 
   private def createStage(
       connection: java.sql.Connection,
@@ -86,7 +85,7 @@ final case class TournamentStageCreateAPIMessage(tournamentId: String, request: 
       advancementRule = request.advancementRuleType
         .map(rule =>
           AdvancementRule(
-            ruleType = AdvancementRuleType.valueOf(rule),
+            ruleType = rule,
             cutSize = request.cutSize,
             thresholdScore = request.thresholdScore,
             targetTableCount = request.targetTableCount,
@@ -110,7 +109,7 @@ final case class TournamentStageCreateAPIMessage(tournamentId: String, request: 
     if request.pairingMethod.isDefined || request.carryOverPoints.isDefined || request.maxRounds.isDefined then
       Some(
         SwissRuleConfig(
-          pairingMethod = request.pairingMethod.map(_.trim.toLowerCase).getOrElse("balanced-elo"),
+          pairingMethod = request.pairingMethod.getOrElse(SwissPairingMethod.BalancedElo),
           carryOverPoints = request.carryOverPoints.getOrElse(true),
           maxRounds = request.maxRounds
         )
@@ -123,7 +122,7 @@ final case class TournamentStageCreateAPIMessage(tournamentId: String, request: 
         KnockoutRuleConfig(
           bracketSize = request.bracketSize,
           thirdPlaceMatch = request.thirdPlaceMatch.getOrElse(false),
-          seedingPolicy = request.seedingPolicy.map(_.trim.toLowerCase).getOrElse("rating"),
+          seedingPolicy = request.seedingPolicy.getOrElse(KnockoutSeedingPolicy.Rating),
           repechageEnabled = request.repechageEnabled.getOrElse(false)
         )
       )

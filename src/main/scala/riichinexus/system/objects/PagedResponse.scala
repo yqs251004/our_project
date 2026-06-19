@@ -10,7 +10,7 @@ final case class PagedResponse[T](
 )
 
 object PagedResponse:
-  export SharedResponseCodecs.given
+  export riichinexus.system.json.SharedResponseCodecs.given
 
   def fromItems[A, B](
       items: Vector[A],

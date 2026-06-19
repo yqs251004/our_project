@@ -24,17 +24,16 @@ import riichinexus.microservices.club.objects.rankprivilegemanagement.ClubPrivil
 import riichinexus.microservices.player.objects.PlayerStatus
 import riichinexus.system.api.AuthorizationFailure
 import riichinexus.microservices.notification.api.`private`.RecordBulkNotificationsPrivateAPIMessage
+import riichinexus.microservices.notification.objects.NotificationType
 import riichinexus.microservices.notification.objects.`private`.CreateNotificationRequest
-import riichinexus.system.realtime.objects.RealtimeEvent
+import riichinexus.system.realtime.objects.{RealtimeEvent, RealtimeEventType}
 
 import riichinexus.microservices.tournament.objects.stage.table.SeatWind
 import riichinexus.microservices.tournament.objects.stage.lineup.apiTypes.{StageLineupSeatRequest, SubmitStageLineupRequest}
 import riichinexus.microservices.tournament.objects.competition.apiTypes.TournamentMutationView
 
-import upickle.default.ReadWriter
-
 /** 提交俱乐部在赛事阶段的出场阵容。 */
-final case class TournamentStageSubmitLineupAPIMessage(tournamentId: String, stageId: String, request: SubmitStageLineupRequest) extends APIMessage[TournamentMutationView] derives ReadWriter:
+final case class TournamentStageSubmitLineupAPIMessage(tournamentId: String, stageId: String, request: SubmitStageLineupRequest) extends APIMessage[TournamentMutationView]:
 
   override def plan(context: ApiPlanContext): IO[TournamentMutationView] =
     for
@@ -61,7 +60,7 @@ final case class TournamentStageSubmitLineupAPIMessage(tournamentId: String, sta
     context.realtimeEventBus.publish(
       RealtimeEvent(
         id = command.submission.id.value,
-        eventType = "TournamentChanged",
+        eventType = RealtimeEventType.TournamentChanged,
         aggregateType = "tournament",
         aggregateId = command.tournamentId.value,
         occurredAt = command.submission.submittedAt,
@@ -142,7 +141,7 @@ final case class TournamentStageSubmitLineupAPIMessage(tournamentId: String, sta
       val roleText = if seat.reserve then "候补" else "正选"
       CreateNotificationRequest(
         recipientPlayerId = seat.playerId.value,
-        notificationType = "TournamentLineupSelected",
+        notificationType = NotificationType.TournamentLineupSelected,
         title = if seat.reserve then "被列入赛事候补阵容" else "被选中参加赛事",
         body = s"你被选入赛事 ${tournament.name} 的 ${stage.name}，身份为${roleText}选手。",
         severity = Some("info"),

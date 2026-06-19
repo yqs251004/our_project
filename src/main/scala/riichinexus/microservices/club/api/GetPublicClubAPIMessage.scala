@@ -1,4 +1,5 @@
 package riichinexus.microservices.club.api
+import riichinexus.microservices.club.domain.functions.ClubViewFunctions
 import riichinexus.microservices.player.api.`private`.ResolvePlayersPrivateAPIMessage
 
 import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
@@ -15,7 +16,6 @@ import riichinexus.microservices.tournament.objects.identity.{TournamentId, Tour
 import riichinexus.microservices.club.domain.Club
 import riichinexus.microservices.club.domain.clubmanagement.model.ClubHonor
 import riichinexus.microservices.club.domain.membershipmanagement.functions.ClubMembershipApplicationFunctions
-import riichinexus.microservices.club.objects.relationmanagement.ClubRelationView
 import riichinexus.microservices.club.tables.clubs.ClubTable
 import riichinexus.microservices.player.objects.`private`.PlayerPrivateView
 import riichinexus.microservices.player.objects.{PlayerStatus, RankSnapshot}
@@ -28,12 +28,10 @@ import riichinexus.microservices.tournament.objects.`private`.competition.Tourna
 import riichinexus.microservices.tournament.objects.competition.TournamentStatus
 import riichinexus.microservices.tournament.api.`private`.{ListClubTournamentsPrivateAPIMessage, ListRecentClubMatchRecordsPrivateAPIMessage, ResolveTournamentsPrivateAPIMessage}
 
-import upickle.default.ReadWriter
-
 /** 获取前端公开俱乐部详情。 */
 final case class GetPublicClubAPIMessage(
     clubId: String
-) extends APIMessage[PublicClubDetailView] derives ReadWriter:
+) extends APIMessage[PublicClubDetailView]:
 
   override def plan(context: ApiPlanContext): IO[PublicClubDetailView] =
     for
@@ -83,7 +81,7 @@ final case class GetPublicClubAPIMessage(
       totalPoints = club.totalPoints,
       treasuryBalance = club.treasuryBalance,
       pointPool = club.pointPool,
-      relations = club.relations.map(ClubRelationView.fromDomain),
+      relations = club.relations.map(ClubViewFunctions.relationView),
       honors = club.honors.sortBy(honor => (honor.achievedAt, honor.title)).reverse.map(publicClubHonorView),
       applicationPolicy = clubApplicationPolicy(club),
       currentLineup = currentLineup(club, lineupPlayerIds, playersById),

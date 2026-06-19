@@ -1,6 +1,7 @@
 package riichinexus.microservices.tournament.api
 
 
+import riichinexus.microservices.tournament.domain.functions.TournamentViewFunctions
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
@@ -9,8 +10,6 @@ import riichinexus.microservices.tournament.objects.competition.apiTypes.{Tourna
 
 import riichinexus.microservices.tournament.tables.tournaments.TournamentTable
 import riichinexus.system.objects.PagedResponse
-import upickle.default.ReadWriter
-
 /** 列出管理视角的赛事。 */
 final case class TournamentListAPIMessage(
     status: Option[String] = None,
@@ -18,7 +17,7 @@ final case class TournamentListAPIMessage(
     organizer: Option[String] = None,
     limit: Option[Int] = None,
     offset: Option[Int] = None
-) extends APIMessage[PagedResponse[TournamentSummaryView]] derives ReadWriter:
+) extends APIMessage[PagedResponse[TournamentSummaryView]]:
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[TournamentSummaryView]] =
     for
@@ -54,7 +53,7 @@ final case class TournamentListAPIMessage(
         organizer = resolved.query.organizer
       )
       .sortBy(tournament => (tournament.startsAt, tournament.name, tournament.id.value))
-      .map(TournamentSummaryView.fromDomain)
+      .map(TournamentViewFunctions.tournamentSummaryView)
 
   private def pagedResponse(
       items: Vector[TournamentSummaryView],

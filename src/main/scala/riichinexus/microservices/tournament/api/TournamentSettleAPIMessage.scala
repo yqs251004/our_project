@@ -1,4 +1,6 @@
 package riichinexus.microservices.tournament.api
+import riichinexus.microservices.tournament.domain.functions.TournamentViewFunctions
+import riichinexus.microservices.audit.objects.`private`.AuditEventType
 import riichinexus.microservices.audit.objects.`private`.AuditEventDraft
 import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.api.`private`.{RequirePermissionPrivateAPIMessage, ResolveAccessPrincipalPrivateAPIMessage}
@@ -16,10 +18,8 @@ import riichinexus.microservices.tournament.objects.finalization.{TournamentSett
 import riichinexus.microservices.notification.api.`private`.RecordBulkNotificationsPrivateAPIMessage
 import riichinexus.microservices.tournament.objects.finalization.apiTypes.{SettleTournamentRequest, SettlementAdjustmentRequest, TournamentSettlementView}
 
-import upickle.default.ReadWriter
-
 /** 生成或记录赛事结算。 */
-final case class TournamentSettleAPIMessage(tournamentId: String, request: SettleTournamentRequest) extends APIMessage[TournamentSettlementView] derives ReadWriter:
+final case class TournamentSettleAPIMessage(tournamentId: String, request: SettleTournamentRequest) extends APIMessage[TournamentSettlementView]:
 
   override def plan(context: ApiPlanContext): IO[TournamentSettlementView] =
     for
@@ -49,7 +49,7 @@ final case class TournamentSettleAPIMessage(tournamentId: String, request: Settl
         else Vector.empty
       }
       _ <- RecordBulkNotificationsPrivateAPIMessage(notificationRequests).plan(context)
-    yield TournamentSettlementView.fromDomain(snapshot)
+    yield TournamentViewFunctions.settlementView(snapshot)
 
   private def validateRequest(): Unit =
     require(request.houseFeeAmount >= 0L, "houseFeeAmount must be non-negative")
@@ -75,7 +75,7 @@ final case class TournamentSettleAPIMessage(tournamentId: String, request: Settl
       AuditEventDraft(
         aggregateType = "tournament",
         aggregateId = TournamentId(tournamentId).value,
-        eventType = "TournamentSettlementRecorded",
+        eventType = AuditEventType.TournamentSettlementRecorded,
         occurredAt = settledAt,
         actorId = actor.playerId,
         details = Map(

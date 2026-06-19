@@ -8,7 +8,7 @@ import MahjongYakuCheckSupport.{MahjongYakuCheckState, YakuCheck, yakuIf}
 
 /** MahjongDoraCheckFunctions 提供麻将宝牌检查函数 相关的领域校验和权限判断。 */
 
-private[functions] object MahjongDoraCheckFunctions:
+private[mahjongcore] object MahjongDoraCheckFunctions:
 
   val plan: Vector[YakuCheck] =
     Vector(checkDora, checkAkaDora, checkUraDora)

@@ -7,7 +7,6 @@ enum ClubTournamentParticipationStatus:
   case Participating
 
 object ClubTournamentParticipationStatus:
-
   def toString(status: ClubTournamentParticipationStatus): String =
     status match
       case ClubTournamentParticipationStatus.Invited => "Invited"

@@ -6,12 +6,10 @@ import riichinexus.microservices.club.objects.clubmanagement.ClubId
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.Club
 import riichinexus.microservices.club.tables.clubs.ClubTable
-import upickle.default.ReadWriter
-
 /** 供后端服务按 id 解析俱乐部 domain 对象。 */
 final case class ResolveClubPrivateAPIMessage(
     clubId: ClubId
-) extends APIMessage[Option[Club]] derives ReadWriter:
+) extends APIMessage[Option[Club]]:
 
   override def plan(context: ApiPlanContext): IO[Option[Club]] =
     for

@@ -1,5 +1,6 @@
 package riichinexus.microservices.club.api
 
+import riichinexus.microservices.club.domain.functions.ClubViewFunctions
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
@@ -9,12 +10,10 @@ import riichinexus.microservices.club.objects.clubmanagement.ClubView
 import riichinexus.microservices.club.objects.clubmanagement.apiTypes.ClubListQuery
 import riichinexus.microservices.club.tables.clubs.ClubTable
 import riichinexus.system.objects.PagedResponse
-import upickle.default.ReadWriter
-
 /** 列出管理视角的俱乐部。 */
 final case class ListClubsAPIMessage(
     query: ClubListQuery = ClubListQuery()
-) extends APIMessage[PagedResponse[ClubView]] derives ReadWriter:
+) extends APIMessage[PagedResponse[ClubView]]:
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[ClubView]] =
     for
@@ -62,7 +61,7 @@ final case class ListClubsAPIMessage(
     require(query.limit > 0, "Input field limit must be positive")
     require(query.offset >= 0, "Input field offset must be non-negative")
     val boundedLimit = math.min(query.limit, 100)
-    val page = clubs.slice(query.offset, query.offset + boundedLimit).map(ClubView.fromDomain)
+    val page = clubs.slice(query.offset, query.offset + boundedLimit).map(ClubViewFunctions.clubView)
     PagedResponse(
       items = page,
       total = clubs.size,

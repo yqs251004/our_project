@@ -13,7 +13,7 @@ import riichinexus.microservices.tournament.objects.`private`.competition.Tourna
 
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubAuthorization
-import riichinexus.microservices.club.objects.tournamentparticipation.ClubTournamentParticipationStatus
+import riichinexus.microservices.club.objects.tournamentparticipation.{ClubTournamentParticipationStatus, ClubTournamentScope}
 
 import riichinexus.microservices.club.objects.tournamentparticipation.apiTypes.ClubTournamentParticipationView
 import riichinexus.microservices.tournament.objects.stage.StageStatus
@@ -21,16 +21,14 @@ import riichinexus.microservices.tournament.objects.competition.TournamentStatus
 import riichinexus.microservices.club.tables.clubs.ClubTable
 import riichinexus.microservices.tournament.api.`private`.ListClubTournamentsPrivateAPIMessage
 import riichinexus.system.objects.PagedResponse
-import upickle.default.ReadWriter
-
 /** 列出俱乐部收到或参与的赛事。 */
 final case class ListClubTournamentsAPIMessage(
     clubId: String,
-    scope: Option[String] = None,
+    scope: Option[ClubTournamentScope] = None,
     viewer: Option[String] = None,
     limit: Option[Int] = None,
     offset: Option[Int] = None
-) extends APIMessage[PagedResponse[ClubTournamentParticipationView]] derives ReadWriter:
+) extends APIMessage[PagedResponse[ClubTournamentParticipationView]]:
   private val recentTournamentWindow = Duration.ofDays(90)
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[ClubTournamentParticipationView]] =
@@ -46,13 +44,13 @@ final case class ListClubTournamentsAPIMessage(
     parsedViewer.map(ResolveAccessPrincipalPrivateAPIMessage(_).plan(context)).getOrElse(ResolveAnonymousGuestAccessPrincipalPrivateAPIMessage().plan(context)).map { viewerPrincipal =>
       ClubTournamentQuery(
         clubId = ClubId(clubId),
-        scope = scope.filter(_.nonEmpty).getOrElse("recent"),
+        scope = scope.getOrElse(ClubTournamentScope.Recent),
         viewerPrincipal = viewerPrincipal,
         limit = limit.getOrElse(20),
         offset = offset.getOrElse(0),
         recentThreshold = now.minus(recentTournamentWindow),
         appliedFilters = Vector(
-          scope.filter(_.nonEmpty).map("scope" -> _),
+          scope.map(value => "scope" -> ClubTournamentScope.toString(value)),
           viewer.filter(_.nonEmpty).map("viewer" -> _)
         ).flatten.toMap
       )
@@ -74,19 +72,15 @@ final case class ListClubTournamentsAPIMessage(
       items: Vector[ClubTournamentParticipationView],
       query: ClubTournamentQuery
   ): Vector[ClubTournamentParticipationView] =
-    query.scope.trim.toLowerCase match
-      case "recent" =>
+    query.scope match
+      case ClubTournamentScope.Recent =>
         items.filter(item =>
           activeStatuses.contains(item.status) ||
             Instant.parse(item.endsAt).isAfter(query.recentThreshold)
         )
-      case "active" =>
+      case ClubTournamentScope.Active =>
         items.filter(item => activeStatuses.contains(item.status))
-      case "all" => items
-      case other =>
-        throw IllegalArgumentException(
-          s"Unsupported scope '$other'. Supported values: recent, active, all"
-        )
+      case ClubTournamentScope.All => items
 
   private def pagedResponse(
       items: Vector[ClubTournamentParticipationView],
@@ -129,10 +123,10 @@ final case class ListClubTournamentsAPIMessage(
           clubId = clubId.value,
           tournamentId = tournament.id.value,
           name = tournament.name,
-          status = tournament.status.toString,
+          status = tournament.status,
           clubParticipationStatus =
-            if isParticipating then ClubTournamentParticipationStatus.toString(ClubTournamentParticipationStatus.Participating)
-            else ClubTournamentParticipationStatus.toString(ClubTournamentParticipationStatus.Invited),
+            if isParticipating then ClubTournamentParticipationStatus.Participating
+            else ClubTournamentParticipationStatus.Invited,
           stageName = stageName,
           startsAt = tournament.startsAt.toString,
           endsAt = tournament.endsAt.toString,
@@ -152,14 +146,14 @@ final case class ListClubTournamentsAPIMessage(
       )
 
   private val activeStatuses = Set(
-    TournamentStatus.RegistrationOpen.toString,
-    TournamentStatus.Scheduled.toString,
-    TournamentStatus.InProgress.toString
+    TournamentStatus.RegistrationOpen,
+    TournamentStatus.Scheduled,
+    TournamentStatus.InProgress
   )
 
   private final case class ClubTournamentQuery(
       clubId: ClubId,
-      scope: String,
+      scope: ClubTournamentScope,
       viewerPrincipal: AccessPrincipalPrivateView,
       limit: Int,
       offset: Int,

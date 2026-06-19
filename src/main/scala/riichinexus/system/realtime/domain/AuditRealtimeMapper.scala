@@ -1,7 +1,7 @@
 package riichinexus.system.realtime.domain
 
 import riichinexus.microservices.audit.domain.auditevent.AuditEvent
-import riichinexus.system.realtime.objects.RealtimeEvent
+import riichinexus.system.realtime.objects.{RealtimeEvent, RealtimeEventType}
 
 object AuditRealtimeMapper:
 
@@ -12,27 +12,27 @@ object AuditRealtimeMapper:
       aggregateType = event.aggregateType,
       aggregateId = event.aggregateId,
       occurredAt = event.occurredAt,
-      sourceEventType = event.eventType,
+      sourceEventType = event.eventType.toString,
       actorId = event.actorId.map(_.value)
     )
 
-  private def realtimeEventType(event: AuditEvent): String =
+  private def realtimeEventType(event: AuditEvent): RealtimeEventType =
     val normalizedAggregateType = event.aggregateType.trim.toLowerCase
-    val normalizedEventType = event.eventType.trim.toLowerCase
+    val normalizedEventType = event.eventType.toString.toLowerCase
 
     if normalizedAggregateType.contains("application") || normalizedEventType.contains("application") then
-      "ClubApplicationChanged"
+      RealtimeEventType.ClubApplicationChanged
     else if normalizedAggregateType.contains("member") || normalizedEventType.contains("member") then
-      "ClubMemberChanged"
+      RealtimeEventType.ClubMemberChanged
     else if normalizedAggregateType.contains("club") then
-      "ClubChanged"
+      RealtimeEventType.ClubChanged
     else if normalizedAggregateType.contains("appeal") then
-      "AppealChanged"
+      RealtimeEventType.AppealChanged
     else if normalizedAggregateType.contains("table") then
-      "TournamentTableChanged"
+      RealtimeEventType.TournamentTableChanged
     else if normalizedAggregateType.contains("tournament") then
-      "TournamentChanged"
+      RealtimeEventType.TournamentChanged
     else if normalizedAggregateType.contains("player") then
-      "PlayerChanged"
+      RealtimeEventType.PlayerChanged
     else
-      "DomainChanged"
+      RealtimeEventType.DomainChanged

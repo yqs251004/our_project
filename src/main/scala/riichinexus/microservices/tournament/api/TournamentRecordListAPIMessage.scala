@@ -1,5 +1,6 @@
 package riichinexus.microservices.tournament.api
 
+import riichinexus.microservices.tournament.domain.functions.TournamentViewFunctions
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.tournament.domain.matchrecord.functions.MatchRecordFunctions
@@ -8,12 +9,10 @@ import riichinexus.microservices.tournament.objects.matchrecord.apiTypes.{MatchR
 
 import riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTable
 import riichinexus.system.objects.PagedResponse
-import upickle.default.ReadWriter
-
 /** 列出赛事比赛记录。 */
 final case class TournamentRecordListAPIMessage(
     query: MatchRecordListQuery = MatchRecordListQuery()
-) extends APIMessage[PagedResponse[TournamentMatchRecordView]] derives ReadWriter:
+) extends APIMessage[PagedResponse[TournamentMatchRecordView]]:
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[TournamentMatchRecordView]] =
     for
@@ -45,7 +44,7 @@ final case class TournamentRecordListAPIMessage(
       .filter(record => resolved.query.stageId.forall(_ == record.stageId))
       .filter(record => resolved.query.tableId.forall(_ == record.tableId))
       .sortBy(record => (record.generatedAt, record.id.value))
-      .map(TournamentMatchRecordView.fromDomain)
+      .map(TournamentViewFunctions.matchRecordView)
 
   private def pagedResponse(
       items: Vector[TournamentMatchRecordView],

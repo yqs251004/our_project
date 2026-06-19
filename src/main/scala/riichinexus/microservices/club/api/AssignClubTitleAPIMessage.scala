@@ -1,4 +1,6 @@
 package riichinexus.microservices.club.api
+import riichinexus.microservices.club.domain.functions.ClubViewFunctions
+import riichinexus.microservices.audit.objects.`private`.AuditEventType
 import riichinexus.microservices.audit.objects.`private`.AuditEventDraft
 import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.api.`private`.ResolveAccessPrincipalPrivateAPIMessage
@@ -22,9 +24,8 @@ import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubAuthorization
 import riichinexus.microservices.club.objects.clubmanagement.ClubView
 import riichinexus.microservices.notification.api.`private`.RecordNotificationPrivateAPIMessage
+import riichinexus.microservices.notification.objects.NotificationType
 import riichinexus.microservices.notification.objects.`private`.CreateNotificationRequest
-import upickle.default.ReadWriter
-
 /** 为俱乐部成员授予头衔。 */
 final case class AssignClubTitleAPIMessage(
     clubId: String,
@@ -32,7 +33,7 @@ final case class AssignClubTitleAPIMessage(
     operatorId: String,
     title: String,
     note: Option[String] = None
-) extends APIMessage[ClubView] derives ReadWriter:
+) extends APIMessage[ClubView]:
 
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
@@ -49,7 +50,7 @@ final case class AssignClubTitleAPIMessage(
       savedClub <- assignTitle(context, command).map(_.getOrElse(throw NoSuchElementException("Resource not found")))
       _ <- RecordAuditEventsPrivateAPIMessage(assignTitleAudit(command)).plan(context)
       _ <- RecordNotificationPrivateAPIMessage(assignTitleNotification(savedClub, command)).plan(context)
-    yield ClubView.fromDomain(savedClub)
+    yield ClubViewFunctions.clubView(savedClub)
 
   private def assignTitle(
       context: ApiPlanContext,
@@ -104,7 +105,7 @@ final case class AssignClubTitleAPIMessage(
       AuditEventDraft(
         aggregateType = "club",
         aggregateId = command.clubId.value,
-        eventType = "ClubTitleAssigned",
+        eventType = AuditEventType.ClubTitleAssigned,
         occurredAt = command.assignedAt,
         actorId = command.actor.playerId,
         details = Map(
@@ -121,7 +122,7 @@ final case class AssignClubTitleAPIMessage(
   ): CreateNotificationRequest =
     CreateNotificationRequest(
       recipientPlayerId = command.playerId.value,
-      notificationType = "ClubTitleAssigned",
+      notificationType = NotificationType.ClubTitleAssigned,
       title = "获得俱乐部专属头衔",
       body = s"你在 ${updatedClub.name} 获得了专属头衔「${command.title}」。",
       severity = Some("success"),

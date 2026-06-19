@@ -14,13 +14,11 @@ import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateVi
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.opsanalytics.objects.{Dashboard, DashboardOwner}
 import riichinexus.microservices.opsanalytics.tables.dashboard.DashboardTable
-import upickle.default.ReadWriter
-
 /** 获取玩家运营仪表盘。 */
 final case class OpsAnalyticsPlayerDashboardAPIMessage(
     playerId: PlayerId,
     operatorId: PlayerId
-) extends APIMessage[Dashboard] derives ReadWriter:
+) extends APIMessage[Dashboard]:
 
   override def plan(context: ApiPlanContext): IO[Dashboard] =
     for

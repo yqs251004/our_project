@@ -1,5 +1,6 @@
 package riichinexus.microservices.tournament.api
 
+import riichinexus.microservices.tournament.domain.functions.TournamentViewFunctions
 import java.util.NoSuchElementException
 
 import cats.effect.IO
@@ -10,16 +11,14 @@ import riichinexus.microservices.tournament.domain.finalization.model.Tournament
 import riichinexus.microservices.tournament.objects.finalization.apiTypes.TournamentSettlementView
 
 import riichinexus.microservices.tournament.tables.settlement.TournamentSettlementTable
-import upickle.default.ReadWriter
-
 /** 获取指定赛事阶段的结算。 */
-final case class TournamentSettlementGetAPIMessage(tournamentId: String, stageId: String) extends APIMessage[TournamentSettlementView] derives ReadWriter:
+final case class TournamentSettlementGetAPIMessage(tournamentId: String, stageId: String) extends APIMessage[TournamentSettlementView]:
 
   override def plan(context: ApiPlanContext): IO[TournamentSettlementView] =
     for
       resolved <- IO.blocking(resolveQuery)
       settlement <- IO.blocking(findSettlement(context, resolved))
-    yield TournamentSettlementView.fromDomain(settlement)
+    yield TournamentViewFunctions.settlementView(settlement)
 
   private def resolveQuery: SettlementGetQuery =
     SettlementGetQuery(

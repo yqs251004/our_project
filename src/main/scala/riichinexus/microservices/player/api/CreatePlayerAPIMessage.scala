@@ -14,12 +14,10 @@ import riichinexus.microservices.player.objects.{RankPlatform, RankSnapshot}
 import riichinexus.microservices.player.objects.apiTypes.CreatePlayerRequest
 import riichinexus.microservices.player.objects.apiTypes.{PlayerProfileView, PlayerRoleFlagsView}
 import riichinexus.microservices.player.tables.players.PlayerTable
-import upickle.default.ReadWriter
-
 /** 创建玩家档案。 */
 final case class CreatePlayerAPIMessage(
     request: CreatePlayerRequest
-) extends APIMessage[PlayerProfileView] derives ReadWriter:
+) extends APIMessage[PlayerProfileView]:
 
   override def plan(context: ApiPlanContext): IO[PlayerProfileView] =
     for

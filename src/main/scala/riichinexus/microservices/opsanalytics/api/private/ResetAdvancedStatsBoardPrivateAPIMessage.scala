@@ -8,13 +8,11 @@ import riichinexus.microservices.opsanalytics.objects.{AdvancedStatsBoard, Dashb
 import riichinexus.microservices.opsanalytics.tables.advancedstatsboard.AdvancedStatsBoardTable
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.ReadWriter
-
 /** 供后端重算流程重置指定主体的高级统计读模型。 */
 final case class ResetAdvancedStatsBoardPrivateAPIMessage(
     owner: DashboardOwner,
     at: Instant
-) extends APIMessage[AdvancedStatsBoard] derives ReadWriter:
+) extends APIMessage[AdvancedStatsBoard]:
 
   override def plan(context: ApiPlanContext): IO[AdvancedStatsBoard] =
     for

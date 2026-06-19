@@ -10,13 +10,11 @@ import riichinexus.microservices.tournament.objects.stage.table.{SeatWind, Table
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.system.app.MahjongCoreShowcaseModeState
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.ReadWriter
-
 /** 推进已结束的小局，或在初始/等待状态下开下一局。 */
 final case class MahjongCoreAdvanceRoundAPIMessage(
     tableId: String,
     request: Option[AdvanceMahjongRoundRequest] = None
-) extends APIMessage[MahjongTableView] derives ReadWriter:
+) extends APIMessage[MahjongTableView]:
 
   override def plan(context: ApiPlanContext): IO[MahjongTableView] =
     for

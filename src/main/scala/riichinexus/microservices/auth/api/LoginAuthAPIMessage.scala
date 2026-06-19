@@ -13,13 +13,11 @@ import riichinexus.microservices.auth.objects.Role
 import riichinexus.microservices.auth.objects.apiTypes.{AuthSuccessView, CurrentSessionRoleFlags}
 import riichinexus.microservices.auth.tables.accountcredential.AccountCredentialTable
 import riichinexus.microservices.auth.tables.authenticatedsession.AuthenticatedSessionTable
-import upickle.default.ReadWriter
-
 /** 使用账号密码登录。 */
 final case class LoginAuthAPIMessage(
     username: String,
     password: String
-) extends APIMessage[AuthSuccessView] derives ReadWriter:
+) extends APIMessage[AuthSuccessView]:
 
   private val SessionTtl = java.time.Duration.ofDays(30)
 

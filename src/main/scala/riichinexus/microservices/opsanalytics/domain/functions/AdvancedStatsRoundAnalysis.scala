@@ -13,7 +13,7 @@ import riichinexus.microservices.opsanalytics.objects.{AdvancedStatsBoard, Dashb
 
 /** AdvancedStatsRoundAnalysis 提供高级统计小局分析 相关的领域计算、校验和转换函数。 */
 
-private[riichinexus] object AdvancedStatsRoundAnalysis:
+private[opsanalytics] object AdvancedStatsRoundAnalysis:
   def buildPlayerBoard(
       playerId: PlayerId,
       records: Vector[MatchRecordPrivateView],

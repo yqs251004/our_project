@@ -1,7 +1,5 @@
 package riichinexus.microservices.tournament.objects.competition
 
-import upickle.default.{ReadWriter, readwriter}
-
 /** TournamentParticipantKind 枚举赛事参赛方类型 可使用的公开取值。 */
 
 enum TournamentParticipantKind:
@@ -9,5 +7,8 @@ enum TournamentParticipantKind:
   case Player
 
 object TournamentParticipantKind:
-  given ReadWriter[TournamentParticipantKind] =
-    readwriter[String].bimap(_.toString, TournamentParticipantKind.valueOf)
+  def toString(kind: TournamentParticipantKind): String =
+    kind.toString
+
+  def fromString(value: String): TournamentParticipantKind =
+    TournamentParticipantKind.valueOf(value)

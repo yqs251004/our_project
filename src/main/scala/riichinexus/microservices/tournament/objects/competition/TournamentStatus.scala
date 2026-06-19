@@ -1,7 +1,5 @@
 package riichinexus.microservices.tournament.objects.competition
 
-import upickle.default.{ReadWriter, readwriter}
-
 /** TournamentStatus 枚举赛事状态 可使用的公开取值。 */
 
 enum TournamentStatus:
@@ -14,4 +12,8 @@ enum TournamentStatus:
   case Archived
 
 object TournamentStatus:
-  given ReadWriter[TournamentStatus] = readwriter[String].bimap(_.toString, TournamentStatus.valueOf)
+  def toString(status: TournamentStatus): String =
+    status.toString
+
+  def fromString(value: String): TournamentStatus =
+    TournamentStatus.valueOf(value)

@@ -1,4 +1,5 @@
 package riichinexus.microservices.club.api
+import riichinexus.microservices.audit.objects.`private`.AuditEventType
 import riichinexus.microservices.auth.api.`private`.{CheckSuperAdminPrivateAPIMessage, ResolveAccessPrincipalPrivateAPIMessage}
 import riichinexus.microservices.player.api.`private`.{ResolvePlayerBoundClubIdsPrivateAPIMessage, ResolvePlayerByUserIdPrivateAPIMessage, ResolvePlayerPrivateAPIMessage}
 
@@ -18,6 +19,7 @@ import riichinexus.microservices.player.objects.`private`.PlayerPrivateView
 import riichinexus.microservices.audit.api.`private`.RecordAuditEventPrivateAPIMessage
 import riichinexus.microservices.audit.objects.`private`.AuditEventDraft
 import riichinexus.microservices.notification.api.`private`.RecordNotificationPrivateAPIMessage
+import riichinexus.microservices.notification.objects.NotificationType
 import riichinexus.microservices.notification.objects.`private`.CreateNotificationRequest
 
 import riichinexus.microservices.club.domain.ClubAuthorization
@@ -28,14 +30,12 @@ import riichinexus.microservices.club.domain.ClubApplicationReviewer
 import riichinexus.microservices.club.objects.membershipmanagement.apiTypes.ClubMembershipApplicationView
 import riichinexus.microservices.club.objects.membershipmanagement.apiTypes.{ClubApplicationReviewDecision, ReviewClubApplicationRequest}
 import riichinexus.microservices.club.tables.clubs.ClubTable
-import upickle.default.ReadWriter
-
 /** 审核俱乐部申请。 */
 final case class ReviewClubApplicationAPIMessage(
     clubId: String,
     membershipId: String,
     request: ReviewClubApplicationRequest
-) extends APIMessage[ClubMembershipApplicationView] derives ReadWriter:
+) extends APIMessage[ClubMembershipApplicationView]:
 
   override def plan(context: ApiPlanContext): IO[ClubMembershipApplicationView] =
     for
@@ -215,8 +215,8 @@ final case class ReviewClubApplicationAPIMessage(
       aggregateId = command.clubId.value,
       eventType =
         command.decision match
-          case ApplicationReviewDecision.Approve => "ClubApplicationApproved"
-          case ApplicationReviewDecision.Reject  => "ClubApplicationRejected",
+          case ApplicationReviewDecision.Approve => AuditEventType.ClubApplicationApproved
+          case ApplicationReviewDecision.Reject  => AuditEventType.ClubApplicationRejected,
       occurredAt = command.reviewedAt,
       actorId = command.actor.playerId,
       details = Map(
@@ -250,14 +250,16 @@ final case class ReviewClubApplicationAPIMessage(
   private def reviewNotificationRequest(
       command: ReviewClubApplicationCommand,
       result: ReviewClubApplicationResult,
-      recipientPlayerId: PlayerId
+    recipientPlayerId: PlayerId
   ): CreateNotificationRequest =
     val approved = command.decision == ApplicationReviewDecision.Approve
-    val eventType = if approved then "ClubApplicationApproved" else "ClubApplicationRejected"
+    val notificationType =
+      if approved then NotificationType.ClubApplicationApproved
+      else NotificationType.ClubApplicationRejected
     val decisionLabel = if approved then "已通过" else "已拒绝"
     CreateNotificationRequest(
       recipientPlayerId = recipientPlayerId.value,
-      notificationType = eventType,
+      notificationType = notificationType,
       title = if approved then "俱乐部申请已通过" else "俱乐部申请已拒绝",
       body = s"你加入 ${result.club.name} 的申请$decisionLabel。",
       severity = Some(if approved then "success" else "info"),

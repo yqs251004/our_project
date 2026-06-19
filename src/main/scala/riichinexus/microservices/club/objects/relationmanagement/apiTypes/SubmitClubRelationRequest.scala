@@ -1,6 +1,7 @@
 package riichinexus.microservices.club.objects.relationmanagement.apiTypes
 
 import riichinexus.microservices.club.objects.relationmanagement.ClubRelationKind
+import riichinexus.system.json.ClubJsonCodecs.given
 import upickle.default.{ReadWriter, macroRW}
 
 /** SubmitClubRelationRequest 表示提交俱乐部关系请求 的前端请求参数。 */

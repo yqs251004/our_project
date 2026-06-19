@@ -25,12 +25,10 @@ import riichinexus.microservices.tournament.objects.stage.apiTypes.PublicTournam
 import riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable
 import riichinexus.microservices.tournament.tables.tournaments.TournamentTable
 
-import upickle.default.ReadWriter
-
 /** 获取前端公开赛事详情。 */
 final case class GetPublicTournamentAPIMessage(
     tournamentId: String
-) extends APIMessage[PublicTournamentDetailView] derives ReadWriter:
+) extends APIMessage[PublicTournamentDetailView]:
 
   override def plan(context: ApiPlanContext): IO[PublicTournamentDetailView] =
     for

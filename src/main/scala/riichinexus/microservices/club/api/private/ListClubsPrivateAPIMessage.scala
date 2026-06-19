@@ -6,8 +6,6 @@ import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.Club
 import riichinexus.microservices.club.tables.clubs.ClubTable
-import upickle.default.ReadWriter
-
 /** 供后端服务读取俱乐部 domain 列表。 */
 final case class ListClubsPrivateAPIMessage(
     activeOnly: Boolean = false,
@@ -15,7 +13,7 @@ final case class ListClubsPrivateAPIMessage(
     memberId: Option[PlayerId] = None,
     adminId: Option[PlayerId] = None,
     name: Option[String] = None
-) extends APIMessage[Vector[Club]] derives ReadWriter:
+) extends APIMessage[Vector[Club]]:
 
   override def plan(context: ApiPlanContext): IO[Vector[Club]] =
     for
