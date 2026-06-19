@@ -1,4 +1,4 @@
-package riichinexus.microservices.tournament.mahjongcore.tables.tablestate
+package riichinexus.system.json
 
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.tournament.mahjongcore.domain.action.model.MahjongEvent
@@ -8,7 +8,7 @@ import riichinexus.microservices.tournament.objects.paifumanagement.{AgariResult
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.*
 
-private[tablestate] object MahjongTableStateJsonCodecs:
+object MahjongTableStateJsonCodecs:
   given ReadWriter[MahjongEvent] =
     readwriter[ujson.Value].bimap[MahjongEvent](writeEvent, readEvent)
 

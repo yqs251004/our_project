@@ -38,7 +38,7 @@ import riichinexus.microservices.tournament.domain.tablemanagement.functions.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.functions.*
 import riichinexus.microservices.tournament.objects.tablemanagement.TableSeat
 
-object TableSeatFunctions:
+private[tournament] object TableSeatFunctions:
   def validate(seat: TableSeat): TableSeat =
     require(seat.initialPoints > 0, "Seat initial points must be positive")
     seat

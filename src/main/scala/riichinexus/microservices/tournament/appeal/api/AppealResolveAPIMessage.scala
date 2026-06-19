@@ -3,7 +3,7 @@ import riichinexus.microservices.audit.domain.auditevent.AuditEvent
 import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
 import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPIMessage
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
-import riichinexus.microservices.notification.api.`private`.CreateBulkNotificationsPrivateAPIMessage
+import riichinexus.microservices.tournament.appeal.api.`private`.CreateAppealAdjudicatedNotificationsPrivateAPIMessage
 
 import java.time.Instant
 import java.util.NoSuchElementException
@@ -11,7 +11,7 @@ import java.util.NoSuchElementException
 import cats.effect.IO
 
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.microservices.auth.domain.functions.AuthorizationPolicyFunctions
+import riichinexus.microservices.auth.domain.authorization.AuthorizationPolicyFunctions
 import riichinexus.microservices.tournament.appeal.domain.AppealApplicationService
 import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
@@ -60,14 +60,11 @@ final case class AppealResolveAPIMessage(
       command = ResolveAppealCommand(AppealTicketId(appealId), resolved, actor, resolvedAt)
       ticket <- resolveAppeal(context.connection, service, command)
       _ <- RecordAuditEventsPrivateAPIMessage(resolveAppealAudit(ticket, command)).plan(context)
-      _ <- CreateBulkNotificationsPrivateAPIMessage(
-        AppealNotificationRequests.appealAdjudicated(
-          context.connection,
-          ticket,
-          AppealDecisionType.Resolve,
-          Some(AppealTableResolution.RestorePriorState),
-          command.input.verdict
-        )
+      _ <- CreateAppealAdjudicatedNotificationsPrivateAPIMessage(
+        ticket,
+        AppealDecisionType.Resolve,
+        Some(AppealTableResolution.RestorePriorState),
+        command.input.verdict
       ).plan(context)
     yield AppealTicketView.fromDomain(ticket)
 

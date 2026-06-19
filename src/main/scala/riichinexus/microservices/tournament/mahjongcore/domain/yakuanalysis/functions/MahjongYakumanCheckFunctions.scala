@@ -7,7 +7,7 @@ import riichinexus.microservices.tournament.objects.paifumanagement.Yaku
 
 import MahjongYakuCheckSupport.*
 
-private[functions] object MahjongYakumanCheckFunctions:
+private[tournament] object MahjongYakumanCheckFunctions:
 
   val plan: Vector[YakuCheck] =
     Vector(

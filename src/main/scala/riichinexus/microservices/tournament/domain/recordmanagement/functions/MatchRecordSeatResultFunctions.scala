@@ -38,6 +38,6 @@ import riichinexus.microservices.tournament.domain.tablemanagement.functions.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.functions.*
 import riichinexus.microservices.tournament.domain.recordmanagement.model.MatchRecordSeatResult
 
-object MatchRecordSeatResultFunctions:
+private[tournament] object MatchRecordSeatResultFunctions:
   def validate(result: MatchRecordSeatResult): Unit =
     require(result.placement >= 1 && result.placement <= 4, "Placement must be between 1 and 4")

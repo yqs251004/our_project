@@ -4,7 +4,7 @@ import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGues
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
 import riichinexus.microservices.player.api.`private`.*
 
-import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+import riichinexus.microservices.auth.domain.authorization.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
 import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.time.Instant
@@ -40,7 +40,6 @@ import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
 import riichinexus.microservices.club.domain.relationmanagement.model.*
 import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
-import riichinexus.microservices.player.domain.functions.PlayerRoleFunctions
 import riichinexus.microservices.auth.domain.*
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubAuthorization
@@ -81,8 +80,9 @@ final case class AssignClubAdminAPIMessage(
         case Some(club) =>
           ensureAdminCanBeAssigned(club, player, command)
           for
-            _ <- SavePlayerPrivateAPIMessage(
-              PlayerRoleFunctions.grantRole(player, RoleGrantFunctions.clubAdmin(command.clubId, command.grantedAt, command.actor.playerId))
+            _ <- GrantPlayerRolePrivateAPIMessage(
+              command.playerId,
+              RoleGrantFunctions.clubAdmin(command.clubId, command.grantedAt, command.actor.playerId)
             ).plan(context)
             savedClub <- IO.blocking(riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, ClubFunctions.grantAdmin(club, command.playerId)))
           yield Some(savedClub)

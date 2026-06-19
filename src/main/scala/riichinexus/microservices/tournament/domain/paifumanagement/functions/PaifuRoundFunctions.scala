@@ -58,7 +58,7 @@ import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGen
 import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.tournament.objects.paifumanagement.PaifuRound
 
-object PaifuRoundFunctions:
+private[tournament] object PaifuRoundFunctions:
   def validate(round: PaifuRound): Unit =
     require(round.players.nonEmpty, "Round must contain players")
     val playerIds = round.players.map(_.playerId).toSet

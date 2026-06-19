@@ -38,7 +38,7 @@ import riichinexus.microservices.tournament.domain.tablemanagement.functions.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.functions.*
 import riichinexus.microservices.tournament.objects.rulesmanagement.knockout.KnockoutBracketMatch
 
-object KnockoutBracketMatchFunctions:
+private[tournament] object KnockoutBracketMatchFunctions:
   def validate(matchNode: KnockoutBracketMatch): Unit =
     require(matchNode.slots.size == 4, "Riichi knockout matches must contain exactly four slots")
     require(matchNode.advancementCount >= 0 && matchNode.advancementCount <= 4, "Advancement count must be between 0 and 4")

@@ -5,7 +5,7 @@ import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGues
 import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPIMessage
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
 
-import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+import riichinexus.microservices.auth.domain.authorization.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
 import riichinexus.microservices.tournament.objects.settlementmanagement.TournamentSettlementStatus
 

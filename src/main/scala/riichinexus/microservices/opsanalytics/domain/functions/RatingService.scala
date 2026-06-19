@@ -28,7 +28,7 @@ import riichinexus.microservices.tournament.domain.tablemanagement.model.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.microservices.player.domain.Player
 
-object RatingService:
+private[opsanalytics] object RatingService:
   def calculateDeltas(
       players: Vector[Player],
       standings: Vector[MatchRecordSeatResult],

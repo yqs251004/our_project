@@ -40,7 +40,7 @@ import riichinexus.microservices.tournament.domain.tournamentmanagement.model.{T
 import riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentWhitelistEntry
 import riichinexus.microservices.tournament.objects.tournamentmanagement.{StageStatus, TournamentParticipantKind, TournamentStatus}
 
-object TournamentFunctions:
+private[tournament] object TournamentFunctions:
   def validate(tournament: Tournament): Unit =
     require(tournament.startsAt.isBefore(tournament.endsAt), "Tournament start time must be earlier than end time")
     require(tournament.stages.map(_.id).distinct.size == tournament.stages.size, "Tournament stages must have unique ids")

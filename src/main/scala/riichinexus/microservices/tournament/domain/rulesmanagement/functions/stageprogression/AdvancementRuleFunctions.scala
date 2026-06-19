@@ -40,7 +40,7 @@ import riichinexus.microservices.tournament.objects.rulesmanagement.stageprogres
 import riichinexus.microservices.tournament.objects.rulesmanagement.stageprogression.AdvancementRuleType
 import riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentFormat
 
-object AdvancementRuleFunctions:
+private[tournament] object AdvancementRuleFunctions:
   def defaultFor(format: TournamentFormat): AdvancementRule =
     format match
       case TournamentFormat.Swiss =>

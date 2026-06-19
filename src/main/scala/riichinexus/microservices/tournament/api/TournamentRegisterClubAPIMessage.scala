@@ -3,7 +3,7 @@ import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
 
-import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+import riichinexus.microservices.auth.domain.authorization.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
 import java.util.NoSuchElementException
 
@@ -45,7 +45,7 @@ import riichinexus.microservices.club.domain.relationmanagement.model.*
 import riichinexus.microservices.notification.api.`private`.CreateBulkNotificationsPrivateAPIMessage
 import riichinexus.microservices.notification.objects.apiTypes.CreateNotificationRequest
 import riichinexus.system.json.JsonCodecs.given
-import riichinexus.microservices.tournament.api.`private`.TournamentOperationViewAssembler
+import riichinexus.microservices.tournament.api.`private`.GetTournamentMutationViewPrivateAPIMessage
 import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
@@ -72,7 +72,7 @@ final case class TournamentRegisterClubAPIMessage(tournamentId: String, clubId: 
         if registration.wasNewInvitation then clubInvitationNotifications(registration.tournament, registration.club)
         else Vector.empty
       _ <- CreateBulkNotificationsPrivateAPIMessage(notificationRequests).plan(context)
-      view <- TournamentOperationViewAssembler.mutationView(context, command.tournamentId, Vector.empty)
+      view <- GetTournamentMutationViewPrivateAPIMessage(command.tournamentId).plan(context)
         .map(_.getOrElse(throw NoSuchElementException("Resource not found")))
     yield view
 
@@ -146,4 +146,3 @@ final case class TournamentRegisterClubAPIMessage(tournamentId: String, clubId: 
       club: Club,
       wasNewInvitation: Boolean
   )
-

@@ -31,7 +31,6 @@ import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.auth.objects.Role
 import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.api.`private`.*
-import riichinexus.microservices.player.domain.functions.PlayerRoleFunctions
 import riichinexus.microservices.player.objects.PlayerStatus
 import riichinexus.microservices.player.objects.apiTypes.{PlayerProfileView, PlayerRoleFlagsView}
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
@@ -90,7 +89,7 @@ final case class ListClubMembersAPIMessage(
       affiliatedClubIds = player.affiliatedClubIds.map(_.value),
       status = player.status.toString,
       roles = PlayerRoleFlagsView(
-        isRegisteredPlayer = PlayerRoleFunctions.effectiveRoleGrants(player).exists(_.role == Role.RegisteredPlayer),
+        isRegisteredPlayer = true,
         isClubAdmin = player.roleGrants.exists(_.role == Role.ClubAdmin),
         isTournamentAdmin = player.roleGrants.exists(_.role == Role.TournamentAdmin),
         isSuperAdmin = player.roleGrants.exists(_.role == Role.SuperAdmin)

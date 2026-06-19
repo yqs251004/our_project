@@ -7,7 +7,7 @@ import javax.crypto.spec.PBEKeySpec
 import riichinexus.microservices.auth.domain.model.AccountCredential
 import riichinexus.microservices.auth.security.PasswordDigest
 
-object PasswordHashFunctions:
+private[auth] object PasswordHashFunctions:
   val DefaultIterations: Int = 65_536
 
   private val Algorithm = "PBKDF2WithHmacSHA256"

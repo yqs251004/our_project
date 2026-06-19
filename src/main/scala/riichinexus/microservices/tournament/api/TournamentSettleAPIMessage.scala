@@ -3,7 +3,7 @@ import riichinexus.microservices.audit.domain.auditevent.AuditEvent
 import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
 import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPIMessage
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
-import riichinexus.microservices.auth.domain.functions.AuthorizationPolicyFunctions
+import riichinexus.microservices.auth.domain.authorization.AuthorizationPolicyFunctions
 
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}

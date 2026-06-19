@@ -26,7 +26,7 @@ import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGen
 import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.auth.domain.model.AuthenticatedSession
 
-object AuthenticatedSessionFunctions:
+private[auth] object AuthenticatedSessionFunctions:
   private val random = SecureRandom()
 
   def isExpired(session: AuthenticatedSession, asOf: Instant = Instant.now()): Boolean =

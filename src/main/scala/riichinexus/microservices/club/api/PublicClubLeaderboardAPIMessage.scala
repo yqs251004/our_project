@@ -2,7 +2,7 @@ package riichinexus.microservices.club.api
 import riichinexus.microservices.auth.objects.Permission
 
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
-import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+import riichinexus.microservices.auth.domain.authorization.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}

@@ -1,4 +1,4 @@
-package riichinexus.microservices.auth.domain.functions
+package riichinexus.microservices.auth.domain.authorization
 import riichinexus.microservices.auth.objects.Permission
 
 import riichinexus.microservices.player.domain.functions.PlayerIdGenerator

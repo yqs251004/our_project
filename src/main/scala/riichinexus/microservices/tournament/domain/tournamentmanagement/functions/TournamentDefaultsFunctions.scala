@@ -59,7 +59,7 @@ import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStat
 import riichinexus.microservices.tournament.domain.tournamentmanagement.model.{Tournament, TournamentStage}
 import riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentFormat
 
-object TournamentDefaultsFunctions:
+private[tournament] object TournamentDefaultsFunctions:
   def initialStage(): TournamentStage =
     TournamentStage(
       id = TournamentIdGenerator.stageId(),

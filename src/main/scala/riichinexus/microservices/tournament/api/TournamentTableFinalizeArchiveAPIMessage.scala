@@ -4,7 +4,7 @@ import java.time.Instant
 import java.util.NoSuchElementException
 
 import cats.effect.IO
-import riichinexus.microservices.auth.domain.functions.AuthorizationPolicyFunctions
+import riichinexus.microservices.auth.domain.authorization.AuthorizationPolicyFunctions
 import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.utils.ResolveAccessPrincipal
 import riichinexus.microservices.opsanalytics.api.`private`.RefreshOpsAnalyticsAfterMatchArchivedPrivateAPIMessage

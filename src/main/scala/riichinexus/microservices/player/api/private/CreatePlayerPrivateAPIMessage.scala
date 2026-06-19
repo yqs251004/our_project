@@ -3,7 +3,7 @@ package riichinexus.microservices.player.api.`private`
 import java.time.Instant
 
 import cats.effect.IO
-import riichinexus.microservices.auth.domain.functions.RoleGrantFunctions
+import riichinexus.microservices.auth.domain.authorization.RoleGrantFunctions
 import riichinexus.microservices.opsanalytics.api.`private`.EnsurePlayerDashboardAPIMessage
 import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.domain.functions.PlayerIdGenerator

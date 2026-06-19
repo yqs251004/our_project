@@ -42,7 +42,7 @@ import riichinexus.microservices.club.objects.rankprivilegemanagement.ClubPrivil
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubAuthorization
 import riichinexus.microservices.tournament.api.`private`.AcceptClubTournamentPrivateAPIMessage
-import riichinexus.microservices.tournament.api.`private`.TournamentOperationViewAssembler
+import riichinexus.microservices.tournament.api.`private`.GetTournamentMutationViewPrivateAPIMessage
 import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
@@ -67,7 +67,7 @@ final case class AcceptClubTournamentAPIMessage(
         actor = actor
       )
       _ <- acceptTournament(context, command)
-      view <- TournamentOperationViewAssembler.mutationView(context, command.tournamentId, Vector.empty)
+      view <- GetTournamentMutationViewPrivateAPIMessage(command.tournamentId).plan(context)
         .map(_.getOrElse(throw NoSuchElementException("Resource not found")))
     yield view
 
@@ -111,4 +111,3 @@ final case class AcceptClubTournamentAPIMessage(
       tournamentId: TournamentId,
       actor: AccessPrincipal
   )
-

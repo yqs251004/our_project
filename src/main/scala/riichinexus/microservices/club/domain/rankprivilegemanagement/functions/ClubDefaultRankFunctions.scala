@@ -3,7 +3,7 @@ package riichinexus.microservices.club.domain.rankprivilegemanagement.functions
 import riichinexus.microservices.club.domain.rankprivilegemanagement.model.ClubDefaultRank
 import riichinexus.microservices.club.objects.rankprivilegemanagement.ClubRankNode
 
-object ClubDefaultRankFunctions:
+private[club] object ClubDefaultRankFunctions:
   val all: Vector[ClubDefaultRank] =
     Vector(
       ClubDefaultRank.Rookie,

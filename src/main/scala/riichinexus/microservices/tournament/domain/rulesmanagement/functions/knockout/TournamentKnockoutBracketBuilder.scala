@@ -45,7 +45,7 @@ import riichinexus.microservices.tournament.domain.tablemanagement.model.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.microservices.player.domain.Player
 
-private[domain] object TournamentKnockoutBracketBuilder:
+private[tournament] object TournamentKnockoutBracketBuilder:
   def build(
       tournament: Tournament,
       stage: TournamentStage,

@@ -39,7 +39,7 @@ import riichinexus.microservices.tournament.domain.tournamentmanagement.function
 import riichinexus.microservices.tournament.objects.paifumanagement.{AgariResult, AgariWinResult, MahjongYakuKind, Yaku}
 import riichinexus.microservices.tournament.objects.paifumanagement.HandOutcome
 
-object AgariResultFunctions:
+private[tournament] object AgariResultFunctions:
   def validate(result: AgariResult): Unit =
     require(result.points >= 0, "Result points must be non-negative")
     require(result.scoreChanges.nonEmpty, "Result must include score changes")

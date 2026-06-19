@@ -6,7 +6,7 @@ import riichinexus.microservices.player.api.`private`.*
 import riichinexus.microservices.notification.api.`private`.CreateBulkNotificationsPrivateAPIMessage
 import riichinexus.microservices.notification.objects.apiTypes.CreateNotificationRequest
 
-import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+import riichinexus.microservices.auth.domain.authorization.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
 import java.util.NoSuchElementException
 

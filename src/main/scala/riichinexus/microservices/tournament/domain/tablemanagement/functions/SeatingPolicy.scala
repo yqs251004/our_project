@@ -45,10 +45,9 @@ import riichinexus.microservices.club.domain.relationmanagement.model.*
 import riichinexus.microservices.tournament.objects.tablemanagement.TableSeat
 import riichinexus.microservices.club.objects.relationmanagement.ClubRelationKind
 import riichinexus.microservices.player.domain.Player
-import riichinexus.microservices.player.domain.functions.PlayerClubBindingFunctions
 import riichinexus.microservices.tournament.objects.tablemanagement.SeatWind
 
-object SeatingPolicy:
+private[tournament] object SeatingPolicy:
   def planTables(
       players: Vector[Player],
       stage: TournamentStage,
@@ -236,7 +235,7 @@ object SeatingPolicy:
         relationBetween(player, other, representedClubByPlayer, clubRelations).nonEmpty
       )
       val rematchPressure = players.filterNot(_.id == player.id).map(other => opponentCount(player.id, other.id, opponentCounts)).sum
-      val flexibilityPenalty = PlayerClubBindingFunctions.boundClubIds(player).size
+      val flexibilityPenalty = boundClubIds(player).size
       (clubPressure, relationPressure, rematchPressure, flexibilityPenalty, player.elo)
     }
 
@@ -314,7 +313,10 @@ object SeatingPolicy:
       representedClubByPlayer: Map[PlayerId, ClubId]
   ): Vector[ClubId] =
     representedClubByPlayer.get(player.id).toVector ++
-      PlayerClubBindingFunctions.boundClubIds(player).filterNot(representedClubByPlayer.get(player.id).contains)
+      boundClubIds(player).filterNot(representedClubByPlayer.get(player.id).contains)
+
+  private def boundClubIds(player: Player): Vector[ClubId] =
+    (player.clubId.toVector ++ player.affiliatedClubIds).distinct
 
   private def relationBetween(
       left: Player,

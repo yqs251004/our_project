@@ -38,7 +38,7 @@ import riichinexus.microservices.tournament.domain.tablemanagement.functions.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.functions.*
 import riichinexus.microservices.tournament.objects.rulesmanagement.swiss.SwissRuleConfig
 
-object SwissRuleConfigFunctions:
+private[tournament] object SwissRuleConfigFunctions:
   private val supportedPairingMethods = Set("balanced-elo", "snake")
 
   def validate(config: SwissRuleConfig): Unit =

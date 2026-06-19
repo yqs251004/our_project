@@ -6,7 +6,7 @@ import riichinexus.microservices.tournament.objects.paifumanagement.{PaifuTile, 
 
 import MahjongYakuCheckSupport.*
 
-object MahjongYakuCheckFunctions:
+private[tournament] object MahjongYakuCheckFunctions:
 
   final case class MahjongYakuCandidate(
       yaku: Vector[Yaku],

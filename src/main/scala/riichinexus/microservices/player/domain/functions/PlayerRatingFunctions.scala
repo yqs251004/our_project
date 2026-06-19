@@ -3,7 +3,7 @@ package riichinexus.microservices.player.domain.functions
 import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.RankSnapshot
 
-object PlayerRatingFunctions:
+private[player] object PlayerRatingFunctions:
   def updateRank(player: Player, rank: RankSnapshot): Player =
     player.copy(currentRank = rank)
 

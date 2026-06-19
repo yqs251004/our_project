@@ -39,7 +39,6 @@ import riichinexus.microservices.club.domain.relationmanagement.model.*
 import riichinexus.microservices.club.objects.rankprivilegemanagement.ClubPrivilegeCode
 import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
-import riichinexus.microservices.player.domain.functions.PlayerClubBindingFunctions
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 
 object ClubApplicationReviewer:
@@ -97,7 +96,9 @@ object ClubApplicationReviewer:
           )
 
           for
-            savedPlayer <- SavePlayerPrivateAPIMessage(PlayerClubBindingFunctions.joinClub(player, parsedClubId)).plan(context)
+            savedPlayer <- JoinPlayerClubPrivateAPIMessage(parsedPlayerId, parsedClubId)
+              .plan(context)
+              .map(_.getOrElse(throw NoSuchElementException(s"Player ${parsedPlayerId.value} was not found")))
             _ <- ClubProjectionRefresher.ensurePlayerDashboard(context, savedPlayer.id, approvedAt)
             refreshedClub <- ClubProjectionRefresher.refreshClubProjection(context, updatedClub, approvedAt)
             savedClub <- IO.blocking(riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, refreshedClub))

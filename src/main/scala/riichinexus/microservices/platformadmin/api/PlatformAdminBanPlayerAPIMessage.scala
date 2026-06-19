@@ -6,7 +6,7 @@ import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPI
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
 import riichinexus.microservices.player.api.`private`.*
 
-import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+import riichinexus.microservices.auth.domain.authorization.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
 import cats.effect.IO
 
@@ -37,9 +37,8 @@ import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStat
 import riichinexus.microservices.auth.domain.AuthorizationFailure
 import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.auth.objects.Role
-import riichinexus.microservices.club.api.`private`.{ResolveClubPrivateAPIMessage, SaveClubPrivateAPIMessage}
+import riichinexus.microservices.club.api.`private`.{ResolveClubPrivateAPIMessage, UpdateClubPowerRatingPrivateAPIMessage}
 import riichinexus.microservices.club.domain.ClubPowerRatingService
-import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import riichinexus.microservices.opsanalytics.api.`private`.{
   RecordClubAdvancedStatsBoardAPIMessage,
   RecordClubDashboardAPIMessage,
@@ -47,7 +46,6 @@ import riichinexus.microservices.opsanalytics.api.`private`.{
   ResetPlayerDashboardAPIMessage
 }
 import riichinexus.microservices.player.domain.Player
-import riichinexus.microservices.player.domain.functions.{PlayerClubBindingFunctions, PlayerStatusFunctions}
 import riichinexus.microservices.player.objects.*
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
@@ -78,7 +76,7 @@ final case class PlatformAdminBanPlayerAPIMessage(
       _ <- RecordAuditEventsPrivateAPIMessage(banPlayerAudit(command)).plan(context)
       _ <- ResetPlayerDashboardAPIMessage(command.playerId, command.bannedAt).plan(context)
       _ <- ResetPlayerAdvancedStatsBoardAPIMessage(command.playerId, command.bannedAt).plan(context)
-      _ <- PlayerClubBindingFunctions.boundClubIds(savedPlayer).distinct.foldLeft(IO.unit) { (previous, clubId) =>
+      _ <- boundClubIds(savedPlayer).distinct.foldLeft(IO.unit) { (previous, clubId) =>
         previous.flatMap(_ =>
           ResolveClubPrivateAPIMessage(clubId).plan(context).flatMap {
             case Some(club) =>
@@ -90,14 +88,14 @@ final case class PlatformAdminBanPlayerAPIMessage(
                   }
                 }
               }.flatMap { playersById =>
-                val refreshed = ClubFunctions.updatePowerRating(
-                  club,
-                  ClubPowerRatingService.calculate(club, playerId => playersById.get(playerId))
-                )
-                SaveClubPrivateAPIMessage(refreshed).plan(context).flatMap { savedClub =>
+                val powerRating = ClubPowerRatingService.calculate(club, playerId => playersById.get(playerId))
+                UpdateClubPowerRatingPrivateAPIMessage(club.id, powerRating).plan(context).flatMap {
+                  case Some(savedClub) =>
                   RecordClubDashboardAPIMessage(savedClub, command.bannedAt).plan(context).flatMap(_ =>
                     RecordClubAdvancedStatsBoardAPIMessage(savedClub, command.bannedAt).plan(context).map(_ => ())
                   )
+                  case None =>
+                    IO.unit
                 }
               }
             case None =>
@@ -124,7 +122,7 @@ final case class PlatformAdminBanPlayerAPIMessage(
 
     ResolvePlayerPrivateAPIMessage(command.playerId).plan(context).flatMap {
       case Some(player) =>
-        SavePlayerPrivateAPIMessage(PlayerStatusFunctions.ban(player, command.reason)).plan(context).map(Some(_))
+        BanPlayerPrivateAPIMessage(player.id, command.reason).plan(context)
       case None =>
         IO.pure(None)
     }
@@ -149,10 +147,13 @@ final case class PlatformAdminBanPlayerAPIMessage(
       userId = player.userId,
       nickname = player.nickname,
       status = player.status.toString,
-      clubIds = PlayerClubBindingFunctions.boundClubIds(player).map(_.value),
+      clubIds = boundClubIds(player).map(_.value),
       bannedReason = player.bannedReason,
       isSuperAdmin = player.roleGrants.exists(_.role == Role.SuperAdmin)
     )
+
+  private def boundClubIds(player: Player): Vector[ClubId] =
+    (player.clubId.toVector ++ player.affiliatedClubIds).distinct
 
   private final case class BanPlayerCommand(
       playerId: PlayerId,

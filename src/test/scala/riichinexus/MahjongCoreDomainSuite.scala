@@ -1,4 +1,4 @@
-package riichinexus
+package riichinexus.microservices.tournament
 
 import munit.FunSuite
 

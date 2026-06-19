@@ -38,7 +38,7 @@ import riichinexus.microservices.tournament.domain.tablemanagement.functions.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.functions.*
 import riichinexus.microservices.tournament.objects.paifumanagement.PaifuTile
 
-object PaifuTileFunctions:
+private[tournament] object PaifuTileFunctions:
   private val TilePattern = "^[0-9][mps]$|^[1-7]z$".r
 
   def isValid(value: String): Boolean =

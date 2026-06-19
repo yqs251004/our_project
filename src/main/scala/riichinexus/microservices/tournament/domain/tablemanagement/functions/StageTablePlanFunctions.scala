@@ -38,7 +38,7 @@ import riichinexus.microservices.tournament.domain.tablemanagement.functions.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.functions.*
 import riichinexus.microservices.tournament.domain.tablemanagement.model.StageTablePlan
 
-object StageTablePlanFunctions:
+private[tournament] object StageTablePlanFunctions:
   def validate(plan: StageTablePlan): Unit =
     require(plan.roundNumber >= 1, "Stage table plan round number must be positive")
     require(plan.seats.size == 4, "Stage table plan must contain four seats")

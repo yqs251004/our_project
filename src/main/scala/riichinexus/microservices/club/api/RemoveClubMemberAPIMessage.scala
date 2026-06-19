@@ -4,7 +4,7 @@ import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGues
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
 import riichinexus.microservices.player.api.`private`.*
 
-import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+import riichinexus.microservices.auth.domain.authorization.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
 import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.time.Instant
@@ -40,7 +40,6 @@ import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
 import riichinexus.microservices.club.domain.relationmanagement.model.*
 import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
-import riichinexus.microservices.player.domain.functions.{PlayerClubBindingFunctions, PlayerRoleFunctions}
 import riichinexus.microservices.auth.domain.*
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.{ClubAuthorization, ClubProjectionRefresher}
@@ -94,12 +93,7 @@ final case class RemoveClubMemberAPIMessage(
           )
           ensureMemberCanBeRemoved(club, command.clubId, command.playerId)
           for
-            _ <- SavePlayerPrivateAPIMessage(
-              PlayerRoleFunctions.revokeClubAdmin(
-                PlayerClubBindingFunctions.leaveClub(player, command.clubId),
-                command.clubId
-              )
-            ).plan(context)
+            _ <- LeavePlayerClubPrivateAPIMessage(command.playerId, command.clubId).plan(context)
             refreshedClub <- ClubProjectionRefresher.refreshClubProjection(
               context,
               ClubFunctions.removeMember(club, command.playerId),
@@ -126,4 +120,3 @@ final case class RemoveClubMemberAPIMessage(
       actor: AccessPrincipal,
       occurredAt: Instant
   )
-

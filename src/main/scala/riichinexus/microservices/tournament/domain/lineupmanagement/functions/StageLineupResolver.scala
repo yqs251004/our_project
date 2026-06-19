@@ -39,7 +39,7 @@ import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
 
-object StageLineupResolver:
+private[tournament] object StageLineupResolver:
   def directPlayerIds(tournament: Tournament): Vector[PlayerId] =
     (tournament.participatingPlayers ++ tournament.whitelist.flatMap(_.playerId)).distinct
 

@@ -26,12 +26,7 @@ final case class MahjongRuleset(
     bankruptcyEnd: Boolean = true,
     allLastDealerFinishAsTop: Boolean = false,
     minHan: Int = 1
-):
-  def normalizedAkaDoraCount: Int =
-    if !akaDora then 0 else math.max(0, math.min(akaDoraCount, 3))
-
-  def normalizedMinHan: Int =
-    math.max(1, minHan)
+)
 
 object MahjongRuleset:
   given ReadWriter[MahjongRuleset] =

@@ -27,7 +27,7 @@ import riichinexus.microservices.opsanalytics.objects.{Dashboard, DashboardOwner
 import riichinexus.microservices.tournament.domain.recordmanagement.model.MatchRecord
 import riichinexus.microservices.tournament.objects.paifumanagement.PaifuRound
 
-object DashboardFunctions:
+private[opsanalytics] object DashboardFunctions:
   def empty(owner: DashboardOwner, at: Instant): Dashboard =
     Dashboard(
       owner = owner,

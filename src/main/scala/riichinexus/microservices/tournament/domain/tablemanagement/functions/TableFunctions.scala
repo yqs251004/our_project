@@ -43,7 +43,7 @@ import riichinexus.microservices.tournament.appeal.domain.model.AppealTableResol
 import riichinexus.microservices.tournament.domain.tablemanagement.model.Table
 import riichinexus.microservices.tournament.objects.tablemanagement.{SeatWind, TableSeat, TableStatus}
 
-object TableFunctions:
+private[tournament] object TableFunctions:
   def validate(table: Table): Table =
     require(table.seats.size == 4, "A riichi table must have exactly four seats")
     require(table.seats.map(_.seat).distinct.size == 4, "Seats must be unique")

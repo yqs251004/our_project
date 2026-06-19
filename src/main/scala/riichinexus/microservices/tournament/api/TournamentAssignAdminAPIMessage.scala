@@ -6,7 +6,7 @@ import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPI
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
 import riichinexus.microservices.player.api.`private`.*
 
-import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+import riichinexus.microservices.auth.domain.authorization.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
 import java.util.NoSuchElementException
 import java.time.Instant
@@ -40,7 +40,6 @@ import riichinexus.microservices.tournament.domain.recordmanagement.model.*
 import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
 import riichinexus.microservices.tournament.domain.tablemanagement.model.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
-import riichinexus.microservices.player.domain.functions.PlayerRoleFunctions
 import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
 import riichinexus.system.json.JsonCodecs.given
@@ -108,7 +107,7 @@ final case class TournamentAssignAdminAPIMessage(tournamentId: String, request: 
     val connection = context.connection
     for
       _ <- SavePlayerPrivateAPIMessage(
-        PlayerRoleFunctions.grantRole(
+        grantRole(
           player,
           RoleGrantFunctions.tournamentAdmin(command.tournamentId, command.grantedAt, command.actor.playerId)
         )
@@ -120,6 +119,14 @@ final case class TournamentAssignAdminAPIMessage(tournamentId: String, request: 
         )
       }
     yield savedTournament
+
+  private def grantRole(player: Player, grant: RoleGrant): Player =
+    val normalized = player.roleGrants.filterNot(existing =>
+      existing.role == grant.role &&
+        existing.clubId == grant.clubId &&
+        existing.tournamentId == grant.tournamentId
+    )
+    player.copy(roleGrants = (normalized :+ grant).sortBy(_.grantedAt.toEpochMilli))
 
   private def assignAdminAudit(command: AssignTournamentAdminCommand): Vector[AuditEvent] =
     Vector(

@@ -13,7 +13,7 @@ import riichinexus.microservices.tournament.domain.lineupmanagement.functions.St
 import riichinexus.microservices.tournament.domain.tournamentmanagement.model.{Tournament, TournamentStage}
 import riichinexus.system.api.ApiPlanContext
 
-object TournamentStageParticipantResolver:
+private[tournament] object TournamentStageParticipantResolver:
   def resolveParticipants(
       context: ApiPlanContext,
       tournament: Tournament,

@@ -39,7 +39,7 @@ import riichinexus.microservices.player.objects.*
 import riichinexus.microservices.opsanalytics.domain.model.PlayerRoundStats
 import riichinexus.microservices.opsanalytics.objects.{AdvancedStatsBoard, DashboardOwner}
 
-private[riichinexus] object AdvancedStatsRoundAnalysis:
+private[opsanalytics] object AdvancedStatsRoundAnalysis:
   def buildPlayerBoard(
       playerId: PlayerId,
       records: Vector[MatchRecord],

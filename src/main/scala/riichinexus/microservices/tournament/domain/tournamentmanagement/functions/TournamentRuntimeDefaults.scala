@@ -40,7 +40,7 @@ import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
 import riichinexus.microservices.tournament.domain.tablemanagement.model.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 
-object TournamentRuntimeDefaults:
+private[tournament] object TournamentRuntimeDefaults:
   val settlementPayoutRatios: Vector[Double] =
     Vector(0.5, 0.3, 0.2)
 

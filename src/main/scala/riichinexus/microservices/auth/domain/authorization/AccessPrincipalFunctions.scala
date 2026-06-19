@@ -1,4 +1,4 @@
-package riichinexus.microservices.auth.domain.functions
+package riichinexus.microservices.auth.domain.authorization
 
 import java.time.Instant
 
@@ -22,6 +22,7 @@ import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
 import riichinexus.microservices.audit.domain.auditevent.AuditEventId
 import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
 import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
+import riichinexus.microservices.auth.domain.functions.GuestAccessSessionFunctions
 import riichinexus.microservices.auth.domain.model.{AccessPrincipal, GuestAccessSession}
 import riichinexus.microservices.auth.objects.Role
 

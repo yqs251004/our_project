@@ -38,7 +38,7 @@ import riichinexus.microservices.tournament.domain.tablemanagement.functions.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.functions.*
 import riichinexus.microservices.tournament.objects.paifumanagement.PaifuMetadata
 
-object PaifuMetadataFunctions:
+private[tournament] object PaifuMetadataFunctions:
   def validate(metadata: PaifuMetadata): Unit =
     require(metadata.source.trim.nonEmpty, "Paifu source cannot be empty")
     require(metadata.seats.size == 4, "Paifu metadata must contain four seats")

@@ -1,7 +1,7 @@
 package riichinexus.microservices.club.domain
 import riichinexus.microservices.auth.objects.Permission
 
-import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+import riichinexus.microservices.auth.domain.authorization.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
 import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import riichinexus.microservices.player.domain.functions.PlayerIdGenerator

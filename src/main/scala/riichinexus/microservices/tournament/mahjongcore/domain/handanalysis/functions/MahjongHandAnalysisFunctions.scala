@@ -5,7 +5,7 @@ import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.Ma
 import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.MahjongTileFunctions.*
 import riichinexus.microservices.tournament.objects.paifumanagement.PaifuTile
 
-object MahjongHandAnalysisFunctions:
+private[tournament] object MahjongHandAnalysisFunctions:
 
   private val YaochuIndices: Vector[Int] =
     Vector(Man1, Man9, Pin1, Pin9, Sou1, Sou9, Ton, Nan, Sha, Pei, Haku, Hatsu, Chun)

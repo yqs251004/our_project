@@ -22,7 +22,7 @@ import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGen
 import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.player.domain.Player
 
-object PlayerClubBindingFunctions:
+private[player] object PlayerClubBindingFunctions:
   def boundClubIds(player: Player): Vector[ClubId] =
     (player.clubId.toVector ++ player.affiliatedClubIds).distinct
 

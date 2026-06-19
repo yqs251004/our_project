@@ -1,7 +1,5 @@
 package riichinexus.microservices.player.domain.functions
 
-import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
-
 import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.club.domain.functions.ClubIdGenerator
@@ -26,10 +24,10 @@ import riichinexus.microservices.auth.domain.model.RoleGrant
 import riichinexus.microservices.auth.objects.Role
 import riichinexus.microservices.player.domain.Player
 
-object PlayerRoleFunctions:
+private[player] object PlayerRoleFunctions:
   def effectiveRoleGrants(player: Player): Vector[RoleGrant] =
     if player.roleGrants.exists(_.role == Role.RegisteredPlayer) then player.roleGrants
-    else RoleGrantFunctions.registered(player.registeredAt) +: player.roleGrants
+    else RoleGrant(Role.RegisteredPlayer, grantedAt = player.registeredAt) +: player.roleGrants
 
   def grantRole(player: Player, grant: RoleGrant): Player =
     val normalized = player.roleGrants.filterNot(existing =>

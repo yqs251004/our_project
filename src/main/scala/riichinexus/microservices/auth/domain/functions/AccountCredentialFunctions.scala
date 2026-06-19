@@ -2,7 +2,7 @@ package riichinexus.microservices.auth.domain.functions
 
 import riichinexus.microservices.auth.domain.model.AccountCredential
 
-object AccountCredentialFunctions:
+private[auth] object AccountCredentialFunctions:
   def normalizeUsername(username: String): String =
     Option(username)
       .map(_.trim.toLowerCase)

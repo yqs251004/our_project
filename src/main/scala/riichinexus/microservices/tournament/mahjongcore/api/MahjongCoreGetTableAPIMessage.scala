@@ -1,7 +1,7 @@
 package riichinexus.microservices.tournament.mahjongcore.api
 
 import cats.effect.IO
-import riichinexus.microservices.auth.domain.functions.AccessPrincipalFunctions
+import riichinexus.microservices.auth.domain.authorization.AccessPrincipalFunctions
 import riichinexus.microservices.auth.utils.ResolveAccessPrincipal
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.tournament.mahjongcore.domain.gamestate.functions.MahjongGameStateTransitionFunctions

@@ -39,7 +39,7 @@ import riichinexus.microservices.tournament.domain.tournamentmanagement.function
 import riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentWhitelistEntry
 import riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentParticipantKind
 
-object TournamentWhitelistEntryFunctions:
+private[tournament] object TournamentWhitelistEntryFunctions:
   def validate(entry: TournamentWhitelistEntry): Unit =
     require(
       entry.participantKind match

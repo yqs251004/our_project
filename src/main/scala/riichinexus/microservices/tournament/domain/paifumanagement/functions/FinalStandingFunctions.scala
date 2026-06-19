@@ -38,6 +38,6 @@ import riichinexus.microservices.tournament.domain.tablemanagement.functions.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.functions.*
 import riichinexus.microservices.tournament.objects.paifumanagement.FinalStanding
 
-object FinalStandingFunctions:
+private[tournament] object FinalStandingFunctions:
   def validate(standing: FinalStanding): Unit =
     require(standing.placement >= 1 && standing.placement <= 4, "Placement must be between 1 and 4")

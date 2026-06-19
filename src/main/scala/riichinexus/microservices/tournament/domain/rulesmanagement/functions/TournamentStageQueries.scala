@@ -58,7 +58,7 @@ import riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTable
 import riichinexus.microservices.tournament.tables.tournaments.TournamentTable
 import riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable
 
-object TournamentStageQueries:
+private[tournament] object TournamentStageQueries:
   def stageStandings(
       connection: Connection,
       tournamentId: TournamentId,

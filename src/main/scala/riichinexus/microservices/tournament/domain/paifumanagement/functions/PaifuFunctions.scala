@@ -58,7 +58,7 @@ import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGen
 import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.tournament.objects.paifumanagement.{HandOutcome, Paifu, PaifuAction, PaifuActionType, PaifuRound}
 
-object PaifuFunctions:
+private[tournament] object PaifuFunctions:
   def validate(paifu: Paifu): Unit =
     PaifuMetadataFunctions.validate(paifu.metadata)
     require(paifu.rounds.nonEmpty, "Paifu must contain at least one round")

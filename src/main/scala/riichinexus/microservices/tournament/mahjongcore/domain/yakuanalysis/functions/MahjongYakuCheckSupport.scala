@@ -7,7 +7,7 @@ import riichinexus.microservices.tournament.mahjongcore.domain.yakuanalysis.mode
 import riichinexus.microservices.tournament.objects.paifumanagement.{MahjongYakuKind, PaifuTile, Yaku}
 import riichinexus.microservices.tournament.objects.tablemanagement.SeatWind
 
-private[functions] object MahjongYakuCheckSupport:
+private[tournament] object MahjongYakuCheckSupport:
 
   final case class MahjongYakuCheckState(
       concealedCounts: Array[Int],

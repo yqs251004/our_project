@@ -3,7 +3,7 @@ import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
 
-import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+import riichinexus.microservices.auth.domain.authorization.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
 import riichinexus.microservices.tournament.objects.rulesmanagement.stageprogression.AdvancementRuleType
 import riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentFormat

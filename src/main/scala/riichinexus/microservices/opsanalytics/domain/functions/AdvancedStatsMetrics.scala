@@ -2,7 +2,7 @@ package riichinexus.microservices.opsanalytics.domain.functions
 
 import riichinexus.microservices.opsanalytics.domain.model.PlayerRoundStats
 
-private[functions] object AdvancedStatsMetrics:
+private[opsanalytics] object AdvancedStatsMetrics:
   def calculateDefenseStability(
       roundStats: Vector[PlayerRoundStats],
       placements: Vector[Double]

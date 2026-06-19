@@ -38,7 +38,7 @@ import riichinexus.microservices.tournament.domain.tablemanagement.functions.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.functions.*
 import riichinexus.microservices.tournament.objects.paifumanagement.PaifuAction
 
-object PaifuActionFunctions:
+private[tournament] object PaifuActionFunctions:
   def validate(action: PaifuAction): Unit =
     require(action.sequenceNo >= 1, "Paifu action sequence number must be positive")
     action.tile.foreach(PaifuTileFunctions.validate)

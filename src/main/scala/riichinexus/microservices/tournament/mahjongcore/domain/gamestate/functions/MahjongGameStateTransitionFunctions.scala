@@ -13,21 +13,31 @@ import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.*
 import riichinexus.microservices.tournament.objects.paifumanagement.*
 import riichinexus.microservices.tournament.objects.tablemanagement.{SeatWind, TableId, TableSeat}
 
-object MahjongGameStateTransitionFunctions:
+private[tournament] object MahjongGameStateTransitionFunctions:
 
   def startTable(tableId: TableId, ruleset: MahjongRuleset, seed: String): MahjongTableState =
     startTable(tableId, ruleset, seed, defaultTableSeats(tableId, ruleset))
 
   def startTable(tableId: TableId, ruleset: MahjongRuleset, seed: String, tableSeats: Vector[TableSeat]): MahjongTableState =
     require(tableSeats.size == 4, "Mahjong table requires four seats")
-    val orderedTableSeats = SeatWind.all.flatMap(wind => tableSeats.find(_.seat == wind))
+    val effectiveTableSeats = MahjongScriptedRoundFunctions.tableSeatsForSeed(tableId, ruleset, seed).getOrElse(tableSeats)
+    val orderedTableSeats = SeatWind.all.flatMap(wind => effectiveTableSeats.find(_.seat == wind))
     require(orderedTableSeats.size == 4, "Mahjong table seats must cover East, South, West and North")
-    val shuffled = MahjongTileFunctions.shuffledWall(seed, ruleset)
+    val descriptor = KyokuDescriptor(SeatWind.East, handNumber = 1, honba = 0)
+    val shuffled =
+      MahjongScriptedRoundFunctions.wallForRound(
+        ruleset,
+        seed,
+        descriptor,
+        orderedTableSeats.map(seat => seat.seat -> seat.playerId),
+        showcaseMode = false
+      ).getOrElse(MahjongTileFunctions.shuffledWall(seed, ruleset))
     val deadSource = shuffled.takeRight(14)
     val deadWall = deadSource.take(4) ++ deadSource.slice(4, 9)
     val uraDora = deadSource.slice(9, 14)
     val liveWall = shuffled.dropRight(14)
     val playerIds = orderedTableSeats.map(_.playerId)
+    val scriptedSeatPoints = MahjongScriptedRoundFunctions.initialPoints(seed)
 
     var cursor = 0
     val initialHands = Array.fill(4)(Vector.empty[PaifuTile])
@@ -44,7 +54,7 @@ object MahjongGameStateTransitionFunctions:
       MahjongSeatState(
         seat = tableSeat.seat,
         playerId = tableSeat.playerId,
-        points = ruleset.initialPoints,
+        points = scriptedSeatPoints.getOrElse(tableSeat.seat, ruleset.initialPoints),
         handTiles = sortTiles(initialHands(index)),
         drawTile = if tableSeat.seat == SeatWind.East then Some(eastDraw) else None,
         melds = Vector.empty,
@@ -54,7 +64,6 @@ object MahjongGameStateTransitionFunctions:
         furiten = false
       )
     }
-    val descriptor = KyokuDescriptor(SeatWind.East, handNumber = 1, honba = 0)
     val round = MahjongRoundState(
       descriptor = descriptor,
       phase = MahjongRoundPhase.PlayerTurn,
@@ -913,46 +922,6 @@ object MahjongGameStateTransitionFunctions:
       .filter(tile => indexOf(tile) == tileIndex)
       .distinctBy(tile => isRed(tile))
 
-  private val showcaseEast2InitialHands: Map[SeatWind, Vector[PaifuTile]] =
-    Map(
-      SeatWind.East -> showcaseTiles("1m", "9m", "1s", "9s", "1p", "9p", "1z", "2z", "3z", "4z", "5z", "6z", "7z"),
-      SeatWind.South -> showcaseTiles("1p", "1p", "1p", "2p", "3p", "4p", "5p", "6p", "7p", "8p", "9p", "9p", "9p"),
-      SeatWind.West -> showcaseTiles("1s", "1s", "1s", "2s", "3s", "4s", "5s", "6s", "7s", "8s", "9s", "9s", "9s"),
-      SeatWind.North -> showcaseTiles("1m", "1m", "1m", "2m", "3m", "4m", "5m", "6m", "7m", "8m", "9m", "9m", "9m")
-    )
-  private val showcaseEast2EastDraw: PaifuTile = PaifuTile("0p")
-  private val showcaseEast2DoraIndicator: PaifuTile = PaifuTile("4z")
-
-  private def showcaseTiles(values: String*): Vector[PaifuTile] =
-    values.toVector.map(PaifuTile(_))
-
-  private def showcaseWallForRound(
-      ruleset: MahjongRuleset,
-      descriptor: KyokuDescriptor,
-      orderedSeats: Vector[MahjongSeatState]
-  ): Option[Vector[PaifuTile]] =
-    if descriptor.roundWind != SeatWind.East || descriptor.handNumber != 2 then None
-    else
-      val livePrefix =
-        (0 until 13).toVector.flatMap { tileIndex =>
-          orderedSeats.map(seat => showcaseEast2InitialHands(seat.seat)(tileIndex))
-        } :+ showcaseEast2EastDraw
-      val liveWallSize = 136 - 14
-      val liveTailSize = liveWallSize - livePrefix.size
-
-      for
-        remainingAfterLivePrefix <- removeTiles(fullWall(ruleset), livePrefix)
-        remaining <- removeTiles(remainingAfterLivePrefix, Vector(showcaseEast2DoraIndicator))
-        if liveTailSize >= 0 && remaining.size >= liveTailSize + 13
-      yield
-        val liveWall = livePrefix ++ remaining.take(liveTailSize)
-        val deadFill = remaining.drop(liveTailSize)
-        val deadSource =
-          deadFill.take(4) ++
-            Vector(showcaseEast2DoraIndicator) ++
-            deadFill.drop(4).take(9)
-        liveWall ++ deadSource
-
   private def dealRound(
       state: MahjongTableState,
       descriptor: KyokuDescriptor,
@@ -962,7 +931,13 @@ object MahjongGameStateTransitionFunctions:
   ): MahjongTableState =
     val orderedSeats = SeatWind.all.flatMap(wind => seatsForRound.find(_.seat == wind))
     val shuffled =
-      (if showcaseMode then showcaseWallForRound(state.ruleset, descriptor, orderedSeats) else None)
+      MahjongScriptedRoundFunctions.wallForRound(
+        state.ruleset,
+        seed,
+        descriptor,
+        orderedSeats.map(seat => seat.seat -> seat.playerId),
+        showcaseMode
+      )
         .getOrElse(MahjongTileFunctions.shuffledWall(seed, state.ruleset))
     val deadSource = shuffled.takeRight(14)
     val deadWall = deadSource.take(4) ++ deadSource.slice(4, 9)
@@ -1092,13 +1067,14 @@ object MahjongGameStateTransitionFunctions:
     SeatWind.all((SeatWind.all.indexOf(seat) + 1) % SeatWind.all.size)
 
   private def finishedRoundFromState(state: MahjongTableState, round: MahjongRoundState): PaifuRound =
-    val timeline = PaifuTimeline(Vector.empty)
+    val actions = round.events.flatMap(eventToPaifuAction)
+    val timeline = PaifuTimeline(actions)
     val players = state.seats.map { seat =>
       PaifuRoundPlayer(
         playerId = seat.playerId,
         seat = seat.seat,
         initialHand = PaifuHand(round.initialHands.getOrElse(seat.playerId, seat.handTiles)),
-        track = PaifuPlayerTrack(Vector.empty)
+        track = PaifuPlayerTrack(actions.filter(_.actor.contains(seat.playerId)))
       )
     }
     PaifuRound(
@@ -1107,6 +1083,28 @@ object MahjongGameStateTransitionFunctions:
       timeline = timeline,
       result = round.result.get
     )
+
+  private def eventToPaifuAction(event: MahjongEvent): Option[PaifuAction] =
+    event match
+      case MahjongEvent.TileDrawn(sequenceNo, playerId, tile) =>
+        Some(PaifuAction(sequenceNo = sequenceNo, actor = Some(playerId), actionType = PaifuActionType.Draw, tile = Some(tile)))
+      case MahjongEvent.TileDiscarded(sequenceNo, playerId, tile, tsumogiri) =>
+        Some(PaifuAction(sequenceNo = sequenceNo, actor = Some(playerId), actionType = PaifuActionType.Discard, tile = Some(tile), note = Option.when(tsumogiri)("tsumogiri")))
+      case MahjongEvent.MeldCalled(sequenceNo, playerId, meld) =>
+        Some(PaifuAction(sequenceNo = sequenceNo, actor = Some(playerId), actionType = meldActionType(meld.meldType), tile = meld.calledTile, revealedTiles = meld.tiles, fromPlayer = meld.fromPlayer))
+      case MahjongEvent.RiichiDeclared(sequenceNo, playerId, tile) =>
+        Some(PaifuAction(sequenceNo = sequenceNo, actor = Some(playerId), actionType = PaifuActionType.Riichi, tile = Some(tile)))
+      case MahjongEvent.KanDeclared(sequenceNo, playerId, meld) =>
+        Some(PaifuAction(sequenceNo = sequenceNo, actor = Some(playerId), actionType = meldActionType(meld.meldType), tile = meld.calledTile.orElse(meld.tiles.headOption), revealedTiles = meld.tiles, fromPlayer = meld.fromPlayer))
+      case MahjongEvent.DoraRevealed(sequenceNo, tile) =>
+        Some(PaifuAction(sequenceNo = sequenceNo, actionType = PaifuActionType.DoraReveal, tile = Some(tile)))
+      case MahjongEvent.WinDeclared(sequenceNo, winner, target, tile) =>
+        Some(PaifuAction(sequenceNo = sequenceNo, actor = Some(winner), actionType = PaifuActionType.Win, tile = Some(tile), fromPlayer = target))
+      case MahjongEvent.PlayerPassed(sequenceNo, playerId) =>
+        Some(PaifuAction(sequenceNo = sequenceNo, actor = Some(playerId), actionType = PaifuActionType.Discard, note = Some("pass")))
+      case MahjongEvent.RoundFinished(sequenceNo, result) if result.winner.isEmpty =>
+        Some(PaifuAction(sequenceNo = sequenceNo, actionType = PaifuActionType.DrawGame, note = Some(result.outcome.toString)))
+      case _ => None
 
   private def leavesTenpaiAfterDiscard(seat: MahjongSeatState, discardTile: PaifuTile): Boolean =
     val source = seat.handTiles ++ seat.drawTile.toVector

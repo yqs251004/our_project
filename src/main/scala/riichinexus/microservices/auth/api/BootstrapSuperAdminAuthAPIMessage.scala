@@ -5,9 +5,9 @@ import riichinexus.microservices.auth.domain.{AuthenticationFailure, Authorizati
 import riichinexus.microservices.auth.domain.functions.{
   AccountCredentialFunctions,
   AuthenticatedSessionFunctions,
-  PasswordHashFunctions,
-  RoleGrantFunctions
+  PasswordHashFunctions
 }
+import riichinexus.microservices.auth.domain.authorization.RoleGrantFunctions
 import riichinexus.microservices.auth.domain.model.{AccountCredential, AuthenticatedSession}
 import riichinexus.microservices.auth.objects.Role
 import riichinexus.microservices.auth.objects.apiTypes.{AuthSuccessView, CurrentSessionRoleFlags}
@@ -16,13 +16,13 @@ import riichinexus.microservices.auth.tables.accountcredential.AccountCredential
 import riichinexus.microservices.auth.tables.authenticatedsession.AuthenticatedSessionTable
 import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.api.`private`.*
-import riichinexus.microservices.player.domain.functions.PlayerRoleFunctions
 import riichinexus.microservices.player.objects.{PlayerStatus, RankPlatform, RankSnapshot}
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import upickle.default.*
 
 import java.sql.Connection
 import java.time.Instant
+import java.util.NoSuchElementException
 
 final case class BootstrapSuperAdminAuthAPIMessage(
     bootstrapKey: String,
@@ -71,12 +71,10 @@ final case class BootstrapSuperAdminAuthAPIMessage(
         ensureActivePlayer(player)
         saveCredential(connection, command, player)
       }
-      superAdminPlayer <- SavePlayerPrivateAPIMessage(
-        PlayerRoleFunctions.grantRole(
-          player,
-          RoleGrantFunctions.superAdmin(command.initializedAt, None)
-        )
-      ).plan(context)
+      superAdminPlayer <- GrantPlayerRolePrivateAPIMessage(
+        player.id,
+        RoleGrantFunctions.superAdmin(command.initializedAt, None)
+      ).plan(context).map(_.getOrElse(throw NoSuchElementException(s"Player ${player.id.value} was not found")))
       session <- IO.blocking(
         AuthenticatedSessionTable.save(
           connection,

@@ -62,7 +62,7 @@ import riichinexus.microservices.tournament.objects.rulesmanagement.knockout.Kno
 import riichinexus.microservices.tournament.objects.tournamentmanagement.StageStatus
 import riichinexus.microservices.tournament.objects.rulesmanagement.swiss.SwissRuleConfig
 
-object TournamentStageFunctions:
+private[tournament] object TournamentStageFunctions:
   def validate(stage: TournamentStage): Unit =
     require(stage.order >= 1, "Stage order must be positive")
     require(stage.roundCount >= 1, "Stage round count must be positive")

@@ -22,7 +22,6 @@ import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
 import riichinexus.microservices.audit.domain.auditevent.AuditEventId
 import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
 import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
-import riichinexus.microservices.tournament.domain.paifumanagement.functions.PaifuTileFunctions
 import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
 import riichinexus.microservices.tournament.domain.recordmanagement.model.*
 import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
@@ -30,7 +29,7 @@ import riichinexus.microservices.tournament.domain.tablemanagement.model.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.microservices.opsanalytics.domain.model.{ExactDefenseState, ExactRoundStats, ExactUkeireState}
 
-private[functions] object AdvancedStatsExactAnalyzer:
+private[opsanalytics] object AdvancedStatsExactAnalyzer:
   private val TerminalAndHonorIndices =
     Set(0, 8, 9, 17, 18, 26, 27, 28, 29, 30, 31, 32, 33)
 
@@ -264,7 +263,27 @@ private[functions] object AdvancedStatsExactAnalyzer:
     else Some(parsed.flatten.foldLeft(EmptyCounts)(incrementCount))
 
   private def parseTile(tile: PaifuTile): Option[Int] =
-    PaifuTileFunctions.toTileIndex(tile)
+    val value = tile.value
+    if value.length != 2 then None
+    else
+      val numberChar = value.charAt(0)
+      val suitChar = value.charAt(1)
+      val normalizedNumber =
+        if numberChar == '0' then 5
+        else if numberChar.isDigit then numberChar.asDigit
+        else -1
+
+      suitChar match
+        case 'm' if isNumberedSuitTile(numberChar, normalizedNumber) => Some(normalizedNumber - 1)
+        case 'p' if isNumberedSuitTile(numberChar, normalizedNumber) => Some(9 + normalizedNumber - 1)
+        case 's' if isNumberedSuitTile(numberChar, normalizedNumber) => Some(18 + normalizedNumber - 1)
+        case 'z' if normalizedNumber >= 1 && normalizedNumber <= 7 && numberChar != '0' =>
+          Some(27 + normalizedNumber - 1)
+        case _ =>
+          None
+
+  private def isNumberedSuitTile(numberChar: Char, normalizedNumber: Int): Boolean =
+    numberChar == '0' || (normalizedNumber >= 1 && normalizedNumber <= 9)
 
   private def isSuitTile(index: Int): Boolean =
     index < 27

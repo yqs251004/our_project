@@ -43,7 +43,7 @@ import riichinexus.microservices.tournament.objects.rulesmanagement.knockout.Kno
 import riichinexus.microservices.tournament.objects.rulesmanagement.stageprogression.StageAdvancementSnapshot
 import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.StageRankingSnapshot
 
-object TournamentRuleEngine:
+private[tournament] object TournamentRuleEngine:
   def buildStageRanking(
       tournament: Tournament,
       stage: TournamentStage,

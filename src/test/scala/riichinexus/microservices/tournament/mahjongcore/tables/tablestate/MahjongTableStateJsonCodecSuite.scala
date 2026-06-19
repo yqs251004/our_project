@@ -9,6 +9,7 @@ import riichinexus.microservices.tournament.mahjongcore.objects.action.{MahjongC
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.{MahjongMeld, MahjongMeldType, MahjongRoundPhase, MahjongRuleset}
 import riichinexus.microservices.tournament.objects.paifumanagement.{AgariResult, FinalStanding, HandOutcome, PaifuTile, RoundSettlement, ScoreChange}
 import riichinexus.microservices.tournament.objects.tablemanagement.{SeatWind, TableId}
+import riichinexus.system.json.MahjongTableStateJsonCodecs
 import upickle.default.{read, write}
 
 class MahjongTableStateJsonCodecSuite extends FunSuite:

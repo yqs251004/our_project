@@ -27,7 +27,7 @@ import riichinexus.microservices.opsanalytics.objects.{AdvancedStatsBoard, Dashb
 import riichinexus.microservices.tournament.domain.recordmanagement.model.MatchRecord
 import riichinexus.microservices.tournament.objects.paifumanagement.Paifu
 
-object AdvancedStatsBoardFunctions:
+private[opsanalytics] object AdvancedStatsBoardFunctions:
   val currentCalculatorVersion: Int = 2
 
   def empty(owner: DashboardOwner, at: Instant): AdvancedStatsBoard =

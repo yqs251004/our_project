@@ -1,7 +1,7 @@
 package riichinexus.microservices.tournament.api
 import riichinexus.microservices.player.api.`private`.*
 
-import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+import riichinexus.microservices.auth.domain.authorization.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
 import java.time.Instant
 import java.util.NoSuchElementException
@@ -36,7 +36,6 @@ import riichinexus.microservices.tournament.domain.recordmanagement.model.*
 import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
 import riichinexus.microservices.tournament.domain.tablemanagement.model.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
-import riichinexus.microservices.player.domain.functions.PlayerRoleFunctions
 import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
 import riichinexus.system.json.JsonCodecs.given
@@ -211,12 +210,20 @@ final case class TournamentCreateAPIMessage(
     adminPlayer match
       case Some(player) =>
         SavePlayerPrivateAPIMessage(
-          PlayerRoleFunctions.grantRole(
+          grantRole(
             player,
             RoleGrantFunctions.tournamentAdmin(tournament.id, input.startsAt, AccessPrincipalFunctions.system.playerId)
           )
         ).plan(context).map(_ => ())
       case None => IO.unit
+
+  private def grantRole(player: Player, grant: RoleGrant): Player =
+    val normalized = player.roleGrants.filterNot(existing =>
+      existing.role == grant.role &&
+        existing.clubId == grant.clubId &&
+        existing.tournamentId == grant.tournamentId
+    )
+    player.copy(roleGrants = (normalized :+ grant).sortBy(_.grantedAt.toEpochMilli))
 
   private def saveTournament(
       connection: java.sql.Connection,

@@ -29,7 +29,7 @@ import riichinexus.microservices.club.domain.rankprivilegemanagement.model.ClubM
 import riichinexus.microservices.club.domain.relationmanagement.model.ClubRelation
 import riichinexus.microservices.club.objects.rankprivilegemanagement.{ClubPrivilegeCode, ClubRankNode}
 
-object ClubFunctions:
+private[club] object ClubFunctions:
   def addMember(club: Club, playerId: PlayerId): Club =
     if club.members.contains(playerId) then club
     else club.copy(members = club.members :+ playerId)

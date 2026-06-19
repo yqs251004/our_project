@@ -6,7 +6,7 @@ import riichinexus.microservices.tournament.objects.paifumanagement.Yaku
 
 import MahjongYakuCheckSupport.*
 
-private[functions] object MahjongDoraCheckFunctions:
+private[tournament] object MahjongDoraCheckFunctions:
 
   val plan: Vector[YakuCheck] =
     Vector(checkDora, checkAkaDora, checkUraDora)

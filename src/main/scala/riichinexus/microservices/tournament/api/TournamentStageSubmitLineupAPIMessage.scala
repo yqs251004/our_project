@@ -4,9 +4,8 @@ import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGues
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
 import riichinexus.microservices.player.api.`private`.*
 
-import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+import riichinexus.microservices.auth.domain.authorization.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
-import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.util.NoSuchElementException
 
 import cats.effect.IO
@@ -53,7 +52,7 @@ import riichinexus.microservices.notification.objects.apiTypes.CreateNotificatio
 import riichinexus.system.realtime.objects.RealtimeEvent
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
-import riichinexus.microservices.tournament.api.`private`.TournamentOperationViewAssembler
+import riichinexus.microservices.tournament.api.`private`.GetTournamentMutationViewPrivateAPIMessage
 import riichinexus.microservices.tournament.objects.tablemanagement.SeatWind
 import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
@@ -80,7 +79,7 @@ final case class TournamentStageSubmitLineupAPIMessage(tournamentId: String, sta
         .map(_.getOrElse(throw NoSuchElementException("Resource not found")))
       _ <- publishLineupSubmitted(context, command)
       _ <- CreateBulkNotificationsPrivateAPIMessage(lineupSelectedNotifications(savedTournament, command)).plan(context)
-      view <- TournamentOperationViewAssembler.mutationView(context, command.tournamentId, Vector.empty)
+      view <- GetTournamentMutationViewPrivateAPIMessage(command.tournamentId).plan(context)
         .map(_.getOrElse(throw NoSuchElementException("Resource not found")))
     yield view
 
@@ -246,13 +245,24 @@ final case class TournamentStageSubmitLineupAPIMessage(tournamentId: String, sta
         clubId = Some(club.id)
       )
     val hasDelegatedPrivilege = actor.playerId.exists { playerId =>
-      club.members.contains(playerId) && ClubFunctions.hasPrivilege(club, playerId, ClubPrivilegeCode.PriorityLineup)
+      club.members.contains(playerId) && hasClubPrivilege(club, playerId, ClubPrivilegeCode.PriorityLineup)
     }
 
     if !hasBasePermission && !hasDelegatedPrivilege then
       throw AuthorizationFailure(
         s"${actor.displayName} is not allowed to perform ${Permission.SubmitTournamentLineup} for club ${club.id.value}"
       )
+
+  private def hasClubPrivilege(club: Club, playerId: PlayerId, privilege: ClubPrivilegeCode): Boolean =
+    val contribution = club.memberContributions.find(_.playerId == playerId).map(_.amount).getOrElse(0)
+    val rank = Option.when(club.members.contains(playerId)) {
+      club.rankTree
+        .filter(_.minimumContribution <= contribution)
+        .lastOption
+        .orElse(club.rankTree.headOption)
+    }.flatten
+
+    rank.exists(_.privileges.contains(privilege))
 
   private final case class SubmitStageLineupCommand(
       tournamentId: TournamentId,

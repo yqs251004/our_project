@@ -16,7 +16,7 @@ import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecord
 import riichinexus.microservices.tournament.objects.tablemanagement.{TableSeat, TableStatus}
 import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
 
-object MahjongTableArchiveFunctions:
+private[tournament] object MahjongTableArchiveFunctions:
 
   final case class ArchivedMahjongTable(
       tableState: MahjongTableState,

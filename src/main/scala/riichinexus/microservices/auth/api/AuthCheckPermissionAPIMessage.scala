@@ -23,7 +23,7 @@ import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
 import riichinexus.microservices.audit.domain.auditevent.AuditEventId
 import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
 import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
-import riichinexus.microservices.auth.domain.functions.AuthorizationPolicyFunctions
+import riichinexus.microservices.auth.domain.authorization.AuthorizationPolicyFunctions
 import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.auth.utils.ResolveAccessPrincipal
 import riichinexus.system.json.JsonCodecs.given

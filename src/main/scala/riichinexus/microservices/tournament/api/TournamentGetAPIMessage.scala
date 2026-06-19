@@ -30,7 +30,7 @@ import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
 import riichinexus.microservices.tournament.domain.tablemanagement.model.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.system.json.JsonCodecs.given
-import riichinexus.microservices.tournament.api.`private`.TournamentOperationViewAssembler
+import riichinexus.microservices.tournament.api.`private`.GetTournamentDetailViewPrivateAPIMessage
 import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
@@ -50,5 +50,5 @@ final case class TournamentGetAPIMessage(tournamentId: String) extends APIMessag
     yield view
 
   private def resolveDetailView(context: ApiPlanContext, tournamentId: TournamentId): IO[TournamentDetailView] =
-    TournamentOperationViewAssembler.detailView(context, tournamentId)
+    GetTournamentDetailViewPrivateAPIMessage(tournamentId).plan(context)
       .map(_.getOrElse(throw NoSuchElementException("Resource not found")))

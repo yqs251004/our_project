@@ -5,7 +5,7 @@ import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPI
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
 import riichinexus.microservices.player.api.`private`.*
 
-import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+import riichinexus.microservices.auth.domain.authorization.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
 import cats.effect.IO
 
@@ -35,7 +35,6 @@ import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGen
 import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.auth.domain.model.*
 import riichinexus.microservices.auth.objects.Role
-import riichinexus.microservices.player.domain.functions.{PlayerClubBindingFunctions, PlayerRoleFunctions}
 import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
 import riichinexus.microservices.auth.domain.AuthorizationFailure
@@ -72,9 +71,10 @@ final case class PlatformAdminGrantSuperAdminAPIMessage(
     ensureSuperAdmin(command.actor)
     ResolvePlayerPrivateAPIMessage(command.playerId).plan(context).flatMap {
       case Some(player) =>
-        SavePlayerPrivateAPIMessage(
-          PlayerRoleFunctions.grantRole(player, RoleGrantFunctions.superAdmin(command.grantedAt, command.actor.playerId))
-        ).plan(context).map(Some(_))
+        GrantPlayerRolePrivateAPIMessage(
+          player.id,
+          RoleGrantFunctions.superAdmin(command.grantedAt, command.actor.playerId)
+        ).plan(context)
       case None =>
         IO.pure(None)
     }
@@ -103,10 +103,13 @@ final case class PlatformAdminGrantSuperAdminAPIMessage(
       userId = player.userId,
       nickname = player.nickname,
       status = player.status.toString,
-      clubIds = PlayerClubBindingFunctions.boundClubIds(player).map(_.value),
+      clubIds = boundClubIds(player).map(_.value),
       bannedReason = player.bannedReason,
       isSuperAdmin = player.roleGrants.exists(_.role == Role.SuperAdmin)
     )
+
+  private def boundClubIds(player: Player): Vector[ClubId] =
+    (player.clubId.toVector ++ player.affiliatedClubIds).distinct
 
   private final case class GrantSuperAdminCommand(
       playerId: PlayerId,

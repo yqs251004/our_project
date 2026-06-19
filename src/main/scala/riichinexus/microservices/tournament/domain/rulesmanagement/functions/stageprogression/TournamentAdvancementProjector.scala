@@ -42,7 +42,7 @@ import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
 import riichinexus.microservices.tournament.domain.tablemanagement.model.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 
-private[domain] object TournamentAdvancementProjector:
+private[tournament] object TournamentAdvancementProjector:
   private final case class CustomAdvancementPolicy(
       topCount: Option[Int] = None,
       topPercent: Option[Double] = None,

@@ -3,7 +3,7 @@ import riichinexus.microservices.audit.domain.auditevent.AuditEvent
 import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
 import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPIMessage
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
-import riichinexus.microservices.notification.api.`private`.CreateBulkNotificationsPrivateAPIMessage
+import riichinexus.microservices.tournament.appeal.api.`private`.CreateAppealAdjudicatedNotificationsPrivateAPIMessage
 import riichinexus.microservices.tournament.mahjongcore.api.MahjongCoreResetTableAPIMessage
 
 import java.time.Instant
@@ -12,7 +12,7 @@ import java.util.NoSuchElementException
 import cats.effect.IO
 
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.microservices.auth.domain.functions.AuthorizationPolicyFunctions
+import riichinexus.microservices.auth.domain.authorization.AuthorizationPolicyFunctions
 import riichinexus.microservices.tournament.appeal.domain.AppealApplicationService
 import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
@@ -63,14 +63,11 @@ final case class AppealAdjudicateAPIMessage(
       ticket <- adjudicateAppeal(context.connection, service, command)
       _ <- resetMahjongCoreIfNeeded(context, ticket, command)
       _ <- RecordAuditEventsPrivateAPIMessage(adjudicateAppealAudit(ticket, command)).plan(context)
-      _ <- CreateBulkNotificationsPrivateAPIMessage(
-        AppealNotificationRequests.appealAdjudicated(
-          context.connection,
-          ticket,
-          command.decision,
-          command.tableResolution,
-          command.verdict
-        )
+      _ <- CreateAppealAdjudicatedNotificationsPrivateAPIMessage(
+        ticket,
+        command.decision,
+        command.tableResolution,
+        command.verdict
       ).plan(context)
     yield AppealTicketView.fromDomain(ticket)
 

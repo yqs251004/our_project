@@ -38,7 +38,7 @@ import riichinexus.microservices.tournament.domain.tablemanagement.functions.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.functions.*
 import riichinexus.microservices.tournament.objects.paifumanagement.RoundSettlement
 
-object RoundSettlementFunctions:
+private[tournament] object RoundSettlementFunctions:
   def validate(settlement: RoundSettlement): Unit =
     require(settlement.riichiSticksDelta >= 0, "Riichi sticks delta must be non-negative")
     require(settlement.honbaPayment >= 0, "Honba payment must be non-negative")

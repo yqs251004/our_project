@@ -41,7 +41,7 @@ import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.microservices.tournament.domain.tablemanagement.model.Table
 import riichinexus.microservices.tournament.objects.paifumanagement.Paifu
 
-object MatchRecordFunctions:
+private[tournament] object MatchRecordFunctions:
   def validate(record: MatchRecord): Unit =
     require(record.seatResults.size == 4, "Match record must contain four seat results")
     require(record.seatResults.map(_.playerId).distinct.size == 4, "Match record players must be unique")

@@ -26,10 +26,11 @@ import riichinexus.microservices.audit.domain.auditevent.AuditEventId
 import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
 import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.auth.api.`private`.ResolveGuestSessionAuthPrivateAPIMessage
-import riichinexus.microservices.auth.domain.functions.AccessPrincipalFunctions
-import riichinexus.microservices.auth.domain.model.{AccessPrincipal, GuestAccessSession}
+import riichinexus.microservices.auth.domain.authorization.{AccessPrincipalFunctions, RoleGrantFunctions}
+import riichinexus.microservices.auth.domain.model.{AccessPrincipal, GuestAccessSession, RoleGrant}
+import riichinexus.microservices.auth.objects.Role
 import riichinexus.microservices.player.api.GetPlayerAPIMessage
-import riichinexus.microservices.player.domain.functions.PlayerPrincipalFunctions
+import riichinexus.microservices.player.domain.Player
 
 final case class ResolveAccessPrincipal(
     playerId: PlayerId
@@ -37,9 +38,21 @@ final case class ResolveAccessPrincipal(
   def plan(context: ApiPlanContext): IO[AccessPrincipal] =
     ResolvePlayerPrivateAPIMessage(playerId).plan(context)
       .map(
-        _.map(PlayerPrincipalFunctions.asPrincipal)
+        _.map(asPrincipal)
           .getOrElse(throw NoSuchElementException(s"Player ${playerId.value} was not found"))
       )
+
+  private def asPrincipal(player: Player): AccessPrincipal =
+    AccessPrincipal(
+      principalId = player.id.value,
+      displayName = player.nickname,
+      playerId = Some(player.id),
+      roleGrants = effectiveRoleGrants(player)
+    )
+
+  private def effectiveRoleGrants(player: Player): Vector[RoleGrant] =
+    if player.roleGrants.exists(_.role == Role.RegisteredPlayer) then player.roleGrants
+    else RoleGrantFunctions.registered(player.registeredAt) +: player.roleGrants
 
 final case class ResolveGuestAccessPrincipal(
     sessionId: GuestSessionId

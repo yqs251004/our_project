@@ -25,7 +25,7 @@ import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStat
 import riichinexus.microservices.club.domain.membershipmanagement.model.ClubMembershipApplication
 import riichinexus.microservices.club.objects.membershipmanagement.ClubApplicationStatus
 
-object ClubMembershipApplicationFunctions:
+private[club] object ClubMembershipApplicationFunctions:
   def isPending(application: ClubMembershipApplication): Boolean =
     application.status == ClubApplicationStatus.Pending
 

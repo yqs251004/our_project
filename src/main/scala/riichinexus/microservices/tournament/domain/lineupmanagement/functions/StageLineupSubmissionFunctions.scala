@@ -58,7 +58,7 @@ import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGen
 import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.tournament.domain.lineupmanagement.model.StageLineupSubmission
 
-object StageLineupSubmissionFunctions:
+private[tournament] object StageLineupSubmissionFunctions:
   def validate(submission: StageLineupSubmission): Unit =
     require(submission.seats.nonEmpty, "Lineup submission must contain at least one seat")
     require(

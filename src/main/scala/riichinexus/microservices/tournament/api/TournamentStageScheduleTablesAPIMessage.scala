@@ -3,7 +3,7 @@ import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
 
-import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+import riichinexus.microservices.auth.domain.authorization.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
 import java.util.NoSuchElementException
 
@@ -36,7 +36,7 @@ import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
 import riichinexus.microservices.tournament.domain.tablemanagement.model.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.system.json.JsonCodecs.given
-import riichinexus.microservices.tournament.api.`private`.TournamentOperationViewAssembler
+import riichinexus.microservices.tournament.api.`private`.GetTournamentMutationViewPrivateAPIMessage
 import riichinexus.microservices.tournament.domain.tablemanagement.functions.TournamentStageTableScheduler
 import riichinexus.microservices.tournament.domain.tablemanagement.model.Table
 import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
@@ -63,8 +63,8 @@ final case class TournamentStageScheduleTablesAPIMessage(
         actor = actor
       )
       scheduledTables <- scheduleTables(context, command)
-      view <- TournamentOperationViewAssembler
-        .mutationView(context, command.tournamentId, scheduledTables)
+      view <- GetTournamentMutationViewPrivateAPIMessage(command.tournamentId, scheduledTables)
+        .plan(context)
         .map(_.getOrElse(throw NoSuchElementException("Resource not found")))
     yield view
 
@@ -97,4 +97,3 @@ final case class TournamentStageScheduleTablesAPIMessage(
       stageId: TournamentStageId,
       actor: AccessPrincipal
   )
-

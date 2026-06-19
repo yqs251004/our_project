@@ -4,7 +4,7 @@ import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGues
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
 import riichinexus.microservices.player.api.`private`.*
 
-import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+import riichinexus.microservices.auth.domain.authorization.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
 import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.util.NoSuchElementException
@@ -39,7 +39,6 @@ import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
 import riichinexus.microservices.club.domain.relationmanagement.model.*
 import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
-import riichinexus.microservices.player.domain.functions.PlayerRoleFunctions
 import riichinexus.microservices.auth.domain.*
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubAuthorization
@@ -83,7 +82,7 @@ final case class RevokeClubAdminAPIMessage(
         case Some(club) =>
           ensureAdminCanBeRevoked(club, command)
           for
-            _ <- SavePlayerPrivateAPIMessage(PlayerRoleFunctions.revokeClubAdmin(player, command.clubId)).plan(context)
+            _ <- RevokePlayerClubAdminPrivateAPIMessage(command.playerId, command.clubId).plan(context)
             savedClub <- IO.blocking(riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, ClubFunctions.revokeAdmin(club, command.playerId)))
           yield Some(savedClub)
     yield savedClub
@@ -118,4 +117,3 @@ final case class RevokeClubAdminAPIMessage(
       playerId: PlayerId,
       actor: AccessPrincipal
   )
-

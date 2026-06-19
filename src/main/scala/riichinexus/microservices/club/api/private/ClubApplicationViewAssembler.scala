@@ -1,7 +1,7 @@
 package riichinexus.microservices.club.api.`private`
 import riichinexus.microservices.player.api.`private`.*
 
-import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+import riichinexus.microservices.auth.domain.authorization.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
 import cats.effect.IO
 import riichinexus.system.api.ApiPlanContext
@@ -42,7 +42,6 @@ import riichinexus.microservices.club.domain.relationmanagement.model.*
 import riichinexus.microservices.club.objects.membershipmanagement.ClubApplicationStatus
 import riichinexus.microservices.club.objects.membershipmanagement.apiTypes.{ClubMembershipApplicantView, ClubMembershipApplicationView}
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
-import riichinexus.microservices.player.domain.functions.PlayerClubBindingFunctions
 
 object ClubApplicationViewAssembler:
   def canManageClubApplications(actor: AccessPrincipal, club: Club): Boolean =
@@ -92,7 +91,7 @@ object ClubApplicationViewAssembler:
           playerStatus = applicantPlayer.map(_.status.toString),
           currentRank = applicantPlayer.map(_.currentRank),
           elo = applicantPlayer.map(_.elo),
-          clubIds = applicantPlayer.map(player => PlayerClubBindingFunctions.boundClubIds(player).map(_.value)).getOrElse(Vector.empty)
+          clubIds = applicantPlayer.map(boundClubIds(_).map(_.value)).getOrElse(Vector.empty)
         ),
         submittedAt = application.submittedAt.toString,
         message = application.message,
@@ -116,3 +115,6 @@ object ClubApplicationViewAssembler:
         application.applicantUserId
           .map(ResolvePlayerByUserIdPrivateAPIMessage(_).plan(context))
           .getOrElse(IO.pure(None))
+
+  private def boundClubIds(player: riichinexus.microservices.player.domain.Player): Vector[ClubId] =
+    (player.clubId.toVector ++ player.affiliatedClubIds).distinct

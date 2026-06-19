@@ -38,6 +38,6 @@ import riichinexus.microservices.tournament.domain.tablemanagement.functions.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.functions.*
 import riichinexus.microservices.tournament.objects.paifumanagement.Yaku
 
-object YakuFunctions:
+private[tournament] object YakuFunctions:
   def validate(yaku: Yaku): Unit =
     require(yaku.han > 0, "Yaku han must be positive")

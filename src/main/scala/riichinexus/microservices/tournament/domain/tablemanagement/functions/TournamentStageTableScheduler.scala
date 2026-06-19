@@ -58,7 +58,7 @@ import riichinexus.microservices.tournament.objects.rulesmanagement.stageprogres
 import riichinexus.microservices.tournament.objects.tablemanagement.{SeatWind, TableStatus}
 import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentFormat, TournamentStatus}
 
-object TournamentStageTableScheduler:
+private[tournament] object TournamentStageTableScheduler:
   def progressAfterTableArchived(
       connection: Connection,
       table: Table,

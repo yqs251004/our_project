@@ -3,7 +3,7 @@ import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
 
-import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+import riichinexus.microservices.auth.domain.authorization.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
 import java.util.NoSuchElementException
 
@@ -37,7 +37,7 @@ import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
 import riichinexus.microservices.tournament.domain.tablemanagement.model.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.system.json.JsonCodecs.given
-import riichinexus.microservices.tournament.api.`private`.TournamentOperationViewAssembler
+import riichinexus.microservices.tournament.api.`private`.GetTournamentMutationViewPrivateAPIMessage
 import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
@@ -59,7 +59,7 @@ final case class TournamentPublishAPIMessage(tournamentId: String, operatorId: O
           publishTournament(context.connection, command)
         }
       }
-      view <- TournamentOperationViewAssembler.mutationView(context, command.tournamentId, Vector.empty)
+      view <- GetTournamentMutationViewPrivateAPIMessage(command.tournamentId).plan(context)
         .map(_.getOrElse(throw NoSuchElementException("Resource not found")))
     yield view
 
@@ -92,4 +92,3 @@ final case class TournamentPublishAPIMessage(tournamentId: String, operatorId: O
       tournamentId: TournamentId,
       actor: AccessPrincipal
   )
-

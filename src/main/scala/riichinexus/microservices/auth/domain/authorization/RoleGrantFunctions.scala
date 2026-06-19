@@ -1,4 +1,4 @@
-package riichinexus.microservices.auth.domain.functions
+package riichinexus.microservices.auth.domain.authorization
 
 import java.time.Instant
 

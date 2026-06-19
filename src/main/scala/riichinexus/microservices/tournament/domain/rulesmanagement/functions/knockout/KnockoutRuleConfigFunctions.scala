@@ -38,7 +38,7 @@ import riichinexus.microservices.tournament.domain.tablemanagement.functions.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.functions.*
 import riichinexus.microservices.tournament.objects.rulesmanagement.knockout.KnockoutRuleConfig
 
-object KnockoutRuleConfigFunctions:
+private[tournament] object KnockoutRuleConfigFunctions:
   private val supportedPolicies = Set("rating", "elo", "ranking", "standings")
 
   def validate(config: KnockoutRuleConfig): Unit =

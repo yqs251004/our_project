@@ -60,7 +60,7 @@ import riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTable
 import riichinexus.microservices.tournament.tables.tournaments.TournamentTable
 import riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable
 
-object KnockoutStageCoordinator:
+private[tournament] object KnockoutStageCoordinator:
   def buildProgression(
       connection: Connection,
       tournamentId: TournamentId,

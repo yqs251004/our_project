@@ -41,7 +41,7 @@ import java.time.Instant
 import riichinexus.microservices.tournament.domain.settlementmanagement.model.TournamentSettlementSnapshot
 import riichinexus.microservices.tournament.objects.settlementmanagement.TournamentSettlementStatus
 
-object TournamentSettlementSnapshotFunctions:
+private[tournament] object TournamentSettlementSnapshotFunctions:
   def validate(snapshot: TournamentSettlementSnapshot): Unit =
     require(snapshot.revision > 0, "Tournament settlement revision must be positive")
     require(snapshot.prizePool >= 0L, "Tournament settlement prize pool must be non-negative")

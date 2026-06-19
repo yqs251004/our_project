@@ -6,9 +6,8 @@ import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPI
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
 import riichinexus.microservices.player.api.`private`.*
 
-import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+import riichinexus.microservices.auth.domain.authorization.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
-import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import cats.effect.IO
 
 import java.time.Instant
@@ -42,13 +41,18 @@ import riichinexus.microservices.club.domain.clubmanagement.model.*
 import riichinexus.microservices.club.domain.membershipmanagement.model.*
 import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
 import riichinexus.microservices.club.domain.relationmanagement.model.*
-import riichinexus.microservices.club.api.`private`.{ListClubsPrivateAPIMessage, ResolveClubPrivateAPIMessage, ResolveClubsPrivateAPIMessage, SaveClubPrivateAPIMessage}
+import riichinexus.microservices.club.api.`private`.{
+  DissolveClubPrivateAPIMessage,
+  ListClubsPrivateAPIMessage,
+  RemoveClubRelationPrivateAPIMessage,
+  ResolveClubPrivateAPIMessage,
+  ResolveClubsPrivateAPIMessage
+}
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.opsanalytics.api.`private`.{
   ResetClubAdvancedStatsBoardAPIMessage,
   ResetClubDashboardAPIMessage
 }
-import riichinexus.microservices.player.domain.functions.{PlayerClubBindingFunctions, PlayerRoleFunctions}
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import riichinexus.microservices.platformadmin.objects.apiTypes.PlatformAdminClubView
 import riichinexus.microservices.platformadmin.objects.apiTypes.*
@@ -110,13 +114,8 @@ final case class PlatformAdminDissolveClubAPIMessage(
     club.members.foldLeft(IO.unit) { (previous, memberId) =>
       previous.flatMap { _ =>
         ResolvePlayerPrivateAPIMessage(memberId).plan(context).flatMap {
-          case Some(player) =>
-            SavePlayerPrivateAPIMessage(
-              PlayerRoleFunctions.revokeClubAdmin(
-                PlayerClubBindingFunctions.leaveClub(player, clubId),
-                clubId
-              )
-            ).plan(context).map(_ => ())
+          case Some(_) =>
+            LeavePlayerClubPrivateAPIMessage(memberId, clubId).plan(context).map(_ => ())
           case None =>
             IO.unit
         }
@@ -130,7 +129,7 @@ final case class PlatformAdminDissolveClubAPIMessage(
         .filter(_.relations.exists(_.targetClubId == clubId))
         .foldLeft(IO.unit) { (previous, relatedClub) =>
           previous.flatMap(_ =>
-            SaveClubPrivateAPIMessage(ClubFunctions.removeRelation(relatedClub, clubId))
+            RemoveClubRelationPrivateAPIMessage(relatedClub.id, clubId)
               .plan(context)
               .map(_ => ())
           )
@@ -142,9 +141,11 @@ final case class PlatformAdminDissolveClubAPIMessage(
       club: Club,
       command: DissolveClubCommand
   ): IO[Club] =
-    SaveClubPrivateAPIMessage(
-      ClubFunctions.dissolve(club, command.actor.playerId.getOrElse(club.creator), command.dissolvedAt)
-    ).plan(context)
+    DissolveClubPrivateAPIMessage(
+      club.id,
+      command.actor.playerId.getOrElse(club.creator),
+      command.dissolvedAt
+    ).plan(context).map(_.getOrElse(throw NoSuchElementException(s"Club ${club.id.value} was not found")))
 
   private def dissolveClubAudit(club: Club, command: DissolveClubCommand): Vector[AuditEvent] =
     Vector(

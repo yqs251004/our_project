@@ -24,7 +24,7 @@ import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGen
 import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.auth.domain.model.GuestAccessSession
 
-object GuestAccessSessionFunctions:
+private[auth] object GuestAccessSessionFunctions:
   private val DefaultTtl: Duration = Duration.ofDays(30)
 
   def isRevoked(session: GuestAccessSession): Boolean =

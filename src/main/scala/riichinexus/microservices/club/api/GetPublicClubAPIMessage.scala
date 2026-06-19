@@ -53,7 +53,6 @@ import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
 import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
-import riichinexus.microservices.tournament.domain.lineupmanagement.functions.StageLineupSubmissionFunctions
 import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
 import riichinexus.microservices.tournament.domain.recordmanagement.model.*
 import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
@@ -269,4 +268,7 @@ final case class GetPublicClubAPIMessage(
       .filter(_.clubId == club.id)
       .sortBy(submission => (submission.submittedAt, submission.id.value))
       .lastOption
-      .map(StageLineupSubmissionFunctions.activePlayerIds)
+      .map(activeLineupPlayerIds)
+
+  private def activeLineupPlayerIds(submission: StageLineupSubmission): Vector[PlayerId] =
+    submission.seats.filterNot(_.reserve).map(_.playerId)

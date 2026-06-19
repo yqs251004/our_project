@@ -1,7 +1,7 @@
 package riichinexus.microservices.tournament.domain.paifumanagement.functions
 import riichinexus.microservices.auth.objects.Permission
 
-import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+import riichinexus.microservices.auth.domain.authorization.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
 import riichinexus.microservices.tournament.domain.lineupmanagement.functions.*
 import riichinexus.microservices.tournament.domain.paifumanagement.functions.*

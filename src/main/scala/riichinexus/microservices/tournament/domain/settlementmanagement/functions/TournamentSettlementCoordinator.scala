@@ -2,7 +2,7 @@ package riichinexus.microservices.tournament.domain.settlementmanagement.functio
 import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.player.api.`private`.ResolvePlayersPrivateAPIMessage
 
-import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+import riichinexus.microservices.auth.domain.authorization.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
 import riichinexus.microservices.tournament.domain.lineupmanagement.functions.*
 import riichinexus.microservices.tournament.domain.paifumanagement.functions.*
@@ -57,7 +57,6 @@ import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
 import riichinexus.microservices.club.domain.relationmanagement.model.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.functions.TournamentFunctions
 import riichinexus.microservices.tournament.domain.settlementmanagement.functions.TournamentSettlementSnapshotFunctions
-import riichinexus.microservices.player.domain.functions.PlayerClubBindingFunctions
 import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
 import riichinexus.microservices.tournament.domain.recordmanagement.model.*
@@ -300,7 +299,7 @@ final class TournamentSettlementCoordinator(
       val deductionAmount =
         adjustmentsByPlayer.getOrElse(playerId, Vector.empty).filter(_.amount < 0L).map(adjustment => math.abs(adjustment.amount)).sum
       val netAwardAmount = baseAwards.lift(index).getOrElse(0L) + adjustmentAmount - deductionAmount
-      val clubId = playersById.get(playerId).flatMap(player => PlayerClubBindingFunctions.boundClubIds(player).headOption)
+      val clubId = playersById.get(playerId).flatMap(player => (player.clubId.toVector ++ player.affiliatedClubIds).distinct.headOption)
       val clubShareAmount =
         if clubId.nonEmpty then math.floor(netAwardAmount.toDouble * settlement.clubShareRatio).toLong
         else 0L

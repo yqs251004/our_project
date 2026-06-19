@@ -2,7 +2,7 @@ package riichinexus.microservices.tournament.appeal.domain
 import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.player.api.`private`.*
 
-import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+import riichinexus.microservices.auth.domain.authorization.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
 import riichinexus.microservices.tournament.objects.tablemanagement.TableStatus
 

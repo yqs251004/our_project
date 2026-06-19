@@ -28,7 +28,7 @@ import riichinexus.microservices.opsanalytics.objects.{
   DashboardOwner
 }
 
-object AdvancedStatsRecomputeTaskFunctions:
+private[opsanalytics] object AdvancedStatsRecomputeTaskFunctions:
   def create(
       owner: DashboardOwner,
       reason: String,

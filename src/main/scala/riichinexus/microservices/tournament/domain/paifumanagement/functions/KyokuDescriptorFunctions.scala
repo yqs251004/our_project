@@ -38,7 +38,7 @@ import riichinexus.microservices.tournament.domain.tablemanagement.functions.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.functions.*
 import riichinexus.microservices.tournament.objects.paifumanagement.KyokuDescriptor
 
-object KyokuDescriptorFunctions:
+private[tournament] object KyokuDescriptorFunctions:
   def validate(descriptor: KyokuDescriptor): Unit =
     require(descriptor.handNumber >= 1 && descriptor.handNumber <= 4, "Hand number must be between 1 and 4")
     require(descriptor.honba >= 0, "Honba must be non-negative")

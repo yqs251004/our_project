@@ -42,7 +42,7 @@ import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
 import riichinexus.microservices.tournament.domain.tablemanagement.model.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 
-private[domain] object TournamentStageRankingBuilder:
+private[tournament] object TournamentStageRankingBuilder:
   def build(
       tournament: Tournament,
       stage: TournamentStage,

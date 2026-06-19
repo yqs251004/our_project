@@ -4,7 +4,7 @@ import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGues
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
 import riichinexus.microservices.player.api.`private`.*
 
-import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+import riichinexus.microservices.auth.domain.authorization.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
 import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.time.Instant
@@ -41,7 +41,6 @@ import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
 import riichinexus.microservices.club.domain.relationmanagement.model.*
 import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
-import riichinexus.microservices.player.domain.functions.PlayerClubBindingFunctions
 import riichinexus.microservices.auth.domain.*
 import riichinexus.microservices.audit.api.`private`.RecordAuditEventPrivateAPIMessage
 import riichinexus.microservices.audit.domain.auditevent.AuditEvent
@@ -152,11 +151,14 @@ final case class SubmitClubApplicationAPIMessage(
       applicantPlayer: Option[Player]
   ): Unit =
     applicantPlayer.foreach { existingPlayer =>
-      if PlayerClubBindingFunctions.boundClubIds(existingPlayer).contains(command.clubId) then
+      if boundClubIds(existingPlayer).contains(command.clubId) then
         throw IllegalArgumentException(
           s"Player ${existingPlayer.id.value} is already a member of club ${command.clubId.value}"
         )
     }
+
+  private def boundClubIds(player: Player): Vector[ClubId] =
+    (player.clubId.toVector ++ player.affiliatedClubIds).distinct
 
   private def createApplication(command: SubmitClubApplicationCommand): ClubMembershipApplication =
     ClubMembershipApplication(

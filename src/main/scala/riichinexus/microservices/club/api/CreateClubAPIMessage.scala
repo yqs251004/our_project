@@ -3,7 +3,7 @@ import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGues
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
 import riichinexus.microservices.player.api.`private`.*
 
-import riichinexus.microservices.auth.domain.functions.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+import riichinexus.microservices.auth.domain.authorization.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
 import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.time.Instant
@@ -39,7 +39,6 @@ import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
 import riichinexus.microservices.club.domain.relationmanagement.model.*
 import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.objects.*
-import riichinexus.microservices.player.domain.functions.{PlayerClubBindingFunctions, PlayerRoleFunctions}
 import riichinexus.microservices.auth.domain.*
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.{ClubAuthorization, ClubProjectionRefresher}
@@ -79,11 +78,13 @@ final case class CreateClubAPIMessage(
         ensureCreatorCanCreateClub(command.actor, command.creatorId)
       }
       club <- IO.blocking(resolveClubToCreate(connection, normalizedName, command.creatorId, command.createdAt))
-      updatedCreator = PlayerRoleFunctions.grantRole(
-        PlayerClubBindingFunctions.joinClub(creator, club.id),
+      joinedCreator <- JoinPlayerClubPrivateAPIMessage(command.creatorId, club.id)
+        .plan(context)
+        .map(_.getOrElse(throw NoSuchElementException(s"Player ${command.creatorId.value} was not found")))
+      savedCreator <- GrantPlayerRolePrivateAPIMessage(
+        joinedCreator.id,
         RoleGrantFunctions.clubAdmin(club.id, command.createdAt, command.actor.playerId)
-      )
-      savedCreator <- SavePlayerPrivateAPIMessage(updatedCreator).plan(context)
+      ).plan(context).map(_.getOrElse(throw NoSuchElementException(s"Player ${command.creatorId.value} was not found")))
       _ <- ClubProjectionRefresher.ensurePlayerDashboard(context, savedCreator.id, command.createdAt)
       refreshedClub <- ClubProjectionRefresher.refreshClubProjection(context, club, command.createdAt)
       savedClub <- IO.blocking(riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, refreshedClub))

@@ -38,6 +38,6 @@ import riichinexus.microservices.tournament.domain.tablemanagement.functions.*
 import riichinexus.microservices.tournament.domain.tournamentmanagement.functions.*
 import riichinexus.microservices.tournament.objects.settlementmanagement.TournamentSettlementAdjustment
 
-object TournamentSettlementAdjustmentFunctions:
+private[tournament] object TournamentSettlementAdjustmentFunctions:
   def validate(adjustment: TournamentSettlementAdjustment): Unit =
     require(adjustment.label.trim.nonEmpty, "Tournament settlement adjustment label cannot be empty")
