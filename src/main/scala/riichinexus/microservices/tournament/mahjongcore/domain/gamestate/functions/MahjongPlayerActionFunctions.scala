@@ -7,7 +7,7 @@ import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.Ma
 import riichinexus.microservices.tournament.mahjongcore.domain.yakuanalysis.functions.MahjongYakuAnalysisFunctions
 import riichinexus.microservices.tournament.mahjongcore.objects.action.{MahjongCommandType, MahjongLegalAction, MahjongPublicEventView}
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.MahjongRoundPhase
-import riichinexus.microservices.tournament.objects.paifumanagement.{PaifuTile, RoundSettlementNote}
+import riichinexus.microservices.tournament.objects.paifu.{PaifuTile, RoundSettlementNote}
 
 import MahjongGameStateSupport.{matchesSubmittedAction, seatByPlayerId}
 import MahjongGameStateViewFunctions.eventToPublicView

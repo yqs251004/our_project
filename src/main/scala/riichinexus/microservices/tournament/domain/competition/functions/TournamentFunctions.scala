@@ -6,9 +6,10 @@ import riichinexus.microservices.tournament.domain.stage.functions.TournamentSta
 
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentStageId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentWhitelistEntry
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{StageStatus, TournamentParticipantKind, TournamentStatus}
+import riichinexus.microservices.tournament.objects.identity.TournamentStageId
+import riichinexus.microservices.tournament.objects.competition.TournamentWhitelistEntry
+import riichinexus.microservices.tournament.objects.stage.StageStatus
+import riichinexus.microservices.tournament.objects.competition.{TournamentParticipantKind, TournamentStatus}
 
 /** TournamentFunctions 提供赛事相关的领域计算、校验和转换函数。 */
 

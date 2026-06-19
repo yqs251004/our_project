@@ -1,8 +1,8 @@
 package riichinexus.microservices.tournament.domain.stage.functions.ranking
 
 
-import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.{StageRankingSnapshot, StageStandingEntry}
-import riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentFormat
+import riichinexus.microservices.tournament.objects.stage.ranking.{StageRankingSnapshot, StageStandingEntry}
+import riichinexus.microservices.tournament.objects.competition.TournamentFormat
 
 import java.time.Instant
 

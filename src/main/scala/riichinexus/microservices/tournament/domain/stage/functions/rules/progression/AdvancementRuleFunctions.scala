@@ -1,9 +1,9 @@
 package riichinexus.microservices.tournament.domain.stage.functions.rules.progression
 
 
-import riichinexus.microservices.tournament.objects.rulesmanagement.stageprogression.AdvancementRule
-import riichinexus.microservices.tournament.objects.rulesmanagement.stageprogression.AdvancementRuleType
-import riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentFormat
+import riichinexus.microservices.tournament.objects.stage.rules.progression.AdvancementRule
+import riichinexus.microservices.tournament.objects.stage.rules.progression.AdvancementRuleType
+import riichinexus.microservices.tournament.objects.competition.TournamentFormat
 
 /** AdvancementRuleFunctions 提供AdvancementRule相关的领域计算、校验和转换函数。 */
 

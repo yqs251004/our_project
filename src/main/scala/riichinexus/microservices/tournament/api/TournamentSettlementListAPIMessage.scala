@@ -2,10 +2,10 @@ package riichinexus.microservices.tournament.api
 
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentId
-import riichinexus.microservices.tournament.domain.settlement.model.TournamentSettlementSnapshot
+import riichinexus.microservices.tournament.objects.identity.TournamentId
+import riichinexus.microservices.tournament.domain.finalization.model.TournamentSettlementSnapshot
 
-import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.{TournamentSettlementQuery, TournamentSettlementView}
+import riichinexus.microservices.tournament.objects.finalization.apiTypes.{TournamentSettlementQuery, TournamentSettlementView}
 
 import riichinexus.microservices.tournament.tables.settlement.TournamentSettlementTable
 import riichinexus.system.objects.PagedResponse

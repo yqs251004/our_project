@@ -1,7 +1,7 @@
 package riichinexus.microservices.tournament.mahjongcore.objects.action.apiTypes
 
 import riichinexus.microservices.tournament.mahjongcore.objects.action.MahjongCommandType
-import riichinexus.microservices.tournament.objects.paifumanagement.PaifuTile
+import riichinexus.microservices.tournament.objects.paifu.PaifuTile
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.{ReadWriter, macroRW}
 

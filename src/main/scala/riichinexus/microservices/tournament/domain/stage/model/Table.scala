@@ -3,12 +3,12 @@ package riichinexus.microservices.tournament.domain.stage.model
 
 import java.time.Instant
 
-import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
-import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
-import riichinexus.microservices.tournament.objects.tablemanagement.TableId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.objects.paifu.PaifuId
+import riichinexus.microservices.tournament.objects.matchrecord.MatchRecordId
+import riichinexus.microservices.tournament.objects.stage.table.TableId
+import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}
 import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
-import riichinexus.microservices.tournament.objects.tablemanagement.{TableSeat, TableStatus}
+import riichinexus.microservices.tournament.objects.stage.table.{TableSeat, TableStatus}
 
 import riichinexus.system.json.JsonCodecs.given
 /** Table 表示后端领域中的牌桌状态或规则，包含 ID、tableNo、赛事 ID、阶段 ID、座位、stageRoundNumber等。 */

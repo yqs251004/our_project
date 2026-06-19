@@ -9,8 +9,8 @@ import riichinexus.microservices.tournament.mahjongcore.domain.yakuanalysis.func
 import riichinexus.microservices.tournament.mahjongcore.domain.yakuanalysis.model.MahjongWinContext
 import riichinexus.microservices.tournament.mahjongcore.objects.action.MahjongLegalAction
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.{MahjongDiscard, MahjongRoundPhase, MahjongTableStatus, MahjongTableSticks}
-import riichinexus.microservices.tournament.objects.paifumanagement.{AgariResult, AgariWinResult, HandOutcome, MahjongYakuKind, PaifuTile, RoundSettlement, RoundSettlementNote, ScoreChange}
-import riichinexus.microservices.tournament.objects.tablemanagement.SeatWind
+import riichinexus.microservices.tournament.objects.paifu.{AgariResult, AgariWinResult, HandOutcome, MahjongYakuKind, PaifuTile, RoundSettlement, RoundSettlementNote, ScoreChange}
+import riichinexus.microservices.tournament.objects.stage.table.SeatWind
 
 import MahjongGameStateSupport.{aggregateScoreChanges, applyScoreChanges, nextSequenceNo, replaceSeat, requireRound, ronWinnerIdsBySeatOrder, seatByPlayerId, singleWinFromResult}
 

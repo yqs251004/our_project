@@ -11,9 +11,9 @@ import riichinexus.microservices.tournament.domain.stage.model.{Table, Tournamen
 import riichinexus.microservices.tournament.domain.matchrecord.model.MatchRecord
 import riichinexus.microservices.tournament.domain.competition.model.Tournament
 import riichinexus.microservices.player.objects.`private`.PlayerPrivateView
-import riichinexus.microservices.tournament.objects.rulesmanagement.knockout.KnockoutBracketSnapshot
-import riichinexus.microservices.tournament.objects.rulesmanagement.stageprogression.StageAdvancementSnapshot
-import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.StageRankingSnapshot
+import riichinexus.microservices.tournament.objects.stage.rules.knockout.KnockoutBracketSnapshot
+import riichinexus.microservices.tournament.objects.stage.rules.progression.StageAdvancementSnapshot
+import riichinexus.microservices.tournament.objects.stage.ranking.StageRankingSnapshot
 
 /** TournamentRuleEngine 负责赛事Rule引擎 相关的领域编排、构建或投影计算。 */
 

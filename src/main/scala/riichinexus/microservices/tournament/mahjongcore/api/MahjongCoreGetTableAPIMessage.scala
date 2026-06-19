@@ -7,7 +7,7 @@ import riichinexus.microservices.tournament.mahjongcore.domain.gamestate.functio
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.{MahjongRuleset, MahjongTableStatus, MahjongTableView}
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.apiTypes.MahjongTableQuery
 import riichinexus.microservices.tournament.mahjongcore.tables.tablestate.MahjongTableStateTable
-import riichinexus.microservices.tournament.objects.tablemanagement.TableId
+import riichinexus.microservices.tournament.objects.stage.table.TableId
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 
 import upickle.default.ReadWriter

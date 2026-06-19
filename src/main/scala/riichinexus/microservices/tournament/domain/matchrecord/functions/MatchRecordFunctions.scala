@@ -7,7 +7,7 @@ import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.tournament.domain.identity.functions.TournamentIdGenerator
 import riichinexus.microservices.tournament.domain.stage.model.Table
 import riichinexus.microservices.tournament.domain.matchrecord.model.{MatchRecord, MatchRecordSeatResult}
-import riichinexus.microservices.tournament.objects.paifumanagement.Paifu
+import riichinexus.microservices.tournament.objects.paifu.Paifu
 
 /** MatchRecordFunctions 提供对局记录相关的领域计算、校验和转换函数。 */
 

@@ -1,7 +1,7 @@
 package riichinexus.microservices.tournament.domain.paifu.functions
 
 
-import riichinexus.microservices.tournament.objects.paifumanagement.RoundSettlement
+import riichinexus.microservices.tournament.objects.paifu.RoundSettlement
 
 /** RoundSettlementFunctions 提供小局结算相关的领域计算、校验和转换函数。 */
 

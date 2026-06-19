@@ -3,8 +3,8 @@ package riichinexus.microservices.tournament.appeal.domain.model
 import java.time.Instant
 
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.tournament.objects.tablemanagement.TableId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.objects.stage.table.TableId
+import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}
 import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
 import riichinexus.microservices.tournament.appeal.objects.AppealDecisionLog
 

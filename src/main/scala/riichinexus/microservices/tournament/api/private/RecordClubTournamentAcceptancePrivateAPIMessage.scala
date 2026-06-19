@@ -3,7 +3,7 @@ package riichinexus.microservices.tournament.api.`private`
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentId
+import riichinexus.microservices.tournament.objects.identity.TournamentId
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.tournament.domain.competition.functions.TournamentFunctions
 import riichinexus.microservices.tournament.domain.competition.model.Tournament

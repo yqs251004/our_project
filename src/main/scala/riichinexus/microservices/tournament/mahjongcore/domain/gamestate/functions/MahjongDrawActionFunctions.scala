@@ -4,7 +4,7 @@ import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.tournament.mahjongcore.domain.action.model.MahjongEvent
 import riichinexus.microservices.tournament.mahjongcore.domain.gamestate.model.{MahjongRoundState, MahjongTableState}
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.{MahjongRoundPhase, MahjongTableStatus}
-import riichinexus.microservices.tournament.objects.paifumanagement.{HandOutcome, RoundSettlementNote}
+import riichinexus.microservices.tournament.objects.paifu.{HandOutcome, RoundSettlementNote}
 
 import MahjongGameStateSupport.{applyScoreChanges, nextSequenceNo, replaceSeat, requireRound, seatByPlayerId}
 import MahjongWinSettlementFunctions.{drawResult, finishRoundWithAbortiveDraw}

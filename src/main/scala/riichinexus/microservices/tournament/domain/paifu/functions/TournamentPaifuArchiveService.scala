@@ -2,11 +2,11 @@ package riichinexus.microservices.tournament.domain.paifu.functions
 
 import riichinexus.microservices.tournament.domain.matchrecord.functions.MatchRecordFunctions
 import riichinexus.microservices.tournament.domain.stage.functions.scheduling.TableFunctions
-import riichinexus.microservices.tournament.objects.paifumanagement.{HandOutcome, Paifu, PaifuActionType}
+import riichinexus.microservices.tournament.objects.paifu.{HandOutcome, Paifu, PaifuActionType}
 
 import java.sql.Connection
 
-import riichinexus.microservices.tournament.objects.tablemanagement.TableId
+import riichinexus.microservices.tournament.objects.stage.table.TableId
 
 import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
 import riichinexus.microservices.tournament.domain.stage.model.Table

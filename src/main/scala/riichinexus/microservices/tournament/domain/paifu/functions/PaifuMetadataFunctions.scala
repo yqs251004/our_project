@@ -1,7 +1,7 @@
 package riichinexus.microservices.tournament.domain.paifu.functions
 
 
-import riichinexus.microservices.tournament.objects.paifumanagement.PaifuMetadata
+import riichinexus.microservices.tournament.objects.paifu.PaifuMetadata
 
 /** PaifuMetadataFunctions 提供牌谱Metadata相关的领域计算、校验和转换函数。 */
 

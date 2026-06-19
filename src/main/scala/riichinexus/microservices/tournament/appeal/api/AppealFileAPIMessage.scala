@@ -14,7 +14,7 @@ import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.tournament.appeal.domain.functions.AppealApplicationService
 import riichinexus.microservices.tournament.appeal.domain.functions.AppealNotificationRequestFunctions
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.tournament.objects.tablemanagement.TableId
+import riichinexus.microservices.tournament.objects.stage.table.TableId
 import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
 import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
 import riichinexus.microservices.tournament.appeal.domain.model.{AppealAttachment, AppealAttachmentMediaKind as DomainAppealAttachmentMediaKind, AppealAttachmentStorageKind as DomainAppealAttachmentStorageKind, AppealPriority as DomainAppealPriority, AppealTicket}

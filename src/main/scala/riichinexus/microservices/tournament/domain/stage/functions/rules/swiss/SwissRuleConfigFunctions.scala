@@ -1,7 +1,7 @@
 package riichinexus.microservices.tournament.domain.stage.functions.rules.swiss
 
 
-import riichinexus.microservices.tournament.objects.rulesmanagement.swiss.SwissRuleConfig
+import riichinexus.microservices.tournament.objects.stage.rules.swiss.SwissRuleConfig
 
 /** SwissRuleConfigFunctions 提供SwissRule配置相关的领域计算、校验和转换函数。 */
 

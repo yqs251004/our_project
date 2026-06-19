@@ -12,7 +12,7 @@ import riichinexus.microservices.opsanalytics.domain.model.RatingChange
 import riichinexus.microservices.player.objects.`private`.PlayerPrivateView
 import riichinexus.microservices.notification.api.`private`.RecordBulkNotificationsPrivateAPIMessage
 import riichinexus.microservices.notification.objects.`private`.CreateNotificationRequest
-import riichinexus.microservices.tournament.objects.`private`.MatchRecordPrivateView
+import riichinexus.microservices.tournament.objects.`private`.matchrecord.MatchRecordPrivateView
 import upickle.default.ReadWriter
 
 /** 供赛事归档流程刷新赛后运营分析读模型。 */

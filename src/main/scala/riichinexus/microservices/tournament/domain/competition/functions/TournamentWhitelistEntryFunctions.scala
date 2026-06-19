@@ -1,8 +1,8 @@
 package riichinexus.microservices.tournament.domain.competition.functions
 
 
-import riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentWhitelistEntry
-import riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentParticipantKind
+import riichinexus.microservices.tournament.objects.competition.TournamentWhitelistEntry
+import riichinexus.microservices.tournament.objects.competition.TournamentParticipantKind
 
 /** TournamentWhitelistEntryFunctions 提供赛事白名单条目相关的领域计算、校验和转换函数。 */
 

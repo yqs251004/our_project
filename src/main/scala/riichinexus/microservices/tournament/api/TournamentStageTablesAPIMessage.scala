@@ -2,10 +2,10 @@ package riichinexus.microservices.tournament.api
 
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}
 import riichinexus.microservices.tournament.domain.stage.model.Table
 
-import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.{StageTableQuery, TournamentTableView}
+import riichinexus.microservices.tournament.objects.stage.table.apiTypes.{StageTableQuery, TournamentTableView}
 
 import riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable
 import riichinexus.system.objects.PagedResponse

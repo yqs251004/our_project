@@ -2,7 +2,7 @@ package riichinexus.microservices.tournament.domain.competition.functions
 
 import riichinexus.microservices.tournament.domain.stage.functions.rules.progression.AdvancementRuleFunctions
 
-import riichinexus.microservices.tournament.objects.rulesmanagement.stageprogression.AdvancementRuleType
+import riichinexus.microservices.tournament.objects.stage.rules.progression.AdvancementRuleType
 
 import riichinexus.microservices.tournament.domain.stage.model.TournamentStage
 

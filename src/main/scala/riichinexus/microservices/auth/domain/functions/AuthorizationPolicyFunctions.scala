@@ -3,7 +3,7 @@ import riichinexus.microservices.auth.objects.Permission
 
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentId
+import riichinexus.microservices.tournament.objects.identity.TournamentId
 import riichinexus.microservices.auth.domain.AuthorizationPolicy
 import riichinexus.system.api.AuthorizationFailure
 import riichinexus.microservices.auth.domain.model.AccessPrincipal

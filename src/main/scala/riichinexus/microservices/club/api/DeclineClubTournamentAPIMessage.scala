@@ -8,7 +8,7 @@ import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentId
+import riichinexus.microservices.tournament.objects.identity.TournamentId
 import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
 import riichinexus.microservices.club.domain.Club
 import riichinexus.microservices.club.objects.rankprivilegemanagement.ClubPrivilegeCode
@@ -16,7 +16,7 @@ import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.tournament.api.TournamentGetAPIMessage
 import riichinexus.microservices.club.domain.ClubAuthorization
 import riichinexus.microservices.tournament.api.`private`.RecordClubTournamentDeclinePrivateAPIMessage
-import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.TournamentMutationView
+import riichinexus.microservices.tournament.objects.competition.apiTypes.TournamentMutationView
 import upickle.default.ReadWriter
 
 /** 俱乐部拒绝赛事邀请。 */

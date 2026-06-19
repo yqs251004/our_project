@@ -3,7 +3,7 @@ package riichinexus.microservices.tournament.mahjongcore.domain.handanalysis.fun
 import riichinexus.microservices.tournament.mahjongcore.domain.handanalysis.model.{MahjongHandDecomposition, MahjongHandMeld, MahjongHandMeldType}
 import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.MahjongTileFunctions
 import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.MahjongTileFunctions.{Chun, Haku, Hatsu, Man1, Man9, Nan, Pei, Pin1, Pin9, Sha, Sou1, Sou9, TileTypeCount, Ton, isSuited, tileOf}
-import riichinexus.microservices.tournament.objects.paifumanagement.PaifuTile
+import riichinexus.microservices.tournament.objects.paifu.PaifuTile
 
 /** MahjongHandAnalysisFunctions 提供麻将手牌分析相关的领域计算、校验和转换函数。 */
 

@@ -1,7 +1,7 @@
 package riichinexus.microservices.tournament.api
 
-import riichinexus.microservices.tournament.objects.tablemanagement.TableStatus
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentFormat, TournamentStatus}
+import riichinexus.microservices.tournament.objects.stage.table.TableStatus
+import riichinexus.microservices.tournament.objects.competition.{TournamentFormat, TournamentStatus}
 
 import java.util.NoSuchElementException
 
@@ -16,11 +16,12 @@ import riichinexus.microservices.tournament.domain.stage.functions.rules.Tournam
 import riichinexus.microservices.tournament.domain.stage.model.Table
 import riichinexus.microservices.tournament.domain.competition.model.Tournament
 import riichinexus.microservices.tournament.domain.stage.model.TournamentStage
-import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.TournamentLineupSubmissionView
-import riichinexus.microservices.tournament.objects.rulesmanagement.knockout.KnockoutBracketSnapshot
-import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.StageRankingSnapshot
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
-import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.{PublicTournamentDetailView, PublicTournamentStageView}
+import riichinexus.microservices.tournament.objects.stage.lineup.apiTypes.TournamentLineupSubmissionView
+import riichinexus.microservices.tournament.objects.stage.rules.knockout.KnockoutBracketSnapshot
+import riichinexus.microservices.tournament.objects.stage.ranking.StageRankingSnapshot
+import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.objects.competition.apiTypes.PublicTournamentDetailView
+import riichinexus.microservices.tournament.objects.stage.apiTypes.PublicTournamentStageView
 import riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable
 import riichinexus.microservices.tournament.tables.tournaments.TournamentTable
 

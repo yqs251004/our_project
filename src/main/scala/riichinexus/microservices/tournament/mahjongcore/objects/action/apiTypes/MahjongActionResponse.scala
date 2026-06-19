@@ -2,7 +2,7 @@ package riichinexus.microservices.tournament.mahjongcore.objects.action.apiTypes
 
 import riichinexus.microservices.tournament.mahjongcore.objects.action.MahjongPublicEventView
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.MahjongTableView
-import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
+import riichinexus.microservices.tournament.objects.paifu.PaifuId
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.{ReadWriter, macroRW}
 

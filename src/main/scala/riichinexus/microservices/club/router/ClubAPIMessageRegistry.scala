@@ -13,7 +13,7 @@ import riichinexus.microservices.club.objects.auditreadmodel.apiTypes.ClubContri
 import riichinexus.microservices.player.objects.apiTypes.PlayerProfileView
 import riichinexus.microservices.notification.objects.Notification
 import riichinexus.system.objects.PagedResponse
-import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.TournamentMutationView
+import riichinexus.microservices.tournament.objects.competition.apiTypes.TournamentMutationView
 
 object ClubAPIMessageRegistry:
 

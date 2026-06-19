@@ -3,10 +3,10 @@ import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.api.`private`.{RequirePermissionPrivateAPIMessage, ResolveAccessPrincipalPrivateAPIMessage}
 import riichinexus.microservices.auth.api.`private`.ResolveSystemAccessPrincipalPrivateAPIMessage
 
-import riichinexus.microservices.tournament.objects.rulesmanagement.stageprogression.{AdvancementRule, AdvancementRuleType}
-import riichinexus.microservices.tournament.objects.rulesmanagement.knockout.KnockoutRuleConfig
-import riichinexus.microservices.tournament.objects.rulesmanagement.swiss.SwissRuleConfig
-import riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentStatus
+import riichinexus.microservices.tournament.objects.stage.rules.progression.{AdvancementRule, AdvancementRuleType}
+import riichinexus.microservices.tournament.objects.stage.rules.knockout.KnockoutRuleConfig
+import riichinexus.microservices.tournament.objects.stage.rules.swiss.SwissRuleConfig
+import riichinexus.microservices.tournament.objects.competition.TournamentStatus
 
 import java.util.NoSuchElementException
 
@@ -14,7 +14,7 @@ import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.tournament.domain.identity.functions.TournamentIdGenerator
-import riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentId
+import riichinexus.microservices.tournament.objects.identity.TournamentId
 import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
 import riichinexus.microservices.tournament.domain.stage.functions.rules.progression.AdvancementRuleFunctions
 import riichinexus.microservices.tournament.domain.competition.functions.TournamentFunctions
@@ -23,8 +23,8 @@ import riichinexus.microservices.tournament.domain.competition.model.Tournament
 
 import riichinexus.microservices.tournament.domain.competition.functions.TournamentRuntimeDefaults
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.MahjongRuleset
-import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.CreateTournamentStageRequest
-import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.TournamentSummaryView
+import riichinexus.microservices.tournament.objects.stage.apiTypes.CreateTournamentStageRequest
+import riichinexus.microservices.tournament.objects.competition.apiTypes.TournamentSummaryView
 
 import upickle.default.ReadWriter
 

@@ -1,8 +1,8 @@
 package riichinexus.microservices.tournament.mahjongcore.domain.yakuanalysis.functions
 
 import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.MahjongTileFunctions.{countDora, redDoraCount}
-import riichinexus.microservices.tournament.objects.paifumanagement.MahjongYakuKind
-import riichinexus.microservices.tournament.objects.paifumanagement.Yaku
+import riichinexus.microservices.tournament.objects.paifu.MahjongYakuKind
+import riichinexus.microservices.tournament.objects.paifu.Yaku
 
 import MahjongYakuCheckSupport.{MahjongYakuCheckState, YakuCheck, yakuIf}
 

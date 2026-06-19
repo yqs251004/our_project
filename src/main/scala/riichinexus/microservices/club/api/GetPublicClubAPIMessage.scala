@@ -9,9 +9,9 @@ import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
-import riichinexus.microservices.tournament.objects.tablemanagement.TableId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.objects.matchrecord.MatchRecordId
+import riichinexus.microservices.tournament.objects.stage.table.TableId
+import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}
 import riichinexus.microservices.club.domain.Club
 import riichinexus.microservices.club.domain.clubmanagement.model.ClubHonor
 import riichinexus.microservices.club.domain.membershipmanagement.functions.ClubMembershipApplicationFunctions
@@ -23,8 +23,9 @@ import riichinexus.microservices.club.objects.clubmanagement.apiTypes.{ClubAppli
 import riichinexus.microservices.club.objects.rankprivilegemanagement.ClubPrivilegeCode
 import riichinexus.microservices.club.objects.tournamentparticipation.apiTypes.PublicClubLineupMemberView
 import riichinexus.microservices.club.objects.auditreadmodel.apiTypes.{PublicClubRecentMatchSeatView, PublicClubRecentMatchView}
-import riichinexus.microservices.tournament.objects.`private`.{MatchRecordPrivateView, TournamentPrivateView}
-import riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentStatus
+import riichinexus.microservices.tournament.objects.`private`.matchrecord.MatchRecordPrivateView
+import riichinexus.microservices.tournament.objects.`private`.competition.TournamentPrivateView
+import riichinexus.microservices.tournament.objects.competition.TournamentStatus
 import riichinexus.microservices.tournament.api.`private`.{ListClubTournamentsPrivateAPIMessage, ListRecentClubMatchRecordsPrivateAPIMessage, ResolveTournamentsPrivateAPIMessage}
 
 import upickle.default.ReadWriter

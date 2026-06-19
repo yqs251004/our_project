@@ -6,8 +6,8 @@ import scala.annotation.tailrec
 import scala.util.Using
 
 import riichinexus.system.errors.OptimisticConcurrencyException
-import riichinexus.microservices.tournament.objects.tablemanagement.TableId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.objects.stage.table.TableId
+import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}
 import riichinexus.microservices.tournament.domain.stage.functions.scheduling.TableFunctions
 import riichinexus.microservices.tournament.domain.stage.model.Table
 import riichinexus.system.json.JsonCodecs.given

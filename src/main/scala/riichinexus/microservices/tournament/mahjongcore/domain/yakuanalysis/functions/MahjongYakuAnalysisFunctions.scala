@@ -5,8 +5,8 @@ import riichinexus.microservices.tournament.mahjongcore.domain.handanalysis.mode
 import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.MahjongTileFunctions.{Chun, Haku, Nan, Pei, Sha, Ton, countsOf, indexOf, isYaochu}
 import riichinexus.microservices.tournament.mahjongcore.domain.yakuanalysis.model.MahjongWinContext
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.{MahjongMeld, MahjongMeldType}
-import riichinexus.microservices.tournament.objects.paifumanagement.{AgariResult, AgariWinResult, HandOutcome, MahjongYakuKind, PaifuTile, RoundSettlement, RoundSettlementNote, ScoreChange, Yaku}
-import riichinexus.microservices.tournament.objects.tablemanagement.SeatWind
+import riichinexus.microservices.tournament.objects.paifu.{AgariResult, AgariWinResult, HandOutcome, MahjongYakuKind, PaifuTile, RoundSettlement, RoundSettlementNote, ScoreChange, Yaku}
+import riichinexus.microservices.tournament.objects.stage.table.SeatWind
 
 /** MahjongYakuAnalysisFunctions 提供麻将役种分析相关的领域计算、校验和转换函数。 */
 

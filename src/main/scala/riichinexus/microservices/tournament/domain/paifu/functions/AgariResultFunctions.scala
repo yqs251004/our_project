@@ -1,8 +1,8 @@
 package riichinexus.microservices.tournament.domain.paifu.functions
 
 
-import riichinexus.microservices.tournament.objects.paifumanagement.{AgariResult, AgariWinResult, MahjongYakuKind, Yaku}
-import riichinexus.microservices.tournament.objects.paifumanagement.HandOutcome
+import riichinexus.microservices.tournament.objects.paifu.{AgariResult, AgariWinResult, MahjongYakuKind, Yaku}
+import riichinexus.microservices.tournament.objects.paifu.HandOutcome
 
 /** AgariResultFunctions 提供Agari结果相关的领域计算、校验和转换函数。 */
 

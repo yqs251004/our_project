@@ -2,10 +2,10 @@ package riichinexus.microservices.tournament.api
 
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}
 import riichinexus.microservices.tournament.domain.stage.functions.rules.TournamentStageQueries
 
-import riichinexus.microservices.tournament.objects.rulesmanagement.stageprogression.StageAdvancementSnapshot
+import riichinexus.microservices.tournament.objects.stage.rules.progression.StageAdvancementSnapshot
 import upickle.default.ReadWriter
 
 /** 预览赛事阶段晋级结果。 */

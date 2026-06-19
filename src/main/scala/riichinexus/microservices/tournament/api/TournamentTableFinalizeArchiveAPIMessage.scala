@@ -11,11 +11,11 @@ import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.tournament.appeal.api.AppealListAPIMessage
 import riichinexus.microservices.tournament.appeal.objects.{AppealStatus as AppealViewStatus}
 import riichinexus.microservices.tournament.appeal.objects.apiTypes.AppealListQuery
-import riichinexus.microservices.tournament.api.`private`.TournamentPrivateReadModel
+import riichinexus.microservices.tournament.domain.functions.TournamentPrivateViewFunctions
 import riichinexus.microservices.tournament.domain.stage.functions.scheduling.{TableFunctions, TournamentStageTableScheduler}
 import riichinexus.microservices.tournament.domain.stage.model.Table
-import riichinexus.microservices.tournament.objects.tablemanagement.{TableId, TableStatus}
-import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.TournamentTableView
+import riichinexus.microservices.tournament.objects.stage.table.{TableId, TableStatus}
+import riichinexus.microservices.tournament.objects.stage.table.apiTypes.TournamentTableView
 import riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTable
 import riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
@@ -51,7 +51,7 @@ final case class TournamentTableFinalizeArchiveAPIMessage(
         )
       )
       _ <- RefreshOpsAnalyticsAfterMatchArchivedPrivateAPIMessage(
-        matchRecord = TournamentPrivateReadModel.fromMatchRecord(archived.matchRecord),
+        matchRecord = TournamentPrivateViewFunctions.fromMatchRecord(archived.matchRecord),
         occurredAt = archived.matchRecord.generatedAt
       ).plan(context)
     yield TournamentTableView.fromDomain(archived.table)

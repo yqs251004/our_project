@@ -1,11 +1,11 @@
 package riichinexus.microservices.tournament.domain.identity.functions
 
-import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
-import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
-import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
-import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
-import riichinexus.microservices.tournament.objects.tablemanagement.TableId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.objects.stage.lineup.LineupSubmissionId
+import riichinexus.microservices.tournament.objects.paifu.PaifuId
+import riichinexus.microservices.tournament.objects.matchrecord.MatchRecordId
+import riichinexus.microservices.tournament.objects.finalization.SettlementSnapshotId
+import riichinexus.microservices.tournament.objects.stage.table.TableId
+import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}
 
 import java.util.UUID
 

@@ -4,7 +4,8 @@ import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
 import riichinexus.system.json.JsonCodecs.given
-import riichinexus.microservices.tournament.objects.`private`.MatchRecordPrivateView
+import riichinexus.microservices.tournament.domain.functions.TournamentPrivateViewFunctions
+import riichinexus.microservices.tournament.objects.`private`.matchrecord.MatchRecordPrivateView
 import riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTable
 import upickle.default.ReadWriter
 
@@ -17,4 +18,4 @@ final case class ListRecentClubMatchRecordsPrivateAPIMessage(
   override def plan(context: ApiPlanContext): IO[Vector[MatchRecordPrivateView]] =
     for
       records <- IO.blocking(MatchRecordTable.findRecentByClub(context.connection, clubId, limit))
-    yield records.map(TournamentPrivateReadModel.fromMatchRecord)
+    yield records.map(TournamentPrivateViewFunctions.fromMatchRecord)

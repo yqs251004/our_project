@@ -1,6 +1,7 @@
 package riichinexus.microservices.tournament.api
 
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{StageStatus, TournamentStatus}
+import riichinexus.microservices.tournament.objects.stage.StageStatus
+import riichinexus.microservices.tournament.objects.competition.TournamentStatus
 
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
@@ -8,7 +9,7 @@ import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
 import riichinexus.microservices.club.api.`private`.ResolveClubReadModelsPrivateAPIMessage
 import riichinexus.microservices.club.objects.`private`.ClubPrivateView
-import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.PublicTournamentSummaryView
+import riichinexus.microservices.tournament.objects.competition.apiTypes.PublicTournamentSummaryView
 import riichinexus.microservices.tournament.domain.competition.model.Tournament
 import riichinexus.microservices.tournament.tables.tournaments.TournamentTable
 import riichinexus.system.objects.PagedResponse

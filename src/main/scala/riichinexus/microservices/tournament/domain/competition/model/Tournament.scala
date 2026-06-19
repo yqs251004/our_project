@@ -6,8 +6,8 @@ import java.time.Instant
 
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentStatus, TournamentWhitelistEntry}
+import riichinexus.microservices.tournament.objects.identity.TournamentId
+import riichinexus.microservices.tournament.objects.competition.{TournamentStatus, TournamentWhitelistEntry}
 
 import riichinexus.system.json.JsonCodecs.given
 /** Tournament 表示后端领域中的赛事状态或规则，包含 ID、名称、organizer、startsAt、endsAt、participatingClubs等。 */

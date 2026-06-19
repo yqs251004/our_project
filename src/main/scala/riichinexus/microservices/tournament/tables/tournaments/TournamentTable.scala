@@ -9,10 +9,10 @@ import org.postgresql.util.PSQLException
 import riichinexus.system.errors.OptimisticConcurrencyException
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentId
+import riichinexus.microservices.tournament.objects.identity.TournamentId
 import riichinexus.microservices.tournament.domain.competition.functions.TournamentDefaultsFunctions
 import riichinexus.microservices.tournament.domain.competition.model.Tournament
-import riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentStatus
+import riichinexus.microservices.tournament.objects.competition.TournamentStatus
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.{read, write}
 

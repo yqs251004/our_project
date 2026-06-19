@@ -4,7 +4,7 @@ import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.tournament.domain.matchrecord.functions.MatchRecordFunctions
 
-import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.{MatchRecordListQuery, TournamentMatchRecordView}
+import riichinexus.microservices.tournament.objects.matchrecord.apiTypes.{MatchRecordListQuery, TournamentMatchRecordView}
 
 import riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTable
 import riichinexus.system.objects.PagedResponse

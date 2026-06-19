@@ -8,16 +8,17 @@ import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}
 import riichinexus.system.api.AuthorizationFailure
 import riichinexus.microservices.club.api.`private`.ResolveClubReadModelsPrivateAPIMessage
 import riichinexus.microservices.club.objects.`private`.ClubPrivateView
 import riichinexus.microservices.player.objects.`private`.PlayerPrivateView
 import riichinexus.microservices.tournament.domain.stage.model.Table
 import riichinexus.microservices.tournament.domain.competition.model.Tournament
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{StageStatus, TournamentStatus}
-import riichinexus.microservices.tournament.objects.tablemanagement.TableStatus
-import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.PublicScheduleView
+import riichinexus.microservices.tournament.objects.stage.StageStatus
+import riichinexus.microservices.tournament.objects.competition.TournamentStatus
+import riichinexus.microservices.tournament.objects.stage.table.TableStatus
+import riichinexus.microservices.tournament.objects.competition.apiTypes.PublicScheduleView
 import riichinexus.microservices.tournament.domain.stage.functions.lineup.StageLineupResolver
 import riichinexus.microservices.tournament.tables.tournaments.TournamentTable
 import riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable

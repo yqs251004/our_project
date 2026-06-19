@@ -10,12 +10,13 @@ import riichinexus.microservices.player.objects.`private`.PlayerPrivateView
 import riichinexus.microservices.player.api.`private`.{ResolvePlayerBoundClubIdsPrivateAPIMessage, ResolvePlayersPrivateAPIMessage}
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentId
+import riichinexus.microservices.tournament.objects.identity.TournamentId
 import riichinexus.microservices.tournament.domain.stage.model.{StageLineupSubmission, TournamentStage}
 import riichinexus.microservices.tournament.domain.competition.model.Tournament
 
-import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.TournamentLineupSubmissionView
-import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.{TournamentDetailView, TournamentOperationsStageView, TournamentParticipantClubView, TournamentParticipantPlayerView, TournamentWhitelistSummaryView}
+import riichinexus.microservices.tournament.objects.stage.lineup.apiTypes.TournamentLineupSubmissionView
+import riichinexus.microservices.tournament.objects.competition.apiTypes.{TournamentDetailView, TournamentParticipantClubView, TournamentParticipantPlayerView, TournamentWhitelistSummaryView}
+import riichinexus.microservices.tournament.objects.stage.apiTypes.TournamentOperationsStageView
 
 import riichinexus.microservices.tournament.tables.tournaments.TournamentTable
 import upickle.default.ReadWriter

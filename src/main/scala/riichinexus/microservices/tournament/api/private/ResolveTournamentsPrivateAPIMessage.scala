@@ -2,10 +2,11 @@ package riichinexus.microservices.tournament.api.`private`
 
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentId
+import riichinexus.microservices.tournament.objects.identity.TournamentId
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.tournament.domain.competition.model.Tournament
-import riichinexus.microservices.tournament.objects.`private`.TournamentPrivateView
+import riichinexus.microservices.tournament.domain.functions.TournamentPrivateViewFunctions
+import riichinexus.microservices.tournament.objects.`private`.competition.TournamentPrivateView
 import riichinexus.microservices.tournament.tables.tournaments.TournamentTable
 import upickle.default.ReadWriter
 
@@ -17,7 +18,7 @@ final case class ResolveTournamentsPrivateAPIMessage(
   override def plan(context: ApiPlanContext): IO[Vector[TournamentPrivateView]] =
     for
       tournaments <- IO.blocking(resolveTournaments(context))
-    yield tournaments.map(TournamentPrivateReadModel.fromTournament)
+    yield tournaments.map(TournamentPrivateViewFunctions.fromTournament)
 
   private def resolveTournaments(context: ApiPlanContext): Vector[Tournament] =
     val distinctIds = tournamentIds.distinct

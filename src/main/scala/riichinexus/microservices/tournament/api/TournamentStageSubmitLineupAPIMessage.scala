@@ -11,7 +11,7 @@ import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
 import riichinexus.microservices.tournament.domain.identity.functions.TournamentIdGenerator
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}
 import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
 import riichinexus.microservices.tournament.domain.competition.functions.TournamentFunctions
 import riichinexus.microservices.tournament.domain.stage.functions.TournamentStageFunctions
@@ -27,9 +27,9 @@ import riichinexus.microservices.notification.api.`private`.RecordBulkNotificati
 import riichinexus.microservices.notification.objects.`private`.CreateNotificationRequest
 import riichinexus.system.realtime.objects.RealtimeEvent
 
-import riichinexus.microservices.tournament.objects.tablemanagement.SeatWind
-import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.{StageLineupSeatRequest, SubmitStageLineupRequest}
-import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.TournamentMutationView
+import riichinexus.microservices.tournament.objects.stage.table.SeatWind
+import riichinexus.microservices.tournament.objects.stage.lineup.apiTypes.{StageLineupSeatRequest, SubmitStageLineupRequest}
+import riichinexus.microservices.tournament.objects.competition.apiTypes.TournamentMutationView
 
 import upickle.default.ReadWriter
 

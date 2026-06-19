@@ -1,7 +1,7 @@
 package riichinexus.microservices.tournament.domain.stage.functions.scheduling
 
 
-import riichinexus.microservices.tournament.objects.tablemanagement.TableSeat
+import riichinexus.microservices.tournament.objects.stage.table.TableSeat
 
 /** TableSeatFunctions 提供牌桌座位相关的领域计算、校验和转换函数。 */
 

@@ -10,10 +10,10 @@ import riichinexus.microservices.tournament.domain.stage.model.Table
 import riichinexus.microservices.tournament.mahjongcore.domain.action.model.MahjongEvent
 import riichinexus.microservices.tournament.mahjongcore.domain.gamestate.model.{MahjongRoundState, MahjongTableState}
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.MahjongMeldType
-import riichinexus.microservices.tournament.objects.paifumanagement.{FinalStanding, Paifu, PaifuAction, PaifuActionType, PaifuHand, PaifuId, PaifuMetadata, PaifuPlayerTrack, PaifuRound, PaifuRoundPlayer, PaifuTimeline}
-import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
-import riichinexus.microservices.tournament.objects.tablemanagement.{TableSeat, TableStatus}
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.objects.paifu.{FinalStanding, Paifu, PaifuAction, PaifuActionType, PaifuHand, PaifuId, PaifuMetadata, PaifuPlayerTrack, PaifuRound, PaifuRoundPlayer, PaifuTimeline}
+import riichinexus.microservices.tournament.objects.matchrecord.MatchRecordId
+import riichinexus.microservices.tournament.objects.stage.table.{TableSeat, TableStatus}
+import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}
 
 /** MahjongTableArchiveFunctions 提供麻将牌桌Archive相关的领域计算、校验和转换函数。 */
 

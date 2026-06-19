@@ -1,7 +1,8 @@
 package riichinexus.microservices.tournament.mahjongcore.domain.tile.functions
 
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.MahjongRuleset
-import riichinexus.microservices.tournament.objects.paifumanagement.PaifuTile
+import riichinexus.microservices.tournament.domain.paifu.functions.PaifuTileFunctions
+import riichinexus.microservices.tournament.objects.paifu.{PaifuTile, PaifuTileSuit}
 
 import java.util.Collections
 import java.util.Random
@@ -56,7 +57,21 @@ private[mahjongcore] object MahjongTileFunctions:
     )
 
   def indexOf(tile: PaifuTile): Int =
-    indexOf(tile.value)
+    val normalizedRank =
+      if tile.rank == 0 then 5
+      else tile.rank
+
+    tile.suit match
+      case PaifuTileSuit.Manzu if normalizedRank >= 1 && normalizedRank <= 9 =>
+        normalizedRank - 1
+      case PaifuTileSuit.Pinzu if normalizedRank >= 1 && normalizedRank <= 9 =>
+        Pin1 + normalizedRank - 1
+      case PaifuTileSuit.Souzu if normalizedRank >= 1 && normalizedRank <= 9 =>
+        Sou1 + normalizedRank - 1
+      case PaifuTileSuit.Honor if normalizedRank >= 1 && normalizedRank <= 7 =>
+        Ton + normalizedRank - 1
+      case _ =>
+        throw IllegalArgumentException(s"Unsupported mahjong tile value: ${PaifuTileFunctions.toString(tile)}")
 
   def indexOf(value: String): Int =
     val normalized = value.trim.toLowerCase.replace("-", "")
@@ -78,18 +93,26 @@ private[mahjongcore] object MahjongTileFunctions:
 
   def tileOf(index: Int, red: Boolean = false): PaifuTile =
     if index >= Man1 && index <= Man9 then
-      PaifuTile(if red && index == Man1 + 4 then "0m" else s"${index + 1}m")
+      PaifuTile(
+        rank = if red && index == Man1 + 4 then 0 else index + 1,
+        suit = PaifuTileSuit.Manzu
+      )
     else if index >= Pin1 && index <= Pin9 then
-      PaifuTile(if red && index == Pin1 + 4 then "0p" else s"${index - Pin1 + 1}p")
+      PaifuTile(
+        rank = if red && index == Pin1 + 4 then 0 else index - Pin1 + 1,
+        suit = PaifuTileSuit.Pinzu
+      )
     else if index >= Sou1 && index <= Sou9 then
-      PaifuTile(if red && index == Sou1 + 4 then "0s" else s"${index - Sou1 + 1}s")
-    else if index >= Ton && index <= Chun then PaifuTile(s"${index - Ton + 1}z")
+      PaifuTile(
+        rank = if red && index == Sou1 + 4 then 0 else index - Sou1 + 1,
+        suit = PaifuTileSuit.Souzu
+      )
+    else if index >= Ton && index <= Chun then
+      PaifuTile(rank = index - Ton + 1, suit = PaifuTileSuit.Honor)
     else throw IllegalArgumentException(s"Unsupported mahjong tile index: $index")
 
   def isRed(tile: PaifuTile): Boolean =
-    val normalized = tile.value.trim.toLowerCase
-    normalized == "0m" || normalized == "0p" || normalized == "0s" ||
-      normalized.endsWith("dora")
+    tile.rank == 0 && tile.suit != PaifuTileSuit.Honor
 
   def normalize(tile: PaifuTile): PaifuTile =
     tileOf(indexOf(tile), red = isRed(tile))

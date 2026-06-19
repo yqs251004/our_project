@@ -1,12 +1,12 @@
 package riichinexus.microservices.tournament.domain.stage.functions
 
-import riichinexus.microservices.tournament.objects.tablemanagement.TableId
+import riichinexus.microservices.tournament.objects.stage.table.TableId
 import riichinexus.microservices.tournament.domain.stage.model.{StageLineupSubmission, StageTablePlan, TournamentStage}
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.MahjongRuleset
-import riichinexus.microservices.tournament.objects.rulesmanagement.stageprogression.AdvancementRule
-import riichinexus.microservices.tournament.objects.rulesmanagement.knockout.KnockoutRuleConfig
-import riichinexus.microservices.tournament.objects.tournamentmanagement.StageStatus
-import riichinexus.microservices.tournament.objects.rulesmanagement.swiss.SwissRuleConfig
+import riichinexus.microservices.tournament.objects.stage.rules.progression.AdvancementRule
+import riichinexus.microservices.tournament.objects.stage.rules.knockout.KnockoutRuleConfig
+import riichinexus.microservices.tournament.objects.stage.StageStatus
+import riichinexus.microservices.tournament.objects.stage.rules.swiss.SwissRuleConfig
 
 /** TournamentStageFunctions 提供赛事阶段相关的领域计算、校验和转换函数。 */
 

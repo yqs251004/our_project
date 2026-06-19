@@ -5,11 +5,11 @@ import riichinexus.microservices.tournament.domain.stage.model.Table
 import java.time.Instant
 import java.util.NoSuchElementException
 
-import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
-import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
+import riichinexus.microservices.tournament.objects.paifu.PaifuId
+import riichinexus.microservices.tournament.objects.matchrecord.MatchRecordId
 import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
 import riichinexus.microservices.tournament.appeal.domain.model.AppealTableResolution
-import riichinexus.microservices.tournament.objects.tablemanagement.{SeatWind, TableSeat, TableStatus}
+import riichinexus.microservices.tournament.objects.stage.table.{SeatWind, TableSeat, TableStatus}
 
 /** TableFunctions 提供牌桌相关的领域计算、校验和转换函数。 */
 

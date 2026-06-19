@@ -8,13 +8,13 @@ import java.util.NoSuchElementException
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.tournament.objects.tablemanagement.TableId
+import riichinexus.microservices.tournament.objects.stage.table.TableId
 import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
 import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
 import riichinexus.microservices.tournament.domain.paifu.functions.TournamentPaifuArchiveService
 
-import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.UploadPaifuRequest
-import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.TournamentTableView
+import riichinexus.microservices.tournament.objects.paifu.apiTypes.UploadPaifuRequest
+import riichinexus.microservices.tournament.objects.stage.table.apiTypes.TournamentTableView
 
 import upickle.default.ReadWriter
 

@@ -1,10 +1,10 @@
 package riichinexus.microservices.tournament.domain.stage.functions.rules.knockout
 
 
-import riichinexus.microservices.tournament.objects.rulesmanagement.stageprogression.{AdvancementRuleType, StageAdvancementSnapshot}
-import riichinexus.microservices.tournament.objects.rulesmanagement.knockout.{KnockoutBracketMatch, KnockoutBracketResult, KnockoutBracketRound, KnockoutBracketSlot, KnockoutBracketSnapshot, KnockoutLane}
-import riichinexus.microservices.tournament.objects.tablemanagement.TableStatus
-import riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentFormat
+import riichinexus.microservices.tournament.objects.stage.rules.progression.{AdvancementRuleType, StageAdvancementSnapshot}
+import riichinexus.microservices.tournament.objects.stage.rules.knockout.{KnockoutBracketMatch, KnockoutBracketResult, KnockoutBracketRound, KnockoutBracketSlot, KnockoutBracketSnapshot, KnockoutLane}
+import riichinexus.microservices.tournament.objects.stage.table.TableStatus
+import riichinexus.microservices.tournament.objects.competition.TournamentFormat
 
 import java.time.Instant
 

@@ -8,13 +8,13 @@ import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPI
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}
 import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
-import riichinexus.microservices.tournament.domain.settlement.model.TournamentSettlementSnapshot
-import riichinexus.microservices.tournament.domain.settlement.functions.{TournamentSettlementCoordinator, TournamentSettlementNotificationRequestFunctions}
-import riichinexus.microservices.tournament.objects.settlementmanagement.{TournamentSettlementAdjustment, TournamentSettlementStatus}
+import riichinexus.microservices.tournament.domain.finalization.model.TournamentSettlementSnapshot
+import riichinexus.microservices.tournament.domain.finalization.functions.{TournamentSettlementCoordinator, TournamentSettlementNotificationRequestFunctions}
+import riichinexus.microservices.tournament.objects.finalization.{TournamentSettlementAdjustment, TournamentSettlementStatus}
 import riichinexus.microservices.notification.api.`private`.RecordBulkNotificationsPrivateAPIMessage
-import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.{SettleTournamentRequest, SettlementAdjustmentRequest, TournamentSettlementView}
+import riichinexus.microservices.tournament.objects.finalization.apiTypes.{SettleTournamentRequest, SettlementAdjustmentRequest, TournamentSettlementView}
 
 import upickle.default.ReadWriter
 

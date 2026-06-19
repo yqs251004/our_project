@@ -1,12 +1,12 @@
 package riichinexus.microservices.opsanalytics.domain.functions
 
-import riichinexus.microservices.tournament.objects.paifumanagement.{HandOutcome, Paifu, PaifuActionType, PaifuRound}
+import riichinexus.microservices.tournament.objects.paifu.{HandOutcome, Paifu, PaifuActionType, PaifuRound}
 
 import java.time.Instant
 
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.tournament.objects.`private`.MatchRecordPrivateView
+import riichinexus.microservices.tournament.objects.`private`.matchrecord.MatchRecordPrivateView
 
 import riichinexus.microservices.opsanalytics.domain.model.PlayerRoundStats
 import riichinexus.microservices.opsanalytics.objects.{AdvancedStatsBoard, DashboardOwner}

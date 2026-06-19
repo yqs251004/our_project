@@ -3,7 +3,7 @@ package riichinexus.microservices.auth.domain.functions
 import java.time.Instant
 
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentId
+import riichinexus.microservices.tournament.objects.identity.TournamentId
 import riichinexus.microservices.auth.domain.model.{AccessPrincipal, GuestAccessSession}
 import riichinexus.microservices.auth.objects.Role
 

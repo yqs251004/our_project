@@ -10,12 +10,12 @@ import riichinexus.microservices.club.objects.membershipmanagement.MembershipApp
 import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
-import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
-import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
-import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
-import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
-import riichinexus.microservices.tournament.objects.tablemanagement.TableId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.objects.stage.lineup.LineupSubmissionId
+import riichinexus.microservices.tournament.objects.paifu.PaifuId
+import riichinexus.microservices.tournament.objects.matchrecord.MatchRecordId
+import riichinexus.microservices.tournament.objects.finalization.SettlementSnapshotId
+import riichinexus.microservices.tournament.objects.stage.table.TableId
+import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}
 import upickle.default.{ReadWriter, macroRW, read, readwriter, writeJs}
 
 object SharedJsonCodecs:

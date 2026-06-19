@@ -8,12 +8,12 @@ import java.util.NoSuchElementException
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentId
+import riichinexus.microservices.tournament.objects.identity.TournamentId
 import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
 import riichinexus.microservices.tournament.domain.competition.functions.TournamentFunctions
 import riichinexus.microservices.tournament.domain.competition.model.Tournament
 import riichinexus.system.json.JsonCodecs.given
-import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.TournamentSummaryView
+import riichinexus.microservices.tournament.objects.competition.apiTypes.TournamentSummaryView
 
 import upickle.default.ReadWriter
 

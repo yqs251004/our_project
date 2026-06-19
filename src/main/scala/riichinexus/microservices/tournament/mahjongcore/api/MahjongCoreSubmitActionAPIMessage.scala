@@ -9,7 +9,7 @@ import riichinexus.microservices.tournament.mahjongcore.domain.gamestate.model.M
 import riichinexus.microservices.tournament.mahjongcore.objects.action.MahjongPublicEventView
 import riichinexus.microservices.tournament.mahjongcore.objects.action.apiTypes.{MahjongActionResponse, SubmitMahjongActionRequest}
 import riichinexus.microservices.tournament.mahjongcore.tables.tablestate.MahjongTableStateTable
-import riichinexus.microservices.tournament.objects.tablemanagement.TableId
+import riichinexus.microservices.tournament.objects.stage.table.TableId
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 
 import riichinexus.system.realtime.objects.RealtimeEvent

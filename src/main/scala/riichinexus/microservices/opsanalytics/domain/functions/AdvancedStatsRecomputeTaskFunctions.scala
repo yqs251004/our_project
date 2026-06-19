@@ -2,7 +2,7 @@ package riichinexus.microservices.opsanalytics.domain.functions
 
 import java.time.Instant
 
-import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
+import riichinexus.microservices.tournament.objects.matchrecord.MatchRecordId
 
 import riichinexus.microservices.opsanalytics.objects.{AdvancedStatsRecomputeTask, AdvancedStatsRecomputeTaskStatus, DashboardOwner}
 

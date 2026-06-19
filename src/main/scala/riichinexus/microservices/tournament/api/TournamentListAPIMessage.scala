@@ -5,7 +5,7 @@ import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.system.json.JsonCodecs.given
-import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.{TournamentListQuery, TournamentSummaryView}
+import riichinexus.microservices.tournament.objects.competition.apiTypes.{TournamentListQuery, TournamentSummaryView}
 
 import riichinexus.microservices.tournament.tables.tournaments.TournamentTable
 import riichinexus.system.objects.PagedResponse
@@ -29,7 +29,7 @@ final case class TournamentListAPIMessage(
   private def resolveQuery: ResolvedTournamentListQuery =
     ResolvedTournamentListQuery(
       query = TournamentListQuery(
-        status = status.filter(_.nonEmpty).map(riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentStatus.valueOf),
+        status = status.filter(_.nonEmpty).map(riichinexus.microservices.tournament.objects.competition.TournamentStatus.valueOf),
         adminId = adminId.filter(_.nonEmpty).map(PlayerId(_)),
         organizer = organizer.filter(_.nonEmpty)
       ),

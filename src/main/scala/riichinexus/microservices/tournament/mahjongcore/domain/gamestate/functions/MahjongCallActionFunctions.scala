@@ -8,7 +8,7 @@ import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.Ma
 import riichinexus.microservices.tournament.mahjongcore.domain.yakuanalysis.functions.MahjongYakuAnalysisFunctions
 import riichinexus.microservices.tournament.mahjongcore.objects.action.{MahjongCommandType, MahjongLegalAction}
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.{MahjongDiscard, MahjongMeld, MahjongMeldType, MahjongRoundPhase, MahjongTableStatus}
-import riichinexus.microservices.tournament.objects.paifumanagement.{PaifuTile, RoundSettlementNote}
+import riichinexus.microservices.tournament.objects.paifu.{PaifuTile, RoundSettlementNote}
 
 import MahjongGameStateSupport.{defaultMeldTiles, markDiscardCalledBy, nextSeatId, nextSequenceNo, removeOneByIndex, replaceSeat, requireRound, seatByPlayerId, seatDistanceFromDiscarder}
 import MahjongWinSettlementFunctions.{acceptPendingRiichiDeclaration, finishRoundWithAbortiveDraw, finishRoundWithRonWinners, winContext}

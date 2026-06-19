@@ -4,7 +4,7 @@ import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.tournament.mahjongcore.domain.action.model.MahjongEvent
 import riichinexus.microservices.tournament.mahjongcore.domain.gamestate.model.{MahjongCallCandidate, MahjongCallResponse, MahjongPendingCallState, MahjongRoundState, MahjongSeatState, MahjongTableState}
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.MahjongMeld
-import riichinexus.microservices.tournament.objects.paifumanagement.{AgariResult, FinalStanding, KyokuDescriptor, PaifuTile}
+import riichinexus.microservices.tournament.objects.paifu.{AgariResult, FinalStanding, KyokuDescriptor, PaifuTile}
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.{ReadWriter, macroRW, read, readwriter, writeJs}
 

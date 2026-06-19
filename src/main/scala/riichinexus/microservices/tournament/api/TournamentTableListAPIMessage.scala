@@ -4,7 +4,7 @@ import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.tournament.domain.stage.model.Table
 
-import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.{TableListQuery, TournamentTableView}
+import riichinexus.microservices.tournament.objects.stage.table.apiTypes.{TableListQuery, TournamentTableView}
 
 import riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable
 import riichinexus.system.objects.PagedResponse

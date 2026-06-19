@@ -2,7 +2,7 @@ package riichinexus.microservices.tournament.domain.paifu.functions
 
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 
-import riichinexus.microservices.tournament.objects.paifumanagement.{HandOutcome, Paifu, PaifuAction, PaifuActionType, PaifuRound}
+import riichinexus.microservices.tournament.objects.paifu.{HandOutcome, Paifu, PaifuAction, PaifuActionType, PaifuRound}
 
 /** PaifuFunctions 提供牌谱相关的领域计算、校验和转换函数。 */
 

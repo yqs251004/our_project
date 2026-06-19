@@ -7,8 +7,8 @@ import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.Ma
 import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.MahjongTileFunctions.{indexOf, isRed, sortTiles, tileOf}
 import riichinexus.microservices.tournament.mahjongcore.objects.action.{MahjongCommandType, MahjongLegalAction}
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.{MahjongMeld, MahjongMeldType, MahjongRuleset}
-import riichinexus.microservices.tournament.objects.paifumanagement.{AgariResult, AgariWinResult, PaifuTile, ScoreChange}
-import riichinexus.microservices.tournament.objects.tablemanagement.{SeatWind, TableId, TableSeat}
+import riichinexus.microservices.tournament.objects.paifu.{AgariResult, AgariWinResult, PaifuTile, ScoreChange}
+import riichinexus.microservices.tournament.objects.stage.table.{SeatWind, TableId, TableSeat}
 
 /** MahjongGameStateSupport 提供麻将游戏状态支撑 相关的领域计算、校验和转换函数。 */
 

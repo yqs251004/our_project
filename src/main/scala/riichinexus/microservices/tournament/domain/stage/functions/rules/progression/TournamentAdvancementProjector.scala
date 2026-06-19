@@ -1,8 +1,8 @@
 package riichinexus.microservices.tournament.domain.stage.functions.rules.progression
 
 import riichinexus.microservices.tournament.domain.stage.functions.rules.knockout.TournamentKnockoutBracketBuilder
-import riichinexus.microservices.tournament.objects.rulesmanagement.stageprogression.{AdvancementRule, AdvancementRuleType, StageAdvancementSnapshot}
-import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.{StageRankingSnapshot, StageStandingEntry}
+import riichinexus.microservices.tournament.objects.stage.rules.progression.{AdvancementRule, AdvancementRuleType, StageAdvancementSnapshot}
+import riichinexus.microservices.tournament.objects.stage.ranking.{StageRankingSnapshot, StageStandingEntry}
 
 import java.time.Instant
 

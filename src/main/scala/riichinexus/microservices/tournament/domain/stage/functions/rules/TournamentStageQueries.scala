@@ -8,14 +8,14 @@ import java.util.NoSuchElementException
 
 import cats.effect.IO
 import riichinexus.system.api.ApiPlanContext
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}
 import riichinexus.microservices.tournament.domain.stage.model.{Table, TournamentStage}
 import riichinexus.microservices.tournament.domain.matchrecord.model.MatchRecord
 import riichinexus.microservices.tournament.domain.competition.model.Tournament
 import riichinexus.microservices.player.objects.`private`.PlayerPrivateView
-import riichinexus.microservices.tournament.objects.rulesmanagement.knockout.KnockoutBracketSnapshot
-import riichinexus.microservices.tournament.objects.rulesmanagement.stageprogression.StageAdvancementSnapshot
-import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.StageRankingSnapshot
+import riichinexus.microservices.tournament.objects.stage.rules.knockout.KnockoutBracketSnapshot
+import riichinexus.microservices.tournament.objects.stage.rules.progression.StageAdvancementSnapshot
+import riichinexus.microservices.tournament.objects.stage.ranking.StageRankingSnapshot
 import riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTable
 import riichinexus.microservices.tournament.tables.tournaments.TournamentTable
 import riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable

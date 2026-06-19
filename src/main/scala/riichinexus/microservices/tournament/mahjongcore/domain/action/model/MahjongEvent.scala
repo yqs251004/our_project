@@ -2,7 +2,7 @@ package riichinexus.microservices.tournament.mahjongcore.domain.action.model
 
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.MahjongMeld
-import riichinexus.microservices.tournament.objects.paifumanagement.{AgariResult, FinalStanding, KyokuDescriptor, PaifuTile}
+import riichinexus.microservices.tournament.objects.paifu.{AgariResult, FinalStanding, KyokuDescriptor, PaifuTile}
 
 /** 后端内部事件流，记录实时对局已经发生的事实，并在归档时转换成 PaifuAction。 */
 enum MahjongEvent:

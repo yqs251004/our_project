@@ -4,8 +4,8 @@ import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.tournament.domain.paifu.functions.PaifuFunctions
 
-import riichinexus.microservices.tournament.objects.paifumanagement.Paifu
-import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.{PaifuListQuery, PaifuRoundScoreChanges, PaifuSummary}
+import riichinexus.microservices.tournament.objects.paifu.Paifu
+import riichinexus.microservices.tournament.objects.paifu.apiTypes.{PaifuListQuery, PaifuRoundScoreChanges, PaifuSummary}
 
 import riichinexus.microservices.tournament.tables.paifu.PaifuTable
 import riichinexus.system.objects.PagedResponse

@@ -1,6 +1,6 @@
 package riichinexus.microservices.opsanalytics.domain.functions
 
-import riichinexus.microservices.tournament.objects.paifumanagement.{PaifuAction, PaifuActionType, PaifuRound, PaifuTile}
+import riichinexus.microservices.tournament.objects.paifu.{PaifuAction, PaifuActionType, PaifuRound, PaifuTile, PaifuTileSuit}
 
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.opsanalytics.domain.model.{ExactDefenseState, ExactRoundStats, ExactUkeireState}
@@ -10,8 +10,6 @@ import riichinexus.microservices.opsanalytics.domain.model.{ExactDefenseState, E
 private[functions] object AdvancedStatsExactAnalyzer:
   private val TerminalAndHonorIndices =
     Set(0, 8, 9, 17, 18, 26, 27, 28, 29, 30, 31, 32, 33)
-
-  private val TilePattern = "^[0-9][mps]$|^[1-7]z$".r
 
   private val EmptyCounts: Vector[Int] =
     Vector.fill(34)(0)
@@ -243,21 +241,21 @@ private[functions] object AdvancedStatsExactAnalyzer:
     else Some(parsed.flatten.foldLeft(EmptyCounts)(incrementCount))
 
   private def parseTile(tile: PaifuTile): Option[Int] =
-    val value = tile.value
-    if !TilePattern.matches(value) then None
-    else
-      val numberChar = value.charAt(0)
-      val suitChar = value.charAt(1)
-      val normalizedNumber =
-        if numberChar == '0' then 5
-        else numberChar.asDigit
+    val normalizedNumber =
+      if tile.rank == 0 then 5
+      else tile.rank
 
-      suitChar match
-        case 'm' => Some(normalizedNumber - 1)
-        case 'p' => Some(9 + normalizedNumber - 1)
-        case 's' => Some(18 + normalizedNumber - 1)
-        case 'z' => Some(27 + normalizedNumber - 1)
-        case _   => None
+    tile.suit match
+      case PaifuTileSuit.Manzu if normalizedNumber >= 1 && normalizedNumber <= 9 =>
+        Some(normalizedNumber - 1)
+      case PaifuTileSuit.Pinzu if normalizedNumber >= 1 && normalizedNumber <= 9 =>
+        Some(9 + normalizedNumber - 1)
+      case PaifuTileSuit.Souzu if normalizedNumber >= 1 && normalizedNumber <= 9 =>
+        Some(18 + normalizedNumber - 1)
+      case PaifuTileSuit.Honor if normalizedNumber >= 1 && normalizedNumber <= 7 =>
+        Some(27 + normalizedNumber - 1)
+      case _ =>
+        None
 
   private def isSuitTile(index: Int): Boolean =
     index < 27

@@ -7,7 +7,7 @@ import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.Ma
 import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.MahjongTileFunctions.sortTiles
 import riichinexus.microservices.tournament.mahjongcore.objects.action.{MahjongLegalAction, MahjongPublicEventView}
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.{MahjongDiscard, MahjongRuleset, MahjongTableStatus, MahjongTableView}
-import riichinexus.microservices.tournament.objects.tablemanagement.{TableId, TableSeat}
+import riichinexus.microservices.tournament.objects.stage.table.{TableId, TableSeat}
 
 /** MahjongGameStateTransitionFunctions 提供麻将游戏状态转换相关的领域计算、校验和转换函数。 */
 

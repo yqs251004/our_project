@@ -8,7 +8,7 @@ import java.time.Instant
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.tournament.objects.tablemanagement.TableId
+import riichinexus.microservices.tournament.objects.stage.table.TableId
 import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
 import riichinexus.microservices.tournament.mahjongcore.api.`private`.ResetMahjongTableStatePrivateAPIMessage
 import riichinexus.microservices.tournament.domain.stage.functions.scheduling.TableFunctions
@@ -16,7 +16,7 @@ import riichinexus.microservices.tournament.domain.stage.model.Table
 
 import riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTable
 import riichinexus.microservices.tournament.tables.paifu.PaifuTable
-import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.{ForceResetTableRequest, TournamentTableView}
+import riichinexus.microservices.tournament.objects.stage.table.apiTypes.{ForceResetTableRequest, TournamentTableView}
 
 import upickle.default.ReadWriter
 

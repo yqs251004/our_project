@@ -5,10 +5,10 @@ import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
 import riichinexus.microservices.tournament.domain.stage.model.{StageTablePlan, TournamentStage}
 import riichinexus.microservices.tournament.domain.matchrecord.model.MatchRecord
-import riichinexus.microservices.tournament.objects.tablemanagement.TableSeat
+import riichinexus.microservices.tournament.objects.stage.table.TableSeat
 import riichinexus.microservices.club.objects.relationmanagement.ClubRelationKind
 import riichinexus.microservices.player.objects.`private`.PlayerPrivateView
-import riichinexus.microservices.tournament.objects.tablemanagement.SeatWind
+import riichinexus.microservices.tournament.objects.stage.table.SeatWind
 
 /** SeatingPolicy 提供Seating策略 相关的领域校验和权限判断。 */
 

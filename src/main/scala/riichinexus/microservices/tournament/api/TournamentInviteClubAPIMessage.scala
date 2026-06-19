@@ -12,8 +12,8 @@ import riichinexus.microservices.club.api.`private`.ResolveClubReadModelsPrivate
 import riichinexus.microservices.club.objects.`private`.ClubPrivateView
 import riichinexus.microservices.tournament.domain.competition.functions.TournamentFunctions
 import riichinexus.microservices.tournament.domain.competition.model.Tournament
-import riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.TournamentMutationView
+import riichinexus.microservices.tournament.objects.identity.TournamentId
+import riichinexus.microservices.tournament.objects.competition.apiTypes.TournamentMutationView
 import riichinexus.microservices.notification.api.`private`.RecordBulkNotificationsPrivateAPIMessage
 import riichinexus.microservices.notification.objects.`private`.CreateNotificationRequest
 import riichinexus.system.json.JsonCodecs.given

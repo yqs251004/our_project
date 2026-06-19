@@ -4,10 +4,11 @@ import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.tournament.mahjongcore.domain.action.model.MahjongEvent
 import riichinexus.microservices.tournament.mahjongcore.domain.gamestate.model.{MahjongCallCandidate, MahjongPendingCallState, MahjongRoundState, MahjongSeatState, MahjongTableState}
 import riichinexus.microservices.tournament.mahjongcore.domain.handanalysis.functions.MahjongHandAnalysisFunctions
+import riichinexus.microservices.tournament.domain.paifu.functions.PaifuTileFunctions
 import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.MahjongTileFunctions
 import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.MahjongTileFunctions.sortTiles
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.{MahjongDiscard, MahjongRoundPhase, MahjongTableStatus}
-import riichinexus.microservices.tournament.objects.paifumanagement.PaifuTile
+import riichinexus.microservices.tournament.objects.paifu.PaifuTile
 
 import MahjongGameStateSupport.{nextSeatId, nextSequenceNo, replaceSeat, requireRound, seatByPlayerId}
 import MahjongWinSettlementFunctions.{acceptRiichiDeclarationForDiscard}
@@ -31,7 +32,7 @@ private[mahjongcore] object MahjongDiscardActionFunctions:
       if fromDraw then seat.copy(drawTile = None)
       else
         val updatedHand = MahjongTileFunctions.removeTiles(seat.handTiles, Vector(normalizedTile))
-          .getOrElse(throw IllegalArgumentException(s"Player ${playerId.value} does not have tile ${tile.value}"))
+          .getOrElse(throw IllegalArgumentException(s"Player ${playerId.value} does not have tile ${PaifuTileFunctions.toString(tile)}"))
         seat.copy(handTiles = sortTiles(updatedHand ++ seat.drawTile.toVector), drawTile = None)
 
     val baseSequence = nextSequenceNo(round)

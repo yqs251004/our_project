@@ -1,7 +1,7 @@
 package riichinexus.microservices.tournament.domain.paifu.functions
 
 
-import riichinexus.microservices.tournament.objects.paifumanagement.Yaku
+import riichinexus.microservices.tournament.objects.paifu.Yaku
 
 /** YakuFunctions 提供役种相关的领域计算、校验和转换函数。 */
 

@@ -3,7 +3,7 @@ package riichinexus.microservices.tournament.mahjongcore.domain.gamestate.functi
 import riichinexus.microservices.tournament.mahjongcore.domain.gamestate.model.MahjongSeatState
 import riichinexus.microservices.tournament.mahjongcore.domain.handanalysis.functions.MahjongHandAnalysisFunctions
 import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.MahjongTileFunctions
-import riichinexus.microservices.tournament.objects.paifumanagement.PaifuTile
+import riichinexus.microservices.tournament.objects.paifu.PaifuTile
 
 /** MahjongRiichiActionFunctions 提供麻将立直动作相关的领域计算、校验和转换函数。 */
 

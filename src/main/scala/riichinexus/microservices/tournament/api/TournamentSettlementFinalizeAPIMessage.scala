@@ -11,14 +11,14 @@ import java.time.Instant
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentId
+import riichinexus.microservices.tournament.objects.finalization.SettlementSnapshotId
+import riichinexus.microservices.tournament.objects.identity.TournamentId
 import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
-import riichinexus.microservices.tournament.domain.settlement.functions.{TournamentSettlementNotificationRequestFunctions, TournamentSettlementSnapshotFunctions}
-import riichinexus.microservices.tournament.domain.settlement.model.TournamentSettlementSnapshot
+import riichinexus.microservices.tournament.domain.finalization.functions.{TournamentSettlementNotificationRequestFunctions, TournamentSettlementSnapshotFunctions}
+import riichinexus.microservices.tournament.domain.finalization.model.TournamentSettlementSnapshot
 import riichinexus.microservices.notification.api.`private`.RecordBulkNotificationsPrivateAPIMessage
 
-import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.{FinalizeTournamentSettlementRequest, TournamentSettlementView}
+import riichinexus.microservices.tournament.objects.finalization.apiTypes.{FinalizeTournamentSettlementRequest, TournamentSettlementView}
 
 import upickle.default.ReadWriter
 
@@ -69,12 +69,12 @@ final case class TournamentSettlementFinalizeAPIMessage(tournamentId: String, se
       settlement: TournamentSettlementSnapshot
   ): FinalizeSettlementResult =
     val didFinalize =
-      settlement.status != riichinexus.microservices.tournament.objects.settlementmanagement.TournamentSettlementStatus.Finalized
+      settlement.status != riichinexus.microservices.tournament.objects.finalization.TournamentSettlementStatus.Finalized
     val finalized =
-      if settlement.status == riichinexus.microservices.tournament.objects.settlementmanagement.TournamentSettlementStatus.Finalized then settlement
+      if settlement.status == riichinexus.microservices.tournament.objects.finalization.TournamentSettlementStatus.Finalized then settlement
       else TournamentSettlementSnapshotFunctions.finalize(settlement, command.finalizedAt)
     val saved =
-      if settlement.status == riichinexus.microservices.tournament.objects.settlementmanagement.TournamentSettlementStatus.Finalized then finalized
+      if settlement.status == riichinexus.microservices.tournament.objects.finalization.TournamentSettlementStatus.Finalized then finalized
       else riichinexus.microservices.tournament.tables.settlement.TournamentSettlementTable.save(connection, finalized)
     FinalizeSettlementResult(saved, didFinalize)
 

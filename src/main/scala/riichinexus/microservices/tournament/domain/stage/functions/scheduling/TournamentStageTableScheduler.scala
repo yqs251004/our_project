@@ -14,18 +14,18 @@ import java.time.Instant
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
 import riichinexus.microservices.tournament.domain.identity.functions.TournamentIdGenerator
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}
 import riichinexus.microservices.tournament.domain.stage.functions.TournamentStageFunctions
 import riichinexus.microservices.tournament.domain.stage.model.{StageTablePlan, Table, TournamentStage}
 import riichinexus.microservices.tournament.domain.matchrecord.model.MatchRecord
 import riichinexus.microservices.tournament.domain.competition.model.Tournament
 import riichinexus.microservices.club.objects.`private`.ClubPrivateView
-import riichinexus.microservices.tournament.objects.tablemanagement.TableSeat
+import riichinexus.microservices.tournament.objects.stage.table.TableSeat
 import riichinexus.microservices.club.objects.relationmanagement.ClubRelationKind
 import riichinexus.microservices.player.objects.`private`.PlayerPrivateView
-import riichinexus.microservices.tournament.objects.rulesmanagement.stageprogression.AdvancementRuleType
-import riichinexus.microservices.tournament.objects.tablemanagement.{SeatWind, TableStatus}
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentFormat, TournamentStatus}
+import riichinexus.microservices.tournament.objects.stage.rules.progression.AdvancementRuleType
+import riichinexus.microservices.tournament.objects.stage.table.{SeatWind, TableStatus}
+import riichinexus.microservices.tournament.objects.competition.{TournamentFormat, TournamentStatus}
 
 /** TournamentStageTableScheduler 负责赛事阶段牌桌调度器 相关的领域编排、构建或投影计算。 */
 

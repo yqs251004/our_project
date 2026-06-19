@@ -6,9 +6,9 @@ import scala.annotation.tailrec
 import scala.util.Using
 
 import riichinexus.system.errors.OptimisticConcurrencyException
-import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
-import riichinexus.microservices.tournament.domain.settlement.model.TournamentSettlementSnapshot
+import riichinexus.microservices.tournament.objects.finalization.SettlementSnapshotId
+import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.domain.finalization.model.TournamentSettlementSnapshot
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.{read, write}
 

@@ -7,7 +7,7 @@ import java.util.NoSuchElementException
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}
 import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
 import riichinexus.microservices.tournament.domain.competition.functions.TournamentFunctions
 import riichinexus.microservices.tournament.domain.stage.functions.TournamentStageFunctions
@@ -16,11 +16,11 @@ import riichinexus.microservices.tournament.domain.competition.model.Tournament
 
 import riichinexus.microservices.tournament.domain.competition.functions.TournamentRuntimeDefaults
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.MahjongRuleset
-import riichinexus.microservices.tournament.objects.rulesmanagement.stageprogression.{AdvancementRule, AdvancementRuleType}
-import riichinexus.microservices.tournament.objects.rulesmanagement.knockout.KnockoutRuleConfig
-import riichinexus.microservices.tournament.objects.rulesmanagement.swiss.SwissRuleConfig
-import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.ConfigureStageRulesRequest
-import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.TournamentSummaryView
+import riichinexus.microservices.tournament.objects.stage.rules.progression.{AdvancementRule, AdvancementRuleType}
+import riichinexus.microservices.tournament.objects.stage.rules.knockout.KnockoutRuleConfig
+import riichinexus.microservices.tournament.objects.stage.rules.swiss.SwissRuleConfig
+import riichinexus.microservices.tournament.objects.stage.apiTypes.ConfigureStageRulesRequest
+import riichinexus.microservices.tournament.objects.competition.apiTypes.TournamentSummaryView
 
 import upickle.default.ReadWriter
 

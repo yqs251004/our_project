@@ -9,7 +9,7 @@ import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
+import riichinexus.microservices.tournament.objects.matchrecord.MatchRecordId
 import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
 
 import riichinexus.microservices.club.api.`private`.ListClubsPrivateAPIMessage

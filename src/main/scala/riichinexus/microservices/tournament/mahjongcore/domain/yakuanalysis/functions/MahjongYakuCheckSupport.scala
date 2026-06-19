@@ -4,8 +4,8 @@ import riichinexus.microservices.tournament.mahjongcore.domain.handanalysis.func
 import riichinexus.microservices.tournament.mahjongcore.domain.handanalysis.model.{MahjongHandDecomposition, MahjongHandMeld, MahjongHandMeldType}
 import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.MahjongTileFunctions.{Chun, Haku, Man1, Man9, Nan, Pei, Pin1, Pin9, Sha, Sou1, Sou9, Ton, indexOf, isYaochu}
 import riichinexus.microservices.tournament.mahjongcore.domain.yakuanalysis.model.MahjongWinContext
-import riichinexus.microservices.tournament.objects.paifumanagement.{MahjongYakuKind, PaifuTile, Yaku}
-import riichinexus.microservices.tournament.objects.tablemanagement.SeatWind
+import riichinexus.microservices.tournament.objects.paifu.{MahjongYakuKind, PaifuTile, Yaku}
+import riichinexus.microservices.tournament.objects.stage.table.SeatWind
 
 /** MahjongYakuCheckSupport 提供麻将役种检查支撑 相关的领域校验和权限判断。 */
 

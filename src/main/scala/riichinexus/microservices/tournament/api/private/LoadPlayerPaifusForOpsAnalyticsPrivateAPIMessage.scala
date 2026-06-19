@@ -4,7 +4,7 @@ import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.system.json.JsonCodecs.given
-import riichinexus.microservices.tournament.objects.paifumanagement.Paifu
+import riichinexus.microservices.tournament.objects.paifu.Paifu
 import riichinexus.microservices.tournament.tables.paifu.PaifuTable
 import upickle.default.ReadWriter
 

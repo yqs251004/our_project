@@ -2,7 +2,7 @@ package riichinexus.microservices.tournament.mahjongcore.domain.yakuanalysis.fun
 
 import riichinexus.microservices.tournament.mahjongcore.domain.handanalysis.model.{MahjongHandDecomposition, MahjongHandMeld}
 import riichinexus.microservices.tournament.mahjongcore.domain.yakuanalysis.model.MahjongWinContext
-import riichinexus.microservices.tournament.objects.paifumanagement.{PaifuTile, Yaku}
+import riichinexus.microservices.tournament.objects.paifu.{PaifuTile, Yaku}
 
 import MahjongYakuCheckSupport.{MahjongYakuCheckState, YakuCheck, runPlan}
 

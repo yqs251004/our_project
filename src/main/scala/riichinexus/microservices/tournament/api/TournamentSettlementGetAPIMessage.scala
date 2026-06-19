@@ -4,10 +4,10 @@ import java.util.NoSuchElementException
 
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
-import riichinexus.microservices.tournament.domain.settlement.model.TournamentSettlementSnapshot
+import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.domain.finalization.model.TournamentSettlementSnapshot
 
-import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.TournamentSettlementView
+import riichinexus.microservices.tournament.objects.finalization.apiTypes.TournamentSettlementView
 
 import riichinexus.microservices.tournament.tables.settlement.TournamentSettlementTable
 import upickle.default.ReadWriter

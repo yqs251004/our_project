@@ -1,7 +1,7 @@
 package riichinexus.microservices.tournament.domain.paifu.functions
 
 
-import riichinexus.microservices.tournament.objects.paifumanagement.FinalStanding
+import riichinexus.microservices.tournament.objects.paifu.FinalStanding
 
 /** FinalStandingFunctions 提供最终排名相关的领域计算、校验和转换函数。 */
 

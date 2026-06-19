@@ -3,11 +3,12 @@ package riichinexus.microservices.tournament.mahjongcore.domain.gamestate.functi
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.tournament.mahjongcore.domain.action.model.MahjongEvent
 import riichinexus.microservices.tournament.mahjongcore.domain.gamestate.model.{MahjongRoundState, MahjongSeatState, MahjongTableState}
+import riichinexus.microservices.tournament.domain.paifu.functions.PaifuTileFunctions
 import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.MahjongTileFunctions
 import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.MahjongTileFunctions.{fullWall, removeTiles, sortTiles}
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.{MahjongGameLength, MahjongRoundPhase, MahjongRuleset, MahjongTableStatus, MahjongTableSticks}
-import riichinexus.microservices.tournament.objects.paifumanagement.{FinalStanding, HandOutcome, KyokuDescriptor, PaifuHand, PaifuPlayerTrack, PaifuRound, PaifuRoundPlayer, PaifuTile, PaifuTimeline}
-import riichinexus.microservices.tournament.objects.tablemanagement.{SeatWind, TableId, TableSeat}
+import riichinexus.microservices.tournament.objects.paifu.{FinalStanding, HandOutcome, KyokuDescriptor, PaifuHand, PaifuPlayerTrack, PaifuRound, PaifuRoundPlayer, PaifuTile, PaifuTimeline}
+import riichinexus.microservices.tournament.objects.stage.table.{SeatWind, TableId, TableSeat}
 
 import MahjongGameStateSupport.{defaultTableSeats, nextSequenceNo, sequenceNoOf, winningPlayerIds}
 
@@ -155,11 +156,11 @@ private[mahjongcore] object MahjongRoundLifecycleFunctions:
       SeatWind.West -> showcaseTiles("1s", "1s", "1s", "2s", "3s", "4s", "5s", "6s", "7s", "8s", "9s", "9s", "9s"),
       SeatWind.North -> showcaseTiles("1m", "1m", "1m", "2m", "3m", "4m", "5m", "6m", "7m", "8m", "9m", "9m", "9m")
     )
-  private[mahjongcore] val showcaseEast2EastDraw: PaifuTile = PaifuTile("0p")
-  private[mahjongcore] val showcaseEast2DoraIndicator: PaifuTile = PaifuTile("4z")
+  private[mahjongcore] val showcaseEast2EastDraw: PaifuTile = PaifuTileFunctions.fromString("0p")
+  private[mahjongcore] val showcaseEast2DoraIndicator: PaifuTile = PaifuTileFunctions.fromString("4z")
 
   private[mahjongcore] def showcaseTiles(values: String*): Vector[PaifuTile] =
-    values.toVector.map(PaifuTile(_))
+    values.toVector.map(PaifuTileFunctions.fromString)
 
   private[mahjongcore] def showcaseWallForRound(
       ruleset: MahjongRuleset,

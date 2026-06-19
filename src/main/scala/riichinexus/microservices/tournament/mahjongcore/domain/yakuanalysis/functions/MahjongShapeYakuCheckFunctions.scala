@@ -2,8 +2,8 @@ package riichinexus.microservices.tournament.mahjongcore.domain.yakuanalysis.fun
 
 import riichinexus.microservices.tournament.mahjongcore.domain.handanalysis.model.MahjongHandMeldType
 import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.MahjongTileFunctions.{Chun, Haku, Man1, Pin1, Sou1}
-import riichinexus.microservices.tournament.objects.paifumanagement.MahjongYakuKind
-import riichinexus.microservices.tournament.objects.paifumanagement.Yaku
+import riichinexus.microservices.tournament.objects.paifu.MahjongYakuKind
+import riichinexus.microservices.tournament.objects.paifu.Yaku
 
 import MahjongYakuCheckSupport.{MahjongYakuCheckState, YakuCheck, isDragonMeld, isYakuhaiPair, tripletLike, yakuIf}
 

@@ -3,6 +3,7 @@ package riichinexus.microservices.audit.api.`private`
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
+import riichinexus.microservices.audit.domain.functions.AuditEventPrivateViewFunctions
 import riichinexus.microservices.audit.domain.auditevent.AuditEvent
 import riichinexus.microservices.audit.objects.`private`.{AuditEventDraft, AuditEventPrivateView}
 
@@ -21,7 +22,7 @@ final case class RecordAuditEventPrivateAPIMessage(
       auditEvent <- IO.blocking(toAuditEvent(event))
       saved <- saveAuditEvent(context, auditEvent)
       _ <- context.realtimeEventBus.publish(AuditRealtimeMapper.fromAudit(saved))
-    yield AuditEventPrivateMapper.toPrivateView(saved)
+    yield AuditEventPrivateViewFunctions.toPrivateView(saved)
 
   private def saveAuditEvent(context: ApiPlanContext, auditEvent: AuditEvent): IO[AuditEvent] =
     IO.blocking(AuditEventTable.save(context.connection, auditEvent))

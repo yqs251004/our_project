@@ -6,13 +6,13 @@ import riichinexus.microservices.auth.api.`private`.ResolveSystemAccessPrincipal
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}
 import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
 import riichinexus.microservices.tournament.domain.stage.model.Table
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.tournament.domain.stage.functions.scheduling.TournamentStageTableScheduler
-import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.TournamentTableView
-import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.TournamentMutationView
+import riichinexus.microservices.tournament.objects.stage.table.apiTypes.TournamentTableView
+import riichinexus.microservices.tournament.objects.competition.apiTypes.TournamentMutationView
 import upickle.default.ReadWriter
 
 /** 为赛事阶段生成牌桌安排。 */

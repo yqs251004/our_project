@@ -4,6 +4,7 @@ import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.tournament.mahjongcore.domain.action.model.MahjongEvent
 import riichinexus.microservices.tournament.mahjongcore.domain.gamestate.model.{MahjongRoundState, MahjongSeatState, MahjongTableState}
 import riichinexus.microservices.tournament.mahjongcore.domain.handanalysis.functions.MahjongHandAnalysisFunctions
+import riichinexus.microservices.tournament.domain.paifu.functions.PaifuTileFunctions
 import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.MahjongTileFunctions
 import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.MahjongTileFunctions.{TileTypeCount, countsOf, indexOf, sortTiles, tileOf, tilesFromCounts}
 import riichinexus.microservices.tournament.mahjongcore.objects.action.{MahjongCommandType, MahjongLegalAction}
@@ -25,7 +26,7 @@ private[mahjongcore] object MahjongKanActionFunctions:
     val kanIndex = indexOf(tile)
     val sourceTiles = seat.handTiles ++ seat.drawTile.toVector
     val handAfterKan = MahjongTileFunctions.removeTiles(sourceTiles, Vector.fill(4)(tileOf(kanIndex)))
-      .getOrElse(throw IllegalArgumentException(s"Player ${playerId.value} cannot closed-kan ${tile.value}"))
+      .getOrElse(throw IllegalArgumentException(s"Player ${playerId.value} cannot closed-kan ${PaifuTileFunctions.toString(tile)}"))
     val meld = MahjongMeld(
       meldType = MahjongMeldType.ClosedKan,
       owner = playerId,
@@ -51,7 +52,7 @@ private[mahjongcore] object MahjongKanActionFunctions:
     if ponIndex < 0 then throw IllegalArgumentException(s"Player ${playerId.value} has no pon to upgrade")
     val sourceTiles = seat.handTiles ++ seat.drawTile.toVector
     val handAfterKan = MahjongTileFunctions.removeTiles(sourceTiles, Vector(tileOf(kanIndex)))
-      .getOrElse(throw IllegalArgumentException(s"Player ${playerId.value} cannot added-kan ${tile.value}"))
+      .getOrElse(throw IllegalArgumentException(s"Player ${playerId.value} cannot added-kan ${PaifuTileFunctions.toString(tile)}"))
     val upgraded = seat.melds(ponIndex).copy(meldType = MahjongMeldType.AddedKan, tiles = Vector.fill(4)(tileOf(kanIndex)))
     val melds = seat.melds.updated(ponIndex, upgraded)
     val event = MahjongEvent.KanDeclared(nextSequenceNo(round), playerId, upgraded)

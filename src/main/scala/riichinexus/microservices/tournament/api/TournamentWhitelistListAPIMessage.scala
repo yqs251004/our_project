@@ -1,6 +1,6 @@
 package riichinexus.microservices.tournament.api
 
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentParticipantKind, TournamentWhitelistEntry}
+import riichinexus.microservices.tournament.objects.competition.{TournamentParticipantKind, TournamentWhitelistEntry}
 
 import java.util.NoSuchElementException
 
@@ -8,10 +8,10 @@ import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentId
+import riichinexus.microservices.tournament.objects.identity.TournamentId
 
 
-import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.TournamentWhitelistQuery
+import riichinexus.microservices.tournament.objects.competition.apiTypes.TournamentWhitelistQuery
 
 import riichinexus.microservices.tournament.tables.tournaments.TournamentTable
 import riichinexus.system.objects.PagedResponse

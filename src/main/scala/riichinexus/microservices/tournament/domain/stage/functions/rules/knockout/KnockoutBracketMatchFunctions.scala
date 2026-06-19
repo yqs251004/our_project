@@ -1,7 +1,7 @@
 package riichinexus.microservices.tournament.domain.stage.functions.rules.knockout
 
 
-import riichinexus.microservices.tournament.objects.rulesmanagement.knockout.KnockoutBracketMatch
+import riichinexus.microservices.tournament.objects.stage.rules.knockout.KnockoutBracketMatch
 
 /** KnockoutBracketMatchFunctions 提供KnockoutBracket对局相关的领域计算、校验和转换函数。 */
 

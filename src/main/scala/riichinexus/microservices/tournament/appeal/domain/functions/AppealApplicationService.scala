@@ -1,14 +1,14 @@
 package riichinexus.microservices.tournament.appeal.domain.functions
 
-import riichinexus.microservices.tournament.objects.tablemanagement.TableStatus
+import riichinexus.microservices.tournament.objects.stage.table.TableStatus
 
 import java.sql.Connection
 import java.time.Instant
 
 import cats.effect.IO
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.tournament.objects.tablemanagement.TableId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.objects.stage.table.TableId
+import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}
 
 import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
 import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView

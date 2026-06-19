@@ -7,11 +7,11 @@ import scala.util.Using
 import scala.util.control.NonFatal
 
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
-import riichinexus.microservices.tournament.objects.tablemanagement.TableId
+import riichinexus.microservices.tournament.objects.paifu.PaifuId
+import riichinexus.microservices.tournament.objects.stage.table.TableId
 import riichinexus.microservices.tournament.domain.paifu.functions.PaifuFunctions
 import riichinexus.system.json.JsonCodecs.given
-import riichinexus.microservices.tournament.objects.paifumanagement.Paifu
+import riichinexus.microservices.tournament.objects.paifu.Paifu
 import upickle.default.{read, write}
 
 object PaifuTable:

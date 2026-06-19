@@ -3,8 +3,8 @@ import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.auth.api.`private`.{RequirePermissionPrivateAPIMessage, ResolveAccessPrincipalPrivateAPIMessage}
 import riichinexus.microservices.auth.api.`private`.ResolveSystemAccessPrincipalPrivateAPIMessage
 
-import riichinexus.microservices.tournament.objects.rulesmanagement.stageprogression.AdvancementRuleType
-import riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentFormat
+import riichinexus.microservices.tournament.objects.stage.rules.progression.AdvancementRuleType
+import riichinexus.microservices.tournament.objects.competition.TournamentFormat
 
 import java.util.NoSuchElementException
 import java.time.Instant
@@ -12,14 +12,14 @@ import java.time.Instant
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}
 import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
 import riichinexus.microservices.tournament.domain.stage.functions.rules.knockout.KnockoutStageCoordinator
 import riichinexus.microservices.tournament.domain.stage.model.TournamentStage
 
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.tournament.domain.stage.model.Table
-import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.TournamentTableView
+import riichinexus.microservices.tournament.objects.stage.table.apiTypes.TournamentTableView
 
 import upickle.default.ReadWriter
 

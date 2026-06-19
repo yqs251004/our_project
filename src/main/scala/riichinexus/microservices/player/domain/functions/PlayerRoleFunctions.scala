@@ -1,7 +1,7 @@
 package riichinexus.microservices.player.domain.functions
 
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentId
+import riichinexus.microservices.tournament.objects.identity.TournamentId
 import riichinexus.microservices.auth.objects.`private`.RoleGrant
 import riichinexus.microservices.auth.objects.Role
 import riichinexus.microservices.player.domain.Player

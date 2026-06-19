@@ -11,15 +11,15 @@ import java.time.Instant
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentId
+import riichinexus.microservices.tournament.objects.identity.TournamentId
 import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
 import riichinexus.microservices.tournament.domain.competition.functions.TournamentFunctions
 import riichinexus.microservices.tournament.domain.competition.model.Tournament
 import riichinexus.microservices.player.objects.`private`.PlayerPrivateView
 import riichinexus.microservices.player.objects.PlayerStatus
 
-import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.{AssignTournamentAdminRequest, TournamentSummaryView}
-import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.AssignTournamentAdminRequest.given
+import riichinexus.microservices.tournament.objects.competition.apiTypes.{AssignTournamentAdminRequest, TournamentSummaryView}
+import riichinexus.microservices.tournament.objects.competition.apiTypes.AssignTournamentAdminRequest.given
 import upickle.default.ReadWriter
 
 /** 授予玩家指定赛事的管理员身份。 */

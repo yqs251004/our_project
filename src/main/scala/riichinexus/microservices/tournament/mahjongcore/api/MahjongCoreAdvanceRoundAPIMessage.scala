@@ -6,7 +6,7 @@ import riichinexus.microservices.tournament.mahjongcore.domain.gamestate.functio
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.{MahjongTableStatus, MahjongTableView}
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.apiTypes.AdvanceMahjongRoundRequest
 import riichinexus.microservices.tournament.mahjongcore.tables.tablestate.MahjongTableStateTable
-import riichinexus.microservices.tournament.objects.tablemanagement.{SeatWind, TableId}
+import riichinexus.microservices.tournament.objects.stage.table.{SeatWind, TableId}
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.system.app.MahjongCoreShowcaseModeState
 import riichinexus.system.json.JsonCodecs.given

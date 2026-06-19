@@ -8,7 +8,7 @@ import riichinexus.microservices.tournament.mahjongcore.domain.paifumanagement.f
 import riichinexus.microservices.tournament.mahjongcore.objects.action.apiTypes.MahjongActionResponse
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.apiTypes.ArchiveMahjongTableRequest
 import riichinexus.microservices.tournament.mahjongcore.tables.tablestate.MahjongTableStateTable
-import riichinexus.microservices.tournament.objects.tablemanagement.TableId
+import riichinexus.microservices.tournament.objects.stage.table.TableId
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 
 import upickle.default.ReadWriter

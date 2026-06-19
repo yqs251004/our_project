@@ -1,7 +1,7 @@
 package riichinexus.microservices.tournament.domain.paifu.functions
 
 
-import riichinexus.microservices.tournament.objects.paifumanagement.KyokuDescriptor
+import riichinexus.microservices.tournament.objects.paifu.KyokuDescriptor
 
 /** KyokuDescriptorFunctions 提供KyokuDescriptor相关的领域计算、校验和转换函数。 */
 

@@ -5,7 +5,7 @@ import java.time.Instant
 
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
+import riichinexus.microservices.tournament.objects.stage.lineup.LineupSubmissionId
 
 import riichinexus.system.json.JsonCodecs.given
 /** StageLineupSubmission 表示后端领域中的阶段阵容提交状态或规则，包含 ID、俱乐部 ID、submittedBy、submittedAt、座位、note。 */

@@ -17,11 +17,11 @@ import riichinexus.microservices.player.objects.PlayerStatus
 
 import riichinexus.microservices.tournament.domain.competition.functions.TournamentRuntimeDefaults
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.MahjongRuleset
-import riichinexus.microservices.tournament.objects.rulesmanagement.stageprogression.{AdvancementRule, AdvancementRuleType}
-import riichinexus.microservices.tournament.objects.rulesmanagement.knockout.KnockoutRuleConfig
-import riichinexus.microservices.tournament.objects.rulesmanagement.swiss.SwissRuleConfig
-import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.CreateTournamentStageRequest
-import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.{CreateTournamentRequest, TournamentSummaryView}
+import riichinexus.microservices.tournament.objects.stage.rules.progression.{AdvancementRule, AdvancementRuleType}
+import riichinexus.microservices.tournament.objects.stage.rules.knockout.KnockoutRuleConfig
+import riichinexus.microservices.tournament.objects.stage.rules.swiss.SwissRuleConfig
+import riichinexus.microservices.tournament.objects.stage.apiTypes.CreateTournamentStageRequest
+import riichinexus.microservices.tournament.objects.competition.apiTypes.{CreateTournamentRequest, TournamentSummaryView}
 
 import upickle.default.ReadWriter
 

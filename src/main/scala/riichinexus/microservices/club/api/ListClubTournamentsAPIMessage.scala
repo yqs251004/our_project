@@ -9,14 +9,15 @@ import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
 import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
-import riichinexus.microservices.tournament.objects.`private`.TournamentPrivateView
+import riichinexus.microservices.tournament.objects.`private`.competition.TournamentPrivateView
 
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubAuthorization
 import riichinexus.microservices.club.objects.tournamentparticipation.ClubTournamentParticipationStatus
 
 import riichinexus.microservices.club.objects.tournamentparticipation.apiTypes.ClubTournamentParticipationView
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{StageStatus, TournamentStatus}
+import riichinexus.microservices.tournament.objects.stage.StageStatus
+import riichinexus.microservices.tournament.objects.competition.TournamentStatus
 import riichinexus.microservices.club.tables.clubs.ClubTable
 import riichinexus.microservices.tournament.api.`private`.ListClubTournamentsPrivateAPIMessage
 import riichinexus.system.objects.PagedResponse

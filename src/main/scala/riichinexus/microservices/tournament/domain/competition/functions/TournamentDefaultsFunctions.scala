@@ -4,7 +4,7 @@ import riichinexus.microservices.tournament.domain.identity.functions.Tournament
 import riichinexus.microservices.tournament.domain.stage.model.TournamentStage
 import riichinexus.microservices.tournament.domain.competition.model.Tournament
 
-import riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentFormat
+import riichinexus.microservices.tournament.objects.competition.TournamentFormat
 
 /** TournamentDefaultsFunctions 提供赛事默认值相关的领域计算、校验和转换函数。 */
 

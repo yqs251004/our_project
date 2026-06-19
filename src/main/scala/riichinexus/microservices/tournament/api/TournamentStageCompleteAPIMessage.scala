@@ -8,9 +8,9 @@ import java.util.NoSuchElementException
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}
 import riichinexus.microservices.tournament.domain.stage.functions.TournamentStageCompletionCoordinator
-import riichinexus.microservices.tournament.objects.rulesmanagement.stageprogression.StageAdvancementSnapshot
+import riichinexus.microservices.tournament.objects.stage.rules.progression.StageAdvancementSnapshot
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.ReadWriter
 

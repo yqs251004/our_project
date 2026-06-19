@@ -1,7 +1,7 @@
 package riichinexus.microservices.tournament.domain.paifu.functions
 
 
-import riichinexus.microservices.tournament.objects.paifumanagement.PaifuAction
+import riichinexus.microservices.tournament.objects.paifu.PaifuAction
 
 /** PaifuActionFunctions 提供牌谱动作相关的领域计算、校验和转换函数。 */
 

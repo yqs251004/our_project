@@ -5,7 +5,7 @@ import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentId
+import riichinexus.microservices.tournament.objects.identity.TournamentId
 import riichinexus.microservices.auth.domain.functions.AuthorizationPolicyFunctions
 import riichinexus.microservices.auth.api.`private`.ResolveRequestActorPrivateAPIMessage
 import riichinexus.microservices.auth.domain.functions.AccessPrincipalPrivateViewFunctions

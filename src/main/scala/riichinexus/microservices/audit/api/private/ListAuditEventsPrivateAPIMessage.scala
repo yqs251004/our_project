@@ -3,6 +3,7 @@ package riichinexus.microservices.audit.api.`private`
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.audit.domain.auditevent.AuditEvent
+import riichinexus.microservices.audit.domain.functions.AuditEventPrivateViewFunctions
 import riichinexus.microservices.audit.objects.`private`.AuditEventPrivateView
 import riichinexus.microservices.audit.tables.auditevent.AuditEventTable
 import riichinexus.system.json.JsonCodecs.given
@@ -19,7 +20,7 @@ final case class ListAuditEventsPrivateAPIMessage(
   override def plan(context: ApiPlanContext): IO[Vector[AuditEventPrivateView]] =
     for
       events <- IO.blocking(listAuditEvents(context))
-    yield events.map(AuditEventPrivateMapper.toPrivateView)
+    yield events.map(AuditEventPrivateViewFunctions.toPrivateView)
 
   private def listAuditEvents(context: ApiPlanContext): Vector[AuditEvent] =
     (aggregateType, aggregateId, eventType, oldestFirst) match

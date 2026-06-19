@@ -6,16 +6,19 @@ import riichinexus.microservices.tournament.appeal.domain.model.{AppealAttachmen
 import riichinexus.microservices.tournament.appeal.objects.AppealDecisionLog
 import riichinexus.microservices.tournament.domain.stage.model.{StageLineupSeat, StageLineupSubmission, StageTablePlan, Table, TournamentStage}
 import riichinexus.microservices.tournament.domain.matchrecord.model.{MatchRecord, MatchRecordSeatResult}
-import riichinexus.microservices.tournament.domain.settlement.model.TournamentSettlementSnapshot
+import riichinexus.microservices.tournament.domain.finalization.model.TournamentSettlementSnapshot
 import riichinexus.microservices.tournament.domain.competition.model.Tournament
-import riichinexus.microservices.tournament.objects.paifumanagement.{AgariResult, AgariWinResult, FinalStanding, HandOutcome, KyokuDescriptor, MahjongYakuKind, Paifu, PaifuAction, PaifuActionType, PaifuHand, PaifuMetadata, PaifuPlayerTrack, PaifuRound, PaifuRoundPlayer, PaifuTile, PaifuTimeline, RoundSettlement, RoundSettlementNote, ScoreChange, Yaku}
-import riichinexus.microservices.tournament.objects.`private`.{MatchRecordPrivateView, MatchRecordSeatResultPrivateView, StageLineupSeatPrivateView, StageLineupSubmissionPrivateView, TournamentPrivateView, TournamentStagePrivateView}
-import riichinexus.microservices.tournament.objects.rulesmanagement.knockout.{KnockoutLane, KnockoutRuleConfig}
-import riichinexus.microservices.tournament.objects.rulesmanagement.stageprogression.{AdvancementRule, AdvancementRuleType}
-import riichinexus.microservices.tournament.objects.rulesmanagement.swiss.SwissRuleConfig
-import riichinexus.microservices.tournament.objects.settlementmanagement.{TournamentSettlementAdjustment, TournamentSettlementEntry, TournamentSettlementStatus}
-import riichinexus.microservices.tournament.objects.tablemanagement.{SeatWind, TableSeat, TableStatus}
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{StageStatus, TournamentFormat, TournamentParticipantKind, TournamentStatus, TournamentWhitelistEntry}
+import riichinexus.microservices.tournament.objects.paifu.{AgariResult, AgariWinResult, FinalStanding, HandOutcome, KyokuDescriptor, MahjongYakuKind, Paifu, PaifuAction, PaifuActionType, PaifuHand, PaifuMetadata, PaifuPlayerTrack, PaifuRound, PaifuRoundPlayer, PaifuTile, PaifuTimeline, RoundSettlement, RoundSettlementNote, ScoreChange, Yaku}
+import riichinexus.microservices.tournament.objects.`private`.matchrecord.{MatchRecordPrivateView, MatchRecordSeatResultPrivateView}
+import riichinexus.microservices.tournament.objects.`private`.stage.{StageLineupSeatPrivateView, StageLineupSubmissionPrivateView, TournamentStagePrivateView}
+import riichinexus.microservices.tournament.objects.`private`.competition.TournamentPrivateView
+import riichinexus.microservices.tournament.objects.stage.rules.knockout.{KnockoutLane, KnockoutRuleConfig}
+import riichinexus.microservices.tournament.objects.stage.rules.progression.{AdvancementRule, AdvancementRuleType}
+import riichinexus.microservices.tournament.objects.stage.rules.swiss.SwissRuleConfig
+import riichinexus.microservices.tournament.objects.finalization.{TournamentSettlementAdjustment, TournamentSettlementEntry, TournamentSettlementStatus}
+import riichinexus.microservices.tournament.objects.stage.table.{SeatWind, TableSeat, TableStatus}
+import riichinexus.microservices.tournament.objects.stage.StageStatus
+import riichinexus.microservices.tournament.objects.competition.{TournamentFormat, TournamentParticipantKind, TournamentStatus, TournamentWhitelistEntry}
 import riichinexus.system.json.JsonCodecSupport.{eitherStringEnumReadWriter, stringEnumReadWriter}
 import riichinexus.system.json.SharedJsonCodecs.given
 import scala.util.Try

@@ -7,8 +7,8 @@ import riichinexus.microservices.tournament.mahjongcore.domain.handanalysis.func
 import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.MahjongTileFunctions.{sortTiles}
 import riichinexus.microservices.tournament.mahjongcore.objects.action.MahjongPublicEventView
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.{MahjongMeldType, MahjongPendingCallView, MahjongRoundPhase, MahjongRoundView, MahjongSeatView, MahjongTableView}
-import riichinexus.microservices.tournament.objects.paifumanagement.{HandOutcome, PaifuActionType}
-import riichinexus.microservices.tournament.objects.tablemanagement.SeatWind
+import riichinexus.microservices.tournament.objects.paifu.{HandOutcome, PaifuActionType}
+import riichinexus.microservices.tournament.objects.stage.table.SeatWind
 
 import MahjongGameStateSupport.{sequenceNoOf, winningPlayerIds}
 
