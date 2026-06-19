@@ -1,6 +1,8 @@
 package riichinexus.microservices.tournament.objects.tablemanagement
 
-import upickle.default.*
+import upickle.default.{ReadWriter, readwriter}
+
+/** TableStatus 枚举牌桌状态 可使用的公开取值。 */
 
 enum TableStatus:
   case WaitingPreparation

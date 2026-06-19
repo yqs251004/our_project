@@ -1,6 +1,8 @@
 package riichinexus.microservices.tournament.objects.tournamentmanagement
 
-import upickle.default.*
+import upickle.default.{ReadWriter, readwriter}
+
+/** TournamentParticipantKind 枚举赛事参赛方类型 可使用的公开取值。 */
 
 enum TournamentParticipantKind:
   case Club

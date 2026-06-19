@@ -7,6 +7,8 @@ import javax.crypto.spec.PBEKeySpec
 import riichinexus.microservices.auth.domain.model.AccountCredential
 import riichinexus.microservices.auth.security.PasswordDigest
 
+/** PasswordHashFunctions 提供密码哈希相关的领域计算、校验和转换函数。 */
+
 private[auth] object PasswordHashFunctions:
   val DefaultIterations: Int = 65_536
 

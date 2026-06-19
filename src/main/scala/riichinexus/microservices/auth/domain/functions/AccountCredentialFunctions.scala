@@ -2,6 +2,8 @@ package riichinexus.microservices.auth.domain.functions
 
 import riichinexus.microservices.auth.domain.model.AccountCredential
 
+/** AccountCredentialFunctions 提供账号凭证相关的领域计算、校验和转换函数。 */
+
 private[auth] object AccountCredentialFunctions:
   def normalizeUsername(username: String): String =
     Option(username)

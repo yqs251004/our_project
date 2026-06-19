@@ -1,58 +1,27 @@
 package riichinexus.microservices.tournament.api
-import riichinexus.microservices.audit.domain.auditevent.AuditEvent
-import riichinexus.microservices.auth.objects.{Permission, Role}
-import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
+import riichinexus.microservices.audit.objects.`private`.AuditEventDraft
+import riichinexus.microservices.auth.objects.Permission
+import riichinexus.microservices.auth.api.`private`.{RequirePermissionPrivateAPIMessage, ResolveAccessPrincipalPrivateAPIMessage}
 import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPIMessage
-import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
-import riichinexus.microservices.player.api.`private`.*
-
-import riichinexus.microservices.auth.domain.authorization.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+import riichinexus.microservices.auth.api.`private`.ResolveSystemAccessPrincipalPrivateAPIMessage
+import riichinexus.microservices.player.api.`private`.{RecordPlayerTournamentAdminRevocationPrivateAPIMessage, ResolvePlayerPrivateAPIMessage}
 
 import java.util.NoSuchElementException
 import java.time.Instant
 
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.domain.functions.ClubIdGenerator
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
-import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
-import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
-import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
-import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
-import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
-import riichinexus.microservices.tournament.objects.tablemanagement.TableId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
-import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
-import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
-import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
-import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
-import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
-import riichinexus.microservices.audit.domain.auditevent.AuditEventId
-import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
-import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
-import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
-import riichinexus.microservices.tournament.domain.recordmanagement.model.*
-import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
-import riichinexus.microservices.tournament.domain.tablemanagement.model.*
-import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
-import riichinexus.microservices.player.domain.Player
-import riichinexus.microservices.player.objects.*
+import riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentId
+import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
+import riichinexus.microservices.tournament.domain.competition.model.Tournament
+import riichinexus.microservices.player.objects.`private`.PlayerPrivateView
 import riichinexus.system.json.JsonCodecs.given
-import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
-import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.AssignTournamentAdminRequest.given
-import upickle.default.*
+import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.TournamentSummaryView
 
+import upickle.default.ReadWriter
+
+/** 撤销玩家指定赛事的管理员身份。 */
 final case class TournamentRevokeAdminAPIMessage(tournamentId: String, playerId: String, operatorId: Option[String] = None) extends APIMessage[TournamentSummaryView] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[TournamentSummaryView] =
@@ -69,10 +38,10 @@ final case class TournamentRevokeAdminAPIMessage(tournamentId: String, playerId:
       _ <- RecordAuditEventsPrivateAPIMessage(revokeAdminAudit(command)).plan(context)
     yield TournamentSummaryView.fromDomain(savedTournament)
 
-  private def resolveOperatorActor(context: ApiPlanContext): IO[AccessPrincipal] =
+  private def resolveOperatorActor(context: ApiPlanContext): IO[AccessPrincipalPrivateView] =
     operatorId.map(PlayerId(_))
-      .map(ResolveAccessPrincipal(_).plan(context))
-      .getOrElse(IO.pure(AccessPrincipalFunctions.system))
+      .map(ResolveAccessPrincipalPrivateAPIMessage(_).plan(context))
+      .getOrElse(ResolveSystemAccessPrincipalPrivateAPIMessage().plan(context))
 
   private def revokeAdmin(
       context: ApiPlanContext,
@@ -82,26 +51,28 @@ final case class TournamentRevokeAdminAPIMessage(tournamentId: String, playerId:
     for
       tournament <- IO.blocking(riichinexus.microservices.tournament.tables.tournaments.TournamentTable.findById(connection, command.tournamentId))
       player <- ResolvePlayerPrivateAPIMessage(command.playerId).plan(context)
-        .map(_.getOrElse(throw NoSuchElementException(s"Player ${command.playerId.value} was not found")))
+        .map(_.getOrElse(throw NoSuchElementException(s"PlayerPrivateView ${command.playerId.value} was not found")))
       savedTournament <- tournament match
         case None => IO.pure(None)
         case Some(tournament) =>
-          ensureAdminCanBeRevoked(tournament, command)
-          commitAdminRevocation(context, tournament, player, command).map(Some(_))
+          for
+            _ <- RequirePermissionPrivateAPIMessage(
+              command.actor,
+              Permission.AssignTournamentAdmin,
+              tournamentId = Some(command.tournamentId)
+            ).plan(context)
+            _ <- IO.blocking(ensureAdminCanBeRevoked(tournament, command))
+            saved <- commitAdminRevocation(context, tournament, player, command)
+          yield Some(saved)
     yield savedTournament
 
   private def ensureAdminCanBeRevoked(
       tournament: Tournament,
       command: RevokeTournamentAdminCommand
   ): Unit =
-    AuthorizationPolicyFunctions.requirePermission(AuthorizationPolicyFunctions.strict, 
-      command.actor,
-      Permission.AssignTournamentAdmin,
-      tournamentId = Some(command.tournamentId)
-    )
     if !tournament.admins.contains(command.playerId) then
       throw IllegalArgumentException(
-        s"Player ${command.playerId.value} is not a tournament admin of tournament ${command.tournamentId.value}"
+        s"PlayerPrivateView ${command.playerId.value} is not a tournament admin of tournament ${command.tournamentId.value}"
       )
     if tournament.admins.size <= 1 then
       throw IllegalArgumentException(
@@ -111,12 +82,12 @@ final case class TournamentRevokeAdminAPIMessage(tournamentId: String, playerId:
   private def commitAdminRevocation(
       context: ApiPlanContext,
       tournament: Tournament,
-      player: Player,
+      player: PlayerPrivateView,
       command: RevokeTournamentAdminCommand
   ): IO[Tournament] =
     val connection = context.connection
     for
-      _ <- SavePlayerPrivateAPIMessage(revokeTournamentAdmin(player, command.tournamentId)).plan(context)
+      _ <- RecordPlayerTournamentAdminRevocationPrivateAPIMessage(command.playerId, command.tournamentId).plan(context)
       savedTournament <- IO.blocking {
         riichinexus.microservices.tournament.tables.tournaments.TournamentTable.save(
           connection,
@@ -125,15 +96,9 @@ final case class TournamentRevokeAdminAPIMessage(tournamentId: String, playerId:
       }
     yield savedTournament
 
-  private def revokeTournamentAdmin(player: Player, tournamentId: TournamentId): Player =
-    player.copy(roleGrants = player.roleGrants.filterNot(grant =>
-      grant.role == Role.TournamentAdmin && grant.tournamentId.contains(tournamentId)
-    ))
-
-  private def revokeAdminAudit(command: RevokeTournamentAdminCommand): Vector[AuditEvent] =
+  private def revokeAdminAudit(command: RevokeTournamentAdminCommand): Vector[AuditEventDraft] =
     Vector(
-      AuditEvent(
-        id = AuditIdGenerator.auditEventId(),
+      AuditEventDraft(
         aggregateType = "tournament",
         aggregateId = command.tournamentId.value,
         eventType = "TournamentAdminRevoked",
@@ -147,6 +112,7 @@ final case class TournamentRevokeAdminAPIMessage(tournamentId: String, playerId:
   private final case class RevokeTournamentAdminCommand(
       tournamentId: TournamentId,
       playerId: PlayerId,
-      actor: AccessPrincipal,
+      actor: AccessPrincipalPrivateView,
       revokedAt: Instant
   )
+

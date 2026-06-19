@@ -1,33 +1,14 @@
 package riichinexus.microservices.auth.api
 import riichinexus.microservices.auth.domain.AuthenticationFailure
-import riichinexus.microservices.player.api.`private`.*
+import riichinexus.microservices.player.api.`private`.{ListAllPlayersPrivateAPIMessage, RecordPlayerNicknameUpdatePrivateAPIMessage, ResolvePlayerByUserIdPrivateAPIMessage, ResolvePlayerPrivateAPIMessage}
 
 import java.time.Instant
+import java.util.NoSuchElementException
 
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.domain.functions.ClubIdGenerator
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
-import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
-import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
-import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
-import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
-import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
-import riichinexus.microservices.tournament.objects.tablemanagement.TableId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
-import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
-import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
-import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
-import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
-import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
-import riichinexus.microservices.audit.domain.auditevent.AuditEventId
-import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
-import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
-import riichinexus.microservices.player.domain.Player
-import riichinexus.microservices.player.objects.*
+import riichinexus.microservices.player.objects.`private`.PlayerPrivateView
+import riichinexus.microservices.player.objects.{RankPlatform, RankSnapshot}
 import riichinexus.microservices.auth.domain.functions.{AccountCredentialFunctions, AuthenticatedSessionFunctions, PasswordHashFunctions}
 import riichinexus.microservices.auth.domain.model.{AccountCredential, AuthenticatedSession}
 import riichinexus.microservices.auth.objects.Role
@@ -35,9 +16,11 @@ import riichinexus.microservices.auth.objects.apiTypes.{AuthSuccessView, Current
 import riichinexus.microservices.auth.security.PasswordSaltGenerator
 import riichinexus.microservices.auth.tables.accountcredential.AccountCredentialTable
 import riichinexus.microservices.auth.tables.authenticatedsession.AuthenticatedSessionTable
-import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
-import upickle.default.*
+import riichinexus.microservices.player.api.CreatePlayerAPIMessage
+import riichinexus.microservices.player.objects.apiTypes.CreatePlayerRequest
+import upickle.default.ReadWriter
 
+/** 注册账号并创建或绑定玩家档案。 */
 final case class RegisterAuthAPIMessage(
     username: String,
     password: String,
@@ -50,77 +33,107 @@ final case class RegisterAuthAPIMessage(
   override def plan(context: ApiPlanContext): IO[AuthSuccessView] =
     for
       registeredAt <- IO.realTimeInstant
-      command = RegisterAuthCommand(
-        username = AccountCredentialFunctions.normalizeUsername(username),
-        password = password,
-        displayName = normalizeDisplayName(displayName),
-        registeredAt = registeredAt
-      )
-      result <- register(context, command)
-    yield AuthSuccessView(
-      userId = result.player.id.value,
-      username = result.username,
-      displayName = result.player.nickname,
-      token = result.session.token,
-      roles = registeredRoleFlags(result.player)
+      command <- IO.blocking(buildCommand(registeredAt))
+      _ <- validateRegistrationRequest(command)
+      _ <- ensureUsernameAvailable(context, command.username)
+      player <- resolveRegisteredPlayer(context, command)
+      _ <- IO.blocking(ensureActivePlayer(player))
+      _ <- saveCredential(context, command, player)
+      session <- createSession(context, command, player)
+    yield authSuccessView(command.username, player, session)
+
+  private def buildCommand(registeredAt: Instant): RegisterAuthCommand =
+    RegisterAuthCommand(
+      username = AccountCredentialFunctions.normalizeUsername(username),
+      password = password,
+      displayName = normalizeDisplayName(displayName),
+      registeredAt = registeredAt
     )
 
-  private def register(context: ApiPlanContext, command: RegisterAuthCommand): IO[RegisterAuthResult] =
-    val connection = context.connection
-    for
-      _ <- IO.blocking {
-        validatePassword(command.password)
-        if AccountCredentialTable.findByUsername(connection, command.username).nonEmpty then
-          throw IllegalArgumentException(s"Username ${command.username} is already registered")
-      }
-      player <- resolveRegisteredPlayer(context, command)
-      _ <- IO.blocking {
-        ensureActivePlayer(player)
-        saveCredential(connection, command, player)
-      }
-      session <- IO.blocking(
-        AuthenticatedSessionTable.save(
-          connection,
-          AuthenticatedSessionFunctions.create(
-            username = command.username,
-            playerId = player.id,
-            createdAt = command.registeredAt,
-            ttl = SessionTtl
-          )
-        )
-      )
-    yield RegisterAuthResult(command.username, player, session)
+  private def validateRegistrationRequest(command: RegisterAuthCommand): IO[Unit] =
+    IO.blocking(validatePassword(command.password))
+
+  private def ensureUsernameAvailable(context: ApiPlanContext, username: String): IO[Unit] =
+    IO.blocking {
+      if AccountCredentialTable.findByUsername(context.connection, username).nonEmpty then
+        throw IllegalArgumentException(s"Username ${username} is already registered")
+    }
 
   private def resolveRegisteredPlayer(
       context: ApiPlanContext,
       command: RegisterAuthCommand
-  ): IO[Player] =
+  ): IO[PlayerPrivateView] =
     ListAllPlayersPrivateAPIMessage().plan(context).flatMap { players =>
       players.find(_.userId.equalsIgnoreCase(command.username)) match
         case Some(existing) if existing.nickname == command.displayName =>
           IO.pure(existing)
         case Some(existing) =>
-          SavePlayerPrivateAPIMessage(existing.copy(nickname = command.displayName)).plan(context)
+          RecordPlayerNicknameUpdatePrivateAPIMessage(existing.id, command.displayName)
+            .plan(context)
+            .flatMap(_ =>
+              ResolvePlayerPrivateAPIMessage(existing.id).plan(context).map(
+                _.getOrElse(throw NoSuchElementException(s"Player ${existing.id.value} was not found"))
+              )
+            )
         case None =>
-          CreatePlayerPrivateAPIMessage(command.username, command.displayName, DefaultRank, command.registeredAt, 1500).plan(context)
+          createPlayerViaPublicAPI(context, command)
     }
 
+  private def createPlayerViaPublicAPI(
+      context: ApiPlanContext,
+      command: RegisterAuthCommand
+  ): IO[PlayerPrivateView] =
+    for
+      _ <- CreatePlayerAPIMessage(
+        CreatePlayerRequest(
+          userId = command.username,
+          nickname = command.displayName,
+          rankPlatform = RankPlatform.toString(DefaultRank.platform),
+          tier = DefaultRank.tier,
+          stars = DefaultRank.stars,
+          initialElo = 1500
+        )
+      ).plan(context)
+      player <- ResolvePlayerByUserIdPrivateAPIMessage(command.username).plan(context).map(
+        _.getOrElse(throw IllegalStateException(s"Player ${command.username} was not created"))
+      )
+    yield player
+
   private def saveCredential(
-      connection: java.sql.Connection,
+      context: ApiPlanContext,
       command: RegisterAuthCommand,
-      player: Player
-  ): AccountCredential =
-    val passwordDigest = PasswordHashFunctions.digest(command.password, PasswordSaltGenerator.nextSalt())
-    AccountCredentialTable.save(
-      connection,
-      AccountCredential(
-        username = command.username,
-        playerId = player.id,
-        passwordHash = passwordDigest.hash,
-        passwordSalt = passwordDigest.salt,
-        passwordIterations = passwordDigest.iterations,
-        createdAt = command.registeredAt,
-        updatedAt = command.registeredAt
+      player: PlayerPrivateView
+  ): IO[AccountCredential] =
+    IO.blocking {
+      val passwordDigest = PasswordHashFunctions.digest(command.password, PasswordSaltGenerator.nextSalt())
+      AccountCredentialTable.save(
+        context.connection,
+        AccountCredential(
+          username = command.username,
+          playerId = player.id,
+          passwordHash = passwordDigest.hash,
+          passwordSalt = passwordDigest.salt,
+          passwordIterations = passwordDigest.iterations,
+          createdAt = command.registeredAt,
+          updatedAt = command.registeredAt
+        )
+      )
+    }
+
+  private def createSession(
+      context: ApiPlanContext,
+      command: RegisterAuthCommand,
+      player: PlayerPrivateView
+  ): IO[AuthenticatedSession] =
+    IO.blocking(
+      AuthenticatedSessionTable.save(
+        context.connection,
+        AuthenticatedSessionFunctions.create(
+          username = command.username,
+          playerId = player.id,
+          createdAt = command.registeredAt,
+          ttl = SessionTtl
+        )
       )
     )
 
@@ -133,14 +146,14 @@ final case class RegisterAuthAPIMessage(
   private def validatePassword(password: String): Unit =
     require(password.length >= 8, "Password must be at least 8 characters")
 
-  private def ensureActivePlayer(player: Player): Unit =
-    if player.status != PlayerStatus.Active then
+  private def ensureActivePlayer(player: PlayerPrivateView): Unit =
+    if !player.active then
       throw AuthenticationFailure(
         s"Player ${player.id.value} is not active",
         "inactive_account"
       )
 
-  private def registeredRoleFlags(player: Player): CurrentSessionRoleFlags =
+  private def registeredRoleFlags(player: PlayerPrivateView): CurrentSessionRoleFlags =
     CurrentSessionRoleFlags(
       isGuest = false,
       isRegisteredPlayer = true,
@@ -149,15 +162,22 @@ final case class RegisterAuthAPIMessage(
       isSuperAdmin = player.roleGrants.exists(_.role == Role.SuperAdmin)
     )
 
+  private def authSuccessView(
+      username: String,
+      player: PlayerPrivateView,
+      session: AuthenticatedSession
+  ): AuthSuccessView =
+    AuthSuccessView(
+      userId = player.id.value,
+      username = username,
+      displayName = player.nickname,
+      token = session.token,
+      roles = registeredRoleFlags(player)
+    )
+
   private final case class RegisterAuthCommand(
       username: String,
       password: String,
       displayName: String,
       registeredAt: Instant
-  )
-
-  private final case class RegisterAuthResult(
-      username: String,
-      player: Player,
-      session: AuthenticatedSession
   )

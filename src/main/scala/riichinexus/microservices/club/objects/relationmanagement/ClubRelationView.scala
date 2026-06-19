@@ -1,7 +1,9 @@
 package riichinexus.microservices.club.objects.relationmanagement
 
 import riichinexus.microservices.club.domain.relationmanagement.model.{ClubRelation as DomainClubRelation}
-import upickle.default.*
+import upickle.default.ReadWriter
+
+/** ClubRelationView 表示俱乐部关系视图 的前端展示视图，包含targetClubId、relation。 */
 
 final case class ClubRelationView(
     targetClubId: String,

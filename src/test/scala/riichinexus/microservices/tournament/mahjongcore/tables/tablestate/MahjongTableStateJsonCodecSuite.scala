@@ -7,14 +7,13 @@ import riichinexus.microservices.tournament.mahjongcore.domain.gamestate.functio
 import riichinexus.microservices.tournament.mahjongcore.domain.gamestate.model.{MahjongCallCandidate, MahjongPendingCallState, MahjongTableState}
 import riichinexus.microservices.tournament.mahjongcore.objects.action.{MahjongCommandType, MahjongLegalAction}
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.{MahjongMeld, MahjongMeldType, MahjongRoundPhase, MahjongRuleset}
-import riichinexus.microservices.tournament.objects.paifumanagement.{AgariResult, FinalStanding, HandOutcome, PaifuTile, RoundSettlement, ScoreChange}
+import riichinexus.microservices.tournament.objects.paifumanagement.{AgariResult, FinalStanding, HandOutcome, PaifuTile, RoundSettlement, RoundSettlementNote, ScoreChange}
 import riichinexus.microservices.tournament.objects.tablemanagement.{SeatWind, TableId}
-import riichinexus.system.json.MahjongTableStateJsonCodecs
 import upickle.default.{read, write}
 
 class MahjongTableStateJsonCodecSuite extends FunSuite:
 
-  import MahjongTableStateJsonCodecs.given
+import riichinexus.system.json.MahjongTableStateJsonCodecs.given
 
   test("table state json codec round-trips all internal event variants and pending call state") {
     val state = MahjongGameStateTransitionFunctions.startTable(TableId("mahjong-state-codec"), MahjongRuleset(), seed = "mahjong-state-codec-seed")
@@ -47,7 +46,7 @@ class MahjongTableStateJsonCodecSuite extends FunSuite:
         ScoreChange(state.seats.find(_.seat == SeatWind.West).get.playerId, 0),
         ScoreChange(state.seats.find(_.seat == SeatWind.North).get.playerId, 0)
       ),
-      settlement = Some(RoundSettlement(notes = Vector("codec round trip")))
+      settlement = Some(RoundSettlement(notes = Vector(RoundSettlementNote.DoubleRon)))
     )
     val standings = state.seats.zipWithIndex.map { case (seat, index) =>
       FinalStanding(seat.playerId, seat.seat, seat.points, placement = index + 1)

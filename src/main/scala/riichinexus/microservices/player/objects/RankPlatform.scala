@@ -1,5 +1,7 @@
 package riichinexus.microservices.player.objects
 
+/** RankPlatform 枚举等级Platform 可使用的公开取值。 */
+
 enum RankPlatform:
   case Tenhou
   case MahjongSoul

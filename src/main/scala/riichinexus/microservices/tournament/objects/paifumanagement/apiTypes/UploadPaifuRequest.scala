@@ -2,7 +2,9 @@ package riichinexus.microservices.tournament.objects.paifumanagement.apiTypes
 
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.tournament.objects.paifumanagement.Paifu
-import upickle.default.*
+import upickle.default.{ReadWriter, macroRW}
+
+/** UploadPaifuRequest 表示上传牌谱请求 的前端请求参数。 */
 
 final case class UploadPaifuRequest(
     operatorId: Option[String] = None,

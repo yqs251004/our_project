@@ -2,7 +2,9 @@ package riichinexus.microservices.club.objects.clubmanagement.apiTypes
 
 import riichinexus.microservices.club.objects.relationmanagement.ClubRelationView
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.*
+import upickle.default.{ReadWriter, macroRW}
+
+/** PublicClubDirectoryEntry 表示前后端共享的公开俱乐部目录条目 数据结构。 */
 
 final case class PublicClubDirectoryEntry(
     clubId: String,

@@ -1,15 +1,16 @@
 package riichinexus.microservices.tournament.mahjongcore.domain.yakuanalysis.functions
 
-import riichinexus.microservices.tournament.mahjongcore.domain.gamestate.functions.MahjongRulesetFunctions
 import riichinexus.microservices.tournament.mahjongcore.domain.handanalysis.functions.MahjongHandAnalysisFunctions
-import riichinexus.microservices.tournament.mahjongcore.domain.handanalysis.model.*
-import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.MahjongTileFunctions.*
+import riichinexus.microservices.tournament.mahjongcore.domain.handanalysis.model.{MahjongHandDecomposition, MahjongHandMeld, MahjongHandMeldType}
+import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.MahjongTileFunctions.{Chun, Haku, Nan, Pei, Sha, Ton, countsOf, indexOf, isYaochu}
 import riichinexus.microservices.tournament.mahjongcore.domain.yakuanalysis.model.MahjongWinContext
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.{MahjongMeld, MahjongMeldType}
-import riichinexus.microservices.tournament.objects.paifumanagement.*
+import riichinexus.microservices.tournament.objects.paifumanagement.{AgariResult, AgariWinResult, HandOutcome, MahjongYakuKind, PaifuTile, RoundSettlement, RoundSettlementNote, ScoreChange, Yaku}
 import riichinexus.microservices.tournament.objects.tablemanagement.SeatWind
 
-private[tournament] object MahjongYakuAnalysisFunctions:
+/** MahjongYakuAnalysisFunctions 提供麻将役种分析相关的领域计算、校验和转换函数。 */
+
+private[mahjongcore] object MahjongYakuAnalysisFunctions:
 
   def analyzeWin(context: MahjongWinContext): Option[AgariResult] =
     val concealedTiles =
@@ -67,7 +68,7 @@ private[tournament] object MahjongYakuAnalysisFunctions:
             uraDoraVisible = uraDoraVisible,
             settlement = Some(
               RoundSettlement(
-                notes = Vector(limitName(scored.han, scored.fu, context.ruleset.allowMultipleYakuman)).filter(_.nonEmpty)
+                notes = limitNote(scored.han, scored.fu, context.ruleset.allowMultipleYakuman).toVector
               )
             ),
             wins = Vector(win)
@@ -100,7 +101,7 @@ private[tournament] object MahjongYakuAnalysisFunctions:
     if yaku.isEmpty then None
     else
       val baseHan = yaku.map(_.han).sum
-      if baseHan < MahjongRulesetFunctions.normalizedMinHan(context.ruleset) then None
+      if baseHan < context.ruleset.normalizedMinHan then None
       else
         val yakuWithDora =
           if includeDora then MahjongYakuCheckFunctions.addDora(yaku, concealedCounts, allCounts, allTiles, context, fixedMelds, closedHand)
@@ -185,15 +186,27 @@ private[tournament] object MahjongYakuAnalysisFunctions:
     else if han == 5 || (han == 4 && fu >= 40) || (han == 3 && fu >= 70) then 2000
     else math.min(2000, fu * (1 << (han + 2)))
 
-  private def limitName(han: Int, fu: Int, allowMultipleYakuman: Boolean): String =
+  private def limitNote(han: Int, fu: Int, allowMultipleYakuman: Boolean): Option[RoundSettlementNote] =
     if han >= 13 then
       val multiple = if allowMultipleYakuman then (han / 13).max(1) else 1
-      if multiple == 1 then "役满" else if multiple == 2 then "双倍役满" else s"${multiple}倍役满"
-    else if han >= 11 then "三倍满"
-    else if han >= 8 then "倍满"
-    else if han >= 6 then "跳满"
-    else if han == 5 || (han == 4 && fu >= 40) || (han == 3 && fu >= 70) then "满贯"
-    else ""
+      Some(yakumanLimitNote(multiple))
+    else if han >= 11 then Some(RoundSettlementNote.Sanbaiman)
+    else if han >= 8 then Some(RoundSettlementNote.Baiman)
+    else if han >= 6 then Some(RoundSettlementNote.Haneman)
+    else if han == 5 || (han == 4 && fu >= 40) || (han == 3 && fu >= 70) then Some(RoundSettlementNote.Mangan)
+    else None
+
+  private def yakumanLimitNote(multiplier: Int): RoundSettlementNote =
+    multiplier match
+      case 1 => RoundSettlementNote.Yakuman
+      case 2 => RoundSettlementNote.DoubleYakuman
+      case 3 => RoundSettlementNote.TripleYakuman
+      case 4 => RoundSettlementNote.QuadrupleYakuman
+      case 5 => RoundSettlementNote.QuintupleYakuman
+      case 6 => RoundSettlementNote.SextupleYakuman
+      case 7 => RoundSettlementNote.SeptupleYakuman
+      case 8 => RoundSettlementNote.OctupleYakuman
+      case _ => RoundSettlementNote.NonupleYakuman
 
   private def toHandMeld(meld: MahjongMeld): Option[MahjongHandMeld] =
     val tileIndex = meld.calledTile.orElse(meld.tiles.headOption).map(indexOf)

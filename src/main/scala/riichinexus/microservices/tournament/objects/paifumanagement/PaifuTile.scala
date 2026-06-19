@@ -1,6 +1,8 @@
 package riichinexus.microservices.tournament.objects.paifumanagement
 
-import upickle.default.*
+import upickle.default.{ReadWriter, readwriter}
+
+/** PaifuTile 表示前后端共享的牌谱牌 数据结构。 */
 
 final case class PaifuTile(value: String)
 

@@ -1,9 +1,8 @@
 package riichinexus.microservices.club.api
-import riichinexus.microservices.audit.domain.auditevent.AuditEvent
+import riichinexus.microservices.audit.objects.`private`.AuditEventDraft
 import riichinexus.microservices.auth.objects.Permission
-import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
+import riichinexus.microservices.auth.api.`private`.ResolveAccessPrincipalPrivateAPIMessage
 import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPIMessage
-import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
 
 import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.time.Instant
@@ -11,40 +10,18 @@ import java.util.NoSuchElementException
 
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.domain.functions.ClubIdGenerator
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
-import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
-import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
-import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
-import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
-import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
-import riichinexus.microservices.tournament.objects.tablemanagement.TableId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
-import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
-import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
-import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
-import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
-import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
-import riichinexus.microservices.audit.domain.auditevent.AuditEventId
-import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
-import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
-import riichinexus.microservices.auth.domain.model.*
+import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
 import riichinexus.microservices.club.domain.Club
-import riichinexus.microservices.club.domain.clubmanagement.model.*
-import riichinexus.microservices.club.domain.membershipmanagement.model.*
-import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
-import riichinexus.microservices.club.domain.relationmanagement.model.*
-import riichinexus.microservices.auth.domain.*
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubAuthorization
 import riichinexus.microservices.club.objects.rankprivilegemanagement.ClubRankNode
 import riichinexus.microservices.club.objects.clubmanagement.ClubView
 import riichinexus.microservices.club.objects.rankprivilegemanagement.apiTypes.ClubRankNodeRequest
-import upickle.default.*
+import upickle.default.ReadWriter
 
+/** 更新俱乐部段位树。 */
 final case class UpdateClubRankTreeAPIMessage(
     clubId: String,
     operatorId: String,
@@ -54,7 +31,7 @@ final case class UpdateClubRankTreeAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubView] =
     for
-      actor <- ResolveAccessPrincipal(PlayerId(operatorId)).plan(context)
+      actor <- ResolveAccessPrincipalPrivateAPIMessage(PlayerId(operatorId)).plan(context)
       occurredAt <- IO.realTimeInstant
       command = UpdateClubRankTreeCommand(
         clubId = ClubId(clubId),
@@ -94,10 +71,9 @@ final case class UpdateClubRankTreeAPIMessage(
   private def updateRankTreeAudit(
       updatedClub: Club,
       command: UpdateClubRankTreeCommand
-  ): Vector[AuditEvent] =
+  ): Vector[AuditEventDraft] =
     Vector(
-      AuditEvent(
-        id = AuditIdGenerator.auditEventId(),
+      AuditEventDraft(
         aggregateType = "club",
         aggregateId = updatedClub.id.value,
         eventType = "ClubRankTreeUpdated",
@@ -110,7 +86,7 @@ final case class UpdateClubRankTreeAPIMessage(
 
   private final case class UpdateClubRankTreeCommand(
       clubId: ClubId,
-      actor: AccessPrincipal,
+      actor: AccessPrincipalPrivateView,
       ranks: Vector[ClubRankNode],
       note: Option[String],
       occurredAt: Instant

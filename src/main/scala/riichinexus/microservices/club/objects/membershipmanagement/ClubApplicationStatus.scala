@@ -1,5 +1,7 @@
 package riichinexus.microservices.club.objects.membershipmanagement
 
+/** ClubApplicationStatus 枚举俱乐部申请状态 可使用的公开取值。 */
+
 enum ClubApplicationStatus:
   case Pending
   case Approved

@@ -2,6 +2,7 @@ package riichinexus.microservices.notification.tables.notifications
 
 import java.sql.Connection
 
+
 object NotificationTableInitializer:
   private val initTableSql: String =
     """

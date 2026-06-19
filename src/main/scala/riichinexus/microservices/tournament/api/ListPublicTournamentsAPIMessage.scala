@@ -4,43 +4,18 @@ import riichinexus.microservices.tournament.objects.tournamentmanagement.{StageS
 
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.domain.functions.ClubIdGenerator
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
-import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
-import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
-import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
-import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
-import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
-import riichinexus.microservices.tournament.objects.tablemanagement.TableId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
-import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
-import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
-import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
-import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
-import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
-import riichinexus.microservices.audit.domain.auditevent.AuditEventId
-import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
-import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
-import riichinexus.microservices.club.api.`private`.ResolveClubsPrivateAPIMessage
-import riichinexus.microservices.club.domain.Club
-import riichinexus.microservices.club.domain.clubmanagement.model.*
-import riichinexus.microservices.club.domain.membershipmanagement.model.*
-import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
-import riichinexus.microservices.club.domain.relationmanagement.model.*
+import riichinexus.microservices.club.api.`private`.ResolveClubReadModelsPrivateAPIMessage
+import riichinexus.microservices.club.objects.`private`.ClubPrivateView
 import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.PublicTournamentSummaryView
-import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
-import riichinexus.microservices.tournament.domain.recordmanagement.model.*
-import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
-import riichinexus.microservices.tournament.domain.tablemanagement.model.*
-import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
+import riichinexus.microservices.tournament.domain.competition.model.Tournament
 import riichinexus.microservices.tournament.tables.tournaments.TournamentTable
 import riichinexus.system.objects.PagedResponse
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.*
+import upickle.default.ReadWriter
 
+/** 列出前端公开赛事。 */
 final case class ListPublicTournamentsAPIMessage(
     status: Option[String] = None,
     organizer: Option[String] = None,
@@ -84,14 +59,14 @@ final case class ListPublicTournamentsAPIMessage(
   private def publicRelatedClubsById(
       context: ApiPlanContext,
       tournaments: Vector[Tournament]
-  ): IO[Map[ClubId, Club]] =
-    ResolveClubsPrivateAPIMessage(tournaments.flatMap(relatedClubIds))
+  ): IO[Map[ClubId, ClubPrivateView]] =
+    ResolveClubReadModelsPrivateAPIMessage(tournaments.flatMap(relatedClubIds))
       .plan(context)
       .map(_.map(club => club.id -> club).toMap)
 
   private def publicTournamentSummaryViews(
       tournaments: Vector[Tournament],
-      clubsById: Map[ClubId, Club]
+      clubsById: Map[ClubId, ClubPrivateView]
   ): Vector[PublicTournamentSummaryView] =
     tournaments.map { tournament =>
       PublicTournamentSummaryView(
@@ -113,7 +88,7 @@ final case class ListPublicTournamentsAPIMessage(
 
   private def tournamentParticipantIds(
       tournament: Tournament,
-      clubsById: Map[ClubId, Club]
+      clubsById: Map[ClubId, ClubPrivateView]
   ): Vector[PlayerId] =
     val clubMembers = tournament.participatingClubs.flatMap(clubId =>
       clubsById.get(clubId).toVector.flatMap(_.members)

@@ -2,6 +2,7 @@ package riichinexus.microservices.audit.tables.auditevent
 
 import java.sql.Connection
 
+
 object AuditEventTableInitializer:
   private val initTableSql: String =
     """

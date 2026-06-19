@@ -1,7 +1,7 @@
 package riichinexus.system.objects
 
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.*
+import upickle.default.{ReadWriter, Reader, Writer, macroR, macroRW, macroW}
 
 object SharedResponseCodecs:
   given ReadWriter[ErrorResponse] = macroRW

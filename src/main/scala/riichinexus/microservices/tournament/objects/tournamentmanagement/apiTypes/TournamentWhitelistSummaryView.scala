@@ -1,6 +1,8 @@
 package riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes
 
-import upickle.default.*
+import upickle.default.{ReadWriter, macroRW}
+
+/** TournamentWhitelistSummaryView 表示赛事白名单摘要视图 的前端展示视图。 */
 
 final case class TournamentWhitelistSummaryView(
     totalEntries: Int,

@@ -3,35 +3,21 @@ import riichinexus.microservices.auth.objects.Permission
 
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.domain.functions.ClubIdGenerator
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
-import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
-import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
-import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
-import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
-import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
-import riichinexus.microservices.tournament.objects.tablemanagement.TableId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
-import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
-import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
-import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
+import riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentId
+import riichinexus.microservices.auth.domain.functions.AuthorizationPolicyFunctions
+import riichinexus.microservices.auth.api.`private`.ResolveRequestActorPrivateAPIMessage
+import riichinexus.microservices.auth.domain.functions.AccessPrincipalPrivateViewFunctions
+import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
 import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
-import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
-import riichinexus.microservices.audit.domain.auditevent.AuditEventId
-import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
-import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
-import riichinexus.microservices.auth.domain.authorization.AuthorizationPolicyFunctions
-import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.auth.utils.ResolveAccessPrincipal
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.*
+import upickle.default.ReadWriter
 
+/** 检查访问主体是否拥有指定权限。 */
 final case class AuthCheckPermissionAPIMessage(
     operatorId: Option[String] = None,
-    principal: Option[AccessPrincipal] = None,
+    guestSessionId: Option[String] = None,
     permission: Permission,
     clubId: Option[String] = None,
     tournamentId: Option[String] = None,
@@ -41,14 +27,14 @@ final case class AuthCheckPermissionAPIMessage(
   override def plan(context: ApiPlanContext): IO[Boolean] =
     for
       input <- IO.blocking(resolveInput)
-      operator <- resolvePrincipal(context, input.operatorId, input.principal)
+      operator <- resolvePrincipal(context, input.guestSessionId, input.operatorId)
       allowed <- IO.blocking(checkPermission(operator, input))
     yield allowed
 
   private def resolveInput: ResolvedCheckPermissionInput =
     ResolvedCheckPermissionInput(
       operatorId = operatorId.filter(_.nonEmpty).map(PlayerId(_)),
-      principal = principal,
+      guestSessionId = guestSessionId.filter(_.nonEmpty).map(GuestSessionId(_)),
       permission = permission,
       clubId = parseOptionalId(clubId)(ClubId(_)),
       tournamentId = parseOptionalId(tournamentId)(TournamentId(_)),
@@ -60,20 +46,15 @@ final case class AuthCheckPermissionAPIMessage(
 
   private def resolvePrincipal(
       context: ApiPlanContext,
-      operatorId: Option[PlayerId],
-      principal: Option[AccessPrincipal]
-  ): IO[AccessPrincipal] =
-    principal match
-      case Some(value) => IO.pure(value)
-      case None =>
-        operatorId match
-          case Some(playerId) => ResolveAccessPrincipal(playerId).plan(context)
-          case None           => IO.raiseError(IllegalArgumentException("operatorId or principal is required"))
+      guestSessionId: Option[GuestSessionId],
+      operatorId: Option[PlayerId]
+  ): IO[AccessPrincipalPrivateView] =
+    ResolveRequestActorPrivateAPIMessage(guestSessionId, operatorId).plan(context)
 
-  private def checkPermission(operator: AccessPrincipal, input: ResolvedCheckPermissionInput): Boolean =
+  private def checkPermission(operator: AccessPrincipalPrivateView, input: ResolvedCheckPermissionInput): Boolean =
     AuthorizationPolicyFunctions.can(
       AuthorizationPolicyFunctions.strict,
-      principal = operator,
+      principal = AccessPrincipalPrivateViewFunctions.toDomain(operator),
       permission = input.permission,
       clubId = input.clubId,
       tournamentId = input.tournamentId,
@@ -82,7 +63,7 @@ final case class AuthCheckPermissionAPIMessage(
 
   private final case class ResolvedCheckPermissionInput(
       operatorId: Option[PlayerId],
-      principal: Option[AccessPrincipal],
+      guestSessionId: Option[GuestSessionId],
       permission: Permission,
       clubId: Option[ClubId],
       tournamentId: Option[TournamentId],

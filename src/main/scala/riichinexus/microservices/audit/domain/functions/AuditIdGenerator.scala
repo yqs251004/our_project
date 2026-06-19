@@ -4,7 +4,9 @@ import riichinexus.microservices.audit.domain.auditevent.AuditEventId
 
 import java.util.UUID
 
-object AuditIdGenerator:
+/** AuditIdGenerator 负责生成审计标识符生成器 相关的领域标识符。 */
+
+private[audit] object AuditIdGenerator:
   private def nextId(prefix: String): String =
     s"$prefix-${UUID.randomUUID().toString.take(8)}"
 

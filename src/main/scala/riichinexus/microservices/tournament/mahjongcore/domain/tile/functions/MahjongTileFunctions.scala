@@ -1,14 +1,15 @@
 package riichinexus.microservices.tournament.mahjongcore.domain.tile.functions
 
-import riichinexus.microservices.tournament.mahjongcore.domain.gamestate.functions.MahjongRulesetFunctions
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.MahjongRuleset
 import riichinexus.microservices.tournament.objects.paifumanagement.PaifuTile
 
 import java.util.Collections
 import java.util.Random
-import scala.jdk.CollectionConverters.*
+import scala.jdk.CollectionConverters.{ListHasAsScala, SeqHasAsJava}
 
-private[tournament] object MahjongTileFunctions:
+/** MahjongTileFunctions 提供麻将牌相关的领域计算、校验和转换函数。 */
+
+private[mahjongcore] object MahjongTileFunctions:
 
   val TileTypeCount = 34
   val Man1 = 0
@@ -144,7 +145,7 @@ private[tournament] object MahjongTileFunctions:
 
   def fullWall(ruleset: MahjongRuleset): Vector[PaifuTile] =
     val redFiveIndexes = Vector(Man1 + 4, Pin1 + 4, Sou1 + 4)
-      .take(MahjongRulesetFunctions.normalizedAkaDoraCount(ruleset))
+      .take(ruleset.normalizedAkaDoraCount)
       .toSet
     (0 until TileTypeCount).toVector.flatMap { index =>
       val red = redFiveIndexes.contains(index)

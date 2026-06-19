@@ -1,6 +1,8 @@
 package riichinexus.microservices.tournament.objects.rulesmanagement.swiss
 
-import upickle.default.*
+import upickle.default.{ReadWriter, readwriter}
+
+/** SwissPairingMethod 枚举SwissPairingMethod 可使用的公开取值。 */
 
 enum SwissPairingMethod:
   case BalancedElo

@@ -1,7 +1,9 @@
 package riichinexus.microservices.tournament.appeal.objects
 
 import riichinexus.microservices.tournament.appeal.domain.model.{AppealStatus as DomainAppealStatus}
-import upickle.default.*
+import upickle.default.{ReadWriter, readwriter}
+
+/** AppealStatus 枚举申诉状态 可使用的公开取值。 */
 
 enum AppealStatus:
   case Open

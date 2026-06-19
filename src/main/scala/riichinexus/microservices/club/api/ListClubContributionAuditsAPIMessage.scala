@@ -1,47 +1,21 @@
 package riichinexus.microservices.club.api
-import riichinexus.microservices.audit.domain.auditevent.AuditEvent
+import riichinexus.microservices.audit.objects.`private`.AuditEventPrivateView
 import riichinexus.microservices.auth.objects.Permission
-import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
+import riichinexus.microservices.auth.api.`private`.ResolveAccessPrincipalPrivateAPIMessage
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
 
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.audit.api.`private`.ListAuditEventsPrivateAPIMessage
-import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.domain.functions.ClubIdGenerator
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
-import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
-import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
-import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
-import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
-import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
-import riichinexus.microservices.tournament.objects.tablemanagement.TableId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
-import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
-import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
-import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
-import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
-import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
-import riichinexus.microservices.audit.domain.auditevent.AuditEventId
-import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
-import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
-import riichinexus.microservices.auth.domain.AuthorizationFailure
-import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.club.domain.Club
-import riichinexus.microservices.club.domain.clubmanagement.model.*
-import riichinexus.microservices.club.domain.membershipmanagement.model.*
-import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
-import riichinexus.microservices.club.domain.relationmanagement.model.*
-import riichinexus.system.json.JsonCodecs.given
-import riichinexus.microservices.club.objects.auditreadmodel.apiTypes.{
-  ClubContributionAuditEntry,
-  ClubContributionAuditQuery
-}
-import riichinexus.system.objects.PagedResponse
-import upickle.default.*
+import riichinexus.system.api.AuthorizationFailure
+import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
 
+import riichinexus.microservices.club.objects.auditreadmodel.apiTypes.{ClubContributionAuditEntry, ClubContributionAuditQuery}
+import riichinexus.system.objects.PagedResponse
+import upickle.default.ReadWriter
+
+/** 列出俱乐部贡献审计记录。 */
 final case class ListClubContributionAuditsAPIMessage(
     clubId: String,
     query: ClubContributionAuditQuery
@@ -49,7 +23,7 @@ final case class ListClubContributionAuditsAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[ClubContributionAuditEntry]] =
     for
-      operator <- ResolveAccessPrincipal(query.operatorId).plan(context)
+      operator <- ResolveAccessPrincipalPrivateAPIMessage(query.operatorId).plan(context)
       _ <- requireContributionAuditPermission(context, operator)
       parsedClubId = ClubId(clubId)
       resolved = resolveQuery(parsedClubId, query)
@@ -61,9 +35,9 @@ final case class ListClubContributionAuditsAPIMessage(
       resolved.appliedFilters
     )(clubContributionAuditEntry(parsedClubId, _))
 
-  private def requireContributionAuditPermission(context: ApiPlanContext, operator: AccessPrincipal): IO[Unit] =
+  private def requireContributionAuditPermission(context: ApiPlanContext, operator: AccessPrincipalPrivateView): IO[Unit] =
     AuthCheckPermissionAPIMessage(
-      principal = Some(operator),
+      operatorId = operator.playerId.map(_.value),
       permission = Permission.ViewAuditTrail
     ).plan(context).flatMap { allowed =>
       if allowed then IO.unit
@@ -85,7 +59,7 @@ final case class ListClubContributionAuditsAPIMessage(
   private def listContributionAudits(
       context: ApiPlanContext,
       query: ResolvedContributionAuditQuery
-  ): IO[Vector[AuditEvent]] =
+  ): IO[Vector[AuditEventPrivateView]] =
     ListAuditEventsPrivateAPIMessage(
       aggregateType = Some("club"),
       aggregateId = Some(query.clubId.value),
@@ -93,9 +67,9 @@ final case class ListClubContributionAuditsAPIMessage(
       oldestFirst = true
     ).plan(context)
 
-  private def clubContributionAuditEntry(clubId: ClubId, entry: AuditEvent): ClubContributionAuditEntry =
+  private def clubContributionAuditEntry(clubId: ClubId, entry: AuditEventPrivateView): ClubContributionAuditEntry =
     ClubContributionAuditEntry(
-      id = entry.id.value,
+      id = entry.id,
       clubId = clubId.value,
       playerId = entry.details.get("playerId"),
       delta = entry.details.get("delta"),

@@ -1,5 +1,7 @@
 package riichinexus.microservices.auth.objects
 
+/** Permission 枚举权限 可使用的公开取值。 */
+
 enum Permission:
   case ViewPublicSchedule
   case ViewClubDirectory

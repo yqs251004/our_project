@@ -1,7 +1,9 @@
 package riichinexus.microservices.club.objects.tournamentparticipation.apiTypes
 
-import upickle.default.*
+import upickle.default.ReadWriter
 import riichinexus.system.json.JsonCodecs.given
+
+/** ClubTournamentParticipationView 表示俱乐部赛事Participation视图 的前端展示视图，包含俱乐部 ID、赛事 ID、名称、状态、clubParticipationStatus、stageName等。 */
 
 final case class ClubTournamentParticipationView(
     clubId: String,

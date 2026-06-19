@@ -1,7 +1,9 @@
 package riichinexus.microservices.player.objects.apiTypes
 
-import riichinexus.system.json.JsonCodecs.given
-import upickle.default.*
+
+import upickle.default.{ReadWriter, macroRW}
+
+/** PlayerRoleFlagsView 表示玩家角色Flags视图 的前端展示视图。 */
 
 final case class PlayerRoleFlagsView(
     isRegisteredPlayer: Boolean,

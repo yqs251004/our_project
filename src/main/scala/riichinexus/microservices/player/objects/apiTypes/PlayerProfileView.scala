@@ -2,7 +2,9 @@ package riichinexus.microservices.player.objects.apiTypes
 
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.player.objects.RankSnapshot
-import upickle.default.*
+import upickle.default.{ReadWriter, macroRW}
+
+/** PlayerProfileView 表示玩家Profile视图 的前端展示视图。 */
 
 final case class PlayerProfileView(
     playerId: String,

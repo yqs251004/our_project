@@ -4,7 +4,9 @@ import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStat
 
 import java.util.UUID
 
-object OpsAnalyticsIdGenerator:
+/** OpsAnalyticsIdGenerator 负责生成OpsAnalytics标识符生成器 相关的领域标识符。 */
+
+private[opsanalytics] object OpsAnalyticsIdGenerator:
   private def nextId(prefix: String): String =
     s"$prefix-${UUID.randomUUID().toString.take(8)}"
 

@@ -1,11 +1,13 @@
 package riichinexus.microservices.tournament.mahjongcore.domain.handanalysis.functions
 
-import riichinexus.microservices.tournament.mahjongcore.domain.handanalysis.model.*
+import riichinexus.microservices.tournament.mahjongcore.domain.handanalysis.model.{MahjongHandDecomposition, MahjongHandMeld, MahjongHandMeldType}
 import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.MahjongTileFunctions
-import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.MahjongTileFunctions.*
+import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.MahjongTileFunctions.{Chun, Haku, Hatsu, Man1, Man9, Nan, Pei, Pin1, Pin9, Sha, Sou1, Sou9, TileTypeCount, Ton, isSuited, tileOf}
 import riichinexus.microservices.tournament.objects.paifumanagement.PaifuTile
 
-private[tournament] object MahjongHandAnalysisFunctions:
+/** MahjongHandAnalysisFunctions 提供麻将手牌分析相关的领域计算、校验和转换函数。 */
+
+private[mahjongcore] object MahjongHandAnalysisFunctions:
 
   private val YaochuIndices: Vector[Int] =
     Vector(Man1, Man9, Pin1, Pin9, Sou1, Sou9, Ton, Nan, Sha, Pei, Haku, Hatsu, Chun)

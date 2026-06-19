@@ -1,16 +1,18 @@
 package riichinexus.microservices.club.domain.relationmanagement.functions
 
-import riichinexus.microservices.auth.domain.AuthorizationFailure
-import riichinexus.microservices.auth.domain.model.AccessPrincipal
+import riichinexus.system.api.AuthorizationFailure
+import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
 import riichinexus.microservices.auth.objects.{Permission, Role}
 import riichinexus.microservices.club.domain.{Club, ClubAuthorization}
 
+/** ClubRelationAuthorizationFunctions 提供俱乐部关系授权函数 相关的领域校验和权限判断。 */
+
 private[club] object ClubRelationAuthorizationFunctions:
-  def requireDirectRelationUpdate(actor: AccessPrincipal): Unit =
+  def requireDirectRelationUpdate(actor: AccessPrincipalPrivateView): Unit =
     if !actor.roleGrants.exists(_.role == Role.SuperAdmin) then
       throw AuthorizationFailure("Only super admins can directly update club relations")
 
-  def requireRelationRequestActor(actor: AccessPrincipal, club: Club): Unit =
+  def requireRelationRequestActor(actor: AccessPrincipalPrivateView, club: Club): Unit =
     ClubAuthorization.requireClubAdmin(
       actor = actor,
       club = club,

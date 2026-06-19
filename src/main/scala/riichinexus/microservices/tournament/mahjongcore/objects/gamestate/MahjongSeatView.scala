@@ -4,7 +4,7 @@ import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.tournament.objects.paifumanagement.PaifuTile
 import riichinexus.microservices.tournament.objects.tablemanagement.SeatWind
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.*
+import upickle.default.{ReadWriter, macroRW}
 
 /** 前端可见的座位状态；手牌会按观看者权限裁剪，本人可见，旁观者只看张数。 */
 final case class MahjongSeatView(

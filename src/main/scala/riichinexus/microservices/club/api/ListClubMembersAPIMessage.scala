@@ -2,41 +2,15 @@ package riichinexus.microservices.club.api
 
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.domain.functions.ClubIdGenerator
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
-import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
-import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
-import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
-import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
-import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
-import riichinexus.microservices.tournament.objects.tablemanagement.TableId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
-import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
-import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
-import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
-import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
-import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
-import riichinexus.microservices.audit.domain.auditevent.AuditEventId
-import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
-import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
-import riichinexus.microservices.club.domain.Club
-import riichinexus.microservices.club.domain.clubmanagement.model.*
-import riichinexus.microservices.club.domain.membershipmanagement.model.*
-import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
-import riichinexus.microservices.club.domain.relationmanagement.model.*
 import riichinexus.system.json.JsonCodecs.given
-import riichinexus.microservices.auth.objects.Role
-import riichinexus.microservices.player.domain.Player
-import riichinexus.microservices.player.api.`private`.*
 import riichinexus.microservices.player.objects.PlayerStatus
-import riichinexus.microservices.player.objects.apiTypes.{PlayerProfileView, PlayerRoleFlagsView}
-import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
+import riichinexus.microservices.player.objects.apiTypes.PlayerProfileView
+import riichinexus.microservices.player.api.ListPlayersAPIMessage
 import riichinexus.system.objects.PagedResponse
-import upickle.default.*
+import upickle.default.ReadWriter
 
+/** 列出俱乐部成员。 */
 final case class ListClubMembersAPIMessage(
     clubId: String,
     status: Option[String] = None,
@@ -47,11 +21,17 @@ final case class ListClubMembersAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[PlayerProfileView]] =
     for
-      query <- IO.blocking(resolveQuery(context))
-      members <- listMembers(context, query)
-    yield pagedResponse(members, query)
+      query <- IO.pure(resolveQuery)
+      members <- ListPlayersAPIMessage(
+        clubId = Some(query.clubId.value),
+        status = query.status.map(_.toString),
+        nickname = query.nickname,
+        limit = Some(query.limit),
+        offset = Some(query.offset)
+      ).plan(context)
+    yield members
 
-  private def resolveQuery(context: ApiPlanContext): ResolvedClubMembersQuery =
+  private def resolveQuery: ResolvedClubMembersQuery =
     ResolvedClubMembersQuery(
       clubId = ClubId(clubId),
       status = status.filter(_.nonEmpty).map(riichinexus.system.EnumParsing.parse("status", _)(PlayerStatus.valueOf)),
@@ -62,56 +42,6 @@ final case class ListClubMembersAPIMessage(
         status.filter(_.nonEmpty).map("status" -> _),
         nickname.filter(_.nonEmpty).map("nickname" -> _)
       ).flatten.toMap
-    )
-
-  private def listMembers(
-      context: ApiPlanContext,
-      query: ResolvedClubMembersQuery
-  ): IO[Vector[PlayerProfileView]] =
-    ListPlayersByClubPrivateAPIMessage(query.clubId)
-      .plan(context)
-      .map(
-        _.filter(player => query.status.forall(_ == player.status))
-          .filter(player => query.nickname.forall(riichinexus.system.TextSearch.containsIgnoreCase(player.nickname, _)))
-          .sortBy(player => (player.nickname, player.id.value))
-          .map(playerProfileView)
-      )
-
-  private def playerProfileView(player: Player): PlayerProfileView =
-    PlayerProfileView(
-      playerId = player.id.value,
-      userId = player.userId,
-      nickname = player.nickname,
-      registeredAt = player.registeredAt.toString,
-      currentRank = player.currentRank,
-      elo = player.elo,
-      clubId = player.clubId.map(_.value),
-      affiliatedClubIds = player.affiliatedClubIds.map(_.value),
-      status = player.status.toString,
-      roles = PlayerRoleFlagsView(
-        isRegisteredPlayer = true,
-        isClubAdmin = player.roleGrants.exists(_.role == Role.ClubAdmin),
-        isTournamentAdmin = player.roleGrants.exists(_.role == Role.TournamentAdmin),
-        isSuperAdmin = player.roleGrants.exists(_.role == Role.SuperAdmin)
-      ),
-      bannedReason = player.bannedReason
-    )
-
-  private def pagedResponse(
-      members: Vector[PlayerProfileView],
-      query: ResolvedClubMembersQuery
-  ): PagedResponse[PlayerProfileView] =
-    require(query.limit > 0, "Input field limit must be positive")
-    require(query.offset >= 0, "Input field offset must be non-negative")
-    val boundedLimit = math.min(query.limit, 100)
-    val page = members.slice(query.offset, query.offset + boundedLimit)
-    PagedResponse(
-      items = page,
-      total = members.size,
-      limit = boundedLimit,
-      offset = query.offset,
-      hasMore = query.offset + page.size < members.size,
-      appliedFilters = query.appliedFilters
     )
 
   private final case class ResolvedClubMembersQuery(

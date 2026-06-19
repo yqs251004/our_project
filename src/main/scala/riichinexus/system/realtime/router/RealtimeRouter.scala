@@ -1,14 +1,12 @@
 package riichinexus.system.realtime.router
 
-import scala.concurrent.duration.*
+import scala.concurrent.duration.DurationInt
 
 import cats.effect.IO
 import fs2.Stream
 import fs2.text
-import org.http4s.{Header, Headers, HttpRoutes, Response, Status}
-import org.http4s.dsl.io.*
+import org.http4s.{Header, Headers, HttpRoutes, Method, Response, Status}
 import org.typelevel.ci.CIString
-import riichinexus.system.realtime.objects.RealtimeEvent
 import riichinexus.system.api.http.RouteContext
 import upickle.default.write
 
@@ -16,7 +14,7 @@ object RealtimeRouter:
 
   def routes(routeContext: RouteContext): HttpRoutes[IO] =
     HttpRoutes.of[IO] {
-      case GET -> Root / "api" / "realtime" / "stream" =>
+      case request if request.method == Method.GET && request.uri.path.renderString == "/api/realtime/stream" =>
         val eventStream =
           Stream.resource(routeContext.realtimeEventBus.subscribe).flatMap(identity)
         val heartbeat = Stream.awakeEvery[IO](20.seconds).as("event: ping\ndata: {}\n\n")

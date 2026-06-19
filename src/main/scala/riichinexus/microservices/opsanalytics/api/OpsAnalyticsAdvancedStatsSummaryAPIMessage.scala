@@ -1,44 +1,22 @@
 package riichinexus.microservices.opsanalytics.api
 import riichinexus.microservices.auth.objects.Permission
-import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
+import riichinexus.microservices.auth.api.`private`.ResolveAccessPrincipalPrivateAPIMessage
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
 
 import java.time.Instant
 
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.domain.functions.ClubIdGenerator
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
-import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
-import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
-import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
-import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
-import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
-import riichinexus.microservices.tournament.objects.tablemanagement.TableId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
-import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
-import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
-import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
-import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
-import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
-import riichinexus.microservices.audit.domain.auditevent.AuditEventId
-import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
-import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
-import riichinexus.microservices.auth.domain.AuthorizationFailure
-import riichinexus.microservices.auth.domain.model.*
+import riichinexus.system.api.AuthorizationFailure
+import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.opsanalytics.domain.functions.AdvancedStatsRecomputeTaskFunctions
-import riichinexus.microservices.opsanalytics.objects.{
-  AdvancedStatsRecomputeTask,
-  AdvancedStatsRecomputeTaskStatus,
-  AdvancedStatsTaskQueueSummary
-}
+import riichinexus.microservices.opsanalytics.objects.{AdvancedStatsRecomputeTask, AdvancedStatsRecomputeTaskStatus, AdvancedStatsTaskQueueSummary}
 import riichinexus.microservices.opsanalytics.tables.advancedstatsrecomputetask.AdvancedStatsRecomputeTaskTable
-import upickle.default.*
+import upickle.default.ReadWriter
 
+/** 获取运营分析高级统计总览。 */
 final case class OpsAnalyticsAdvancedStatsSummaryAPIMessage(
     operatorId: PlayerId,
     asOf: Option[Instant] = None
@@ -46,7 +24,7 @@ final case class OpsAnalyticsAdvancedStatsSummaryAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[AdvancedStatsTaskQueueSummary] =
     for
-      operator <- ResolveAccessPrincipal(operatorId).plan(context)
+      operator <- ResolveAccessPrincipalPrivateAPIMessage(operatorId).plan(context)
       _ <- requireOpsAdmin(context, operator)
       resolvedAsOf <- resolveAsOf
       tasks <- IO.blocking(AdvancedStatsRecomputeTaskTable.findAll(context.connection))
@@ -55,12 +33,12 @@ final case class OpsAnalyticsAdvancedStatsSummaryAPIMessage(
 
   private def resolveAsOf: IO[Instant] =
     asOf match
-      case Some(value) => IO.blocking(value)
+      case Some(value) => IO.pure(value)
       case None        => IO.realTimeInstant
 
-  private def requireOpsAdmin(context: ApiPlanContext, operator: AccessPrincipal): IO[Unit] =
+  private def requireOpsAdmin(context: ApiPlanContext, operator: AccessPrincipalPrivateView): IO[Unit] =
     AuthCheckPermissionAPIMessage(
-      principal = Some(operator),
+      operatorId = operator.playerId.map(_.value),
       permission = Permission.ManagePlatformOperations
     ).plan(context).flatMap { allowed =>
       if allowed then IO.unit

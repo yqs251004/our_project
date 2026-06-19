@@ -3,20 +3,21 @@ package riichinexus.microservices.tournament.mahjongcore.domain.paifumanagement.
 import java.sql.Connection
 import java.time.Instant
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
-import riichinexus.microservices.tournament.domain.recordmanagement.model.{MatchRecord, MatchRecordSeatResult}
-import riichinexus.microservices.tournament.domain.tablemanagement.functions.TableFunctions
-import riichinexus.microservices.tournament.domain.tablemanagement.model.Table
+import riichinexus.microservices.tournament.domain.identity.functions.TournamentIdGenerator
+import riichinexus.microservices.tournament.domain.matchrecord.model.{MatchRecord, MatchRecordSeatResult}
+import riichinexus.microservices.tournament.domain.stage.functions.scheduling.TableFunctions
+import riichinexus.microservices.tournament.domain.stage.model.Table
 import riichinexus.microservices.tournament.mahjongcore.domain.action.model.MahjongEvent
 import riichinexus.microservices.tournament.mahjongcore.domain.gamestate.model.{MahjongRoundState, MahjongTableState}
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.MahjongMeldType
-import riichinexus.microservices.tournament.objects.paifumanagement.*
+import riichinexus.microservices.tournament.objects.paifumanagement.{FinalStanding, Paifu, PaifuAction, PaifuActionType, PaifuHand, PaifuId, PaifuMetadata, PaifuPlayerTrack, PaifuRound, PaifuRoundPlayer, PaifuTimeline}
 import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
 import riichinexus.microservices.tournament.objects.tablemanagement.{TableSeat, TableStatus}
 import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
 
-private[tournament] object MahjongTableArchiveFunctions:
+/** MahjongTableArchiveFunctions 提供麻将牌桌Archive相关的领域计算、校验和转换函数。 */
+
+private[mahjongcore] object MahjongTableArchiveFunctions:
 
   final case class ArchivedMahjongTable(
       tableState: MahjongTableState,

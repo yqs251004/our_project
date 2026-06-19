@@ -1,5 +1,7 @@
 package riichinexus.microservices.club.objects.tournamentparticipation
 
+/** ClubTournamentParticipationStatus 枚举俱乐部赛事Participation状态 可使用的公开取值。 */
+
 enum ClubTournamentParticipationStatus:
   case Invited
   case Participating

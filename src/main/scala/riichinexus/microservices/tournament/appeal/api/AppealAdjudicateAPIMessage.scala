@@ -1,10 +1,10 @@
 package riichinexus.microservices.tournament.appeal.api
-import riichinexus.microservices.audit.domain.auditevent.AuditEvent
-import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
+import riichinexus.microservices.audit.objects.`private`.AuditEventDraft
+import riichinexus.microservices.auth.api.`private`.{RequirePermissionPrivateAPIMessage, ResolveAccessPrincipalPrivateAPIMessage}
+import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPIMessage
-import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
-import riichinexus.microservices.tournament.appeal.api.`private`.CreateAppealAdjudicatedNotificationsPrivateAPIMessage
-import riichinexus.microservices.tournament.mahjongcore.api.MahjongCoreResetTableAPIMessage
+import riichinexus.microservices.notification.api.`private`.RecordBulkNotificationsPrivateAPIMessage
+import riichinexus.microservices.tournament.mahjongcore.api.`private`.ResetMahjongTableStatePrivateAPIMessage
 
 import java.time.Instant
 import java.util.NoSuchElementException
@@ -12,43 +12,19 @@ import java.util.NoSuchElementException
 import cats.effect.IO
 
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.microservices.auth.domain.authorization.AuthorizationPolicyFunctions
-import riichinexus.microservices.tournament.appeal.domain.AppealApplicationService
-import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
+import riichinexus.microservices.tournament.appeal.domain.functions.AppealApplicationService
+import riichinexus.microservices.tournament.appeal.domain.functions.AppealNotificationRequestFunctions
+import riichinexus.microservices.tournament.appeal.tables.appealticket.AppealTicketTable
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.domain.functions.ClubIdGenerator
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
-import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
-import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
-import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
-import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
-import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
-import riichinexus.microservices.tournament.objects.tablemanagement.TableId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
-import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
 import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
-import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
-import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
-import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
-import riichinexus.microservices.audit.domain.auditevent.AuditEventId
-import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
-import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
-import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.tournament.appeal.domain.model.{
-  AppealDecisionType as DomainAppealDecisionType,
-  AppealTableResolution as DomainAppealTableResolution,
-  AppealTicket
-}
-import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
-import riichinexus.microservices.tournament.domain.recordmanagement.model.*
-import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
-import riichinexus.microservices.tournament.domain.tablemanagement.model.*
-import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
-import riichinexus.system.json.JsonCodecs.given
-import riichinexus.microservices.tournament.appeal.objects.apiTypes.*
-import upickle.default.*
+import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
+import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
+import riichinexus.microservices.tournament.appeal.domain.model.{AppealDecisionType as DomainAppealDecisionType, AppealTableResolution as DomainAppealTableResolution, AppealTicket}
 
+import riichinexus.microservices.tournament.appeal.objects.apiTypes.{AdjudicateAppealRequest, AppealTicketView}
+import upickle.default.ReadWriter
+
+/** 裁决申诉工单并按处理结果更新牌桌。 */
 final case class AppealAdjudicateAPIMessage(
     appealId: String,
     request: AdjudicateAppealRequest
@@ -56,22 +32,34 @@ final case class AppealAdjudicateAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[AppealTicketView] =
     for
-      actor <- ResolveAccessPrincipal(PlayerId(request.operatorId)).plan(context)
+      actor <- ResolveAccessPrincipalPrivateAPIMessage(PlayerId(request.operatorId)).plan(context)
       adjudicatedAt <- IO.realTimeInstant
-      service = AppealApplicationService(AuthorizationPolicyFunctions.strict)
-      command <- IO.blocking(resolveCommand(actor, adjudicatedAt))
-      ticket <- adjudicateAppeal(context.connection, service, command)
+      command <- IO.delay(resolveCommand(actor, adjudicatedAt))
+      existingTicket <- IO.blocking(
+        AppealTicketTable.findById(context.connection, command.ticketId)
+          .getOrElse(throw NoSuchElementException("Resource not found"))
+      )
+      _ <- RequirePermissionPrivateAPIMessage(
+        command.actor,
+        Permission.ResolveAppeal,
+        tournamentId = Some(existingTicket.tournamentId)
+      ).plan(context)
+      ticket <- adjudicateAppeal(context.connection, command)
       _ <- resetMahjongCoreIfNeeded(context, ticket, command)
       _ <- RecordAuditEventsPrivateAPIMessage(adjudicateAppealAudit(ticket, command)).plan(context)
-      _ <- CreateAppealAdjudicatedNotificationsPrivateAPIMessage(
-        ticket,
-        command.decision,
-        command.tableResolution,
-        command.verdict
-      ).plan(context)
+      notifications <- IO.blocking(
+        AppealNotificationRequestFunctions.appealAdjudicated(
+          context.connection,
+          ticket,
+          command.decision,
+          command.tableResolution,
+          command.verdict
+        )
+      )
+      _ <- RecordBulkNotificationsPrivateAPIMessage(notifications).plan(context)
     yield AppealTicketView.fromDomain(ticket)
 
-  private def resolveCommand(actor: AccessPrincipal, adjudicatedAt: Instant): AdjudicateAppealCommand =
+  private def resolveCommand(actor: AccessPrincipalPrivateView, adjudicatedAt: Instant): AdjudicateAppealCommand =
     AdjudicateAppealCommand(
       ticketId = AppealTicketId(appealId),
       decision = request.decision.toDomain,
@@ -84,19 +72,21 @@ final case class AppealAdjudicateAPIMessage(
 
   private def adjudicateAppeal(
       connection: java.sql.Connection,
-      service: AppealApplicationService,
       command: AdjudicateAppealCommand
   ): IO[AppealTicket] =
-    service.adjudicateAppeal(
+    AppealApplicationService.adjudicateAppeal(
       connection = connection,
       ticketId = command.ticketId,
       decision = command.decision,
       verdict = command.verdict,
-      actor = command.actor,
+      actor = privateActor(command.actor),
       adjudicatedAt = command.adjudicatedAt,
       tableResolution = command.tableResolution,
       note = command.note
     ).map(_.getOrElse(throw NoSuchElementException("Resource not found")))
+
+  private def privateActor(actor: AccessPrincipalPrivateView): AccessPrincipalPrivateView =
+    actor
 
   private def resetMahjongCoreIfNeeded(
       context: ApiPlanContext,
@@ -105,7 +95,7 @@ final case class AppealAdjudicateAPIMessage(
   ): IO[Unit] =
     if command.tableResolution.contains(DomainAppealTableResolution.ForceReset) then
       IO.blocking {
-        MahjongCoreResetTableAPIMessage.resetAndSave(context.connection, ticket.tableId)
+        ResetMahjongTableStatePrivateAPIMessage.resetAndSave(context.connection, ticket.tableId)
         ()
       }
     else IO.unit
@@ -113,10 +103,9 @@ final case class AppealAdjudicateAPIMessage(
   private def adjudicateAppealAudit(
       ticket: AppealTicket,
       command: AdjudicateAppealCommand
-  ): Vector[AuditEvent] =
+  ): Vector[AuditEventDraft] =
     Vector(
-      AuditEvent(
-        id = AuditIdGenerator.auditEventId(),
+      AuditEventDraft(
         aggregateType = "appeal",
         aggregateId = command.ticketId.value,
         eventType = "AppealTicketAdjudicated",
@@ -136,7 +125,7 @@ final case class AppealAdjudicateAPIMessage(
       ticketId: AppealTicketId,
       decision: DomainAppealDecisionType,
       verdict: String,
-      actor: AccessPrincipal,
+      actor: AccessPrincipalPrivateView,
       tableResolution: Option[DomainAppealTableResolution],
       note: Option[String],
       adjudicatedAt: Instant

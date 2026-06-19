@@ -1,10 +1,12 @@
 package riichinexus.microservices.club.objects.clubmanagement.apiTypes
 
 import riichinexus.microservices.club.objects.relationmanagement.ClubRelationView
-import riichinexus.microservices.club.objects.clubmanagement.apiTypes.ClubApplicationPolicyView
+
 import riichinexus.microservices.club.objects.tournamentparticipation.apiTypes.PublicClubLineupMemberView
 import riichinexus.microservices.club.objects.auditreadmodel.apiTypes.PublicClubRecentMatchView
-import upickle.default.*
+import upickle.default.{ReadWriter, macroRW}
+
+/** PublicClubDetailView 表示公开俱乐部详情视图 的前端展示视图。 */
 
 final case class PublicClubDetailView(
     clubId: String,

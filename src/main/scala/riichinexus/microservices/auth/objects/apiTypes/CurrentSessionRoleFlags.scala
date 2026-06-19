@@ -1,7 +1,9 @@
 package riichinexus.microservices.auth.objects.apiTypes
 
-import riichinexus.system.json.JsonCodecs.given
-import upickle.default.*
+
+import upickle.default.{ReadWriter, macroRW}
+
+/** CurrentSessionRoleFlags 表示前后端共享的当前会话角色Flags 数据结构。 */
 
 final case class CurrentSessionRoleFlags(
     isGuest: Boolean,

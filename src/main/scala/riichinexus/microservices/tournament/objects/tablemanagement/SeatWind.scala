@@ -1,5 +1,7 @@
 package riichinexus.microservices.tournament.objects.tablemanagement
 
+/** SeatWind 枚举座位Wind 可使用的公开取值。 */
+
 enum SeatWind:
   case East
   case South

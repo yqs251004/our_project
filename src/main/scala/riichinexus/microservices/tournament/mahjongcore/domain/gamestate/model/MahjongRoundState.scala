@@ -5,6 +5,7 @@ import riichinexus.microservices.tournament.mahjongcore.domain.action.model.Mahj
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.{MahjongRoundPhase, MahjongTableSticks}
 import riichinexus.microservices.tournament.objects.paifumanagement.{AgariResult, KyokuDescriptor, PaifuTile}
 
+import riichinexus.system.json.JsonCodecs.given
 /** 后端内部的当前小局状态，包含牌山、死牌、宝牌、待响应鸣牌和完整事件流。 */
 final case class MahjongRoundState(
     descriptor: KyokuDescriptor,

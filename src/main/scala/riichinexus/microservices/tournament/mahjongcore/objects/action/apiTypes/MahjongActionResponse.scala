@@ -4,7 +4,7 @@ import riichinexus.microservices.tournament.mahjongcore.objects.action.MahjongPu
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.MahjongTableView
 import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.*
+import upickle.default.{ReadWriter, macroRW}
 
 /** 实时麻将行动 API 的统一响应，返回最新桌面、被接受的公开事件以及可选归档结果。 */
 final case class MahjongActionResponse(

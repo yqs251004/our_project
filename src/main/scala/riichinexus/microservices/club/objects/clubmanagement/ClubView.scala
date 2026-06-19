@@ -4,7 +4,9 @@ import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.{Club as DomainClub}
 import riichinexus.microservices.club.objects.rankprivilegemanagement.ClubRankNode
 import riichinexus.microservices.club.objects.relationmanagement.ClubRelationView
-import upickle.default.*
+import upickle.default.ReadWriter
+
+/** ClubView 表示俱乐部详情视图，包含成员、管理员、资产、等级树、关系和解散状态。 */
 
 final case class ClubView(
     id: String,

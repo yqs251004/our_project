@@ -1,8 +1,10 @@
 package riichinexus.microservices.club.objects.membershipmanagement.apiTypes
 
-import upickle.default.*
+import upickle.default.ReadWriter
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.club.objects.membershipmanagement.ClubApplicationStatus
+
+/** ClubMembershipApplicationResponse 表示俱乐部成员资格申请响应 的 API 响应结果，包含 ID、玩家 ID、显示名、submittedAt、消息、状态等。 */
 
 final case class ClubMembershipApplicationResponse(
     id: String,

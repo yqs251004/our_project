@@ -5,7 +5,7 @@ import java.sql.Connection
 import cats.effect.IO
 import riichinexus.system.realtime.domain.RealtimeEventBus
 import riichinexus.microservices.auth.domain.AuthenticationFailure
-import upickle.default.*
+import upickle.default.{Reader, Writer, read, writeJs}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag

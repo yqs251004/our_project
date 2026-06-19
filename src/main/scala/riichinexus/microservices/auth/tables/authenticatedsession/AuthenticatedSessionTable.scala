@@ -11,6 +11,7 @@ import riichinexus.microservices.auth.domain.functions.AuthenticatedSessionFunct
 import riichinexus.microservices.auth.domain.model.AuthenticatedSession
 import upickle.default.{read, write}
 
+
 object AuthenticatedSessionTable:
   private val upsertSql: String =
     """

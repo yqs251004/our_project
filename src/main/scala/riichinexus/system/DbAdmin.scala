@@ -1,6 +1,6 @@
 package riichinexus.system
 
-import riichinexus.system.postgres.*
+import riichinexus.system.postgres.{DatabaseConfig, JdbcConnectionFactory, PostgresAdminService, PostgresSchemaInitializer}
 
 @main def riichiNexusDbAdmin(command: String = "health"): Unit =
   val config = DatabaseConfig.fromEnv()

@@ -1,12 +1,10 @@
 package riichinexus.microservices.platformadmin.api
-import riichinexus.microservices.audit.domain.auditevent.AuditEvent
+import riichinexus.microservices.audit.objects.`private`.AuditEventDraft
 import riichinexus.microservices.auth.objects.Permission
-import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
+import riichinexus.microservices.auth.api.`private`.ResolveAccessPrincipalPrivateAPIMessage
 import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPIMessage
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
-import riichinexus.microservices.player.api.`private`.*
-
-import riichinexus.microservices.auth.domain.authorization.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+import riichinexus.microservices.player.api.`private`.RecordPlayerClubRemovalPrivateAPIMessage
 
 import cats.effect.IO
 
@@ -14,50 +12,19 @@ import java.time.Instant
 import java.util.NoSuchElementException
 
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.domain.functions.ClubIdGenerator
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
-import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
-import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
-import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
-import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
-import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
-import riichinexus.microservices.tournament.objects.tablemanagement.TableId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
-import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
-import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
-import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
-import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
-import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
-import riichinexus.microservices.audit.domain.auditevent.AuditEventId
-import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
-import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
-import riichinexus.microservices.auth.domain.AuthorizationFailure
-import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.club.domain.Club
-import riichinexus.microservices.club.domain.clubmanagement.model.*
-import riichinexus.microservices.club.domain.membershipmanagement.model.*
-import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
-import riichinexus.microservices.club.domain.relationmanagement.model.*
-import riichinexus.microservices.club.api.`private`.{
-  DissolveClubPrivateAPIMessage,
-  ListClubsPrivateAPIMessage,
-  RemoveClubRelationPrivateAPIMessage,
-  ResolveClubPrivateAPIMessage,
-  ResolveClubsPrivateAPIMessage
-}
+import riichinexus.system.api.AuthorizationFailure
+import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
+import riichinexus.microservices.club.api.`private`.{ListClubReadModelsPrivateAPIMessage, RecordClubDissolutionPrivateAPIMessage, RecordClubRelationRemovalPrivateAPIMessage, ResolveClubReadModelsPrivateAPIMessage}
+import riichinexus.microservices.club.objects.`private`.ClubPrivateView
 import riichinexus.system.json.JsonCodecs.given
-import riichinexus.microservices.opsanalytics.api.`private`.{
-  ResetClubAdvancedStatsBoardAPIMessage,
-  ResetClubDashboardAPIMessage
-}
-import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
+import riichinexus.microservices.opsanalytics.api.`private`.{ResetAdvancedStatsBoardPrivateAPIMessage, ResetDashboardPrivateAPIMessage}
+import riichinexus.microservices.opsanalytics.objects.DashboardOwner
 import riichinexus.microservices.platformadmin.objects.apiTypes.PlatformAdminClubView
-import riichinexus.microservices.platformadmin.objects.apiTypes.*
-import upickle.default.*
+import upickle.default.ReadWriter
 
+/** 平台管理员解散俱乐部并清理关联投影。 */
 final case class PlatformAdminDissolveClubAPIMessage(
     clubId: ClubId,
     operatorId: PlayerId
@@ -65,71 +32,56 @@ final case class PlatformAdminDissolveClubAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[PlatformAdminClubView] =
     for
-      actor <- ResolveAccessPrincipal(operatorId).plan(context)
+      actor <- ResolveAccessPrincipalPrivateAPIMessage(operatorId).plan(context)
       _ <- requireDissolveClubPermission(context, actor)
-      request = DissolveClubRequest(operatorId = operatorId)
       dissolvedAt <- IO.realTimeInstant
       command = DissolveClubCommand(
         clubId = clubId,
         actor = actor,
         dissolvedAt = dissolvedAt
       )
-      dissolvedClub <- dissolveClub(context, command)
-        .map(_.getOrElse(throw NoSuchElementException(s"Club ${command.clubId.value} was not found")))
+      club <- resolveClub(context, command.clubId)
+      _ <- IO.delay(ensureClubCanDissolve(club, command.clubId))
+      _ <- removeMembersFromClub(context, club, command.clubId)
+      _ <- removeRelationsToClub(context, command.clubId)
+      dissolvedClub <- commitDissolvedClub(context, club, command)
       _ <- RecordAuditEventsPrivateAPIMessage(dissolveClubAudit(dissolvedClub, command)).plan(context)
-      _ <- ResetClubDashboardAPIMessage(command.clubId, command.dissolvedAt).plan(context)
-      _ <- ResetClubAdvancedStatsBoardAPIMessage(command.clubId, command.dissolvedAt).plan(context)
+      _ <- resetClubAnalytics(context, command)
     yield platformAdminClubView(dissolvedClub)
 
-  private def requireDissolveClubPermission(context: ApiPlanContext, actor: AccessPrincipal): IO[Unit] =
+  private def requireDissolveClubPermission(context: ApiPlanContext, actor: AccessPrincipalPrivateView): IO[Unit] =
     AuthCheckPermissionAPIMessage(
-      principal = Some(actor),
+      operatorId = actor.playerId.map(_.value),
       permission = Permission.DissolveClub
     ).plan(context).flatMap { allowed =>
       if allowed then IO.unit
       else IO.raiseError(AuthorizationFailure(s"${actor.displayName} is not allowed to dissolve club"))
     }
 
-  private def dissolveClub(
+  private def resolveClub(
       context: ApiPlanContext,
-      command: DissolveClubCommand
-  ): IO[Option[Club]] =
-    ResolveClubPrivateAPIMessage(command.clubId).plan(context).flatMap {
-      case Some(club) =>
-        ensureClubCanDissolve(club, command.clubId)
-        for
-          _ <- removeMembersFromClub(context, club, command.clubId)
-          _ <- removeRelationsToClub(context, command.clubId)
-          dissolvedClub <- commitDissolvedClub(context, club, command)
-        yield Some(dissolvedClub)
-      case None =>
-        IO.pure(None)
-    }
+      clubId: ClubId
+  ): IO[ClubPrivateView] =
+    ResolveClubReadModelsPrivateAPIMessage(Vector(clubId)).plan(context)
+      .map(_.headOption.getOrElse(throw NoSuchElementException(s"Club ${clubId.value} was not found")))
 
-  private def ensureClubCanDissolve(club: Club, clubId: ClubId): Unit =
+  private def ensureClubCanDissolve(club: ClubPrivateView, clubId: ClubId): Unit =
     if club.dissolvedAt.nonEmpty then
       throw IllegalArgumentException(s"Club ${clubId.value} has already been dissolved")
 
-  private def removeMembersFromClub(context: ApiPlanContext, club: Club, clubId: ClubId): IO[Unit] =
+  private def removeMembersFromClub(context: ApiPlanContext, club: ClubPrivateView, clubId: ClubId): IO[Unit] =
     club.members.foldLeft(IO.unit) { (previous, memberId) =>
-      previous.flatMap { _ =>
-        ResolvePlayerPrivateAPIMessage(memberId).plan(context).flatMap {
-          case Some(_) =>
-            LeavePlayerClubPrivateAPIMessage(memberId, clubId).plan(context).map(_ => ())
-          case None =>
-            IO.unit
-        }
-      }
+      previous.flatMap(_ => RecordPlayerClubRemovalPrivateAPIMessage(memberId, clubId).plan(context).map(_ => ()))
     }
 
   private def removeRelationsToClub(context: ApiPlanContext, clubId: ClubId): IO[Unit] =
-    ListClubsPrivateAPIMessage(activeOnly = true).plan(context).flatMap { clubs =>
+    ListClubReadModelsPrivateAPIMessage(activeOnly = true).plan(context).flatMap { clubs =>
       clubs
         .filterNot(_.id == clubId)
         .filter(_.relations.exists(_.targetClubId == clubId))
         .foldLeft(IO.unit) { (previous, relatedClub) =>
           previous.flatMap(_ =>
-            RemoveClubRelationPrivateAPIMessage(relatedClub.id, clubId)
+            RecordClubRelationRemovalPrivateAPIMessage(relatedClub.id, clubId)
               .plan(context)
               .map(_ => ())
           )
@@ -138,19 +90,30 @@ final case class PlatformAdminDissolveClubAPIMessage(
 
   private def commitDissolvedClub(
       context: ApiPlanContext,
-      club: Club,
+      club: ClubPrivateView,
       command: DissolveClubCommand
-  ): IO[Club] =
-    DissolveClubPrivateAPIMessage(
-      club.id,
+  ): IO[ClubPrivateView] =
+    RecordClubDissolutionPrivateAPIMessage(
+      command.clubId,
       command.actor.playerId.getOrElse(club.creator),
       command.dissolvedAt
-    ).plan(context).map(_.getOrElse(throw NoSuchElementException(s"Club ${club.id.value} was not found")))
+    ).plan(context).flatMap {
+      case Some(_) => resolveClub(context, command.clubId)
+      case None    => IO.raiseError(NoSuchElementException(s"Club ${command.clubId.value} was not found"))
+    }
 
-  private def dissolveClubAudit(club: Club, command: DissolveClubCommand): Vector[AuditEvent] =
+  private def resetClubAnalytics(
+      context: ApiPlanContext,
+      command: DissolveClubCommand
+  ): IO[Unit] =
+    val clubOwner = DashboardOwner.Club(command.clubId)
+    ResetDashboardPrivateAPIMessage(clubOwner, command.dissolvedAt).plan(context).flatMap(_ =>
+      ResetAdvancedStatsBoardPrivateAPIMessage(clubOwner, command.dissolvedAt).plan(context).map(_ => ())
+    )
+
+  private def dissolveClubAudit(club: ClubPrivateView, command: DissolveClubCommand): Vector[AuditEventDraft] =
     Vector(
-      AuditEvent(
-        id = AuditIdGenerator.auditEventId(),
+      AuditEventDraft(
         aggregateType = "club",
         aggregateId = command.clubId.value,
         eventType = "ClubDissolved",
@@ -161,7 +124,7 @@ final case class PlatformAdminDissolveClubAPIMessage(
       )
     )
 
-  private def platformAdminClubView(club: Club): PlatformAdminClubView =
+  private def platformAdminClubView(club: ClubPrivateView): PlatformAdminClubView =
     PlatformAdminClubView(
       clubId = club.id.value,
       name = club.name,
@@ -177,6 +140,6 @@ final case class PlatformAdminDissolveClubAPIMessage(
 
   private final case class DissolveClubCommand(
       clubId: ClubId,
-      actor: AccessPrincipal,
+      actor: AccessPrincipalPrivateView,
       dissolvedAt: Instant
   )

@@ -4,9 +4,11 @@ import riichinexus.microservices.tournament.mahjongcore.domain.handanalysis.mode
 import riichinexus.microservices.tournament.mahjongcore.domain.yakuanalysis.model.MahjongWinContext
 import riichinexus.microservices.tournament.objects.paifumanagement.{PaifuTile, Yaku}
 
-import MahjongYakuCheckSupport.*
+import MahjongYakuCheckSupport.{MahjongYakuCheckState, YakuCheck, runPlan}
 
-private[tournament] object MahjongYakuCheckFunctions:
+/** MahjongYakuCheckFunctions 提供麻将役种检查函数 相关的领域校验和权限判断。 */
+
+private[mahjongcore] object MahjongYakuCheckFunctions:
 
   final case class MahjongYakuCandidate(
       yaku: Vector[Yaku],

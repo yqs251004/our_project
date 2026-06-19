@@ -1,37 +1,15 @@
 package riichinexus.microservices.opsanalytics.domain.functions
 
-import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.domain.functions.ClubIdGenerator
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
-import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
-import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
-import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
-import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
-import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
-import riichinexus.microservices.tournament.objects.tablemanagement.TableId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
-import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
-import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
-import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
-import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
-import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
-import riichinexus.microservices.audit.domain.auditevent.AuditEventId
-import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
-import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.microservices.opsanalytics.domain.model.{EloRatingConfig, RatingChange}
-import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
-import riichinexus.microservices.tournament.domain.recordmanagement.model.*
-import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
-import riichinexus.microservices.tournament.domain.tablemanagement.model.*
-import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
-import riichinexus.microservices.player.domain.Player
+import riichinexus.microservices.tournament.objects.`private`.MatchRecordSeatResultPrivateView
+import riichinexus.microservices.player.objects.`private`.PlayerPrivateView
+
+/** RatingService 提供评级服务 相关的领域计算、校验和转换函数。 */
 
 private[opsanalytics] object RatingService:
   def calculateDeltas(
-      players: Vector[Player],
-      standings: Vector[MatchRecordSeatResult],
+      players: Vector[PlayerPrivateView],
+      standings: Vector[MatchRecordSeatResultPrivateView],
       config: EloRatingConfig = EloRatingConfig()
   ): Vector[RatingChange] =
     validateInputs(players, standings, config)
@@ -80,7 +58,7 @@ private[opsanalytics] object RatingService:
   private def umaPerformance(totalUma: Double): Double =
     logistic(totalUma / 15.0)
 
-  private def tableVolatilityFactor(standings: Vector[MatchRecordSeatResult]): Double =
+  private def tableVolatilityFactor(standings: Vector[MatchRecordSeatResultPrivateView]): Double =
     val averageSwing =
       standings.map(_.scoreDelta.abs).sum.toDouble / math.max(1.0, standings.size.toDouble)
     (1.0 + averageSwing / 30000.0).min(1.35)
@@ -89,8 +67,8 @@ private[opsanalytics] object RatingService:
     1.0 / (1.0 + math.exp(-value))
 
   private def validateInputs(
-      players: Vector[Player],
-      standings: Vector[MatchRecordSeatResult],
+      players: Vector[PlayerPrivateView],
+      standings: Vector[MatchRecordSeatResultPrivateView],
       config: EloRatingConfig
   ): Unit =
     if players.isEmpty then

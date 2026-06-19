@@ -2,20 +2,18 @@ package riichinexus.microservices.tournament.router
 import riichinexus.system.api.RegisteredAPIMessage
 
 import riichinexus.system.json.JsonCodecs.given
-import riichinexus.microservices.tournament.api.*
+import riichinexus.microservices.tournament.api.{GetPublicTournamentAPIMessage, ListPublicSchedulesAPIMessage, ListPublicTournamentsAPIMessage, TournamentAssignAdminAPIMessage, TournamentCreateAPIMessage, TournamentGetAPIMessage, TournamentInviteClubAPIMessage, TournamentListAPIMessage, TournamentPaifuGetAPIMessage, TournamentPaifuListAPIMessage, TournamentPublishAPIMessage, TournamentRecordGetAPIMessage, TournamentRecordListAPIMessage, TournamentRegisterPlayerAPIMessage, TournamentRemoveClubParticipationAPIMessage, TournamentRevokeAdminAPIMessage, TournamentSettleAPIMessage, TournamentSettlementFinalizeAPIMessage, TournamentSettlementGetAPIMessage, TournamentSettlementListAPIMessage, TournamentStageAdvanceAPIMessage, TournamentStageAdvancementPreviewAPIMessage, TournamentStageCompleteAPIMessage, TournamentStageConfigureRulesAPIMessage, TournamentStageCreateAPIMessage, TournamentStageDirectoryAPIMessage, TournamentStageKnockoutBracketAPIMessage, TournamentStageScheduleTablesAPIMessage, TournamentStageStandingsAPIMessage, TournamentStageSubmitLineupAPIMessage, TournamentStageTablesAPIMessage, TournamentStartAPIMessage, TournamentTableFinalizeArchiveAPIMessage, TournamentTableGetAPIMessage, TournamentTableListAPIMessage, TournamentTableResetAPIMessage, TournamentTableStartAPIMessage, TournamentTableUpdateOwnReadyAPIMessage, TournamentTableUpdateSeatStateAPIMessage, TournamentTableUploadPaifuAPIMessage, TournamentWhitelistListAPIMessage, TournamentWhitelistPlayerAPIMessage}
 import riichinexus.microservices.tournament.objects.rulesmanagement.knockout.KnockoutBracketSnapshot
 import riichinexus.microservices.tournament.objects.paifumanagement.Paifu
 import riichinexus.microservices.tournament.objects.rulesmanagement.stageprogression.StageAdvancementSnapshot
 import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.StageRankingSnapshot
 import riichinexus.microservices.tournament.objects.tournamentmanagement.TournamentWhitelistEntry
-import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.AssignTournamentAdminRequest.given
+import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.PaifuSummary
+import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.TournamentMatchRecordView
+import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.TournamentSettlementView
+import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.TournamentTableView
+import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.{PublicScheduleView, PublicTournamentDetailView, PublicTournamentSummaryView, TournamentDetailView, TournamentMutationView, TournamentStageDirectoryEntry, TournamentSummaryView}
+
 import riichinexus.system.objects.PagedResponse
 
 object TournamentAPIMessageRegistry:
@@ -37,10 +35,9 @@ object TournamentAPIMessageRegistry:
       RegisteredAPIMessage.api[TournamentSettleAPIMessage, TournamentSettlementView],
       RegisteredAPIMessage.api[TournamentSettlementFinalizeAPIMessage, TournamentSettlementView],
       RegisteredAPIMessage.api[TournamentRegisterPlayerAPIMessage, TournamentSummaryView],
-      RegisteredAPIMessage.api[TournamentRegisterClubAPIMessage, TournamentMutationView],
+      RegisteredAPIMessage.api[TournamentInviteClubAPIMessage, TournamentMutationView],
       RegisteredAPIMessage.api[TournamentRemoveClubParticipationAPIMessage, TournamentMutationView],
       RegisteredAPIMessage.api[TournamentWhitelistPlayerAPIMessage, TournamentSummaryView],
-      RegisteredAPIMessage.api[TournamentWhitelistClubAPIMessage, TournamentSummaryView],
       RegisteredAPIMessage.api[TournamentAssignAdminAPIMessage, TournamentSummaryView],
       RegisteredAPIMessage.api[TournamentRevokeAdminAPIMessage, TournamentSummaryView],
       RegisteredAPIMessage.api[TournamentStageCreateAPIMessage, TournamentSummaryView],
@@ -63,7 +60,6 @@ object TournamentAPIMessageRegistry:
       RegisteredAPIMessage.api[TournamentTableResetAPIMessage, TournamentTableView],
       RegisteredAPIMessage.api[TournamentRecordListAPIMessage, PagedResponse[TournamentMatchRecordView]],
       RegisteredAPIMessage.api[TournamentRecordGetAPIMessage, TournamentMatchRecordView],
-      RegisteredAPIMessage.api[TournamentRecordGetByTableAPIMessage, TournamentMatchRecordView],
       RegisteredAPIMessage.api[TournamentPaifuListAPIMessage, PagedResponse[PaifuSummary]],
       RegisteredAPIMessage.api[TournamentPaifuGetAPIMessage, Paifu]
     )

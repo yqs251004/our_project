@@ -1,0 +1,27 @@
+package riichinexus.microservices.opsanalytics.api.`private`
+
+import cats.effect.IO
+import java.time.Instant
+
+import riichinexus.system.api.{APIMessage, ApiPlanContext}
+import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.system.json.JsonCodecs.given
+import riichinexus.microservices.opsanalytics.domain.functions.DashboardFunctions
+import riichinexus.microservices.opsanalytics.objects.{Dashboard, DashboardOwner}
+import riichinexus.microservices.opsanalytics.tables.dashboard.DashboardTable
+import upickle.default.ReadWriter
+
+/** 供后端服务确保玩家仪表盘读模型存在。 */
+final case class EnsurePlayerDashboardPrivateAPIMessage(
+    playerId: PlayerId,
+    at: Instant
+) extends APIMessage[Dashboard] derives ReadWriter:
+
+  override def plan(context: ApiPlanContext): IO[Dashboard] =
+    for
+      dashboard <- IO.blocking {
+        val owner = DashboardOwner.Player(playerId)
+        DashboardTable.findByOwner(context.connection, owner)
+          .getOrElse(DashboardTable.save(context.connection, DashboardFunctions.empty(owner, at)))
+      }
+    yield dashboard

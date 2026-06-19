@@ -1,6 +1,8 @@
 package riichinexus.microservices.tournament.objects.paifumanagement
 
-import upickle.default.*
+import upickle.default.{ReadWriter, readwriter}
+
+/** MahjongYakuKind 枚举麻将役种类型 可使用的公开取值。 */
 
 enum MahjongYakuKind:
   case KokushiMusouThirteenWait // 国士无双十三面

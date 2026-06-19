@@ -1,7 +1,9 @@
 package riichinexus.microservices.auth.objects.apiTypes
 
-import riichinexus.system.json.JsonCodecs.given
-import upickle.default.*
+
+import upickle.default.{ReadWriter, macroRW}
+
+/** CurrentSessionPlayerView 表示当前会话玩家视图 的前端展示视图。 */
 
 final case class CurrentSessionPlayerView(
     id: String,

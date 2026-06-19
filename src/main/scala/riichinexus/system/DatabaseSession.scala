@@ -1,11 +1,7 @@
 package riichinexus.system
 
 import cats.effect.IO
-import riichinexus.system.postgres.{
-  DatabaseConfig as PostgresDatabaseConfig,
-  JdbcConnectionFactory,
-  PostgresSchemaInitializer
-}
+import riichinexus.system.postgres.{DatabaseConfig as PostgresDatabaseConfig, JdbcConnectionFactory, PostgresSchemaInitializer}
 
 object DatabaseSession:
 

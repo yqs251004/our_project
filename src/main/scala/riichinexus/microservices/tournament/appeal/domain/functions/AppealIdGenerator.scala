@@ -4,7 +4,9 @@ import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.Appe
 
 import java.util.UUID
 
-object AppealIdGenerator:
+/** AppealIdGenerator 负责生成申诉标识符生成器 相关的领域标识符。 */
+
+private[appeal] object AppealIdGenerator:
   private def nextId(prefix: String): String =
     s"$prefix-${UUID.randomUUID().toString.take(8)}"
 

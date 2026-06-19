@@ -1,6 +1,6 @@
 package riichinexus.system.objects
 
-import upickle.default.*
+import upickle.default.{ReadWriter, macroRW}
 
 final case class PerformanceStatusCount(
     statusCode: Int,

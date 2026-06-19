@@ -1,6 +1,8 @@
 package riichinexus.microservices.club.objects.tournamentparticipation
 
-import upickle.default.*
+import upickle.default.{ReadWriter, readwriter}
+
+/** ClubTournamentScope 枚举俱乐部赛事Scope 可使用的公开取值。 */
 
 enum ClubTournamentScope:
   case Recent

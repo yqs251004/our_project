@@ -1,5 +1,7 @@
 package riichinexus.microservices.opsanalytics.objects
 
+/** AdvancedStatsBackfillMode 枚举高级统计补算模式 可使用的公开取值。 */
+
 enum AdvancedStatsBackfillMode:
   case Full
   case Missing

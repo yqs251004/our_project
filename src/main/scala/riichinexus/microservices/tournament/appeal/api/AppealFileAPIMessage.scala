@@ -1,9 +1,9 @@
 package riichinexus.microservices.tournament.appeal.api
-import riichinexus.microservices.audit.domain.auditevent.AuditEvent
-import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
+import riichinexus.microservices.audit.objects.`private`.AuditEventDraft
+import riichinexus.microservices.auth.api.`private`.{RequirePermissionPrivateAPIMessage, ResolveAccessPrincipalPrivateAPIMessage}
+import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPIMessage
-import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
-import riichinexus.microservices.tournament.appeal.api.`private`.CreateAppealFiledNotificationsPrivateAPIMessage
+import riichinexus.microservices.notification.api.`private`.RecordBulkNotificationsPrivateAPIMessage
 
 import java.time.Instant
 import java.util.NoSuchElementException
@@ -11,45 +11,18 @@ import java.util.NoSuchElementException
 import cats.effect.IO
 
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.microservices.auth.domain.authorization.AuthorizationPolicyFunctions
-import riichinexus.microservices.tournament.appeal.domain.AppealApplicationService
-import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
+import riichinexus.microservices.tournament.appeal.domain.functions.AppealApplicationService
+import riichinexus.microservices.tournament.appeal.domain.functions.AppealNotificationRequestFunctions
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.domain.functions.ClubIdGenerator
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
-import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
-import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
-import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
-import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
-import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
 import riichinexus.microservices.tournament.objects.tablemanagement.TableId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
-import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
-import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
-import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
-import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
-import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
-import riichinexus.microservices.audit.domain.auditevent.AuditEventId
-import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
-import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
-import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.tournament.appeal.domain.model.{
-  AppealAttachment,
-  AppealAttachmentMediaKind as DomainAppealAttachmentMediaKind,
-  AppealAttachmentStorageKind as DomainAppealAttachmentStorageKind,
-  AppealPriority as DomainAppealPriority,
-  AppealTicket
-}
-import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
-import riichinexus.microservices.tournament.domain.recordmanagement.model.*
-import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
-import riichinexus.microservices.tournament.domain.tablemanagement.model.*
-import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
-import riichinexus.system.json.JsonCodecs.given
-import riichinexus.microservices.tournament.appeal.objects.apiTypes.*
-import upickle.default.*
+import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
+import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
+import riichinexus.microservices.tournament.appeal.domain.model.{AppealAttachment, AppealAttachmentMediaKind as DomainAppealAttachmentMediaKind, AppealAttachmentStorageKind as DomainAppealAttachmentStorageKind, AppealPriority as DomainAppealPriority, AppealTicket}
 
+import riichinexus.microservices.tournament.appeal.objects.apiTypes.{AppealAttachmentRequest, AppealTicketView, FileAppealRequest}
+import upickle.default.ReadWriter
+
+/** 提交牌桌申诉工单。 */
 final case class AppealFileAPIMessage(
     tableId: String,
     request: FileAppealRequest
@@ -57,16 +30,21 @@ final case class AppealFileAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[AppealTicketView] =
     for
-      actor <- ResolveAccessPrincipal(PlayerId(request.playerId)).plan(context)
+      actor <- ResolveAccessPrincipalPrivateAPIMessage(PlayerId(request.playerId)).plan(context)
       createdAt <- IO.realTimeInstant
-      service = AppealApplicationService(AuthorizationPolicyFunctions.strict)
-      command <- IO.blocking(resolveCommand(actor, createdAt))
-      ticket <- IO.blocking(fileAppeal(context.connection, service, command))
+      command <- IO.delay(resolveCommand(actor, createdAt))
+      _ <- RequirePermissionPrivateAPIMessage(
+        command.actor,
+        Permission.FileAppealTicket,
+        subjectPlayerId = Some(command.openedBy)
+      ).plan(context)
+      ticket <- IO.blocking(fileAppeal(context.connection, command))
       _ <- RecordAuditEventsPrivateAPIMessage(fileAppealAudit(ticket, command)).plan(context)
-      _ <- CreateAppealFiledNotificationsPrivateAPIMessage(ticket).plan(context)
+      notifications <- IO.blocking(AppealNotificationRequestFunctions.appealFiled(context.connection, ticket))
+      _ <- RecordBulkNotificationsPrivateAPIMessage(notifications).plan(context)
     yield AppealTicketView.fromDomain(ticket)
 
-  private def resolveCommand(actor: AccessPrincipal, createdAt: Instant): FileAppealCommand =
+  private def resolveCommand(actor: AccessPrincipalPrivateView, createdAt: Instant): FileAppealCommand =
     FileAppealCommand(
       tableId = TableId(tableId),
       openedBy = PlayerId(request.playerId),
@@ -94,10 +72,9 @@ final case class AppealFileAPIMessage(
 
   private def fileAppeal(
       connection: java.sql.Connection,
-      service: AppealApplicationService,
       command: FileAppealCommand
   ): AppealTicket =
-    service.fileAppeal(
+    AppealApplicationService.fileAppeal(
       connection = connection,
       tableId = command.tableId,
       openedBy = command.openedBy,
@@ -105,17 +82,19 @@ final case class AppealFileAPIMessage(
       attachments = command.attachments,
       priority = command.priority,
       dueAt = command.dueAt,
-      actor = command.actor,
+      actor = privateActor(command.actor),
       createdAt = command.createdAt
     ).getOrElse(throw NoSuchElementException("Resource not found"))
+
+  private def privateActor(actor: AccessPrincipalPrivateView): AccessPrincipalPrivateView =
+    actor
 
   private def fileAppealAudit(
       ticket: AppealTicket,
       command: FileAppealCommand
-  ): Vector[AuditEvent] =
+  ): Vector[AuditEventDraft] =
     Vector(
-      AuditEvent(
-        id = AuditIdGenerator.auditEventId(),
+      AuditEventDraft(
         aggregateType = "appeal",
         aggregateId = ticket.id.value,
         eventType = "AppealTicketFiled",
@@ -137,6 +116,6 @@ final case class AppealFileAPIMessage(
       attachments: Vector[AppealAttachment],
       priority: DomainAppealPriority,
       dueAt: Option[Instant],
-      actor: AccessPrincipal,
+      actor: AccessPrincipalPrivateView,
       createdAt: Instant
   )

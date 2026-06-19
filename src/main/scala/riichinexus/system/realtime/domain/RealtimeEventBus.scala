@@ -5,7 +5,6 @@ import scala.collection.concurrent.TrieMap
 
 import cats.effect.{IO, Resource}
 import cats.effect.std.Queue
-import cats.syntax.all.*
 import fs2.Stream
 import riichinexus.system.realtime.objects.RealtimeEvent
 
@@ -15,7 +14,9 @@ final class RealtimeEventBus:
 
   def publish(event: RealtimeEvent): IO[Unit] =
     IO.defer {
-      subscribers.values.toVector.traverse_(_.offer(event))
+      subscribers.values.toVector.foldLeft(IO.unit) { (acc, subscriber) =>
+        acc.flatMap(_ => subscriber.offer(event))
+      }
     }
 
   def subscribe: Resource[IO, Stream[IO, RealtimeEvent]] =
@@ -27,7 +28,7 @@ final class RealtimeEventBus:
           _ <- IO(subscribers.put(subscriberId, queue))
         yield subscriberId -> queue
       } { case (subscriberId, _) =>
-        IO(subscribers.remove(subscriberId)).void
+        IO(subscribers.remove(subscriberId)).map(_ => ())
       }
       .map { case (_, queue) =>
         Stream.fromQueueUnterminated(queue)

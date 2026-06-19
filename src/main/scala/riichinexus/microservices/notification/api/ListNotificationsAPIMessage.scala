@@ -6,9 +6,10 @@ import riichinexus.microservices.notification.objects.apiTypes.NotificationListQ
 import riichinexus.microservices.notification.tables.notifications.NotificationTable
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.system.json.JsonCodecs.given
-import upickle.default.*
 
+import upickle.default.ReadWriter
+
+/** 列出玩家通知。 */
 final case class ListNotificationsAPIMessage(
     operatorId: String,
     query: NotificationListQuery = NotificationListQuery()

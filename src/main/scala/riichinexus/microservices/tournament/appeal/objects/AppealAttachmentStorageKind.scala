@@ -1,7 +1,9 @@
 package riichinexus.microservices.tournament.appeal.objects
 
 import riichinexus.microservices.tournament.appeal.domain.model.{AppealAttachmentStorageKind as DomainAppealAttachmentStorageKind}
-import upickle.default.*
+import upickle.default.{ReadWriter, readwriter}
+
+/** AppealAttachmentStorageKind 枚举申诉附件存储类型 可使用的公开取值。 */
 
 enum AppealAttachmentStorageKind:
   case ExternalUrl

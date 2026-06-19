@@ -1,6 +1,6 @@
 package riichinexus.microservices.tournament.mahjongcore.objects.action
 
-import upickle.default.*
+import upickle.default.{ReadWriter, readwriter}
 
 /** 玩家可提交的交互命令类型；不同于牌谱的 PaifuActionType，它只表示玩家主动选择。 */
 enum MahjongCommandType:

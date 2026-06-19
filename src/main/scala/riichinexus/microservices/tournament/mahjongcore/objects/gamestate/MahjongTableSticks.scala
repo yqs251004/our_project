@@ -1,6 +1,6 @@
 package riichinexus.microservices.tournament.mahjongcore.objects.gamestate
 
-import upickle.default.*
+import upickle.default.{ReadWriter, macroRW}
 
 /** 汇总桌面棒数状态；honba 表示本场棒，riichi 表示立直供托棒，两者结算规则不同。 */
 final case class MahjongTableSticks(

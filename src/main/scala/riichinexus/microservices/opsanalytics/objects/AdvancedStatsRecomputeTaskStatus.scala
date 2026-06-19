@@ -1,5 +1,7 @@
 package riichinexus.microservices.opsanalytics.objects
 
+/** AdvancedStatsRecomputeTaskStatus 枚举高级统计重算任务状态 可使用的公开取值。 */
+
 enum AdvancedStatsRecomputeTaskStatus:
   case Pending
   case Processing

@@ -1,7 +1,9 @@
 package riichinexus.microservices.club.objects.membershipmanagement.apiTypes
 
-import upickle.default.*
+import upickle.default.ReadWriter
 import riichinexus.system.json.JsonCodecs.given
+
+/** ClubMembershipApplicationView 表示俱乐部成员资格申请视图 的前端展示视图，包含applicationId、俱乐部 ID、clubName、applicant、submittedAt、消息等。 */
 
 final case class ClubMembershipApplicationView(
     applicationId: String,

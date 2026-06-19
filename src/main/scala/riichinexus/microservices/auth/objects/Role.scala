@@ -1,5 +1,7 @@
 package riichinexus.microservices.auth.objects
 
+/** Role 枚举角色 可使用的公开取值。 */
+
 enum Role:
   case Guest
   case RegisteredPlayer

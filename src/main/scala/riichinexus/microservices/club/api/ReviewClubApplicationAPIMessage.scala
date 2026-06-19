@@ -1,56 +1,36 @@
 package riichinexus.microservices.club.api
-import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
-import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
-import riichinexus.microservices.player.api.`private`.*
+import riichinexus.microservices.auth.api.`private`.{CheckSuperAdminPrivateAPIMessage, ResolveAccessPrincipalPrivateAPIMessage}
+import riichinexus.microservices.player.api.`private`.{ResolvePlayerBoundClubIdsPrivateAPIMessage, ResolvePlayerByUserIdPrivateAPIMessage, ResolvePlayerPrivateAPIMessage}
 
 import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.time.Instant
 import java.util.NoSuchElementException
 
 import cats.effect.IO
-import cats.syntax.all.*
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.domain.functions.ClubIdGenerator
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
 import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
-import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
-import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
-import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
-import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
-import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
-import riichinexus.microservices.tournament.objects.tablemanagement.TableId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
-import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
-import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
-import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
-import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
-import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
-import riichinexus.microservices.audit.domain.auditevent.AuditEventId
-import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
-import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
-import riichinexus.microservices.auth.domain.model.*
+import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
 import riichinexus.microservices.club.domain.Club
-import riichinexus.microservices.club.domain.clubmanagement.model.*
-import riichinexus.microservices.club.domain.membershipmanagement.model.*
-import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
-import riichinexus.microservices.club.domain.relationmanagement.model.*
-import riichinexus.microservices.player.domain.Player
-import riichinexus.microservices.player.objects.*
+import riichinexus.microservices.club.domain.membershipmanagement.model.ClubMembershipApplication
+import riichinexus.microservices.player.objects.`private`.PlayerPrivateView
 import riichinexus.microservices.audit.api.`private`.RecordAuditEventPrivateAPIMessage
-import riichinexus.microservices.audit.domain.auditevent.AuditEvent
-import riichinexus.microservices.notification.api.`private`.CreateNotificationPrivateAPIMessage
-import riichinexus.microservices.notification.objects.apiTypes.CreateNotificationRequest
-import riichinexus.system.json.JsonCodecs.given
-import riichinexus.microservices.club.api.`private`.ClubApplicationViewAssembler
+import riichinexus.microservices.audit.objects.`private`.AuditEventDraft
+import riichinexus.microservices.notification.api.`private`.RecordNotificationPrivateAPIMessage
+import riichinexus.microservices.notification.objects.`private`.CreateNotificationRequest
+
+import riichinexus.microservices.club.domain.ClubAuthorization
+import riichinexus.microservices.club.domain.membershipmanagement.functions.ClubMembershipApplicationFunctions
+import riichinexus.microservices.club.objects.membershipmanagement.ClubApplicationStatus
+import riichinexus.microservices.club.objects.membershipmanagement.apiTypes.ClubMembershipApplicantView
 import riichinexus.microservices.club.domain.ClubApplicationReviewer
 import riichinexus.microservices.club.objects.membershipmanagement.apiTypes.ClubMembershipApplicationView
 import riichinexus.microservices.club.objects.membershipmanagement.apiTypes.{ClubApplicationReviewDecision, ReviewClubApplicationRequest}
 import riichinexus.microservices.club.tables.clubs.ClubTable
-import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
-import upickle.default.*
+import upickle.default.ReadWriter
 
+/** 审核俱乐部申请。 */
 final case class ReviewClubApplicationAPIMessage(
     clubId: String,
     membershipId: String,
@@ -59,8 +39,8 @@ final case class ReviewClubApplicationAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[ClubMembershipApplicationView] =
     for
-      decision <- IO.blocking(resolveDecision(request.decision))
-      actor <- ResolveAccessPrincipal(PlayerId(request.operatorId)).plan(context)
+      decision <- IO.pure(resolveDecision(request.decision))
+      actor <- ResolveAccessPrincipalPrivateAPIMessage(PlayerId(request.operatorId)).plan(context)
       reviewedAt <- IO.realTimeInstant
       command = ReviewClubApplicationCommand(
         clubId = ClubId(clubId),
@@ -73,7 +53,7 @@ final case class ReviewClubApplicationAPIMessage(
       result <- reviewApplication(context, command)
       _ <- RecordAuditEventPrivateAPIMessage(reviewApplicationAudit(command)).plan(context)
       _ <- notifyApplicant(context, command, result)
-      view <- ClubApplicationViewAssembler.applicationView(
+      view <- applicationView(
         context,
         result.club,
         result.application,
@@ -103,19 +83,22 @@ final case class ReviewClubApplicationAPIMessage(
   ): IO[Option[Club]] =
     command.decision match
       case ApplicationReviewDecision.Approve =>
-        resolveApprovedPlayer(context, command).flatMap { player =>
-          ClubApplicationReviewer.approve(
-            context = context,          parsedClubId = command.clubId,
+        for
+          player <- resolveApprovedPlayer(context, command)
+          reviewedClub <- ClubApplicationReviewer.approve(
+            context = context,
+            parsedClubId = command.clubId,
             parsedMembershipId = command.membershipId,
             parsedPlayerId = player.id,
             actor = command.actor,
             note = command.note,
             approvedAt = command.reviewedAt
           )
-        }
+        yield reviewedClub
       case ApplicationReviewDecision.Reject =>
         ClubApplicationReviewer.reject(
-          context = context,          parsedClubId = command.clubId,
+          context = context,
+          parsedClubId = command.clubId,
           parsedMembershipId = command.membershipId,
           actor = command.actor,
           note = command.note,
@@ -125,7 +108,7 @@ final case class ReviewClubApplicationAPIMessage(
   private def resolveApprovedPlayer(
       context: ApiPlanContext,
       command: ReviewClubApplicationCommand
-  ): IO[Player] =
+  ): IO[PlayerPrivateView] =
     for
       application <- IO.blocking {
         val club = ClubTable
@@ -149,7 +132,7 @@ final case class ReviewClubApplicationAPIMessage(
   private def resolveApplicantPlayer(
       context: ApiPlanContext,
       application: ClubMembershipApplication
-  ): IO[Option[Player]] =
+  ): IO[Option[PlayerPrivateView]] =
     application.playerId match
       case Some(playerId) => ResolvePlayerPrivateAPIMessage(playerId).plan(context)
       case None =>
@@ -157,14 +140,77 @@ final case class ReviewClubApplicationAPIMessage(
           .map(ResolvePlayerByUserIdPrivateAPIMessage(_).plan(context))
           .getOrElse(IO.pure(None))
 
+  private def applicationView(
+      context: ApiPlanContext,
+      club: Club,
+      application: ClubMembershipApplication,
+      actor: AccessPrincipalPrivateView
+  ): IO[ClubMembershipApplicationView] =
+    for
+      applicantPlayer <- resolveApplicantPlayer(context, application)
+      applicantClubIds <- applicantPlayer
+        .map(player => ResolvePlayerBoundClubIdsPrivateAPIMessage(player.id).plan(context).map(_.map(_.value)))
+        .getOrElse(IO.pure(Vector.empty))
+      reviewedByDisplayName <- application.reviewedBy
+        .map(playerId => ResolvePlayerPrivateAPIMessage(playerId).plan(context).map(_.map(_.nickname)))
+        .getOrElse(IO.pure(None))
+      canWithdraw <- canWithdrawClubApplication(context, actor, application)
+    yield ClubMembershipApplicationView(
+      applicationId = application.id.value,
+      clubId = club.id.value,
+      clubName = club.name,
+      applicant = ClubMembershipApplicantView(
+        playerId = applicantPlayer.map(_.id.value),
+        displayName = application.displayName,
+        playerStatus = applicantPlayer.map(_.status.toString),
+        currentRank = applicantPlayer.map(_.currentRank),
+        elo = applicantPlayer.map(_.elo),
+        clubIds = applicantClubIds
+      ),
+      submittedAt = application.submittedAt.toString,
+      message = application.message,
+      status = ClubApplicationStatus.toString(application.status),
+      reviewedBy = application.reviewedBy.map(_.value),
+      reviewedByDisplayName = reviewedByDisplayName,
+      reviewedAt = application.reviewedAt.map(_.toString),
+      reviewNote = application.reviewNote,
+      withdrawnByPrincipalId = application.withdrawnByPrincipalId,
+      canReview = ClubMembershipApplicationFunctions.isPending(application) && ClubAuthorization.canManageClubApplications(actor, club),
+      canWithdraw = ClubMembershipApplicationFunctions.isPending(application) && canWithdraw
+    )
+
+  private def canWithdrawClubApplication(
+      context: ApiPlanContext,
+      actor: AccessPrincipalPrivateView,
+      application: ClubMembershipApplication
+  ): IO[Boolean] =
+    for
+      isSuperAdmin <- CheckSuperAdminPrivateAPIMessage(actor).plan(context)
+      canWithdraw <-
+        if isSuperAdmin then IO.pure(true)
+        else ownsClubApplication(context, actor, application)
+    yield canWithdraw
+
+  private def ownsClubApplication(
+      context: ApiPlanContext,
+      actor: AccessPrincipalPrivateView,
+      application: ClubMembershipApplication
+  ): IO[Boolean] =
+    actor.playerId
+      .map(playerId => ResolvePlayerPrivateAPIMessage(playerId).plan(context))
+      .getOrElse(IO.pure(None))
+      .map(_.exists { player =>
+        application.playerId.contains(player.id) ||
+          application.applicantUserId.contains(player.userId)
+      })
+
   private def resolveDecision(decision: ClubApplicationReviewDecision): ApplicationReviewDecision =
     decision match
       case ClubApplicationReviewDecision.Approve => ApplicationReviewDecision.Approve
       case ClubApplicationReviewDecision.Reject  => ApplicationReviewDecision.Reject
 
-  private def reviewApplicationAudit(command: ReviewClubApplicationCommand): AuditEvent =
-    AuditEvent(
-      id = AuditIdGenerator.auditEventId(),
+  private def reviewApplicationAudit(command: ReviewClubApplicationCommand): AuditEventDraft =
+    AuditEventDraft(
       aggregateType = "club-application",
       aggregateId = command.clubId.value,
       eventType =
@@ -184,13 +230,15 @@ final case class ReviewClubApplicationAPIMessage(
       command: ReviewClubApplicationCommand,
       result: ReviewClubApplicationResult
   ): IO[Unit] =
-    resolveApplicantRecipient(context, command, result.application).flatMap {
-      case Some(recipientPlayerId) =>
-        CreateNotificationPrivateAPIMessage(
-          reviewNotificationRequest(command, result, recipientPlayerId)
-        ).plan(context).void
-      case None => IO.unit
-    }
+    for
+      recipient <- resolveApplicantRecipient(context, command, result.application)
+      _ <- recipient match
+        case Some(recipientPlayerId) =>
+          RecordNotificationPrivateAPIMessage(
+            reviewNotificationRequest(command, result, recipientPlayerId)
+          ).plan(context).void
+        case None => IO.unit
+    yield ()
 
   private def resolveApplicantRecipient(
       context: ApiPlanContext,
@@ -230,7 +278,7 @@ final case class ReviewClubApplicationAPIMessage(
   private final case class ReviewClubApplicationCommand(
       clubId: ClubId,
       membershipId: MembershipApplicationId,
-      actor: AccessPrincipal,
+      actor: AccessPrincipalPrivateView,
       decision: ApplicationReviewDecision,
       note: Option[String],
       reviewedAt: Instant

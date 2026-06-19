@@ -1,6 +1,8 @@
 package riichinexus.microservices.tournament.objects.tournamentmanagement
 
-import upickle.default.*
+import upickle.default.{ReadWriter, readwriter}
+
+/** StageStatus 枚举阶段状态 可使用的公开取值。 */
 
 enum StageStatus:
   case Pending

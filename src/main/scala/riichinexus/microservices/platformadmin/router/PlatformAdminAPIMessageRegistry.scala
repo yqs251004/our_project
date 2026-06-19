@@ -1,10 +1,9 @@
 package riichinexus.microservices.platformadmin.router
 import riichinexus.system.api.RegisteredAPIMessage
 
-import riichinexus.system.json.JsonCodecs.given
-import riichinexus.microservices.platformadmin.api.*
+
+import riichinexus.microservices.platformadmin.api.{PlatformAdminBanPlayerAPIMessage, PlatformAdminDissolveClubAPIMessage, PlatformAdminGrantSuperAdminAPIMessage}
 import riichinexus.microservices.platformadmin.objects.apiTypes.{PlatformAdminClubView, PlatformAdminPlayerView}
-import riichinexus.microservices.platformadmin.objects.apiTypes.*
 
 object PlatformAdminAPIMessageRegistry:
 

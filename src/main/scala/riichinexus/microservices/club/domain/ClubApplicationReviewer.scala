@@ -1,45 +1,24 @@
 package riichinexus.microservices.club.domain
 import riichinexus.microservices.auth.objects.Permission
-import riichinexus.microservices.player.api.`private`.*
+import riichinexus.microservices.player.api.`private`.{RecordPlayerClubJoinPrivateAPIMessage, ResolvePlayerPrivateAPIMessage}
 
 import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
-import java.sql.Connection
 import java.time.Instant
 import java.util.NoSuchElementException
 
 import cats.effect.IO
 import riichinexus.system.api.ApiPlanContext
-import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.domain.functions.ClubIdGenerator
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
 import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
-import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
-import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
-import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
-import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
-import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
-import riichinexus.microservices.tournament.objects.tablemanagement.TableId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
-import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
-import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
-import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
-import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
-import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
-import riichinexus.microservices.audit.domain.auditevent.AuditEventId
-import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
-import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
-import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.club.domain.Club
-import riichinexus.microservices.club.domain.clubmanagement.model.*
+import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
+
 import riichinexus.microservices.club.domain.membershipmanagement.functions.ClubMembershipApplicationFunctions
-import riichinexus.microservices.club.domain.membershipmanagement.model.*
-import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
-import riichinexus.microservices.club.domain.relationmanagement.model.*
 import riichinexus.microservices.club.objects.rankprivilegemanagement.ClubPrivilegeCode
-import riichinexus.microservices.player.domain.Player
-import riichinexus.microservices.player.objects.*
-import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
+import riichinexus.microservices.player.objects.`private`.PlayerPrivateView
+import riichinexus.microservices.player.objects.PlayerStatus
+
+/** ClubApplicationReviewer 编排俱乐部申请Reviewer 相关的领域流程和规则判断。 */
 
 object ClubApplicationReviewer:
   def approve(
@@ -47,7 +26,7 @@ object ClubApplicationReviewer:
       parsedClubId: ClubId,
       parsedMembershipId: MembershipApplicationId,
       parsedPlayerId: PlayerId,
-      actor: AccessPrincipal,
+      actor: AccessPrincipalPrivateView,
       note: Option[String],
       approvedAt: Instant
   ): IO[Option[Club]] =
@@ -58,7 +37,7 @@ object ClubApplicationReviewer:
       savedClub <- (club, player) match
         case (Some(club), Some(player)) =>
           ClubAuthorization.ensureClubActive(club)
-          requireActivePlayer(player, s"Player ${parsedPlayerId.value} cannot be approved into a club")
+          requireActivePlayer(player, s"PlayerPrivateView ${parsedPlayerId.value} cannot be approved into a club")
           ClubAuthorization.requireClubCapability(          actor = actor,
             club = club,
             permission = Permission.ManageClubMembership,
@@ -79,7 +58,7 @@ object ClubApplicationReviewer:
 
           if club.members.contains(parsedPlayerId) then
             throw IllegalArgumentException(
-              s"Player ${parsedPlayerId.value} is already a member of club ${parsedClubId.value}"
+              s"PlayerPrivateView ${parsedPlayerId.value} is already a member of club ${parsedClubId.value}"
             )
 
           if !application.playerId.contains(parsedPlayerId) &&
@@ -96,9 +75,9 @@ object ClubApplicationReviewer:
           )
 
           for
-            savedPlayer <- JoinPlayerClubPrivateAPIMessage(parsedPlayerId, parsedClubId)
-              .plan(context)
-              .map(_.getOrElse(throw NoSuchElementException(s"Player ${parsedPlayerId.value} was not found")))
+            savedPlayer <- RecordPlayerClubJoinPrivateAPIMessage(parsedPlayerId, parsedClubId).plan(context).map(
+              _.getOrElse(throw NoSuchElementException(s"PlayerPrivateView ${parsedPlayerId.value} was not found"))
+            )
             _ <- ClubProjectionRefresher.ensurePlayerDashboard(context, savedPlayer.id, approvedAt)
             refreshedClub <- ClubProjectionRefresher.refreshClubProjection(context, updatedClub, approvedAt)
             savedClub <- IO.blocking(riichinexus.microservices.club.tables.clubs.ClubTable.save(connection, refreshedClub))
@@ -111,7 +90,7 @@ object ClubApplicationReviewer:
       context: ApiPlanContext,
       parsedClubId: ClubId,
       parsedMembershipId: MembershipApplicationId,
-      actor: AccessPrincipal,
+      actor: AccessPrincipalPrivateView,
       note: Option[String],
       rejectedAt: Instant
   ): IO[Option[Club]] =
@@ -144,6 +123,6 @@ object ClubApplicationReviewer:
       }
     }
 
-  private def requireActivePlayer(player: Player, context: String): Unit =
+  private def requireActivePlayer(player: PlayerPrivateView, context: String): Unit =
     if player.status != PlayerStatus.Active then
       throw IllegalArgumentException(context)

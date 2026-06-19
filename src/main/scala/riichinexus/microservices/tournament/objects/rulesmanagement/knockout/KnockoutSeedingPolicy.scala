@@ -1,6 +1,8 @@
 package riichinexus.microservices.tournament.objects.rulesmanagement.knockout
 
-import upickle.default.*
+import upickle.default.{ReadWriter, readwriter}
+
+/** KnockoutSeedingPolicy 枚举KnockoutSeeding策略 可使用的公开取值。 */
 
 enum KnockoutSeedingPolicy:
   case Rating

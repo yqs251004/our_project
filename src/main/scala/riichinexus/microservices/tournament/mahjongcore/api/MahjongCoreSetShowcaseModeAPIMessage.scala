@@ -1,14 +1,15 @@
 package riichinexus.microservices.tournament.mahjongcore.api
 
 import cats.effect.IO
-import riichinexus.microservices.tournament.mahjongcore.domain.MahjongCoreShowcaseMode
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.apiTypes.{MahjongCoreShowcaseModeView, SetMahjongCoreShowcaseModeRequest}
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import upickle.default.*
+import riichinexus.system.app.MahjongCoreShowcaseModeState
+import upickle.default.ReadWriter
 
+/** 设置实时麻将演示模式全局开关。 */
 final case class MahjongCoreSetShowcaseModeAPIMessage(
     request: SetMahjongCoreShowcaseModeRequest
 ) extends APIMessage[MahjongCoreShowcaseModeView] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[MahjongCoreShowcaseModeView] =
-    IO.pure(MahjongCoreShowcaseModeView(MahjongCoreShowcaseMode.setEnabled(request.enabled)))
+    IO.delay(MahjongCoreShowcaseModeView(MahjongCoreShowcaseModeState.setEnabled(request.enabled)))

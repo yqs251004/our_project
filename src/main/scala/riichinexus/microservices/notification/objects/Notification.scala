@@ -4,7 +4,9 @@ import java.time.Instant
 
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.*
+import upickle.default.ReadWriter
+
+/** Notification 表示发送给玩家的一条系统通知，包含内容、来源、已读时间和操作链接。 */
 
 final case class Notification(
     id: NotificationId,

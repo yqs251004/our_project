@@ -1,8 +1,8 @@
 package riichinexus.microservices.tournament.appeal.api
-import riichinexus.microservices.audit.domain.auditevent.AuditEvent
-import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
+import riichinexus.microservices.audit.objects.`private`.AuditEventDraft
+import riichinexus.microservices.auth.api.`private`.{RequirePermissionPrivateAPIMessage, ResolveAccessPrincipalPrivateAPIMessage}
+import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPIMessage
-import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
 
 import java.time.Instant
 import java.util.NoSuchElementException
@@ -10,42 +10,19 @@ import java.util.NoSuchElementException
 import cats.effect.IO
 
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.microservices.auth.domain.authorization.AuthorizationPolicyFunctions
-import riichinexus.microservices.tournament.appeal.domain.AppealApplicationService
-import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
+import riichinexus.microservices.tournament.appeal.domain.functions.AppealApplicationService
+import riichinexus.microservices.tournament.appeal.tables.appealticket.AppealTicketTable
+import riichinexus.microservices.player.api.`private`.ResolvePlayerReadModelsPrivateAPIMessage
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.domain.functions.ClubIdGenerator
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
-import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
-import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
-import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
-import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
-import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
-import riichinexus.microservices.tournament.objects.tablemanagement.TableId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
-import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
 import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
-import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
-import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
-import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
-import riichinexus.microservices.audit.domain.auditevent.AuditEventId
-import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
-import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
-import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.tournament.appeal.domain.model.{
-  AppealPriority as DomainAppealPriority,
-  AppealTicket
-}
-import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
-import riichinexus.microservices.tournament.domain.recordmanagement.model.*
-import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
-import riichinexus.microservices.tournament.domain.tablemanagement.model.*
-import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
-import riichinexus.system.json.JsonCodecs.given
-import riichinexus.microservices.tournament.appeal.objects.apiTypes.*
-import upickle.default.*
+import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
+import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
+import riichinexus.microservices.tournament.appeal.domain.model.{AppealPriority as DomainAppealPriority, AppealTicket}
 
+import riichinexus.microservices.tournament.appeal.objects.apiTypes.{AppealTicketView, UpdateAppealWorkflowRequest}
+import upickle.default.ReadWriter
+
+/** 更新申诉工单的分派、优先级或截止时间。 */
 final case class AppealUpdateWorkflowAPIMessage(
     appealId: String,
     request: UpdateAppealWorkflowRequest
@@ -53,15 +30,24 @@ final case class AppealUpdateWorkflowAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[AppealTicketView] =
     for
-      actor <- ResolveAccessPrincipal(PlayerId(request.operatorId)).plan(context)
+      actor <- ResolveAccessPrincipalPrivateAPIMessage(PlayerId(request.operatorId)).plan(context)
       updatedAt <- IO.realTimeInstant
-      service = AppealApplicationService(AuthorizationPolicyFunctions.strict)
-      command <- IO.blocking(resolveCommand(actor, updatedAt))
-      ticket <- updateWorkflow(context.connection, service, command)
+      command <- IO.delay(resolveCommand(actor, updatedAt))
+      existingTicket <- IO.blocking(
+        AppealTicketTable.findById(context.connection, command.ticketId)
+          .getOrElse(throw NoSuchElementException("Resource not found"))
+      )
+      _ <- RequirePermissionPrivateAPIMessage(
+        command.actor,
+        Permission.ResolveAppeal,
+        tournamentId = Some(existingTicket.tournamentId)
+      ).plan(context)
+      _ <- requireActiveAssignee(context, command.assigneeId)
+      ticket <- updateWorkflow(context.connection, command)
       _ <- RecordAuditEventsPrivateAPIMessage(updateWorkflowAudit(ticket, command)).plan(context)
     yield AppealTicketView.fromDomain(ticket)
 
-  private def resolveCommand(actor: AccessPrincipal, updatedAt: Instant): UpdateAppealWorkflowCommand =
+  private def resolveCommand(actor: AccessPrincipalPrivateView, updatedAt: Instant): UpdateAppealWorkflowCommand =
     validateRequest()
     UpdateAppealWorkflowCommand(
       ticketId = AppealTicketId(appealId),
@@ -87,13 +73,12 @@ final case class AppealUpdateWorkflowAPIMessage(
 
   private def updateWorkflow(
       connection: java.sql.Connection,
-      service: AppealApplicationService,
       command: UpdateAppealWorkflowCommand
   ): IO[AppealTicket] =
-    service.updateAppealWorkflow(
+    AppealApplicationService.updateAppealWorkflow(
       connection = connection,
       ticketId = command.ticketId,
-      actor = command.actor,
+      actor = privateActor(command.actor),
       assigneeId = command.assigneeId,
       clearAssignee = command.clearAssignee,
       priority = command.priority,
@@ -103,13 +88,29 @@ final case class AppealUpdateWorkflowAPIMessage(
       note = command.note
     ).map(_.getOrElse(throw NoSuchElementException("Resource not found")))
 
+  private def requireActiveAssignee(context: ApiPlanContext, assigneeId: Option[PlayerId]): IO[Unit] =
+    assigneeId
+      .map { id =>
+        ResolvePlayerReadModelsPrivateAPIMessage(Vector(id))
+          .plan(context)
+          .map(_.headOption.getOrElse(throw NoSuchElementException(s"Player ${id.value} was not found")))
+          .flatMap { player =>
+            if !player.active then
+              IO.raiseError(IllegalArgumentException("Appeal assignee must be an active player"))
+            else IO.unit
+          }
+      }
+      .getOrElse(IO.unit)
+
+  private def privateActor(actor: AccessPrincipalPrivateView): AccessPrincipalPrivateView =
+    actor
+
   private def updateWorkflowAudit(
       ticket: AppealTicket,
       command: UpdateAppealWorkflowCommand
-  ): Vector[AuditEvent] =
+  ): Vector[AuditEventDraft] =
     Vector(
-      AuditEvent(
-        id = AuditIdGenerator.auditEventId(),
+      AuditEventDraft(
         aggregateType = "appeal",
         aggregateId = command.ticketId.value,
         eventType = "AppealTicketWorkflowUpdated",
@@ -128,7 +129,7 @@ final case class AppealUpdateWorkflowAPIMessage(
 
   private final case class UpdateAppealWorkflowCommand(
       ticketId: AppealTicketId,
-      actor: AccessPrincipal,
+      actor: AccessPrincipalPrivateView,
       assigneeId: Option[PlayerId],
       clearAssignee: Boolean,
       priority: Option[DomainAppealPriority],

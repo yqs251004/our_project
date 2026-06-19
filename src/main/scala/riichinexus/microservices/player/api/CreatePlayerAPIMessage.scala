@@ -1,42 +1,22 @@
 package riichinexus.microservices.player.api
 
-import riichinexus.microservices.auth.domain.authorization.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
-
 import java.time.Instant
 
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.domain.functions.ClubIdGenerator
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
-import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
-import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
-import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
-import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
-import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
-import riichinexus.microservices.tournament.objects.tablemanagement.TableId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
-import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
-import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
-import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
-import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
-import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
-import riichinexus.microservices.audit.domain.auditevent.AuditEventId
-import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
-import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
-import riichinexus.microservices.auth.domain.model.RoleGrant
+import riichinexus.microservices.auth.objects.`private`.RoleGrant
 import riichinexus.microservices.auth.objects.Role
-import riichinexus.microservices.opsanalytics.api.`private`.EnsurePlayerDashboardAPIMessage
+import riichinexus.microservices.opsanalytics.api.`private`.EnsurePlayerDashboardPrivateAPIMessage
 import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.domain.functions.PlayerRoleFunctions
 import riichinexus.microservices.player.objects.{RankPlatform, RankSnapshot}
 import riichinexus.microservices.player.objects.apiTypes.CreatePlayerRequest
 import riichinexus.microservices.player.objects.apiTypes.{PlayerProfileView, PlayerRoleFlagsView}
 import riichinexus.microservices.player.tables.players.PlayerTable
-import upickle.default.*
+import upickle.default.ReadWriter
 
+/** 创建玩家档案。 */
 final case class CreatePlayerAPIMessage(
     request: CreatePlayerRequest
 ) extends APIMessage[PlayerProfileView] derives ReadWriter:
@@ -44,35 +24,36 @@ final case class CreatePlayerAPIMessage(
   override def plan(context: ApiPlanContext): IO[PlayerProfileView] =
     for
       registeredAt <- IO.realTimeInstant
-      player <- createPlayer(context, registeredAt)
-    yield playerProfileView(player)
+      player <- resolvePlayerDraft(context, registeredAt)
+      savedPlayer <- savePlayer(context, player)
+      _ <- EnsurePlayerDashboardPrivateAPIMessage(savedPlayer.id, registeredAt).plan(context)
+    yield playerProfileView(savedPlayer)
 
   private def rankSnapshot: RankSnapshot =
     RankSnapshot(RankPlatform.valueOf(request.rankPlatform), request.tier, request.stars)
 
-  private def createPlayer(context: ApiPlanContext, registeredAt: Instant): IO[Player] =
-    for
-      player <- IO.blocking {
-        PlayerTable.findByUserId(context.connection, request.userId) match
-          case Some(existing) =>
-            existing.copy(
-              nickname = request.nickname,
-              currentRank = rankSnapshot
-            )
-          case None =>
-            Player(
-              id = PlayerIdGenerator.playerId(),
-              userId = request.userId,
-              nickname = request.nickname,
-              registeredAt = registeredAt,
-              currentRank = rankSnapshot,
-              elo = request.initialElo,
-              roleGrants = Vector(RoleGrantFunctions.registered(registeredAt))
-            )
-      }
-      savedPlayer <- IO.blocking(PlayerTable.save(context.connection, player))
-      _ <- EnsurePlayerDashboardAPIMessage(savedPlayer.id, registeredAt).plan(context)
-    yield savedPlayer
+  private def resolvePlayerDraft(context: ApiPlanContext, registeredAt: Instant): IO[Player] =
+    IO.blocking {
+      PlayerTable.findByUserId(context.connection, request.userId) match
+        case Some(existing) =>
+          existing.copy(
+            nickname = request.nickname,
+            currentRank = rankSnapshot
+          )
+        case None =>
+          Player(
+            id = PlayerIdGenerator.playerId(),
+            userId = request.userId,
+            nickname = request.nickname,
+            registeredAt = registeredAt,
+            currentRank = rankSnapshot,
+            elo = request.initialElo,
+            roleGrants = Vector(RoleGrant(Role.RegisteredPlayer, grantedAt = registeredAt))
+          )
+    }
+
+  private def savePlayer(context: ApiPlanContext, player: Player): IO[Player] =
+    IO.blocking(PlayerTable.save(context.connection, player))
 
   private def playerProfileView(player: Player): PlayerProfileView =
     PlayerProfileView(
@@ -93,4 +74,3 @@ final case class CreatePlayerAPIMessage(
       ),
       bannedReason = player.bannedReason
     )
-

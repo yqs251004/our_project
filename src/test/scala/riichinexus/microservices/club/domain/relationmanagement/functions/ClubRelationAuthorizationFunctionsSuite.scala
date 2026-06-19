@@ -5,7 +5,8 @@ import java.time.Instant
 import munit.FunSuite
 
 import riichinexus.microservices.auth.domain.AuthorizationFailure
-import riichinexus.microservices.auth.domain.model.{AccessPrincipal, RoleGrant}
+import riichinexus.microservices.auth.domain.model.AccessPrincipal
+import riichinexus.microservices.auth.objects.`private`.RoleGrant
 import riichinexus.microservices.auth.objects.Role
 import riichinexus.microservices.club.domain.Club
 import riichinexus.microservices.club.objects.clubmanagement.ClubId

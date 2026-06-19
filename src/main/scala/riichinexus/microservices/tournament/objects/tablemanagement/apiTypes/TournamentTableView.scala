@@ -1,10 +1,12 @@
 package riichinexus.microservices.tournament.objects.tablemanagement.apiTypes
 
 import riichinexus.system.json.JsonCodecs.given
-import riichinexus.microservices.tournament.domain.tablemanagement.model.Table
+import riichinexus.microservices.tournament.domain.stage.model.Table
 import riichinexus.microservices.tournament.objects.tablemanagement.TableSeat
 import riichinexus.microservices.tournament.objects.tablemanagement.TableStatus
-import upickle.default.*
+import upickle.default.{ReadWriter, macroRW}
+
+/** TournamentTableView 表示赛事牌桌视图 的前端展示视图。 */
 
 final case class TournamentTableView(
     tableId: String,

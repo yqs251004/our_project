@@ -1,61 +1,28 @@
 package riichinexus.microservices.club.api
-import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
-import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
-
-import riichinexus.microservices.auth.domain.authorization.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+import riichinexus.microservices.auth.api.`private`.{ResolveAccessPrincipalPrivateAPIMessage, ResolveAnonymousGuestAccessPrincipalPrivateAPIMessage}
 
 import java.time.{Duration, Instant}
 import java.util.NoSuchElementException
 
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.domain.functions.ClubIdGenerator
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
-import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
-import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
-import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
-import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
-import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
-import riichinexus.microservices.tournament.objects.tablemanagement.TableId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
-import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
-import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
-import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
-import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
-import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
-import riichinexus.microservices.audit.domain.auditevent.AuditEventId
-import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
-import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
-import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
-import riichinexus.microservices.tournament.domain.recordmanagement.model.*
-import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
-import riichinexus.microservices.tournament.domain.tablemanagement.model.*
-import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
-import riichinexus.microservices.club.domain.Club
-import riichinexus.microservices.club.domain.clubmanagement.model.*
-import riichinexus.microservices.club.domain.membershipmanagement.model.*
-import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
-import riichinexus.microservices.club.domain.relationmanagement.model.*
+import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
+import riichinexus.microservices.tournament.objects.`private`.TournamentPrivateView
+
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubAuthorization
 import riichinexus.microservices.club.objects.tournamentparticipation.ClubTournamentParticipationStatus
+
 import riichinexus.microservices.club.objects.tournamentparticipation.apiTypes.ClubTournamentParticipationView
-import riichinexus.microservices.club.objects.clubmanagement.apiTypes.*
-import riichinexus.microservices.club.objects.membershipmanagement.apiTypes.*
-import riichinexus.microservices.club.objects.rankprivilegemanagement.apiTypes.*
-import riichinexus.microservices.club.objects.relationmanagement.apiTypes.*
-import riichinexus.microservices.club.objects.tournamentparticipation.apiTypes.*
-import riichinexus.microservices.club.objects.auditreadmodel.apiTypes.*
 import riichinexus.microservices.tournament.objects.tournamentmanagement.{StageStatus, TournamentStatus}
 import riichinexus.microservices.club.tables.clubs.ClubTable
 import riichinexus.microservices.tournament.api.`private`.ListClubTournamentsPrivateAPIMessage
 import riichinexus.system.objects.PagedResponse
-import upickle.default.*
+import upickle.default.ReadWriter
 
+/** 列出俱乐部收到或参与的赛事。 */
 final case class ListClubTournamentsAPIMessage(
     clubId: String,
     scope: Option[String] = None,
@@ -75,7 +42,7 @@ final case class ListClubTournamentsAPIMessage(
 
   private def resolveQuery(context: ApiPlanContext, now: Instant): IO[ClubTournamentQuery] =
     val parsedViewer = viewer.filter(_.nonEmpty).map(PlayerId(_))
-    parsedViewer.map(ResolveAccessPrincipal(_).plan(context)).getOrElse(IO.pure(AccessPrincipalFunctions.guest())).map { viewerPrincipal =>
+    parsedViewer.map(ResolveAccessPrincipalPrivateAPIMessage(_).plan(context)).getOrElse(ResolveAnonymousGuestAccessPrincipalPrivateAPIMessage().plan(context)).map { viewerPrincipal =>
       ClubTournamentQuery(
         clubId = ClubId(clubId),
         scope = scope.filter(_.nonEmpty).getOrElse("recent"),
@@ -93,7 +60,7 @@ final case class ListClubTournamentsAPIMessage(
   private def listTournaments(
       connection: java.sql.Connection,
       query: ClubTournamentQuery,
-      tournaments: Vector[Tournament]
+      tournaments: Vector[TournamentPrivateView]
   ): Vector[ClubTournamentParticipationView] =
     ClubTable
       .findById(connection, query.clubId)
@@ -141,12 +108,12 @@ final case class ListClubTournamentsAPIMessage(
   private def buildClubTournamentParticipationView(
       connection: java.sql.Connection,
       clubId: ClubId,
-      tournament: Tournament,
-      viewer: AccessPrincipal
+      tournament: TournamentPrivateView,
+      viewer: AccessPrincipalPrivateView
   ): Option[ClubTournamentParticipationView] =
     val club = ClubTable.findById(connection, clubId)
     val clubVisibleToViewer =
-      club.exists(currentClub => ClubAuthorization.canManageClubTournamentParticipation(AuthorizationPolicyFunctions.strict, viewer, currentClub))
+      club.exists(currentClub => ClubAuthorization.canManageClubTournamentParticipation(viewer, currentClub))
     val isWhitelisted = tournament.whitelist.exists(_.clubId.contains(clubId))
     val isParticipating = tournament.participatingClubs.contains(clubId)
     if !isWhitelisted && !isParticipating then None
@@ -192,7 +159,7 @@ final case class ListClubTournamentsAPIMessage(
   private final case class ClubTournamentQuery(
       clubId: ClubId,
       scope: String,
-      viewerPrincipal: AccessPrincipal,
+      viewerPrincipal: AccessPrincipalPrivateView,
       limit: Int,
       offset: Int,
       recentThreshold: Instant,

@@ -2,39 +2,19 @@ package riichinexus.microservices.club.api
 import riichinexus.microservices.auth.objects.Permission
 
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
-import riichinexus.microservices.auth.domain.authorization.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.domain.functions.ClubIdGenerator
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
-import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
-import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
-import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
-import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
-import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
-import riichinexus.microservices.tournament.objects.tablemanagement.TableId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
-import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
-import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
-import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
-import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
-import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
-import riichinexus.microservices.audit.domain.auditevent.AuditEventId
-import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
-import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
-import riichinexus.microservices.auth.domain.AuthorizationFailure
-import riichinexus.microservices.auth.domain.model.AccessPrincipal
+import riichinexus.system.api.AuthorizationFailure
 import riichinexus.microservices.club.domain.Club
 import riichinexus.microservices.club.tables.clubs.ClubTable
 import riichinexus.microservices.club.objects.clubmanagement.apiTypes.ClubLeaderboardEntry
 import riichinexus.system.objects.PagedResponse
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.*
+import upickle.default.ReadWriter
 
+/** 获取前端公开俱乐部排行榜。 */
 final case class PublicClubLeaderboardAPIMessage(
     name: Option[String] = None,
     limit: Option[Int] = None,
@@ -44,23 +24,21 @@ final case class PublicClubLeaderboardAPIMessage(
   override def plan(context: ApiPlanContext): IO[PagedResponse[ClubLeaderboardEntry]] =
     for
       _ <- requirePublicLeaderboardPermission(context)
-      query <- IO.blocking(resolveQuery(context))
+      query = resolveQuery
       clubs <- IO.blocking(publicClubs(context))
-      entries <- IO.blocking(publicClubLeaderboardEntries(clubs))
-      filteredEntries <- IO.blocking(filterPublicClubLeaderboardEntries(context, entries, query))
+      entries = publicClubLeaderboardEntries(clubs)
+      filteredEntries = filterPublicClubLeaderboardEntries(entries, query)
     yield PagedResponse.fromItems(filteredEntries, limit, offset, query.appliedFilters)(identity)
 
   private def requirePublicLeaderboardPermission(context: ApiPlanContext): IO[Unit] =
-    val guest = AccessPrincipalFunctions.guest()
     AuthCheckPermissionAPIMessage(
-      principal = Some(guest),
       permission = Permission.ViewPublicLeaderboard
     ).plan(context).flatMap { allowed =>
       if allowed then IO.unit
-      else IO.raiseError(AuthorizationFailure(s"${guest.displayName} is not allowed to view public leaderboard"))
+      else IO.raiseError(AuthorizationFailure("guest is not allowed to view public leaderboard"))
     }
 
-  private def resolveQuery(context: ApiPlanContext): ResolvedClubLeaderboardQuery =
+  private def resolveQuery: ResolvedClubLeaderboardQuery =
     ResolvedClubLeaderboardQuery(
       name = name.filter(_.nonEmpty),
       appliedFilters = Vector(name.filter(_.nonEmpty).map("name" -> _)).flatten.toMap
@@ -98,7 +76,6 @@ final case class PublicClubLeaderboardAPIMessage(
     )
 
   private def filterPublicClubLeaderboardEntries(
-      context: ApiPlanContext,
       entries: Vector[ClubLeaderboardEntry],
       query: ResolvedClubLeaderboardQuery
   ): Vector[ClubLeaderboardEntry] =

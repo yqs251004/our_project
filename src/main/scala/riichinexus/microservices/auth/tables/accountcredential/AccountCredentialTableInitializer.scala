@@ -2,6 +2,7 @@ package riichinexus.microservices.auth.tables.accountcredential
 
 import java.sql.Connection
 
+
 object AccountCredentialTableInitializer:
   private val initTableSql: String =
     """

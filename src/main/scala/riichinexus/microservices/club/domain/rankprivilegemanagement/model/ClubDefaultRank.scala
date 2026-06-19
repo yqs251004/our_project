@@ -1,5 +1,7 @@
 package riichinexus.microservices.club.domain.rankprivilegemanagement.model
 
+/** ClubDefaultRank 枚举领域内俱乐部Default等级 的可选状态或类型。 */
+
 enum ClubDefaultRank(
     val code: String,
     val label: String,

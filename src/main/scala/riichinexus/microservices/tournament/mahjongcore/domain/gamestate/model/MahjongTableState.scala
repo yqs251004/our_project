@@ -4,6 +4,7 @@ import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.{Mahjo
 import riichinexus.microservices.tournament.objects.paifumanagement.PaifuRound
 import riichinexus.microservices.tournament.objects.tablemanagement.TableId
 
+import riichinexus.system.json.JsonCodecs.given
 /** 后端内部保存的一张比赛桌实时麻将完整状态，包含暗牌、小局记录和乐观锁版本。 */
 final case class MahjongTableState(
     tableId: TableId,

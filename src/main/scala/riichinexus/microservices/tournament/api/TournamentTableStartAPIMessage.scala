@@ -1,59 +1,29 @@
 package riichinexus.microservices.tournament.api
 import riichinexus.microservices.auth.objects.Permission
-import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
-import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
-
-import riichinexus.microservices.auth.domain.authorization.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+import riichinexus.microservices.auth.api.`private`.{RequirePermissionPrivateAPIMessage, ResolveAccessPrincipalPrivateAPIMessage}
+import riichinexus.microservices.auth.api.`private`.ResolveSystemAccessPrincipalPrivateAPIMessage
 
 import java.util.NoSuchElementException
 import java.time.Instant
 
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.domain.functions.ClubIdGenerator
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
-import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
-import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
-import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
-import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
-import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
 import riichinexus.microservices.tournament.objects.tablemanagement.TableId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
-import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
-import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
-import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
-import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
-import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
-import riichinexus.microservices.audit.domain.auditevent.AuditEventId
-import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
-import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
-import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.notification.api.`private`.CreateBulkNotificationsPrivateAPIMessage
-import riichinexus.microservices.notification.objects.apiTypes.CreateNotificationRequest
-import riichinexus.microservices.tournament.mahjongcore.api.MahjongCoreStartTableAPIMessage
+import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
+import riichinexus.microservices.notification.api.`private`.RecordBulkNotificationsPrivateAPIMessage
+import riichinexus.microservices.notification.objects.`private`.CreateNotificationRequest
+import riichinexus.microservices.tournament.mahjongcore.api.`private`.{InitializeMahjongTableStatePrivateAPIMessage, InitializeMahjongTableStateRequest}
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.MahjongRuleset
-import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.apiTypes.StartMahjongTableRequest
-import riichinexus.microservices.tournament.domain.tablemanagement.functions.TableFunctions
-import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
-import riichinexus.microservices.tournament.domain.recordmanagement.model.*
-import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
-import riichinexus.microservices.tournament.domain.tablemanagement.model.*
-import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
-import riichinexus.system.json.JsonCodecs.given
-import riichinexus.microservices.tournament.domain.tablemanagement.model.Table
-import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.AssignTournamentAdminRequest.given
-import upickle.default.*
+import riichinexus.microservices.tournament.domain.stage.functions.scheduling.TableFunctions
+import riichinexus.microservices.tournament.domain.stage.model.Table
 
+import riichinexus.system.json.JsonCodecs.given
+import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.TournamentTableView
+
+import upickle.default.ReadWriter
+
+/** 开始赛事牌桌并初始化对局状态。 */
 final case class TournamentTableStartAPIMessage(tableId: String, operatorId: Option[String] = None) extends APIMessage[TournamentTableView] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[TournamentTableView] =
@@ -61,37 +31,59 @@ final case class TournamentTableStartAPIMessage(tableId: String, operatorId: Opt
       actor <- resolveOperatorActor(context)
       startedAt <- IO.realTimeInstant
       command = StartTableCommand(TableId(tableId), actor, startedAt)
-      table <- IO.blocking {
-        {
-          startTable(context.connection, command)
-        }.getOrElse(throw NoSuchElementException("Resource not found"))
-      }
-      _ <- CreateBulkNotificationsPrivateAPIMessage(tableStartedNotifications(context.connection, table)).plan(context)
+      table <- startTable(context, command).map(_.getOrElse(throw NoSuchElementException("Resource not found")))
+      notificationRequests <- IO.blocking(tableStartedNotifications(context.connection, table))
+      _ <- RecordBulkNotificationsPrivateAPIMessage(notificationRequests).plan(context)
     yield TournamentTableView.fromDomain(table)
 
-  private def resolveOperatorActor(context: ApiPlanContext): IO[AccessPrincipal] =
+  private def resolveOperatorActor(context: ApiPlanContext): IO[AccessPrincipalPrivateView] =
     operatorId.filter(_.nonEmpty).map(PlayerId(_))
-      .map(ResolveAccessPrincipal(_).plan(context))
-      .getOrElse(IO.pure(AccessPrincipalFunctions.system))
+      .map(ResolveAccessPrincipalPrivateAPIMessage(_).plan(context))
+      .getOrElse(ResolveSystemAccessPrincipalPrivateAPIMessage().plan(context))
 
-  private def startTable(connection: java.sql.Connection, command: StartTableCommand): Option[Table] =
-    riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.findById(connection, command.tableId).map { table =>
-      AuthorizationPolicyFunctions.requirePermission(AuthorizationPolicyFunctions.strict, 
+  private def startTable(context: ApiPlanContext, command: StartTableCommand): IO[Option[Table]] =
+    loadTable(context, command.tableId).flatMap {
+      case Some(table) => startLoadedTable(context, table, command).map(Some(_))
+      case None        => IO.pure(None)
+    }
+
+  private def loadTable(context: ApiPlanContext, tableId: TableId): IO[Option[Table]] =
+    IO.blocking {
+      riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.findById(context.connection, tableId)
+    }
+
+  private def startLoadedTable(
+      context: ApiPlanContext,
+      table: Table,
+      command: StartTableCommand
+  ): IO[Table] =
+    for
+      _ <- RequirePermissionPrivateAPIMessage(
         command.actor,
         Permission.ManageTournamentStages,
         tournamentId = Some(table.tournamentId)
+      ).plan(context)
+      startedTable <- IO.blocking(startAndSaveTable(context.connection, table, command))
+    yield startedTable
+
+  private def startAndSaveTable(
+      connection: java.sql.Connection,
+      table: Table,
+      command: StartTableCommand
+  ): Table =
+    val startedTable = riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.save(
+      connection,
+      TableFunctions.start(table, command.startedAt)
+    )
+    InitializeMahjongTableStatePrivateAPIMessage.initializeAndSave(
+      connection,
+      command.tableId,
+      InitializeMahjongTableStateRequest(
+        operatorId = command.actor.playerId.map(_.value),
+        ruleset = Some(rulesetForTable(connection, table))
       )
-      val startedTable = riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable.save(connection, TableFunctions.start(table, command.startedAt))
-      MahjongCoreStartTableAPIMessage.startAndSave(
-        connection,
-        command.tableId,
-        StartMahjongTableRequest(
-          operatorId = command.actor.playerId.map(_.value),
-          ruleset = Some(rulesetForTable(connection, table))
-        )
-      )
-      startedTable
-    }
+    )
+    startedTable
 
   private def rulesetForTable(connection: java.sql.Connection, table: Table): MahjongRuleset =
     riichinexus.microservices.tournament.tables.tournaments.TournamentTable
@@ -134,7 +126,6 @@ final case class TournamentTableStartAPIMessage(tableId: String, operatorId: Opt
 
   private final case class StartTableCommand(
       tableId: TableId,
-      actor: AccessPrincipal,
+      actor: AccessPrincipalPrivateView,
       startedAt: Instant
   )
-

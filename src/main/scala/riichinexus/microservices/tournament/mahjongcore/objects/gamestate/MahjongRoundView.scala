@@ -3,7 +3,7 @@ package riichinexus.microservices.tournament.mahjongcore.objects.gamestate
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.tournament.objects.paifumanagement.{AgariResult, KyokuDescriptor, PaifuTile}
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.*
+import upickle.default.{ReadWriter, macroRW}
 
 /** 前端可见的当前小局摘要，隐藏牌山和完整暗牌，只暴露桌面展示需要的信息。 */
 final case class MahjongRoundView(

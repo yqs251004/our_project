@@ -1,13 +1,15 @@
 package riichinexus.microservices.tournament.mahjongcore.domain.yakuanalysis.functions
 
-import riichinexus.microservices.tournament.mahjongcore.domain.handanalysis.model.*
-import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.MahjongTileFunctions.*
+import riichinexus.microservices.tournament.mahjongcore.domain.handanalysis.model.MahjongHandMeldType
+import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.MahjongTileFunctions.{isHonor, isYaochu}
 import riichinexus.microservices.tournament.objects.paifumanagement.MahjongYakuKind
 import riichinexus.microservices.tournament.objects.paifumanagement.Yaku
 
-import MahjongYakuCheckSupport.*
+import MahjongYakuCheckSupport.{MahjongYakuCheckState, YakuCheck, everyMeldHasTerminal, suitCount, yakuIf}
 
-private[tournament] object MahjongSuitYakuCheckFunctions:
+/** MahjongSuitYakuCheckFunctions 提供麻将花色役种检查函数 相关的领域校验和权限判断。 */
+
+private[functions] object MahjongSuitYakuCheckFunctions:
 
   val plan: Vector[YakuCheck] =
     Vector(

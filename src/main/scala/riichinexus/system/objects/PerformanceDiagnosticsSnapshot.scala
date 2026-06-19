@@ -3,7 +3,7 @@ package riichinexus.system.objects
 import java.time.Instant
 
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.*
+import upickle.default.{ReadWriter, macroRW}
 
 final case class PerformanceDiagnosticsSnapshot(
     startedAt: Instant,

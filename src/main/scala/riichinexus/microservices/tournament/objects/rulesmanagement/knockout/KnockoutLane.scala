@@ -1,6 +1,8 @@
 package riichinexus.microservices.tournament.objects.rulesmanagement.knockout
 
-import upickle.default.*
+import upickle.default.{ReadWriter, readwriter}
+
+/** KnockoutLane 枚举KnockoutLane 可使用的公开取值。 */
 
 enum KnockoutLane:
   case Championship

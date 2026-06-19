@@ -1,6 +1,6 @@
 package riichinexus.microservices.auth.api
-import riichinexus.system.api.ApiPlanContext
-import riichinexus.microservices.player.api.`private`.*
+
+import riichinexus.microservices.player.api.`private`.ResolvePlayerPrivateAPIMessage
 
 import java.time.Instant
 
@@ -11,12 +11,11 @@ import riichinexus.microservices.auth.domain.functions.AuthenticatedSessionFunct
 import riichinexus.microservices.auth.domain.model.AuthenticatedSession
 import riichinexus.microservices.auth.objects.Role
 import riichinexus.microservices.auth.objects.apiTypes.{AuthSessionView, CurrentSessionRoleFlags}
-import riichinexus.microservices.player.domain.Player
-import riichinexus.microservices.player.objects.PlayerStatus
+import riichinexus.microservices.player.objects.`private`.PlayerPrivateView
 import riichinexus.microservices.auth.tables.authenticatedsession.AuthenticatedSessionTable
-import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
-import upickle.default.*
+import upickle.default.ReadWriter
 
+/** 从 token 恢复登录会话。 */
 final case class RestoreAuthSessionAPIMessage() extends APIWithTokenMessage[AuthSessionView] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[AuthSessionView] =
@@ -50,7 +49,7 @@ final case class RestoreAuthSessionAPIMessage() extends APIWithTokenMessage[Auth
         _.getOrElse(throw AuthenticationFailure(s"Player ${touched.playerId.value} was not found", "invalid_session"))
       )
       _ <- IO.blocking {
-        if player.status != PlayerStatus.Active then
+        if !player.active then
           throw AuthenticationFailure(s"Player ${player.id.value} is not active", "inactive_account")
       }
     yield RestoreSessionResult(touched, player)
@@ -62,10 +61,10 @@ final case class RestoreAuthSessionAPIMessage() extends APIWithTokenMessage[Auth
 
   private final case class RestoreSessionResult(
       session: AuthenticatedSession,
-      player: Player
+      player: PlayerPrivateView
   )
 
-  private def registeredRoleFlags(player: Player): CurrentSessionRoleFlags =
+  private def registeredRoleFlags(player: PlayerPrivateView): CurrentSessionRoleFlags =
     CurrentSessionRoleFlags(
       isGuest = false,
       isRegisteredPlayer = true,

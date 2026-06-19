@@ -1,7 +1,9 @@
 package riichinexus.microservices.tournament.appeal.objects
 
 import riichinexus.microservices.tournament.appeal.domain.model.{AppealTableResolution as DomainAppealTableResolution}
-import upickle.default.*
+import upickle.default.{ReadWriter, readwriter}
+
+/** AppealTableResolution 枚举申诉牌桌处理结果 可使用的公开取值。 */
 
 enum AppealTableResolution:
   case RestorePriorState

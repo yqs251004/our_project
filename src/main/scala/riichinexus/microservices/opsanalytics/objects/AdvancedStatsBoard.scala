@@ -2,6 +2,8 @@ package riichinexus.microservices.opsanalytics.objects
 
 import java.time.Instant
 
+/** AdvancedStatsBoard 表示前后端共享的高级统计看板 数据结构，包含owner、sampleSize、defenseStability、ukeireExpectation、averageShantenImprovement、callAggressionRate等。 */
+
 final case class AdvancedStatsBoard(
     owner: DashboardOwner,
     sampleSize: Int,

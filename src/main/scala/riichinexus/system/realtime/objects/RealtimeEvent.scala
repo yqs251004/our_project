@@ -3,7 +3,7 @@ package riichinexus.system.realtime.objects
 import java.time.Instant
 
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.*
+import upickle.default.ReadWriter
 
 final case class RealtimeEvent(
     id: String,

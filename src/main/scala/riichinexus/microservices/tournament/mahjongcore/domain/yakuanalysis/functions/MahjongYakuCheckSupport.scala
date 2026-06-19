@@ -1,13 +1,15 @@
 package riichinexus.microservices.tournament.mahjongcore.domain.yakuanalysis.functions
 
 import riichinexus.microservices.tournament.mahjongcore.domain.handanalysis.functions.MahjongHandAnalysisFunctions
-import riichinexus.microservices.tournament.mahjongcore.domain.handanalysis.model.*
-import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.MahjongTileFunctions.*
+import riichinexus.microservices.tournament.mahjongcore.domain.handanalysis.model.{MahjongHandDecomposition, MahjongHandMeld, MahjongHandMeldType}
+import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.MahjongTileFunctions.{Chun, Haku, Man1, Man9, Nan, Pei, Pin1, Pin9, Sha, Sou1, Sou9, Ton, indexOf, isYaochu}
 import riichinexus.microservices.tournament.mahjongcore.domain.yakuanalysis.model.MahjongWinContext
 import riichinexus.microservices.tournament.objects.paifumanagement.{MahjongYakuKind, PaifuTile, Yaku}
 import riichinexus.microservices.tournament.objects.tablemanagement.SeatWind
 
-private[tournament] object MahjongYakuCheckSupport:
+/** MahjongYakuCheckSupport 提供麻将役种检查支撑 相关的领域校验和权限判断。 */
+
+private[functions] object MahjongYakuCheckSupport:
 
   final case class MahjongYakuCheckState(
       concealedCounts: Array[Int],

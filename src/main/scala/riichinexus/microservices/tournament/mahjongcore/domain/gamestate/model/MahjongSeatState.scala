@@ -5,6 +5,7 @@ import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.{Mahjo
 import riichinexus.microservices.tournament.objects.paifumanagement.PaifuTile
 import riichinexus.microservices.tournament.objects.tablemanagement.SeatWind
 
+import riichinexus.system.json.JsonCodecs.given
 /** 后端内部的座位状态，包含玩家真实手牌、摸牌、副露和河牌等不可直接全量公开的信息。 */
 final case class MahjongSeatState(
     seat: SeatWind,

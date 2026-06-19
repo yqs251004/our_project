@@ -1,10 +1,11 @@
 package riichinexus.system.api
 
 import scala.annotation.tailrec
-import scala.concurrent.duration.*
+import scala.concurrent.duration.DurationInt
 import java.util.concurrent.atomic.AtomicReference
 
 import cats.effect.{IO, Resource}
+import cats.effect.unsafe.implicits.global
 import com.comcast.ip4s.{Host, Port, host, port}
 import org.http4s.ember.server.EmberServerBuilder
 import org.http4s.server.Server
@@ -84,23 +85,16 @@ object ApiServer:
       .withHttpApp(ApiHttpApp.build(runtime = runtime))
       .build
 
-  def start(apiServer: ApiServerState): IO[Unit] =
-    IO.defer {
-      val current = apiServer.primary.get()
-      if current.nonEmpty then IO.unit
-      else
-        resource(apiServer.runtime, apiServer.config).allocated.flatMap { case (server, release) =>
-          val handle = ApiServerHandle(server, release)
-          IO.delay(apiServer.primary.compareAndSet(current, Some(handle))).flatMap { started =>
-            if started then IO.unit else release
-          }
-        }
-    }
+  def start(apiServer: ApiServerState): Unit =
+    val current = apiServer.primary.get()
+    if current.isEmpty then
+      val (server, release) = resource(apiServer.runtime, apiServer.config).allocated.unsafeRunSync()
+      val handle = ApiServerHandle(server, release)
+      if !apiServer.primary.compareAndSet(current, Some(handle)) then
+        release.unsafeRunSync()
 
-  def stop(apiServer: ApiServerState, delaySeconds: Int = 0): IO[Unit] =
-    val delay =
-      if delaySeconds > 0 then IO.sleep(delaySeconds.seconds) else IO.unit
-    delay.flatMap(_ => IO.delay(clearPrimary(apiServer)).flatMap(_.fold(IO.unit)(_.release)))
+  def stop(apiServer: ApiServerState, delaySeconds: Int = 0): Unit =
+    clearPrimary(apiServer).foreach(_.release.unsafeRunSync())
 
   def port(apiServer: ApiServerState): Int =
     apiServer.primary.get().map(_.server.address.getPort).getOrElse(apiServer.config.port)

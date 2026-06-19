@@ -10,8 +10,9 @@ import riichinexus.microservices.auth.domain.model.GuestAccessSession
 import riichinexus.microservices.auth.objects.apiTypes.GuestSessionResponse
 import riichinexus.microservices.auth.tables.guestsession.GuestSessionTable
 import riichinexus.system.objects.PagedResponse
-import upickle.default.*
+import upickle.default.ReadWriter
 
+/** 列出游客访问会话。 */
 final case class ListGuestSessionsAuthAPIMessage(
     activeOnly: Option[Boolean] = None,
     limit: Option[Int] = None,

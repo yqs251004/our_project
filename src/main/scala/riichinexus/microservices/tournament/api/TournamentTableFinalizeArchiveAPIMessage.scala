@@ -4,33 +4,34 @@ import java.time.Instant
 import java.util.NoSuchElementException
 
 import cats.effect.IO
-import riichinexus.microservices.auth.domain.authorization.AuthorizationPolicyFunctions
 import riichinexus.microservices.auth.objects.Permission
-import riichinexus.microservices.auth.utils.ResolveAccessPrincipal
+import riichinexus.microservices.auth.api.`private`.{RequirePermissionPrivateAPIMessage, ResolveAccessPrincipalPrivateAPIMessage}
 import riichinexus.microservices.opsanalytics.api.`private`.RefreshOpsAnalyticsAfterMatchArchivedPrivateAPIMessage
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.tournament.appeal.api.AppealListAPIMessage
 import riichinexus.microservices.tournament.appeal.objects.{AppealStatus as AppealViewStatus}
 import riichinexus.microservices.tournament.appeal.objects.apiTypes.AppealListQuery
-import riichinexus.microservices.tournament.domain.tablemanagement.functions.{TableFunctions, TournamentStageTableScheduler}
-import riichinexus.microservices.tournament.domain.tablemanagement.model.Table
+import riichinexus.microservices.tournament.api.`private`.TournamentPrivateReadModel
+import riichinexus.microservices.tournament.domain.stage.functions.scheduling.{TableFunctions, TournamentStageTableScheduler}
+import riichinexus.microservices.tournament.domain.stage.model.Table
 import riichinexus.microservices.tournament.objects.tablemanagement.{TableId, TableStatus}
 import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.TournamentTableView
 import riichinexus.microservices.tournament.tables.matchrecord.MatchRecordTable
 import riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.system.json.JsonCodecs.given
-import upickle.default.*
 
+import upickle.default.ReadWriter
+
+/** 归档已计分牌桌并刷新赛后统计。 */
 final case class TournamentTableFinalizeArchiveAPIMessage(
     tableId: String,
     operatorId: String
 ) extends APIMessage[TournamentTableView] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[TournamentTableView] =
-    val archivedAt = Instant.now()
     for
-      actor <- ResolveAccessPrincipal(PlayerId(operatorId)).plan(context)
+      archivedAt <- IO.realTimeInstant
+      actor <- ResolveAccessPrincipalPrivateAPIMessage(PlayerId(operatorId)).plan(context)
       appealPage <- AppealListAPIMessage(
         AppealListQuery(
           tableId = Some(TableId(tableId)),
@@ -50,34 +51,35 @@ final case class TournamentTableFinalizeArchiveAPIMessage(
         )
       )
       _ <- RefreshOpsAnalyticsAfterMatchArchivedPrivateAPIMessage(
-        matchRecord = archived.matchRecord,
+        matchRecord = TournamentPrivateReadModel.fromMatchRecord(archived.matchRecord),
         occurredAt = archived.matchRecord.generatedAt
       ).plan(context)
     yield TournamentTableView.fromDomain(archived.table)
 
   private def finalizeArchive(
       context: ApiPlanContext,
-      actor: riichinexus.microservices.auth.domain.model.AccessPrincipal,
+      actor: riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView,
       tableId: TableId,
       archivedAt: Instant,
       activeAppealExists: Boolean
   ): IO[ArchivedTable] =
     for
-      archived <- IO.blocking {
+      table <- IO.blocking {
         val table = TournamentGameTable.findById(context.connection, tableId)
           .getOrElse(throw NoSuchElementException("Resource not found"))
-        AuthorizationPolicyFunctions.requirePermission(
-          AuthorizationPolicyFunctions.strict,
-          actor,
-          Permission.ManageTournamentStages,
-          tournamentId = Some(table.tournamentId)
-        )
         require(table.status == TableStatus.Scoring, s"Only scoring table ${table.id.value} can be archived")
         require(
           !activeAppealExists,
           s"Table ${table.id.value} cannot be archived while appeals are active"
         )
-
+        table
+      }
+      _ <- RequirePermissionPrivateAPIMessage(
+          actor,
+          Permission.ManageTournamentStages,
+          tournamentId = Some(table.tournamentId)
+      ).plan(context)
+      archived <- IO.blocking {
         val recordId = table.matchRecordId
           .getOrElse(throw IllegalArgumentException(s"Table ${table.id.value} has no match record to archive"))
         val paifuId = table.paifuId
@@ -102,5 +104,5 @@ final case class TournamentTableFinalizeArchiveAPIMessage(
 
   private final case class ArchivedTable(
       table: Table,
-      matchRecord: riichinexus.microservices.tournament.domain.recordmanagement.model.MatchRecord
+      matchRecord: riichinexus.microservices.tournament.domain.matchrecord.model.MatchRecord
   )

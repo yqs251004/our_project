@@ -7,47 +7,26 @@ import java.util.NoSuchElementException
 
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.domain.functions.ClubIdGenerator
+import riichinexus.microservices.club.api.`private`.ResolveClubReadModelsPrivateAPIMessage
+import riichinexus.microservices.club.objects.`private`.ClubPrivateView
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
-import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
-import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
-import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
-import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
-import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
-import riichinexus.microservices.tournament.objects.tablemanagement.TableId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
-import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
-import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
-import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
-import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
-import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
-import riichinexus.microservices.audit.domain.auditevent.AuditEventId
-import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
-import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
-import riichinexus.microservices.club.api.`private`.ResolveClubsPrivateAPIMessage
-import riichinexus.microservices.club.domain.Club
-import riichinexus.microservices.club.domain.clubmanagement.model.*
-import riichinexus.microservices.club.domain.membershipmanagement.model.*
-import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
-import riichinexus.microservices.club.domain.relationmanagement.model.*
+import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.tournament.domain.stage.model.StageLineupSubmission
+import riichinexus.microservices.tournament.domain.stage.functions.rules.TournamentStageQueries
+import riichinexus.microservices.tournament.domain.stage.model.Table
+import riichinexus.microservices.tournament.domain.competition.model.Tournament
+import riichinexus.microservices.tournament.domain.stage.model.TournamentStage
 import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.TournamentLineupSubmissionView
-import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.{PublicTournamentDetailView, PublicTournamentStageView}
-import riichinexus.microservices.tournament.domain.rulesmanagement.functions.TournamentStageQueries
-import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
-import riichinexus.microservices.tournament.domain.recordmanagement.model.*
-import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
-import riichinexus.microservices.tournament.domain.tablemanagement.model.*
-import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.microservices.tournament.objects.rulesmanagement.knockout.KnockoutBracketSnapshot
 import riichinexus.microservices.tournament.objects.rulesmanagement.ranking.StageRankingSnapshot
-import riichinexus.microservices.tournament.tables.tournaments.TournamentTable
+import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
+import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.{PublicTournamentDetailView, PublicTournamentStageView}
 import riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable
-import riichinexus.system.json.JsonCodecs.given
-import upickle.default.*
+import riichinexus.microservices.tournament.tables.tournaments.TournamentTable
 
+import upickle.default.ReadWriter
+
+/** 获取前端公开赛事详情。 */
 final case class GetPublicTournamentAPIMessage(
     tournamentId: String
 ) extends APIMessage[PublicTournamentDetailView] derives ReadWriter:
@@ -56,9 +35,7 @@ final case class GetPublicTournamentAPIMessage(
     for
       id <- IO.blocking(TournamentId(tournamentId))
       tournament <- IO.blocking(publicTournament(context, id))
-      clubsById <- publicRelatedClubsById(context, tournament)
-      tablesByStage <- IO.blocking(tablesByStageId(context, tournament))
-      view <- publicTournamentView(context, tournament, clubsById, tablesByStage)
+      view <- publicTournamentView(context, tournament)
     yield view
 
   private def publicTournament(
@@ -70,11 +47,34 @@ final case class GetPublicTournamentAPIMessage(
       .filter(_.status != TournamentStatus.Draft)
       .getOrElse(throw NoSuchElementException("Resource not found"))
 
+  private def publicTournamentView(
+      context: ApiPlanContext,
+      tournament: Tournament
+  ): IO[PublicTournamentDetailView] =
+    for
+      clubsById <- publicRelatedClubsById(context, tournament)
+      tablesByStage <- IO.blocking(tablesByStageId(context, tournament))
+      stages <- sequenceVector(tournament.stages.sortBy(_.order).map { stage =>
+        publicStageView(context, tournament, stage, tablesByStage(stage.id))
+      })
+    yield PublicTournamentDetailView(
+      tournamentId = tournament.id,
+      name = tournament.name,
+      organizer = tournament.organizer,
+      status = tournament.status,
+      startsAt = tournament.startsAt,
+      endsAt = tournament.endsAt,
+      clubIds = tournament.participatingClubs.distinct,
+      playerIds = tournamentParticipantIds(tournament, clubsById),
+      whitelistCount = tournament.whitelist.size,
+      stages = stages
+    )
+
   private def publicRelatedClubsById(
       context: ApiPlanContext,
       tournament: Tournament
-  ): IO[Map[ClubId, Club]] =
-    ResolveClubsPrivateAPIMessage(relatedClubIds(tournament))
+  ): IO[Map[ClubId, ClubPrivateView]] =
+    ResolveClubReadModelsPrivateAPIMessage(relatedClubIds(tournament))
       .plan(context)
       .map(_.map(club => club.id -> club).toMap)
 
@@ -87,29 +87,6 @@ final case class GetPublicTournamentAPIMessage(
       .groupBy(_.stageId)
       .withDefaultValue(Vector.empty)
 
-  private def publicTournamentView(
-      context: ApiPlanContext,
-      tournament: Tournament,
-      clubsById: Map[ClubId, Club],
-      tablesByStage: Map[TournamentStageId, Vector[Table]]
-  ): IO[PublicTournamentDetailView] =
-    sequenceVector(tournament.stages.sortBy(_.order).map { stage =>
-      publicStageView(context, tournament, stage, tablesByStage(stage.id))
-    }).map { stages =>
-      PublicTournamentDetailView(
-        tournamentId = tournament.id,
-        name = tournament.name,
-        organizer = tournament.organizer,
-        status = tournament.status,
-        startsAt = tournament.startsAt,
-        endsAt = tournament.endsAt,
-        clubIds = tournament.participatingClubs.distinct,
-        playerIds = tournamentParticipantIds(tournament, clubsById),
-        whitelistCount = tournament.whitelist.size,
-        stages = stages
-      )
-    }
-
   private def publicStageView(
       context: ApiPlanContext,
       tournament: Tournament,
@@ -120,27 +97,27 @@ final case class GetPublicTournamentAPIMessage(
       standings <- publicStageStandings(context, tournament, stage)
       bracket <- publicStageBracket(context, tournament, stage)
     yield PublicTournamentStageView(
-        stageId = stage.id,
-        name = stage.name,
-        format = stage.format,
-        order = stage.order,
-        status = stage.status,
-        currentRound = stage.currentRound,
-        roundCount = stage.roundCount,
-        schedulingPoolSize = stage.schedulingPoolSize,
-        tableCount = tables.size,
-        archivedTableCount = tables.count(_.status == TableStatus.Archived),
-        pendingTablePlanCount = stage.pendingTablePlans.size,
-        standings = Some(standings),
-        bracket = bracket,
-        advancementRule = stage.advancementRule,
-        swissRule = stage.swissRule,
-        knockoutRule = stage.knockoutRule,
-        mahjongRuleset = stage.mahjongRuleset,
-        lineupSubmissions = stage.lineupSubmissions
-          .sortBy(_.submittedAt)
-          .map(lineupSubmissionView)
-      )
+      stageId = stage.id,
+      name = stage.name,
+      format = stage.format,
+      order = stage.order,
+      status = stage.status,
+      currentRound = stage.currentRound,
+      roundCount = stage.roundCount,
+      schedulingPoolSize = stage.schedulingPoolSize,
+      tableCount = tables.size,
+      archivedTableCount = tables.count(_.status == TableStatus.Archived),
+      pendingTablePlanCount = stage.pendingTablePlans.size,
+      standings = Some(standings),
+      bracket = bracket,
+      advancementRule = stage.advancementRule,
+      swissRule = stage.swissRule,
+      knockoutRule = stage.knockoutRule,
+      mahjongRuleset = stage.mahjongRuleset,
+      lineupSubmissions = stage.lineupSubmissions
+        .sortBy(_.submittedAt)
+        .map(lineupSubmissionView)
+    )
 
   private def lineupSubmissionView(
       submission: StageLineupSubmission
@@ -173,7 +150,7 @@ final case class GetPublicTournamentAPIMessage(
 
   private def tournamentParticipantIds(
       tournament: Tournament,
-      clubsById: Map[ClubId, Club]
+      clubsById: Map[ClubId, ClubPrivateView]
   ): Vector[PlayerId] =
     val clubMembers = tournament.participatingClubs.flatMap(clubId =>
       clubsById.get(clubId).toVector.flatMap(_.members)

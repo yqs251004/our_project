@@ -8,8 +8,9 @@ import scala.util.Using
 
 import riichinexus.microservices.notification.objects.Notification
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.system.json.JsonCodecs.given
+
 import upickle.default.{read, write}
+
 
 object NotificationTable:
   private val upsertSql: String =

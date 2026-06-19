@@ -1,6 +1,8 @@
 package riichinexus.microservices.club.objects.relationmanagement
 
-import upickle.default.*
+import upickle.default.{ReadWriter, readwriter}
+
+/** ClubRelationKind 枚举俱乐部关系类型 可使用的公开取值。 */
 
 enum ClubRelationKind:
   case Alliance

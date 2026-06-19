@@ -1,9 +1,7 @@
 package riichinexus.system.api.http
 
 import cats.effect.IO
-import cats.syntax.all.*
-import org.http4s.{HttpRoutes, Request, Response, Status}
-import org.http4s.dsl.io.*
+import org.http4s.{HttpRoutes, Method, Request, Response, Status}
 import riichinexus.system.api.{APIMessageRegistry, ApiPlanContext, ApiPostCommitHooks, ApiSuccessStatus, RegisteredAPIMessage}
 import riichinexus.system.objects.ErrorResponse
 
@@ -14,9 +12,27 @@ object APIMessageRouter:
       apiMessagesByName: Map[String, RegisteredAPIMessage] = APIMessageRegistry.apiMessagesByName
   ): HttpRoutes[IO] =
     HttpRoutes.of[IO] {
-      case req @ POST -> Root / "api" / apiName =>
-        dispatch(support, apiMessagesByName, apiName, req)
+      case request if request.method == Method.POST =>
+        apiPathName(request) match
+          case Some(apiName) => dispatch(support, apiMessagesByName, apiName, request)
+          case None =>
+            RouteSupport.jsonResponse(
+              support,
+              Status.NotFound,
+              ErrorResponse(
+                message = s"Unknown API path: ${request.uri.path.renderString}",
+                code = "api_not_found"
+              )
+            )
     }
+
+  private def apiPathName(request: Request[IO]): Option[String] =
+    normalizedPathSegments(request) match
+      case Vector("api", apiName) => Some(apiName)
+      case _ => None
+
+  private def normalizedPathSegments(request: Request[IO]): Vector[String] =
+    request.uri.path.renderString.split('/').toVector.filter(_.nonEmpty)
 
   private def dispatch(
       support: RouteSupport,
@@ -55,15 +71,20 @@ object APIMessageRouter:
         )
         for
           _ <-
-            if apiMessage.requiresBearerToken then IO.blocking(ApiPlanContext.requireBearerToken(context)).void
+            if apiMessage.requiresBearerToken then IO.blocking(ApiPlanContext.requireBearerToken(context)).map(_ => ())
             else IO.unit
           responseJson <- apiMessage.planJson(bodyForDecode(body), context)
         yield responseJson
       }
-      _ <- postCommitHooks.drain.traverse_(_.handleErrorWith(_ => IO.unit))
+      _ <- runPostCommitHooks(postCommitHooks.drain)
       responseBody <- IO.blocking(ujson.write(responseJson, indent = 2))
       response <- RouteSupport.textResponse(support, httpStatus(apiMessage.successStatus), responseBody, "application/json; charset=utf-8")
     yield response
+
+  private def runPostCommitHooks(hooks: Vector[IO[Unit]]): IO[Unit] =
+    hooks.foldLeft(IO.unit) { (acc, hook) =>
+      acc.flatMap(_ => hook.handleErrorWith(_ => IO.unit))
+    }
 
   private def httpStatus(status: ApiSuccessStatus): Status =
     status match

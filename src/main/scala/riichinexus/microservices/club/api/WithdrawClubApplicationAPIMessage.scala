@@ -1,10 +1,9 @@
 package riichinexus.microservices.club.api
 import riichinexus.microservices.auth.objects.Permission
-import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
-import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
-import riichinexus.microservices.player.api.`private`.*
-
-import riichinexus.microservices.auth.domain.authorization.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+import riichinexus.microservices.auth.api.`private`.ResolveRequestActorPrivateAPIMessage
+import riichinexus.microservices.auth.api.`private`.RequirePermissionPrivateAPIMessage
+import riichinexus.microservices.auth.api.`private`.CheckSuperAdminPrivateAPIMessage
+import riichinexus.microservices.player.api.`private`.ResolvePlayerPrivateAPIMessage
 
 import riichinexus.microservices.club.domain.clubmanagement.functions.ClubFunctions
 import java.time.Instant
@@ -12,43 +11,23 @@ import java.util.NoSuchElementException
 
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.domain.functions.ClubIdGenerator
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
 import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
-import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
-import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
-import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
-import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
-import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
-import riichinexus.microservices.tournament.objects.tablemanagement.TableId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
-import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
-import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
-import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
-import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
-import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
-import riichinexus.microservices.audit.domain.auditevent.AuditEventId
-import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
-import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
-import riichinexus.microservices.auth.domain.model.*
+import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
 import riichinexus.microservices.club.domain.Club
-import riichinexus.microservices.club.domain.clubmanagement.model.*
 import riichinexus.microservices.club.domain.membershipmanagement.functions.ClubMembershipApplicationFunctions
-import riichinexus.microservices.club.domain.membershipmanagement.model.*
-import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
-import riichinexus.microservices.club.domain.relationmanagement.model.*
-import riichinexus.microservices.player.domain.Player
-import riichinexus.microservices.auth.domain.*
+import riichinexus.microservices.club.domain.membershipmanagement.model.ClubMembershipApplication
+import riichinexus.microservices.player.objects.`private`.PlayerPrivateView
+import riichinexus.system.api.AuthorizationFailure
 import riichinexus.microservices.audit.api.`private`.RecordAuditEventPrivateAPIMessage
-import riichinexus.microservices.audit.domain.auditevent.AuditEvent
+import riichinexus.microservices.audit.objects.`private`.AuditEventDraft
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.club.domain.ClubAuthorization
 import riichinexus.microservices.club.objects.membershipmanagement.apiTypes.ClubMembershipApplicationResponse
-import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
-import upickle.default.*
+import upickle.default.ReadWriter
 
+/** 撤回俱乐部申请。 */
 final case class WithdrawClubApplicationAPIMessage(
     clubId: String,
     membershipId: String,
@@ -71,8 +50,8 @@ final case class WithdrawClubApplicationAPIMessage(
       _ <- RecordAuditEventPrivateAPIMessage(withdrawApplicationAudit(command, application)).plan(context)
     yield ClubMembershipApplicationResponse.fromDomain(application)
 
-  private def resolveActor(context: ApiPlanContext): IO[AccessPrincipal] =
-    ResolveRequestActor(
+  private def resolveActor(context: ApiPlanContext): IO[AccessPrincipalPrivateView] =
+    ResolveRequestActorPrivateAPIMessage(
       None,
       operatorId.filter(_.nonEmpty).map(PlayerId(_))
     ).plan(context)
@@ -86,14 +65,22 @@ final case class WithdrawClubApplicationAPIMessage(
       actorPlayer <- command.actor.playerId
         .map(playerId => ResolvePlayerPrivateAPIMessage(playerId).plan(context))
         .getOrElse(IO.pure(None))
-      application <- IO.blocking {
-        AuthorizationPolicyFunctions.requirePermission(AuthorizationPolicyFunctions.strict, command.actor, Permission.WithdrawClubApplication)
+      _ <- RequirePermissionPrivateAPIMessage(command.actor, Permission.WithdrawClubApplication).plan(context)
+      pending <- IO.blocking {
         riichinexus.microservices.club.tables.clubs.ClubTable.findById(connection, command.clubId).map { club =>
           ClubAuthorization.ensureClubActive(club)
           val application = resolveApplication(club, command)
           ensureApplicationPending(application, command.membershipId)
-          requireApplicationOwnership(application, command.actor, actorPlayer)
-          val updatedApplication = ClubMembershipApplicationFunctions.withdraw(application, command.actor.principalId, command.withdrawnAt, command.note)
+          (club, application)
+        }
+      }
+      _ <- pending
+        .map { case (_, application) => requireApplicationOwnership(context, application, command.actor, actorPlayer) }
+        .getOrElse(IO.unit)
+      application <- IO.blocking {
+        pending.map { (club, application) =>
+          val updatedApplication =
+            ClubMembershipApplicationFunctions.withdraw(application, command.actor.principalId, command.withdrawnAt, command.note)
           riichinexus.microservices.club.tables.clubs.ClubTable.save(
             connection,
             ClubFunctions.reviewApplication(club, command.membershipId, _ => updatedApplication)
@@ -125,27 +112,32 @@ final case class WithdrawClubApplicationAPIMessage(
       )
 
   private def requireApplicationOwnership(
+      context: ApiPlanContext,
       application: ClubMembershipApplication,
-      actor: AccessPrincipal,
-      actorPlayer: Option[Player]
-  ): Unit =
+      actor: AccessPrincipalPrivateView,
+      actorPlayer: Option[PlayerPrivateView]
+  ): IO[Unit] =
     val ownedByRegisteredPlayer =
       actorPlayer.exists(player =>
         application.playerId.contains(player.id) ||
           application.applicantUserId.contains(player.userId)
       )
 
-    if !ownedByRegisteredPlayer && !AccessPrincipalFunctions.isSuperAdmin(actor) then
-      throw AuthorizationFailure(
-        s"${actor.displayName} cannot withdraw membership application ${application.id.value}"
-      )
+    CheckSuperAdminPrivateAPIMessage(actor).plan(context).flatMap { isSuperAdmin =>
+      if !ownedByRegisteredPlayer && !isSuperAdmin then
+        IO.raiseError(
+          AuthorizationFailure(
+            s"${actor.displayName} cannot withdraw membership application ${application.id.value}"
+          )
+        )
+      else IO.unit
+    }
 
   private def withdrawApplicationAudit(
       command: WithdrawClubApplicationCommand,
       application: ClubMembershipApplication
-  ): AuditEvent =
-    AuditEvent(
-      id = AuditIdGenerator.auditEventId(),
+  ): AuditEventDraft =
+    AuditEventDraft(
       aggregateType = "club-application",
       aggregateId = command.clubId.value,
       eventType = "ClubApplicationWithdrawn",
@@ -160,7 +152,7 @@ final case class WithdrawClubApplicationAPIMessage(
   private final case class WithdrawClubApplicationCommand(
       clubId: ClubId,
       membershipId: MembershipApplicationId,
-      actor: AccessPrincipal,
+      actor: AccessPrincipalPrivateView,
       note: Option[String],
       withdrawnAt: Instant
   )

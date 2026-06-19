@@ -3,21 +3,23 @@ package riichinexus.microservices.audit.api.`private`
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.audit.domain.auditevent.AuditEvent
+import riichinexus.microservices.audit.objects.`private`.AuditEventPrivateView
 import riichinexus.microservices.audit.tables.auditevent.AuditEventTable
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.*
+import upickle.default.ReadWriter
 
+/** 供后端服务读取审计事件列表。 */
 final case class ListAuditEventsPrivateAPIMessage(
     aggregateType: Option[String] = None,
     aggregateId: Option[String] = None,
     eventType: Option[String] = None,
     oldestFirst: Boolean = false
-) extends APIMessage[Vector[AuditEvent]] derives ReadWriter:
+) extends APIMessage[Vector[AuditEventPrivateView]] derives ReadWriter:
 
-  override def plan(context: ApiPlanContext): IO[Vector[AuditEvent]] =
+  override def plan(context: ApiPlanContext): IO[Vector[AuditEventPrivateView]] =
     for
       events <- IO.blocking(listAuditEvents(context))
-    yield events
+    yield events.map(AuditEventPrivateMapper.toPrivateView)
 
   private def listAuditEvents(context: ApiPlanContext): Vector[AuditEvent] =
     (aggregateType, aggregateId, eventType, oldestFirst) match

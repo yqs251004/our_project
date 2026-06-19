@@ -1,32 +1,11 @@
 package riichinexus.microservices.auth.api
-import riichinexus.microservices.player.api.`private`.*
+import riichinexus.microservices.player.api.`private`.ResolvePlayerPrivateAPIMessage
 
 import java.time.Instant
 
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.domain.functions.ClubIdGenerator
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
-import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
-import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
-import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
-import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
-import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
-import riichinexus.microservices.tournament.objects.tablemanagement.TableId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
-import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
-import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
-import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
-import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
-import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
-import riichinexus.microservices.audit.domain.auditevent.AuditEventId
-import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
-import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
-import riichinexus.microservices.player.domain.Player
-import riichinexus.microservices.player.objects.*
+import riichinexus.microservices.player.objects.`private`.PlayerPrivateView
 import riichinexus.microservices.auth.domain.AuthenticationFailure
 import riichinexus.microservices.auth.domain.functions.{AccountCredentialFunctions, AuthenticatedSessionFunctions, PasswordHashFunctions}
 import riichinexus.microservices.auth.domain.model.{AccountCredential, AuthenticatedSession}
@@ -34,9 +13,9 @@ import riichinexus.microservices.auth.objects.Role
 import riichinexus.microservices.auth.objects.apiTypes.{AuthSuccessView, CurrentSessionRoleFlags}
 import riichinexus.microservices.auth.tables.accountcredential.AccountCredentialTable
 import riichinexus.microservices.auth.tables.authenticatedsession.AuthenticatedSessionTable
-import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
-import upickle.default.*
+import upickle.default.ReadWriter
 
+/** 使用账号密码登录。 */
 final case class LoginAuthAPIMessage(
     username: String,
     password: String
@@ -47,52 +26,62 @@ final case class LoginAuthAPIMessage(
   override def plan(context: ApiPlanContext): IO[AuthSuccessView] =
     for
       loginAt <- IO.realTimeInstant
-      command = LoginCommand(AccountCredentialFunctions.normalizeUsername(username), password, loginAt)
-      result <- login(context, command)
-    yield AuthSuccessView(
-      userId = result.player.id.value,
-      username = result.credential.username,
-      displayName = result.player.nickname,
-      token = result.session.token,
-      roles = registeredRoleFlags(result.player)
+      command <- IO.blocking(buildCommand(loginAt))
+      credential <- authenticateCredential(context, command)
+      player <- resolveCredentialPlayer(context, credential)
+      _ <- IO.blocking(ensureActivePlayer(player))
+      session <- createSession(context, command, credential)
+    yield authSuccessView(credential.username, player, session)
+
+  private def buildCommand(loginAt: Instant): LoginCommand =
+    LoginCommand(AccountCredentialFunctions.normalizeUsername(username), password, loginAt)
+
+  private def authenticateCredential(
+      context: ApiPlanContext,
+      command: LoginCommand
+  ): IO[AccountCredential] =
+    IO.blocking {
+      require(command.password.nonEmpty, "Password is required")
+      val credential = AccountCredentialTable.findByUsername(context.connection, command.username)
+        .getOrElse(throw AuthenticationFailure("Invalid username or password", "invalid_credentials"))
+      if !PasswordHashFunctions.verify(command.password, credential) then
+        throw AuthenticationFailure("Invalid username or password", "invalid_credentials")
+      credential
+    }
+
+  private def resolveCredentialPlayer(
+      context: ApiPlanContext,
+      credential: AccountCredential
+  ): IO[PlayerPrivateView] =
+    ResolvePlayerPrivateAPIMessage(credential.playerId).plan(context).map(
+      _.getOrElse(throw AuthenticationFailure(s"Player ${credential.playerId.value} was not found", "invalid_credentials"))
     )
 
-  private def login(context: ApiPlanContext, command: LoginCommand): IO[LoginResult] =
-    val connection = context.connection
-    for
-      credential <- IO.blocking {
-        require(command.password.nonEmpty, "Password is required")
-        val credential = AccountCredentialTable.findByUsername(connection, command.username)
-          .getOrElse(throw AuthenticationFailure("Invalid username or password", "invalid_credentials"))
-        if !PasswordHashFunctions.verify(command.password, credential) then
-          throw AuthenticationFailure("Invalid username or password", "invalid_credentials")
-        credential
-      }
-      player <- ResolvePlayerPrivateAPIMessage(credential.playerId).plan(context).map(
-        _.getOrElse(throw AuthenticationFailure(s"Player ${credential.playerId.value} was not found", "invalid_credentials"))
-      )
-      _ <- IO.blocking(ensureActivePlayer(player))
-      session <- IO.blocking(
-        AuthenticatedSessionTable.save(
-          connection,
-          AuthenticatedSessionFunctions.create(
-            username = credential.username,
-            playerId = credential.playerId,
-            createdAt = command.loginAt,
-            ttl = SessionTtl
-          )
+  private def createSession(
+      context: ApiPlanContext,
+      command: LoginCommand,
+      credential: AccountCredential
+  ): IO[AuthenticatedSession] =
+    IO.blocking(
+      AuthenticatedSessionTable.save(
+        context.connection,
+        AuthenticatedSessionFunctions.create(
+          username = credential.username,
+          playerId = credential.playerId,
+          createdAt = command.loginAt,
+          ttl = SessionTtl
         )
       )
-    yield LoginResult(credential, player, session)
+    )
 
-  private def ensureActivePlayer(player: Player): Unit =
-    if player.status != PlayerStatus.Active then
+  private def ensureActivePlayer(player: PlayerPrivateView): Unit =
+    if !player.active then
       throw AuthenticationFailure(
         s"Player ${player.id.value} is not active",
         "inactive_account"
       )
 
-  private def registeredRoleFlags(player: Player): CurrentSessionRoleFlags =
+  private def registeredRoleFlags(player: PlayerPrivateView): CurrentSessionRoleFlags =
     CurrentSessionRoleFlags(
       isGuest = false,
       isRegisteredPlayer = true,
@@ -101,14 +90,21 @@ final case class LoginAuthAPIMessage(
       isSuperAdmin = player.roleGrants.exists(_.role == Role.SuperAdmin)
     )
 
+  private def authSuccessView(
+      username: String,
+      player: PlayerPrivateView,
+      session: AuthenticatedSession
+  ): AuthSuccessView =
+    AuthSuccessView(
+      userId = player.id.value,
+      username = username,
+      displayName = player.nickname,
+      token = session.token,
+      roles = registeredRoleFlags(player)
+    )
+
   private final case class LoginCommand(
       username: String,
       password: String,
       loginAt: Instant
-  )
-
-  private final case class LoginResult(
-      credential: AccountCredential,
-      player: Player,
-      session: AuthenticatedSession
   )

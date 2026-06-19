@@ -1,7 +1,9 @@
 package riichinexus.microservices.auth.objects.apiTypes
 
-import riichinexus.system.json.JsonCodecs.given
-import upickle.default.*
+
+import upickle.default.{ReadWriter, macroRW}
+
+/** AuthSuccessView 表示认证成功结果视图 的前端展示视图。 */
 
 final case class AuthSuccessView(
     userId: String,

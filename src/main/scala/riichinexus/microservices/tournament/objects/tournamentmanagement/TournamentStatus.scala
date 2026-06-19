@@ -1,6 +1,8 @@
 package riichinexus.microservices.tournament.objects.tournamentmanagement
 
-import upickle.default.*
+import upickle.default.{ReadWriter, readwriter}
+
+/** TournamentStatus 枚举赛事状态 可使用的公开取值。 */
 
 enum TournamentStatus:
   case Draft

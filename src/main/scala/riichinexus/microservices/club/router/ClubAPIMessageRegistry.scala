@@ -1,29 +1,19 @@
 package riichinexus.microservices.club.router
 import riichinexus.system.api.RegisteredAPIMessage
 
-import riichinexus.system.json.JsonCodecs.given
-import riichinexus.microservices.club.api.*
-import riichinexus.microservices.club.objects.clubmanagement.*
-import riichinexus.microservices.club.objects.membershipmanagement.*
-import riichinexus.microservices.club.objects.rankprivilegemanagement.*
-import riichinexus.microservices.club.objects.relationmanagement.*
-import riichinexus.microservices.club.objects.tournamentparticipation.*
-import riichinexus.microservices.club.objects.clubmanagement.apiTypes.*
-import riichinexus.microservices.club.objects.membershipmanagement.apiTypes.*
-import riichinexus.microservices.club.objects.rankprivilegemanagement.apiTypes.*
-import riichinexus.microservices.club.objects.relationmanagement.apiTypes.*
-import riichinexus.microservices.club.objects.tournamentparticipation.apiTypes.*
-import riichinexus.microservices.club.objects.auditreadmodel.apiTypes.*
-import riichinexus.microservices.player.objects.apiTypes.*
+
+import riichinexus.microservices.club.api.{AcceptClubTournamentAPIMessage, AddClubMemberAPIMessage, AdjustClubMemberContributionAPIMessage, AdjustClubPointPoolAPIMessage, AdjustClubTreasuryAPIMessage, AssignClubAdminAPIMessage, AssignClubTitleAPIMessage, AwardClubHonorAPIMessage, ClearClubTitleAPIMessage, ClubPrivilegeDefinitionsAPIMessage, CreateClubAPIMessage, DeclineClubTournamentAPIMessage, GetClubAPIMessage, GetClubApplicationAPIMessage, GetClubMemberPrivilegeAPIMessage, GetCurrentClubApplicationAPIMessage, GetPublicClubAPIMessage, ListClubApplicationsAPIMessage, ListClubContributionAuditsAPIMessage, ListClubMemberPrivilegesAPIMessage, ListClubMembersAPIMessage, ListClubTournamentsAPIMessage, ListClubsAPIMessage, ListPublicClubsAPIMessage, PublicClubLeaderboardAPIMessage, RemoveClubMemberAPIMessage, ReviewClubApplicationAPIMessage, RevokeClubAdminAPIMessage, RevokeClubHonorAPIMessage, SubmitClubApplicationAPIMessage, SubmitClubRelationRequestAPIMessage, UpdateClubRankTreeAPIMessage, UpdateClubRecruitmentPolicyAPIMessage, UpdateClubRelationAPIMessage, WithdrawClubApplicationAPIMessage}
+import riichinexus.microservices.club.objects.clubmanagement.ClubView
+import riichinexus.microservices.club.objects.rankprivilegemanagement.ClubPrivilegeDefinition
+import riichinexus.microservices.club.objects.clubmanagement.apiTypes.{ClubLeaderboardEntry, PublicClubDetailView, PublicClubDirectoryEntry}
+import riichinexus.microservices.club.objects.membershipmanagement.apiTypes.{ClubMembershipApplicationResponse, ClubMembershipApplicationView}
+import riichinexus.microservices.club.objects.rankprivilegemanagement.apiTypes.ClubMemberPrivilegeSnapshotView
+import riichinexus.microservices.club.objects.tournamentparticipation.apiTypes.ClubTournamentParticipationView
+import riichinexus.microservices.club.objects.auditreadmodel.apiTypes.ClubContributionAuditEntry
+import riichinexus.microservices.player.objects.apiTypes.PlayerProfileView
 import riichinexus.microservices.notification.objects.Notification
 import riichinexus.system.objects.PagedResponse
-import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
+import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.TournamentMutationView
 
 object ClubAPIMessageRegistry:
 
@@ -62,8 +52,6 @@ object ClubAPIMessageRegistry:
       RegisteredAPIMessage.api[SubmitClubApplicationAPIMessage, ClubMembershipApplicationResponse],
       RegisteredAPIMessage.api[WithdrawClubApplicationAPIMessage, ClubMembershipApplicationResponse],
       RegisteredAPIMessage.api[ReviewClubApplicationAPIMessage, ClubMembershipApplicationView],
-      RegisteredAPIMessage.api[ApproveClubApplicationAPIMessage, ClubView],
-      RegisteredAPIMessage.api[RejectClubApplicationAPIMessage, ClubView],
       RegisteredAPIMessage.api[AcceptClubTournamentAPIMessage, TournamentMutationView],
       RegisteredAPIMessage.api[DeclineClubTournamentAPIMessage, TournamentMutationView]
     )

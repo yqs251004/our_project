@@ -1,7 +1,7 @@
 package riichinexus.system.api.http
 
 import cats.effect.IO
-import cats.syntax.all.*
+import cats.syntax.semigroupk.toSemigroupKOps
 import org.http4s.HttpApp
 import riichinexus.system.realtime.router.RealtimeRouter
 

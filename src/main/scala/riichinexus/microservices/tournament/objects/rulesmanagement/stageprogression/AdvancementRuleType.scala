@@ -1,6 +1,8 @@
 package riichinexus.microservices.tournament.objects.rulesmanagement.stageprogression
 
-import upickle.default.*
+import upickle.default.{ReadWriter, readwriter}
+
+/** AdvancementRuleType 枚举AdvancementRule类型 可使用的公开取值。 */
 
 enum AdvancementRuleType:
   case SwissCut

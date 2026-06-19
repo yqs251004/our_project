@@ -5,6 +5,8 @@ import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.{Mahjo
 import riichinexus.microservices.tournament.objects.paifumanagement.PaifuTile
 import riichinexus.microservices.tournament.objects.tablemanagement.SeatWind
 
+import riichinexus.system.json.JsonCodecs.given
+/** MahjongWinContext 表示后端领域中的麻将和牌上下文状态或规则，包含winner、target、seatByPlayer、roundWind、handTiles、melds等。 */
 final case class MahjongWinContext(
     winner: PlayerId,
     target: Option[PlayerId],

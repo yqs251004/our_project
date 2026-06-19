@@ -2,6 +2,7 @@ package riichinexus.microservices.auth.tables.guestsession
 
 import java.sql.Connection
 
+
 object GuestSessionTableInitializer:
   private val initTableSql: String =
     """

@@ -3,51 +3,29 @@ package riichinexus.microservices.tournament.appeal.api
 import cats.effect.IO
 
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.domain.functions.ClubIdGenerator
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
-import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
-import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
-import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
-import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
-import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
-import riichinexus.microservices.tournament.objects.tablemanagement.TableId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
-import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
-import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
-import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
-import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
-import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
-import riichinexus.microservices.audit.domain.auditevent.AuditEventId
-import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
-import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
-import riichinexus.microservices.tournament.appeal.domain.model.*
-import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
-import riichinexus.microservices.tournament.domain.recordmanagement.model.*
-import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
-import riichinexus.microservices.tournament.domain.tablemanagement.model.*
-import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
-import riichinexus.system.json.JsonCodecs.given
-import riichinexus.microservices.tournament.appeal.objects.apiTypes.*
+import riichinexus.microservices.tournament.appeal.domain.model.AppealTicket
+
+import riichinexus.microservices.tournament.appeal.objects.apiTypes.{AppealListQuery, AppealTicketView}
 import riichinexus.microservices.tournament.appeal.tables.appealticket.AppealTicketTable
 import riichinexus.system.objects.PagedResponse
-import upickle.default.*
+import upickle.default.ReadWriter
 
+/** 按筛选条件分页列出申诉工单。 */
 final case class AppealListAPIMessage(
     query: AppealListQuery = AppealListQuery()
 ) extends APIMessage[PagedResponse[AppealTicketView]] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[PagedResponse[AppealTicketView]] =
     for
-      resolved <- IO.blocking(resolveQuery)
+      now <- IO.realTimeInstant
+      resolved <- IO.delay(resolveQuery(now))
       appeals <- IO.blocking(listAppeals(context, resolved))
     yield page(appeals.map(AppealTicketView.fromDomain), resolved)
 
-  private def resolveQuery: ResolvedAppealListQuery =
+  private def resolveQuery(now: java.time.Instant): ResolvedAppealListQuery =
     ResolvedAppealListQuery(
       query = query,
+      asOf = query.asOf.getOrElse(now),
       appliedFilters = filters(
         query.status.map(value => "status" -> value.toString),
         query.priority.map(value => "priority" -> value.toString),
@@ -64,7 +42,6 @@ final case class AppealListAPIMessage(
     )
 
   private def listAppeals(context: ApiPlanContext, resolved: ResolvedAppealListQuery): Vector[AppealTicket] =
-    val asOf = resolved.query.asOf.getOrElse(java.time.Instant.now())
     AppealTicketTable.findAll(context.connection)
       .filter(ticket => resolved.query.status.forall(_.toDomain == ticket.status))
       .filter(ticket => resolved.query.priority.forall(_.toDomain == ticket.priority))
@@ -73,7 +50,7 @@ final case class AppealListAPIMessage(
       .filter(ticket => resolved.query.tableId.forall(_ == ticket.tableId))
       .filter(ticket => resolved.query.openedBy.forall(_ == ticket.openedBy))
       .filter(ticket => resolved.query.assigneeId.forall(ticket.assigneeId.contains))
-      .filter(ticket => !resolved.query.overdueOnly || ticket.dueAt.exists(_.isBefore(asOf)))
+      .filter(ticket => !resolved.query.overdueOnly || ticket.dueAt.exists(_.isBefore(resolved.asOf)))
       .filter(ticket => resolved.query.dueBefore.forall(limit => ticket.dueAt.exists(dueAt => !dueAt.isAfter(limit))))
       .filter(ticket => resolved.query.dueAfter.forall(limit => ticket.dueAt.exists(dueAt => !dueAt.isBefore(limit))))
       .sortBy(ticket => (ticket.updatedAt, ticket.id.value))
@@ -92,5 +69,6 @@ final case class AppealListAPIMessage(
 
   private final case class ResolvedAppealListQuery(
       query: AppealListQuery,
+      asOf: java.time.Instant,
       appliedFilters: Map[String, String]
   )

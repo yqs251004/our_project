@@ -1,68 +1,48 @@
 package riichinexus.microservices.opsanalytics.api
 import riichinexus.microservices.auth.objects.Permission
-import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
-import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
-import riichinexus.microservices.player.api.`private`.*
+import riichinexus.microservices.auth.api.`private`.{RequirePermissionPrivateAPIMessage, ResolveAccessPrincipalPrivateAPIMessage}
+import riichinexus.microservices.player.api.`private`.ListAllPlayersPrivateAPIMessage
 
 import java.time.Instant
 
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.domain.functions.ClubIdGenerator
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
-import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
-import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
-import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
 import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
-import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
-import riichinexus.microservices.tournament.objects.tablemanagement.TableId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
-import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
-import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
-import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
-import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
-import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
-import riichinexus.microservices.audit.domain.auditevent.AuditEventId
-import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
-import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
-import riichinexus.microservices.auth.domain.AuthorizationFailure
-import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.club.domain.Club
-import riichinexus.microservices.club.domain.clubmanagement.model.*
-import riichinexus.microservices.club.domain.membershipmanagement.model.*
-import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
-import riichinexus.microservices.club.domain.relationmanagement.model.*
-import riichinexus.microservices.club.api.`private`.{ListClubsPrivateAPIMessage, ResolveClubPrivateAPIMessage, ResolveClubsPrivateAPIMessage, SaveClubPrivateAPIMessage}
-import riichinexus.microservices.player.domain.Player
-import riichinexus.microservices.player.objects.*
-import riichinexus.system.json.JsonCodecs.given
-import riichinexus.microservices.opsanalytics.domain.functions.{
-  AdvancedStatsBoardFunctions,
-  AdvancedStatsRecomputeTaskFunctions
-}
-import riichinexus.microservices.opsanalytics.objects.*
-import riichinexus.microservices.opsanalytics.objects.apiTypes.AdvancedStatsRecomputeRequest
-import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
-import upickle.default.*
+import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
 
+import riichinexus.microservices.club.api.`private`.ListClubsPrivateAPIMessage
+
+
+import riichinexus.microservices.opsanalytics.domain.functions.{AdvancedStatsBoardFunctions, AdvancedStatsRecomputeTaskFunctions}
+import riichinexus.microservices.opsanalytics.objects.{AdvancedStatsBackfillMode, AdvancedStatsRecomputeTask, DashboardOwner}
+import riichinexus.microservices.opsanalytics.objects.apiTypes.AdvancedStatsRecomputeRequest
+import riichinexus.microservices.opsanalytics.tables.advancedstatsboard.AdvancedStatsBoardTable
+import riichinexus.microservices.opsanalytics.tables.advancedstatsrecomputetask.AdvancedStatsRecomputeTaskTable
+import upickle.default.ReadWriter
+
+/** 创建高级统计重算任务。 */
 final case class OpsAnalyticsRecomputeAdvancedStatsAPIMessage(
     request: AdvancedStatsRecomputeRequest
 ) extends APIMessage[Vector[AdvancedStatsRecomputeTask]] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[Vector[AdvancedStatsRecomputeTask]] =
     for
-      operator <- ResolveAccessPrincipal(request.operatorId).plan(context)
-      requestedAt <- IO.realTimeInstant
-      command <- IO.blocking(resolveCommand(operator, requestedAt))
-      _ <- requireOpsAdmin(context, command.operator)
+      command <- buildCommand(context)
+      _ <- RequirePermissionPrivateAPIMessage(command.operator, Permission.ManagePlatformOperations).plan(context)
       tasks <- enqueueRecompute(context, command)
     yield tasks
 
+  private def buildCommand(context: ApiPlanContext): IO[RecomputeAdvancedStatsCommand] =
+    for
+      operator <- ResolveAccessPrincipalPrivateAPIMessage(request.operatorId).plan(context)
+      requestedAt <- IO.realTimeInstant
+      command <- IO.delay(resolveCommand(operator, requestedAt))
+    yield command
+
   private def resolveCommand(
-      operator: AccessPrincipal,
+      operator: AccessPrincipalPrivateView,
       requestedAt: Instant
   ): RecomputeAdvancedStatsCommand =
     validateRequest()
@@ -92,32 +72,13 @@ final case class OpsAnalyticsRecomputeAdvancedStatsAPIMessage(
       case (Some(other), Some(_))     => throw IllegalArgumentException(s"Unsupported advanced stats ownerType: $other")
       case _                          => None
 
-  private def requireOpsAdmin(context: ApiPlanContext, operator: AccessPrincipal): IO[Unit] =
-    AuthCheckPermissionAPIMessage(
-      principal = Some(operator),
-      permission = Permission.ManagePlatformOperations
-    ).plan(context).flatMap { allowed =>
-      if allowed then IO.unit
-      else IO.raiseError(AuthorizationFailure(s"${operator.displayName} is not allowed to manage platform operations"))
-    }
-
   private def enqueueRecompute(
       context: ApiPlanContext,
       command: RecomputeAdvancedStatsCommand
   ): IO[Vector[AdvancedStatsRecomputeTask]] =
-    val connection = context.connection
     command.targetOwner match
       case Some(owner) =>
-        IO.blocking(
-          Vector(
-            enqueueOwnerRecompute(
-              connection,
-              owner = owner,
-              reason = command.targetedReason,
-              requestedAt = command.requestedAt
-            )
-          )
-        )
+        enqueueOwners(context, Vector(owner), command.targetedReason, command.requestedAt)
       case None =>
         command.mode match
           case AdvancedStatsBackfillMode.Full =>
@@ -140,17 +101,9 @@ final case class OpsAnalyticsRecomputeAdvancedStatsAPIMessage(
       requestedAt: Instant,
       reason: String
   ): IO[Vector[AdvancedStatsRecomputeTask]] =
-    val connection = context.connection
     for
-      players <- ListAllPlayersPrivateAPIMessage().plan(context)
-      clubs <- ListClubsPrivateAPIMessage(activeOnly = true).plan(context)
-      tasks <- IO.blocking {
-        val owners =
-          players.map(player => DashboardOwner.Player(player.id)) ++
-            clubs.map(club => DashboardOwner.Club(club.id))
-
-        owners.distinct.map(owner => enqueueOwnerRecompute(connection, owner, reason, requestedAt))
-      }
+      owners <- listAllOwners(context)
+      tasks <- enqueueOwners(context, owners, reason, requestedAt)
     yield tasks
 
   private def enqueueBackfill(
@@ -160,21 +113,33 @@ final case class OpsAnalyticsRecomputeAdvancedStatsAPIMessage(
       reason: String,
       limit: Int
   ): IO[Vector[AdvancedStatsRecomputeTask]] =
-    val connection = context.connection
+    for
+      owners <- listAllOwners(context)
+      selectedOwners <- selectBackfillOwners(context, owners, mode, limit)
+      tasks <- enqueueOwners(context, selectedOwners, reason, requestedAt)
+    yield tasks
+
+  private def listAllOwners(context: ApiPlanContext): IO[Vector[DashboardOwner]] =
     for
       players <- ListAllPlayersPrivateAPIMessage().plan(context)
       clubs <- ListClubsPrivateAPIMessage(activeOnly = true).plan(context)
-      tasks <- IO.blocking {
-        val owners =
-          players.map(player => DashboardOwner.Player(player.id)) ++
-            clubs.map(club => DashboardOwner.Club(club.id))
+    yield (players.map(player => DashboardOwner.Player(player.id)) ++ clubs.map(club => DashboardOwner.Club(club.id))).distinct
 
-        owners.distinct
-          .filter(owner => shouldBackfillOwner(connection, owner, mode))
-          .take(limit)
-          .map(owner => enqueueOwnerRecompute(connection, owner, reason, requestedAt))
-      }
-    yield tasks
+  private def selectBackfillOwners(
+      context: ApiPlanContext,
+      owners: Vector[DashboardOwner],
+      mode: AdvancedStatsBackfillMode,
+      limit: Int
+  ): IO[Vector[DashboardOwner]] =
+    IO.blocking(owners.filter(owner => shouldBackfillOwner(context.connection, owner, mode)).take(limit))
+
+  private def enqueueOwners(
+      context: ApiPlanContext,
+      owners: Vector[DashboardOwner],
+      reason: String,
+      requestedAt: Instant
+  ): IO[Vector[AdvancedStatsRecomputeTask]] =
+    IO.blocking(owners.map(owner => enqueueOwnerRecompute(context.connection, owner, reason, requestedAt)))
 
   private def enqueueOwnerRecompute(
       connection: java.sql.Connection,
@@ -184,10 +149,10 @@ final case class OpsAnalyticsRecomputeAdvancedStatsAPIMessage(
       lastMatchRecordId: Option[MatchRecordId] = None
   ): AdvancedStatsRecomputeTask =
     {
-      riichinexus.microservices.opsanalytics.tables.advancedstatsrecomputetask.AdvancedStatsRecomputeTaskTable
+      AdvancedStatsRecomputeTaskTable
         .findActiveByOwner(connection, owner, AdvancedStatsBoardFunctions.currentCalculatorVersion)
         .getOrElse(
-          riichinexus.microservices.opsanalytics.tables.advancedstatsrecomputetask.AdvancedStatsRecomputeTaskTable.save(connection, 
+          AdvancedStatsRecomputeTaskTable.save(connection,
             AdvancedStatsRecomputeTaskFunctions.create(
               owner = owner,
               reason = reason,
@@ -204,7 +169,7 @@ final case class OpsAnalyticsRecomputeAdvancedStatsAPIMessage(
       owner: DashboardOwner,
       mode: AdvancedStatsBackfillMode
   ): Boolean =
-    val board = riichinexus.microservices.opsanalytics.tables.advancedstatsboard.AdvancedStatsBoardTable.findByOwner(connection, owner)
+    val board = AdvancedStatsBoardTable.findByOwner(connection, owner)
     mode match
       case AdvancedStatsBackfillMode.Full    => true
       case AdvancedStatsBackfillMode.Missing => board.isEmpty
@@ -212,7 +177,7 @@ final case class OpsAnalyticsRecomputeAdvancedStatsAPIMessage(
         board.exists(_.calculatorVersion < AdvancedStatsBoardFunctions.currentCalculatorVersion)
 
   private final case class RecomputeAdvancedStatsCommand(
-      operator: AccessPrincipal,
+      operator: AccessPrincipalPrivateView,
       targetOwner: Option[DashboardOwner],
       mode: AdvancedStatsBackfillMode,
       targetedReason: String,

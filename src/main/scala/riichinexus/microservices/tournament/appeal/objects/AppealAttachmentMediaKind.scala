@@ -1,7 +1,9 @@
 package riichinexus.microservices.tournament.appeal.objects
 
 import riichinexus.microservices.tournament.appeal.domain.model.{AppealAttachmentMediaKind as DomainAppealAttachmentMediaKind}
-import upickle.default.*
+import upickle.default.{ReadWriter, readwriter}
+
+/** AppealAttachmentMediaKind 枚举申诉附件媒体类型 可使用的公开取值。 */
 
 enum AppealAttachmentMediaKind:
   case Image

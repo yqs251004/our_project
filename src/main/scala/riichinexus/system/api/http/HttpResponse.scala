@@ -3,13 +3,13 @@ package riichinexus.system.api.http
 import java.util.NoSuchElementException
 
 import cats.effect.IO
-import org.http4s.*
+import org.http4s.{Header, Headers, Response, Status}
 import org.typelevel.ci.CIString
 import riichinexus.microservices.auth.domain.AuthenticationFailure
-import riichinexus.microservices.auth.domain.AuthorizationFailure
+import riichinexus.system.api.AuthorizationFailure
 import riichinexus.system.errors.OptimisticConcurrencyException
 import riichinexus.system.objects.ErrorResponse
-import upickle.default.*
+import upickle.default.{Writer, write}
 
 object HttpResponse:
 

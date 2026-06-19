@@ -3,6 +3,8 @@ package riichinexus.microservices.club.domain.rankprivilegemanagement.functions
 import riichinexus.microservices.auth.objects.Permission
 import riichinexus.microservices.club.objects.rankprivilegemanagement.{ClubPrivilegeCode, ClubPrivilegeDefinition}
 
+/** ClubPrivilegeRegistry 提供俱乐部权限注册表 相关的领域计算、校验和转换函数。 */
+
 private[club] object ClubPrivilegeRegistry:
   private val definitionsByCode: Map[ClubPrivilegeCode, ClubPrivilegeDefinition] = Map(
     ClubPrivilegeCode.PriorityLineup ->

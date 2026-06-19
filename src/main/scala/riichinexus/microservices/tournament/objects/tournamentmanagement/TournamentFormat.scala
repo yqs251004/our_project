@@ -1,5 +1,7 @@
 package riichinexus.microservices.tournament.objects.tournamentmanagement
 
+/** TournamentFormat 枚举赛事Format 可使用的公开取值。 */
+
 enum TournamentFormat:
   case Swiss
   case Knockout

@@ -1,68 +1,42 @@
 package riichinexus.microservices.tournament.api
 import riichinexus.microservices.auth.objects.Permission
-import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
-import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
-
-import riichinexus.microservices.auth.domain.authorization.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
+import riichinexus.microservices.auth.api.`private`.{RequirePermissionPrivateAPIMessage, ResolveAccessPrincipalPrivateAPIMessage}
 
 import java.util.NoSuchElementException
 
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.domain.functions.ClubIdGenerator
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
-import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
-import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
-import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
-import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
-import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
-import riichinexus.microservices.tournament.objects.tablemanagement.TableId
 import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
-import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
-import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
-import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
-import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
-import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
-import riichinexus.microservices.audit.domain.auditevent.AuditEventId
-import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
-import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
-import riichinexus.microservices.auth.domain.model.*
-import riichinexus.microservices.tournament.domain.tournamentmanagement.functions.{TournamentFunctions, TournamentStageFunctions}
-import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
-import riichinexus.microservices.tournament.domain.recordmanagement.model.*
-import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
-import riichinexus.microservices.tournament.domain.tablemanagement.model.*
-import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
-import riichinexus.system.json.JsonCodecs.given
-import riichinexus.microservices.tournament.domain.tournamentmanagement.functions.TournamentRuntimeDefaults
+import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
+import riichinexus.microservices.tournament.domain.competition.functions.TournamentFunctions
+import riichinexus.microservices.tournament.domain.stage.functions.TournamentStageFunctions
+import riichinexus.microservices.tournament.domain.stage.model.TournamentStage
+import riichinexus.microservices.tournament.domain.competition.model.Tournament
+
+import riichinexus.microservices.tournament.domain.competition.functions.TournamentRuntimeDefaults
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.MahjongRuleset
 import riichinexus.microservices.tournament.objects.rulesmanagement.stageprogression.{AdvancementRule, AdvancementRuleType}
 import riichinexus.microservices.tournament.objects.rulesmanagement.knockout.KnockoutRuleConfig
 import riichinexus.microservices.tournament.objects.rulesmanagement.swiss.SwissRuleConfig
-import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.AssignTournamentAdminRequest.given
-import upickle.default.*
+import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.ConfigureStageRulesRequest
+import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.TournamentSummaryView
 
+import upickle.default.ReadWriter
+
+/** 配置指定赛事阶段的规则。 */
 final case class TournamentStageConfigureRulesAPIMessage(tournamentId: String, stageId: String, request: ConfigureStageRulesRequest) extends APIMessage[TournamentSummaryView] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[TournamentSummaryView] =
     for
-      actor <- ResolveAccessPrincipal(PlayerId(request.operatorId)).plan(context)
+      actor <- ResolveAccessPrincipalPrivateAPIMessage(PlayerId(request.operatorId)).plan(context)
       command = ConfigureStageRulesCommand(
         tournamentId = TournamentId(tournamentId),
         stageId = TournamentStageId(stageId),
         actor = actor,
         request = request
       )
+      _ <- RequirePermissionPrivateAPIMessage(command.actor, Permission.ConfigureTournamentRules, tournamentId = Some(command.tournamentId)).plan(context)
       tournament <- IO.blocking {
         {
           configureStageRules(context.connection, command)
@@ -76,11 +50,6 @@ final case class TournamentStageConfigureRulesAPIMessage(tournamentId: String, s
   ): Option[Tournament] =
     riichinexus.microservices.tournament.tables.tournaments.TournamentTable.findById(connection, command.tournamentId).map { tournament =>
       val currentStage = requireStage(tournament, command.stageId)
-      AuthorizationPolicyFunctions.requirePermission(AuthorizationPolicyFunctions.strict, 
-        command.actor,
-        Permission.ConfigureTournamentRules,
-        tournamentId = Some(command.tournamentId)
-      )
       val configuredStage = buildConfiguredStage(currentStage, command.request)
       riichinexus.microservices.tournament.tables.tournaments.TournamentTable.save(connection, 
         TournamentFunctions.updateStage(tournament, command.stageId, _ => configuredStage)
@@ -165,6 +134,6 @@ final case class TournamentStageConfigureRulesAPIMessage(tournamentId: String, s
   private final case class ConfigureStageRulesCommand(
       tournamentId: TournamentId,
       stageId: TournamentStageId,
-      actor: AccessPrincipal,
+      actor: AccessPrincipalPrivateView,
       request: ConfigureStageRulesRequest
   )

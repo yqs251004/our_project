@@ -2,6 +2,8 @@ package riichinexus.microservices.tournament.appeal.domain.model
 
 import java.time.Instant
 
+import riichinexus.system.json.JsonCodecs.given
+/** AppealAttachment 表示后端领域中的申诉附件 状态，包含名称、uri、contentType、storageKind、mediaKind、checksum等。 */
 final case class AppealAttachment(
     name: String,
     uri: String,

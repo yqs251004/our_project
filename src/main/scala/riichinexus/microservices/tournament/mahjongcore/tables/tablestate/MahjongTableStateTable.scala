@@ -5,10 +5,10 @@ import java.sql.{Connection, ResultSet}
 import scala.util.Using
 
 import riichinexus.microservices.tournament.mahjongcore.domain.gamestate.model.MahjongTableState
+import riichinexus.system.json.MahjongTableStateJsonCodecs.given
 import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
 import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
 import riichinexus.microservices.tournament.objects.tablemanagement.TableId
-import riichinexus.system.json.MahjongTableStateJsonCodecs.given
 import upickle.default.{read, write}
 
 object MahjongTableStateTable:

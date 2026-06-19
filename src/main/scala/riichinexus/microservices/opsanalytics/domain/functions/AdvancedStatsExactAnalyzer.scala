@@ -2,36 +2,16 @@ package riichinexus.microservices.opsanalytics.domain.functions
 
 import riichinexus.microservices.tournament.objects.paifumanagement.{PaifuAction, PaifuActionType, PaifuRound, PaifuTile}
 
-import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.domain.functions.ClubIdGenerator
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
-import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
-import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
-import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
-import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
-import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
-import riichinexus.microservices.tournament.objects.tablemanagement.TableId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
-import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
-import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
-import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
-import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
-import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
-import riichinexus.microservices.audit.domain.auditevent.AuditEventId
-import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
-import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
-import riichinexus.microservices.tournament.domain.lineupmanagement.model.*
-import riichinexus.microservices.tournament.domain.recordmanagement.model.*
-import riichinexus.microservices.tournament.domain.settlementmanagement.model.*
-import riichinexus.microservices.tournament.domain.tablemanagement.model.*
-import riichinexus.microservices.tournament.domain.tournamentmanagement.model.*
 import riichinexus.microservices.opsanalytics.domain.model.{ExactDefenseState, ExactRoundStats, ExactUkeireState}
 
-private[opsanalytics] object AdvancedStatsExactAnalyzer:
+/** AdvancedStatsExactAnalyzer 提供高级统计ExactAnalyzer 相关的领域计算、校验和转换函数。 */
+
+private[functions] object AdvancedStatsExactAnalyzer:
   private val TerminalAndHonorIndices =
     Set(0, 8, 9, 17, 18, 26, 27, 28, 29, 30, 31, 32, 33)
+
+  private val TilePattern = "^[0-9][mps]$|^[1-7]z$".r
 
   private val EmptyCounts: Vector[Int] =
     Vector.fill(34)(0)
@@ -264,26 +244,20 @@ private[opsanalytics] object AdvancedStatsExactAnalyzer:
 
   private def parseTile(tile: PaifuTile): Option[Int] =
     val value = tile.value
-    if value.length != 2 then None
+    if !TilePattern.matches(value) then None
     else
       val numberChar = value.charAt(0)
       val suitChar = value.charAt(1)
       val normalizedNumber =
         if numberChar == '0' then 5
-        else if numberChar.isDigit then numberChar.asDigit
-        else -1
+        else numberChar.asDigit
 
       suitChar match
-        case 'm' if isNumberedSuitTile(numberChar, normalizedNumber) => Some(normalizedNumber - 1)
-        case 'p' if isNumberedSuitTile(numberChar, normalizedNumber) => Some(9 + normalizedNumber - 1)
-        case 's' if isNumberedSuitTile(numberChar, normalizedNumber) => Some(18 + normalizedNumber - 1)
-        case 'z' if normalizedNumber >= 1 && normalizedNumber <= 7 && numberChar != '0' =>
-          Some(27 + normalizedNumber - 1)
-        case _ =>
-          None
-
-  private def isNumberedSuitTile(numberChar: Char, normalizedNumber: Int): Boolean =
-    numberChar == '0' || (normalizedNumber >= 1 && normalizedNumber <= 9)
+        case 'm' => Some(normalizedNumber - 1)
+        case 'p' => Some(9 + normalizedNumber - 1)
+        case 's' => Some(18 + normalizedNumber - 1)
+        case 'z' => Some(27 + normalizedNumber - 1)
+        case _   => None
 
   private def isSuitTile(index: Int): Boolean =
     index < 27

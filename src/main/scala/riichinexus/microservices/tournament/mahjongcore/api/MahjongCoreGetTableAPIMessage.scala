@@ -1,8 +1,7 @@
 package riichinexus.microservices.tournament.mahjongcore.api
 
 import cats.effect.IO
-import riichinexus.microservices.auth.domain.authorization.AccessPrincipalFunctions
-import riichinexus.microservices.auth.utils.ResolveAccessPrincipal
+import riichinexus.microservices.auth.api.`private`.{CheckSuperAdminPrivateAPIMessage, ResolveAccessPrincipalPrivateAPIMessage}
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.tournament.mahjongcore.domain.gamestate.functions.MahjongGameStateTransitionFunctions
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.{MahjongRuleset, MahjongTableStatus, MahjongTableView}
@@ -10,8 +9,8 @@ import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.apiTyp
 import riichinexus.microservices.tournament.mahjongcore.tables.tablestate.MahjongTableStateTable
 import riichinexus.microservices.tournament.objects.tablemanagement.TableId
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.system.json.JsonCodecs.given
-import upickle.default.*
+
+import upickle.default.ReadWriter
 
 /** 查询 tableId 对应比赛桌的实时麻将桌面视图。 */
 final case class MahjongCoreGetTableAPIMessage(
@@ -42,5 +41,10 @@ final case class MahjongCoreGetTableAPIMessage(
   private def canRevealAllHands(context: ApiPlanContext, query: MahjongTableQuery): IO[Boolean] =
     query.operatorId
       .map(PlayerId(_))
-      .map(operatorId => ResolveAccessPrincipal(operatorId).plan(context).attempt.map(_.toOption.exists(AccessPrincipalFunctions.isSuperAdmin)))
+      .map(operatorId =>
+        ResolveAccessPrincipalPrivateAPIMessage(operatorId).plan(context).attempt.flatMap {
+          case Right(principal) => CheckSuperAdminPrivateAPIMessage(principal).plan(context)
+          case Left(_)          => IO.pure(false)
+        }
+      )
       .getOrElse(IO.pure(false))

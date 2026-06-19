@@ -1,5 +1,7 @@
 package riichinexus.microservices.auth.objects
 
+/** SessionPrincipalKind 枚举会话访问主体类型 可使用的公开取值。 */
+
 enum SessionPrincipalKind:
   case Anonymous
   case Guest

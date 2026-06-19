@@ -1,6 +1,8 @@
 package riichinexus.microservices.tournament.objects.paifumanagement
 
-import upickle.default.*
+import upickle.default.{ReadWriter, readwriter}
+
+/** PaifuActionType 枚举牌谱动作类型 可使用的公开取值。 */
 
 enum PaifuActionType:
   case Draw

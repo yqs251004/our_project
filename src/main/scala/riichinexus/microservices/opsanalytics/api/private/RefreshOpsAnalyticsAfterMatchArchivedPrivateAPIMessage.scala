@@ -1,47 +1,23 @@
 package riichinexus.microservices.opsanalytics.api.`private`
-import riichinexus.microservices.player.api.`private`.*
+import riichinexus.microservices.player.api.`private`.{ApplyPlayerEloDeltaPrivateAPIMessage, ResolvePlayerBoundClubIdsPrivateAPIMessage, ResolvePlayerPrivateAPIMessage}
 
 import cats.effect.IO
 
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.domain.functions.ClubIdGenerator
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
-import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
-import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
-import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
-import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
-import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
-import riichinexus.microservices.tournament.objects.tablemanagement.TableId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
-import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
-import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
-import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
-import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
-import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
-import riichinexus.microservices.audit.domain.auditevent.AuditEventId
-import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
-import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 import riichinexus.system.json.JsonCodecs.given
-import riichinexus.microservices.club.api.`private`.{
-  AddClubPointsPrivateAPIMessage,
-  ResolveClubPrivateAPIMessage,
-  UpdateClubPowerRatingPrivateAPIMessage
-}
-import riichinexus.microservices.club.domain.Club
-import riichinexus.microservices.club.domain.ClubPowerRatingService
+import riichinexus.microservices.club.api.`private`.{ApplyClubPointDeltaPrivateAPIMessage, RefreshClubPowerRatingPrivateAPIMessage}
 import riichinexus.microservices.opsanalytics.domain.functions.RatingService
 import riichinexus.microservices.opsanalytics.domain.model.RatingChange
-import riichinexus.microservices.notification.api.`private`.CreateBulkNotificationsPrivateAPIMessage
-import riichinexus.microservices.notification.objects.apiTypes.CreateNotificationRequest
-import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage}
-import riichinexus.microservices.tournament.domain.recordmanagement.model.MatchRecord
-import upickle.default.*
+import riichinexus.microservices.player.objects.`private`.PlayerPrivateView
+import riichinexus.microservices.notification.api.`private`.RecordBulkNotificationsPrivateAPIMessage
+import riichinexus.microservices.notification.objects.`private`.CreateNotificationRequest
+import riichinexus.microservices.tournament.objects.`private`.MatchRecordPrivateView
+import upickle.default.ReadWriter
 
+/** 供赛事归档流程刷新赛后运营分析读模型。 */
 final case class RefreshOpsAnalyticsAfterMatchArchivedPrivateAPIMessage(
-    matchRecord: MatchRecord,
+    matchRecord: MatchRecordPrivateView,
     occurredAt: java.time.Instant
 ) extends APIMessage[Unit] derives ReadWriter:
 
@@ -50,83 +26,103 @@ final case class RefreshOpsAnalyticsAfterMatchArchivedPrivateAPIMessage(
     val representedClubIds = matchRecord.seatResults.flatMap(_.clubId).distinct
 
     for
-      memberClubIds <- matchRecord.seatResults.foldLeft(IO.pure(Vector.empty[ClubId])) { (previous, result) =>
-        previous.flatMap { clubIds =>
-          ResolvePlayerPrivateAPIMessage(result.playerId).plan(context).map(player =>
-            (clubIds ++ player.toVector.flatMap(boundClubIds)).distinct
-          )
-        }
-      }
+      memberClubIds <- resolveMemberClubIds(context)
       impactedClubIds = (representedClubIds ++ memberClubIds).distinct
-      _ <- matchRecord.seatResults.foldLeft(IO.unit) { (previous, result) =>
-        previous.flatMap { _ =>
-          result.clubId match
-            case Some(clubId) =>
-              ResolveClubPrivateAPIMessage(clubId).plan(context).flatMap {
-                case Some(_) =>
-                  AddClubPointsPrivateAPIMessage(clubId, result.scoreDelta).plan(context).map(_ => ())
-                case None =>
-                  IO.unit
-              }
-            case None =>
-              IO.unit
-        }
-      }
-      players <- matchRecord.seatResults.foldLeft(IO.pure(Vector.empty[riichinexus.microservices.player.domain.Player])) { (previous, result) =>
-        previous.flatMap { players =>
-          ResolvePlayerPrivateAPIMessage(result.playerId).plan(context).map(player => players ++ player.toVector)
-        }
-      }
+      _ <- applyRepresentedClubPointDeltas(context)
+      players <- resolveImpactedPlayers(context)
       ratingDeltas = RatingService.calculateDeltas(players, matchRecord.seatResults)
-      ratingNotificationRequests = eloChangeNotifications(matchRecord, players, ratingDeltas)
-      _ <- ratingDeltas.foldLeft(IO.unit) { (previous, delta) =>
-        previous.flatMap { _ =>
-          ApplyPlayerEloDeltaPrivateAPIMessage(delta.playerId, delta.delta).plan(context).map(_ => ())
-        }
-      }
-      _ <- CreateBulkNotificationsPrivateAPIMessage(ratingNotificationRequests).plan(context)
-      refreshedClubs <- impactedClubIds.foldLeft(IO.pure(Vector.empty[Club])) { (previous, clubId) =>
-        previous.flatMap { clubs =>
-          ResolveClubPrivateAPIMessage(clubId).plan(context).flatMap {
-            case Some(club) =>
-              club.members.foldLeft(IO.pure(Map.empty[PlayerId, riichinexus.microservices.player.domain.Player])) { (playersIO, playerId) =>
-                playersIO.flatMap { playersById =>
-                  ResolvePlayerPrivateAPIMessage(playerId).plan(context).map {
-                    case Some(player) => playersById + (playerId -> player)
-                    case None         => playersById
-                  }
-                }
-              }.flatMap { playersById =>
-                val powerRating = ClubPowerRatingService.calculate(club, playerId => playersById.get(playerId))
-                UpdateClubPowerRatingPrivateAPIMessage(club.id, powerRating).plan(context).map {
-                  case Some(saved) => clubs :+ saved
-                  case None        => clubs
-                }
-              }
-            case None =>
-              IO.pure(clubs)
-          }
-        }
-      }
-      _ <- impactedPlayerIds.foldLeft(IO.unit) { (previous, playerId) =>
-        previous.flatMap(_ =>
-          RecordPlayerDashboardAPIMessage(playerId, occurredAt).plan(context).flatMap(_ =>
-            RecordPlayerAdvancedStatsBoardAPIMessage(playerId, occurredAt).plan(context).map(_ => ())
-          )
-        )
-      }
-      _ <- refreshedClubs.foldLeft(IO.unit) { (previous, club) =>
-        previous.flatMap(_ =>
-          RecordClubDashboardAPIMessage(club, occurredAt).plan(context).flatMap(_ =>
-            RecordClubAdvancedStatsBoardAPIMessage(club, occurredAt).plan(context).map(_ => ())
-          )
-        )
-      }
+      _ <- applyPlayerRatingDeltas(context, ratingDeltas)
+      _ <- notifyRatingChanges(context, players, ratingDeltas)
+      refreshedClubIds <- refreshClubPowerRatings(context, impactedClubIds)
+      _ <- rebuildPlayerReadModels(context, impactedPlayerIds)
+      _ <- rebuildClubReadModels(context, refreshedClubIds)
     yield ()
 
+  private def resolveMemberClubIds(context: ApiPlanContext): IO[Vector[ClubId]] =
+    matchRecord.seatResults.foldLeft(IO.pure(Vector.empty[ClubId])) { (previous, result) =>
+      previous.flatMap { clubIds =>
+        ResolvePlayerBoundClubIdsPrivateAPIMessage(result.playerId)
+          .plan(context)
+          .map(playerClubIds => (clubIds ++ playerClubIds).distinct)
+      }
+    }
+
+  private def applyRepresentedClubPointDeltas(context: ApiPlanContext): IO[Unit] =
+    matchRecord.seatResults.foldLeft(IO.unit) { (previous, result) =>
+      previous.flatMap { _ =>
+        result.clubId match
+          case Some(clubId) =>
+            ApplyClubPointDeltaPrivateAPIMessage(clubId, result.scoreDelta).plan(context).void
+          case None =>
+            IO.unit
+      }
+    }
+
+  private def resolveImpactedPlayers(context: ApiPlanContext): IO[Vector[PlayerPrivateView]] =
+    matchRecord.seatResults.foldLeft(IO.pure(Vector.empty[PlayerPrivateView])) { (previous, result) =>
+      previous.flatMap { players =>
+        ResolvePlayerPrivateAPIMessage(result.playerId).plan(context).map(player => players ++ player.toVector)
+      }
+    }
+
+  private def applyPlayerRatingDeltas(
+      context: ApiPlanContext,
+      ratingDeltas: Vector[RatingChange]
+  ): IO[Unit] =
+    ratingDeltas.foldLeft(IO.unit) { (previous, delta) =>
+      previous.flatMap(_ => ApplyPlayerEloDeltaPrivateAPIMessage(delta.playerId, delta.delta).plan(context))
+    }
+
+  private def notifyRatingChanges(
+      context: ApiPlanContext,
+      players: Vector[PlayerPrivateView],
+      ratingDeltas: Vector[RatingChange]
+  ): IO[Unit] =
+    RecordBulkNotificationsPrivateAPIMessage(
+      eloChangeNotifications(matchRecord, players, ratingDeltas)
+    ).plan(context).void
+
+  private def refreshClubPowerRatings(
+      context: ApiPlanContext,
+      clubIds: Vector[ClubId]
+  ): IO[Vector[ClubId]] =
+    clubIds.foldLeft(IO.pure(Vector.empty[ClubId])) { (previous, clubId) =>
+      previous.flatMap { refreshedClubIds =>
+        RefreshClubPowerRatingPrivateAPIMessage(clubId)
+          .plan(context)
+          .map(_.fold(refreshedClubIds)(_ => refreshedClubIds :+ clubId))
+      }
+    }
+
+  private def rebuildPlayerReadModels(
+      context: ApiPlanContext,
+      playerIds: Vector[riichinexus.microservices.player.objects.playerprofile.PlayerId]
+  ): IO[Unit] =
+    playerIds.foldLeft(IO.unit) { (previous, playerId) =>
+      previous.flatMap { _ =>
+        for
+          _ <- RecordPlayerDashboardPrivateAPIMessage(playerId, occurredAt).plan(context)
+          _ <- RecordPlayerAdvancedStatsBoardPrivateAPIMessage(playerId, occurredAt).plan(context)
+        yield ()
+      }
+    }
+
+  private def rebuildClubReadModels(
+      context: ApiPlanContext,
+      clubIds: Vector[ClubId]
+  ): IO[Unit] =
+    clubIds.foldLeft(IO.unit) { (previous, clubId) =>
+      previous.flatMap { _ =>
+        for
+          _ <- RecordClubDashboardPrivateAPIMessage(clubId, occurredAt).plan(context)
+          _ <- RecordClubAdvancedStatsBoardPrivateAPIMessage(clubId, occurredAt).plan(context)
+        yield ()
+      }
+    }
+
   private def eloChangeNotifications(
-      matchRecord: MatchRecord,
-      players: Vector[riichinexus.microservices.player.domain.Player],
+      matchRecord: MatchRecordPrivateView,
+      players: Vector[PlayerPrivateView],
       ratingDeltas: Vector[RatingChange]
   ): Vector[CreateNotificationRequest] =
     val playersById = players.map(player => player.id -> player).toMap
@@ -158,6 +154,3 @@ final case class RefreshOpsAnalyticsAfterMatchArchivedPrivateAPIMessage(
         )
       }
     }
-
-  private def boundClubIds(player: riichinexus.microservices.player.domain.Player): Vector[ClubId] =
-    (player.clubId.toVector ++ player.affiliatedClubIds).distinct

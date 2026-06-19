@@ -1,5 +1,7 @@
 package riichinexus.microservices.player.objects
 
+/** PlayerStatus 枚举玩家状态 可使用的公开取值。 */
+
 enum PlayerStatus:
   case Active
   case Suspended

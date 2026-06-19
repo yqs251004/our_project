@@ -1,49 +1,25 @@
 package riichinexus.microservices.club.api
 import riichinexus.microservices.auth.objects.Permission
-import riichinexus.microservices.player.api.`private`.*
+import riichinexus.microservices.player.api.`private`.ResolvePlayersPrivateAPIMessage
 
 import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
-import riichinexus.microservices.auth.domain.authorization.{AccessPrincipalFunctions, AuthorizationPolicyFunctions, RoleGrantFunctions}
 
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.domain.functions.ClubIdGenerator
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
-import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
-import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
-import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
-import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
-import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
-import riichinexus.microservices.tournament.objects.tablemanagement.TableId
-import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
-import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
-import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
-import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
-import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
-import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
-import riichinexus.microservices.audit.domain.auditevent.AuditEventId
-import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
-import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
-import riichinexus.microservices.auth.domain.AuthorizationFailure
-import riichinexus.microservices.auth.domain.model.AccessPrincipal
+import riichinexus.system.api.AuthorizationFailure
 import riichinexus.microservices.club.domain.Club
-import riichinexus.microservices.club.domain.clubmanagement.model.*
-import riichinexus.microservices.club.domain.membershipmanagement.model.*
-import riichinexus.microservices.club.domain.rankprivilegemanagement.model.*
-import riichinexus.microservices.club.domain.relationmanagement.model.*
 import riichinexus.microservices.club.objects.relationmanagement.{ClubRelationKind, ClubRelationView}
 import riichinexus.microservices.club.tables.clubs.ClubTable
-import riichinexus.microservices.player.domain.Player
+import riichinexus.microservices.player.objects.`private`.PlayerPrivateView
 import riichinexus.microservices.player.objects.PlayerStatus
-import riichinexus.microservices.player.api.{CreatePlayerAPIMessage, GetPlayerAPIMessage, ListPlayersAPIMessage}
 import riichinexus.microservices.club.objects.clubmanagement.apiTypes.PublicClubDirectoryEntry
 import riichinexus.system.objects.PagedResponse
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.*
+import upickle.default.ReadWriter
 
+/** 列出前端公开俱乐部。 */
 final case class ListPublicClubsAPIMessage(
     name: Option[String] = None,
     relation: Option[ClubRelationKind] = None,
@@ -54,25 +30,23 @@ final case class ListPublicClubsAPIMessage(
   override def plan(context: ApiPlanContext): IO[PagedResponse[PublicClubDirectoryEntry]] =
     for
       _ <- requirePublicDirectoryPermission(context)
-      query <- IO.blocking(resolveQuery(context))
+      query = resolveQuery
       clubs <- IO.blocking(publicClubs(context))
       playersById <- publicClubPlayersById(context, clubs)
       relatedClubsById <- IO.blocking(publicRelatedClubsById(context, clubs))
-      entries <- IO.blocking(publicClubDirectoryEntries(clubs, playersById, relatedClubsById))
-      filteredEntries <- IO.blocking(filterPublicClubDirectoryEntries(context, entries, query))
+      entries = publicClubDirectoryEntries(clubs, playersById, relatedClubsById)
+      filteredEntries = filterPublicClubDirectoryEntries(entries, query)
     yield PagedResponse.fromItems(filteredEntries, limit, offset, query.appliedFilters)(identity)
 
   private def requirePublicDirectoryPermission(context: ApiPlanContext): IO[Unit] =
-    val guest = AccessPrincipalFunctions.guest()
     AuthCheckPermissionAPIMessage(
-      principal = Some(guest),
       permission = Permission.ViewClubDirectory
     ).plan(context).flatMap { allowed =>
       if allowed then IO.unit
-      else IO.raiseError(AuthorizationFailure(s"${guest.displayName} is not allowed to view club directory"))
+      else IO.raiseError(AuthorizationFailure("guest is not allowed to view club directory"))
     }
 
-  private def resolveQuery(context: ApiPlanContext): ResolvedClubDirectoryQuery =
+  private def resolveQuery: ResolvedClubDirectoryQuery =
     ResolvedClubDirectoryQuery(
       name = name.filter(_.nonEmpty),
       relation = relation,
@@ -88,7 +62,7 @@ final case class ListPublicClubsAPIMessage(
   private def publicClubPlayersById(
       context: ApiPlanContext,
       clubs: Vector[Club]
-  ): IO[Map[PlayerId, Player]] =
+  ): IO[Map[PlayerId, PlayerPrivateView]] =
     ResolvePlayersPrivateAPIMessage(clubs.flatMap(_.members).distinct)
       .plan(context)
       .map(_.map(player => player.id -> player).toMap)
@@ -108,7 +82,7 @@ final case class ListPublicClubsAPIMessage(
 
   private def publicClubDirectoryEntries(
       clubs: Vector[Club],
-      playersById: Map[PlayerId, Player],
+      playersById: Map[PlayerId, PlayerPrivateView],
       relatedClubsById: Map[ClubId, Club]
   ): Vector[PublicClubDirectoryEntry] =
     val clubsById = clubs.map(club => club.id -> club).toMap ++ relatedClubsById
@@ -177,7 +151,6 @@ final case class ListPublicClubsAPIMessage(
     )
 
   private def filterPublicClubDirectoryEntries(
-      context: ApiPlanContext,
       entries: Vector[PublicClubDirectoryEntry],
       query: ResolvedClubDirectoryQuery
   ): Vector[PublicClubDirectoryEntry] =

@@ -1,60 +1,39 @@
 package riichinexus.microservices.tournament.api
-import riichinexus.microservices.audit.domain.auditevent.AuditEvent
-import riichinexus.microservices.auth.utils.{ResolveAccessPrincipal, ResolveGuestAccessPrincipal, ResolveRequestActor}
+import riichinexus.microservices.audit.objects.`private`.AuditEventDraft
+import riichinexus.microservices.auth.objects.Permission
+import riichinexus.microservices.auth.api.`private`.{RequirePermissionPrivateAPIMessage, ResolveAccessPrincipalPrivateAPIMessage}
+import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
 import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPIMessage
-import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
-import riichinexus.microservices.auth.domain.authorization.AuthorizationPolicyFunctions
 
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.domain.functions.ClubIdGenerator
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
-import riichinexus.microservices.tournament.domain.functions.TournamentIdGenerator
-import riichinexus.microservices.tournament.objects.lineupmanagement.LineupSubmissionId
-import riichinexus.microservices.tournament.objects.paifumanagement.PaifuId
-import riichinexus.microservices.tournament.objects.recordmanagement.MatchRecordId
-import riichinexus.microservices.tournament.objects.settlementmanagement.SettlementSnapshotId
-import riichinexus.microservices.tournament.objects.tablemanagement.TableId
 import riichinexus.microservices.tournament.objects.tournamentmanagement.{TournamentId, TournamentStageId}
-import riichinexus.microservices.tournament.appeal.domain.functions.AppealIdGenerator
-import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
-import riichinexus.microservices.auth.domain.functions.AuthIdGenerator
-import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
-import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
-import riichinexus.microservices.audit.domain.auditevent.AuditEventId
-import riichinexus.microservices.opsanalytics.domain.functions.OpsAnalyticsIdGenerator
-import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
-import riichinexus.microservices.auth.domain.model.AccessPrincipal
-import riichinexus.microservices.tournament.domain.settlementmanagement.model.TournamentSettlementSnapshot
-import riichinexus.microservices.tournament.domain.settlementmanagement.functions.TournamentSettlementCoordinator
+import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
+import riichinexus.microservices.tournament.domain.settlement.model.TournamentSettlementSnapshot
+import riichinexus.microservices.tournament.domain.settlement.functions.{TournamentSettlementCoordinator, TournamentSettlementNotificationRequestFunctions}
 import riichinexus.microservices.tournament.objects.settlementmanagement.{TournamentSettlementAdjustment, TournamentSettlementStatus}
-import riichinexus.microservices.notification.api.`private`.CreateBulkNotificationsPrivateAPIMessage
-import riichinexus.microservices.notification.objects.apiTypes.CreateNotificationRequest
-import riichinexus.microservices.tournament.objects.lineupmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.paifumanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.recordmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.rulesmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.tablemanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.*
-import riichinexus.microservices.tournament.objects.tournamentmanagement.apiTypes.AssignTournamentAdminRequest.given
-import upickle.default.*
+import riichinexus.microservices.notification.api.`private`.RecordBulkNotificationsPrivateAPIMessage
+import riichinexus.microservices.tournament.objects.settlementmanagement.apiTypes.{SettleTournamentRequest, SettlementAdjustmentRequest, TournamentSettlementView}
 
+import upickle.default.ReadWriter
+
+/** 生成或记录赛事结算。 */
 final case class TournamentSettleAPIMessage(tournamentId: String, request: SettleTournamentRequest) extends APIMessage[TournamentSettlementView] derives ReadWriter:
 
   override def plan(context: ApiPlanContext): IO[TournamentSettlementView] =
     for
-      actor <- ResolveAccessPrincipal(PlayerId(request.operatorId)).plan(context)
+      actor <- ResolveAccessPrincipalPrivateAPIMessage(PlayerId(request.operatorId)).plan(context)
       settledAt <- IO.realTimeInstant
       _ = validateRequest()
-      snapshot <- TournamentSettlementCoordinator(AuthorizationPolicyFunctions.strict).settleTournament(
+      parsedTournamentId = TournamentId(tournamentId)
+      _ <- RequirePermissionPrivateAPIMessage(actor, Permission.ManageTournamentStages, tournamentId = Some(parsedTournamentId)).plan(context)
+      actorView = actor
+      snapshot <- TournamentSettlementCoordinator.settleTournament(
         connection = context.connection,
-        tournamentId = TournamentId(tournamentId),
+        tournamentId = parsedTournamentId,
         finalStageId = TournamentStageId(request.finalStageId),
-        actor = actor,
+        actor = actorView,
         settledAt = settledAt,
         prizePool = request.prizePool,
         payoutRatios = request.payoutRatios,
@@ -66,10 +45,10 @@ final case class TournamentSettleAPIMessage(tournamentId: String, request: Settl
       )
       _ <- RecordAuditEventsPrivateAPIMessage(settleTournamentAudit(snapshot, actor, settledAt)).plan(context)
       notificationRequests <- IO.blocking {
-        if snapshot.status == TournamentSettlementStatus.Finalized then settlementFinalizedNotifications(context.connection, snapshot)
+        if snapshot.status == TournamentSettlementStatus.Finalized then TournamentSettlementNotificationRequestFunctions.finalized(context.connection, snapshot)
         else Vector.empty
       }
-      _ <- CreateBulkNotificationsPrivateAPIMessage(notificationRequests).plan(context)
+      _ <- RecordBulkNotificationsPrivateAPIMessage(notificationRequests).plan(context)
     yield TournamentSettlementView.fromDomain(snapshot)
 
   private def validateRequest(): Unit =
@@ -89,12 +68,11 @@ final case class TournamentSettleAPIMessage(tournamentId: String, request: Settl
 
   private def settleTournamentAudit(
       snapshot: TournamentSettlementSnapshot,
-      actor: AccessPrincipal,
+      actor: AccessPrincipalPrivateView,
       settledAt: java.time.Instant
-  ): Vector[AuditEvent] =
+  ): Vector[AuditEventDraft] =
     Vector(
-      AuditEvent(
-        id = AuditIdGenerator.auditEventId(),
+      AuditEventDraft(
         aggregateType = "tournament",
         aggregateId = TournamentId(tournamentId).value,
         eventType = "TournamentSettlementRecorded",
@@ -113,36 +91,3 @@ final case class TournamentSettleAPIMessage(tournamentId: String, request: Settl
         note = request.note.orElse(Some(snapshot.summary))
       )
     )
-
-  private def settlementFinalizedNotifications(
-      connection: java.sql.Connection,
-      snapshot: TournamentSettlementSnapshot
-  ): Vector[CreateNotificationRequest] =
-    val tournamentName =
-      riichinexus.microservices.tournament.tables.tournaments.TournamentTable
-        .findById(connection, snapshot.tournamentId)
-        .map(_.name)
-        .getOrElse(snapshot.tournamentId.value)
-
-    snapshot.entries.map { entry =>
-      CreateNotificationRequest(
-        recipientPlayerId = entry.playerId.value,
-        notificationType = "TournamentSettlementFinalized",
-        title = "赛事结算已完成",
-        body = s"$tournamentName 已完成结算：你的排名第 ${entry.rank}，结算分 ${entry.finalPoints}。",
-        severity = Some("info"),
-        sourceService = "tournament",
-        sourceType = "tournament-settlement",
-        sourceId = snapshot.id.value,
-        actionUrl = Some(s"/public/tournaments/${snapshot.tournamentId.value}"),
-        objects = Map(
-          "tournamentId" -> snapshot.tournamentId.value,
-          "stageId" -> snapshot.stageId.value,
-          "settlementId" -> snapshot.id.value,
-          "playerId" -> entry.playerId.value,
-          "rank" -> entry.rank.toString,
-          "finalPoints" -> entry.finalPoints.toString,
-          "awardAmount" -> entry.awardAmount.toString
-        )
-      )
-    }

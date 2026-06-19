@@ -2,6 +2,7 @@ package riichinexus.microservices.auth.tables.authenticatedsession
 
 import java.sql.Connection
 
+
 object AuthenticatedSessionTableInitializer:
   private val initTableSql: String =
     """

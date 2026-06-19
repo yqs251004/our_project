@@ -11,9 +11,9 @@ import riichinexus.microservices.tournament.mahjongcore.objects.action.apiTypes.
 import riichinexus.microservices.tournament.mahjongcore.tables.tablestate.MahjongTableStateTable
 import riichinexus.microservices.tournament.objects.tablemanagement.TableId
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.system.json.JsonCodecs.given
+
 import riichinexus.system.realtime.objects.RealtimeEvent
-import upickle.default.*
+import upickle.default.{ReadWriter, writeJs}
 
 /** 提交玩家实时麻将行动并返回最新桌面。 */
 final case class MahjongCoreSubmitActionAPIMessage(
@@ -23,33 +23,50 @@ final case class MahjongCoreSubmitActionAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[MahjongActionResponse] =
     for
-      planned <- IO.blocking {
-        val id = TableId(tableId)
-        val submitted = MahjongSubmittedAction(
-          playerId = PlayerId(request.playerId),
-          commandType = request.commandType,
-          tile = request.tile,
-          tiles = request.tiles,
-          targetSequenceNo = request.targetSequenceNo
-        )
-        val current = MahjongTableStateTable.findById(context.connection, id)
-          .getOrElse(throw IllegalArgumentException(s"Mahjong table ${tableId} is not started"))
-        val normalizedCurrent = MahjongTableStateTable.save(context.connection, MahjongGameStateTransitionFunctions.normalizeCurrentRoundState(current))
-        val (state, acceptedEvent) = MahjongGameStateTransitionFunctions.submitAction(normalizedCurrent, submitted)
-        MahjongTableStateTable.save(context.connection, state)
-        MahjongActionResponse(
-          table = MahjongGameStateTransitionFunctions.toView(state, Some(submitted.playerId), includeLegalActions = true),
-          acceptedEvent = acceptedEvent,
-          archivedPaifuId = None
-        ) -> acceptedEvent
-      }
-      (response, acceptedEvent) = planned
-      _ <- acceptedEvent.fold(IO.unit)(event => publishAcceptedAction(context, event))
-    yield response
+      command <- IO.delay(resolveCommand)
+      outcome <- IO.blocking(submitAndSave(context, command))
+      occurredAt <- IO.realTimeInstant
+      _ <- outcome.acceptedEvent.fold(IO.unit)(event => publishAcceptedAction(context, event, occurredAt))
+    yield outcome.response
+
+  private def resolveCommand: SubmitMahjongActionCommand =
+    SubmitMahjongActionCommand(
+      tableId = TableId(tableId),
+      submitted = MahjongSubmittedAction(
+        playerId = PlayerId(request.playerId),
+        commandType = request.commandType,
+        tile = request.tile,
+        tiles = request.tiles,
+        targetSequenceNo = request.targetSequenceNo
+      )
+    )
+
+  private def submitAndSave(
+      context: ApiPlanContext,
+      command: SubmitMahjongActionCommand
+  ): SubmitMahjongActionOutcome =
+    val current = MahjongTableStateTable
+      .findById(context.connection, command.tableId)
+      .getOrElse(throw IllegalArgumentException(s"Mahjong table ${command.tableId.value} is not started"))
+    val normalizedCurrent = MahjongTableStateTable.save(
+      context.connection,
+      MahjongGameStateTransitionFunctions.normalizeCurrentRoundState(current)
+    )
+    val (state, acceptedEvent) = MahjongGameStateTransitionFunctions.submitAction(normalizedCurrent, command.submitted)
+    val stored = MahjongTableStateTable.save(context.connection, state)
+    SubmitMahjongActionOutcome(
+      response = MahjongActionResponse(
+        table = MahjongGameStateTransitionFunctions.toView(stored, Some(command.submitted.playerId), includeLegalActions = true),
+        acceptedEvent = acceptedEvent,
+        archivedPaifuId = None
+      ),
+      acceptedEvent = acceptedEvent
+    )
 
   private def publishAcceptedAction(
       context: ApiPlanContext,
-      event: MahjongPublicEventView
+      event: MahjongPublicEventView,
+      occurredAt: Instant
   ): IO[Unit] =
     context.afterCommit(
       context.realtimeEventBus.publish(
@@ -58,7 +75,7 @@ final case class MahjongCoreSubmitActionAPIMessage(
           eventType = "MahjongActionAccepted",
           aggregateType = "mahjongTable",
           aggregateId = tableId,
-          occurredAt = Instant.now(),
+          occurredAt = occurredAt,
           sourceEventType = event.actionType.toString,
           actorId = event.actor.map(_.value),
           actionUrl = Some(s"/tables/${tableId}"),
@@ -66,3 +83,13 @@ final case class MahjongCoreSubmitActionAPIMessage(
         )
       )
     )
+
+  private final case class SubmitMahjongActionCommand(
+      tableId: TableId,
+      submitted: MahjongSubmittedAction
+  )
+
+  private final case class SubmitMahjongActionOutcome(
+      response: MahjongActionResponse,
+      acceptedEvent: Option[MahjongPublicEventView]
+  )
