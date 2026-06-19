@@ -1,18 +1,6 @@
 package riichinexus.microservices.tournament.mahjongcore.domain.handanalysis.model
 
-/** MahjongHandDecomposition 枚举领域内麻将手牌拆解 的可选状态或类型。 */
-
-enum MahjongHandMeldType:
-  case Shuntsu
-  case Koutsu
-  case Kantsu
-
-final case class MahjongHandMeld(
-    meldType: MahjongHandMeldType,
-    tileIndex: Int,
-    concealed: Boolean
-)
-
+/** MahjongHandDecomposition 表示标准手牌拆解结果，包含面子列表和雀头牌索引。 */
 final case class MahjongHandDecomposition(
     melds: Vector[MahjongHandMeld],
     pairIndex: Int

@@ -2,17 +2,6 @@ package riichinexus.microservices.tournament.mahjongcore.objects.gamestate
 
 import upickle.default.{ReadWriter, read, readwriter, writeJs}
 
-/** MahjongRuleset 枚举麻将规则集 可使用的公开取值。 */
-
-enum MahjongGameLength:
-  case OneKyoku
-  case Tonpu
-  case Hanchan
-
-object MahjongGameLength:
-  given ReadWriter[MahjongGameLength] =
-    readwriter[String].bimap(_.toString, MahjongGameLength.valueOf)
-
 /** 描述一张桌采用的日本麻将规则配置；该类型前后端字段一致，所以不额外拆 View。 */
 final case class MahjongRuleset(
     gameLength: MahjongGameLength = MahjongGameLength.Hanchan,
