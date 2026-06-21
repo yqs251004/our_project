@@ -54,6 +54,7 @@ final case class MahjongCoreAdvanceRoundAPIMessage(
       if actor.isEmpty || !eastPlayer.contains(actor.get) then
         throw IllegalArgumentException("Only the current east player can advance the mahjong round")
 
+  /** 推进实时麻将桌到下一小局时使用的已解析命令。 */
   private final case class AdvanceMahjongRoundCommand(
       tableId: TableId,
       actor: Option[PlayerId]

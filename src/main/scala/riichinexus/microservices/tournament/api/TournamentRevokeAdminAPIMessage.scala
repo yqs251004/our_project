@@ -109,6 +109,7 @@ final case class TournamentRevokeAdminAPIMessage(tournamentId: String, playerId:
       )
     )
 
+  /** 撤销赛事管理员身份时使用的已授权内部命令。 */
   private final case class RevokeTournamentAdminCommand(
       tournamentId: TournamentId,
       playerId: PlayerId,

@@ -6,8 +6,10 @@ import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.ReadWriter
 
-/** Notification 表示发送给玩家的一条系统通知，包含内容、来源、已读时间和操作链接。 */
-
+/** 发给玩家的一条持久化系统通知。
+  *
+  * 通知保留接收人、类型、内容、严重级别、来源服务/对象、可选操作链接和已读/过期时间，用于通知中心和实时事件补偿。
+  */
 final case class Notification(
     id: NotificationId,
     recipientPlayerId: PlayerId,

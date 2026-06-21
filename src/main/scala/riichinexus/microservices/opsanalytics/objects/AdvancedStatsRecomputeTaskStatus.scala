@@ -1,7 +1,9 @@
 package riichinexus.microservices.opsanalytics.objects
 
-/** AdvancedStatsRecomputeTaskStatus 枚举高级统计重算任务状态 可使用的公开取值。 */
-
+/** 高级统计重算任务在队列中的处理状态。
+  *
+  * 状态覆盖等待、处理中、完成、可重试失败和死信，供调度器与运维面板共同判断任务是否还能继续执行。
+  */
 enum AdvancedStatsRecomputeTaskStatus:
   case Pending
   case Processing

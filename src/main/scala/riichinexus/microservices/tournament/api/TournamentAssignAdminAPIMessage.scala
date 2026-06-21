@@ -104,6 +104,7 @@ final case class TournamentAssignAdminAPIMessage(tournamentId: String, request: 
       )
     )
 
+  /** 授予赛事管理员身份时使用的已授权内部命令。 */
   private final case class AssignTournamentAdminCommand(
       tournamentId: TournamentId,
       playerId: PlayerId,

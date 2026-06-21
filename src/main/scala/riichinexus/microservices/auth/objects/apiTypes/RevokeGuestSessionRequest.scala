@@ -3,8 +3,10 @@ package riichinexus.microservices.auth.objects.apiTypes
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.{ReadWriter, macroRW}
 
-/** RevokeGuestSessionRequest 表示撤销游客会话请求 的前端请求参数。 */
-
+/** 撤销游客会话时附带的可选说明。
+  *
+  * 原因会写入会话状态，供后台排查用户主动退出、风控处理或设备切换等不同撤销来源。
+  */
 final case class RevokeGuestSessionRequest(
     reason: Option[String] = None
 )

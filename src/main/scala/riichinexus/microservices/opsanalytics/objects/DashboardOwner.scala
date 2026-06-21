@@ -3,8 +3,10 @@ package riichinexus.microservices.opsanalytics.objects
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
 
-/** DashboardOwner 枚举仪表盘归属方 可使用的公开取值。 */
-
+/** 运营分析看板所属的业务主体。
+  *
+  * 看板既可以归属于单个玩家，也可以归属于俱乐部；序列化格式带有前缀，避免不同 ID 空间发生冲突。
+  */
 enum DashboardOwner:
   case Player(playerId: PlayerId)
   case Club(clubId: ClubId)

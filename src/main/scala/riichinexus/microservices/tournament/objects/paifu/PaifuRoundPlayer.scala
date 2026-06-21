@@ -3,8 +3,10 @@ package riichinexus.microservices.tournament.objects.paifu
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.tournament.objects.stage.table.SeatWind
 
-/** PaifuRoundPlayer 表示前后端共享的牌谱小局玩家 数据结构，包含玩家 ID、座位、initialHand、track。 */
-
+/** 牌谱小局中某位玩家的起手和个人事件轨迹。
+  *
+  * 它把玩家、座位风、起手牌和玩家视角事件流绑定在一起，供回放时重建每个座位的手牌变化。
+  */
 final case class PaifuRoundPlayer(
     playerId: PlayerId,
     seat: SeatWind,

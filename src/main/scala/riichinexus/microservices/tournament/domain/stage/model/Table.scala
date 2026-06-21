@@ -11,7 +11,11 @@ import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.Appe
 import riichinexus.microservices.tournament.objects.stage.table.{TableSeat, TableStatus}
 
 import riichinexus.system.json.JsonCodecs.given
-/** Table 表示后端领域中的牌桌状态或规则，包含 ID、tableNo、赛事 ID、阶段 ID、座位、stageRoundNumber等。 */
+
+/** 一张赛事牌桌的运行状态。
+  *
+  * 牌桌连接赛事阶段、轮次、座位、淘汰赛节点、计分时间、牌谱、对局归档和申诉工单，是从准备、对局、计分到结束的状态机载体。
+  */
 final case class Table(
     id: TableId,
     tableNo: Int,

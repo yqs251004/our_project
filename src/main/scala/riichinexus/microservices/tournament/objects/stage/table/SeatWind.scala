@@ -1,7 +1,9 @@
 package riichinexus.microservices.tournament.objects.stage.table
 
-/** SeatWind 枚举座位Wind 可使用的公开取值。 */
-
+/** 四人麻将牌桌中的座位风。
+  *
+  * 座位风用于排桌、牌谱记录、对局结果和前端牌桌布局，`all` 保持东南西北的固定座位顺序。
+  */
 enum SeatWind:
   case East
   case South

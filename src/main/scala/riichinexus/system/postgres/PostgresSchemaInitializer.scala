@@ -22,6 +22,10 @@ import riichinexus.microservices.tournament.tables.settlement.TournamentSettleme
 import riichinexus.microservices.tournament.tables.tournaments.TournamentTableInitializer
 import riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTableInitializer
 
+/** PostgreSQL schema 初始化器。
+  *
+  * 初始化器先写入核心 schema 与版本标记，再逐个调用各微服务表初始化器，确保应用启动前数据库结构完整。
+  */
 final class PostgresSchemaInitializer(connectionFactory: JdbcConnectionFactory):
   def initialize(): Unit =
     connectionFactory.withConnection { connection =>

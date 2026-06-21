@@ -7,8 +7,10 @@ import riichinexus.microservices.club.objects.clubmanagement.ClubId
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.player.objects.{PlayerStatus, RankSnapshot}
 
-/** TournamentParticipantPlayerView 表示赛事参赛方玩家视图 的前端展示视图，包含玩家 ID、昵称、状态、elo、currentRank、clubIds等。 */
-
+/** 赛事详情中展示的参赛玩家摘要。
+  *
+  * 视图携带昵称、账号状态、Elo、当前段位和俱乐部归属，便于运营后台筛选参赛者并安排阶段阵容或牌桌。
+  */
 final case class TournamentParticipantPlayerView(
     playerId: String,
     nickname: String,

@@ -11,6 +11,7 @@ import org.http4s.ember.server.EmberServerBuilder
 import org.http4s.server.Server
 import riichinexus.system.api.http.ApiHttpApp
 
+/** HTTP API 服务启动配置。 */
 final case class ApiServerConfig(
     host: String,
     port: Int,
@@ -18,11 +19,16 @@ final case class ApiServerConfig(
     corsAllowOrigin: String = "*"
 )
 
+/** 已启动 API 服务及其释放动作。 */
 final case class ApiServerHandle(
     server: Server,
     release: IO[Unit]
 )
 
+/** 运行中的 API 服务状态。
+  *
+  * `primary` 记录当前持有的 http4s server，使用原子引用避免重复启动或并发停止造成资源泄漏。
+  */
 final case class ApiServerState(
     runtime: ApiRuntimeContext,
     config: ApiServerConfig,

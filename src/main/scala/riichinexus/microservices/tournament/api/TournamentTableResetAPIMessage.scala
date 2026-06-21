@@ -73,6 +73,7 @@ final case class TournamentTableResetAPIMessage(tableId: String, request: ForceR
     MatchRecordTable.deleteByTable(connection, tableId)
     PaifuTable.deleteByTable(connection, tableId)
 
+  /** 强制重置牌桌并清理结果产物时使用的内部命令。 */
   private final case class ResetTableCommand(
       tableId: TableId,
       actor: AccessPrincipalPrivateView,

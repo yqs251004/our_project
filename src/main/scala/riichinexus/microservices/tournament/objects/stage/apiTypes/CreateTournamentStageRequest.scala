@@ -8,8 +8,10 @@ import riichinexus.microservices.tournament.objects.stage.rules.progression.Adva
 import riichinexus.microservices.tournament.objects.stage.rules.swiss.SwissPairingMethod
 import upickle.default.{ReadWriter, macroRW}
 
-/** CreateTournamentStageRequest 表示创建赛事阶段请求 的前端请求参数。 */
-
+/** 创建赛事阶段时提交的赛制、晋级、排桌和麻将规则配置。
+  *
+  * 请求覆盖瑞士轮、淘汰赛、晋级规则、调度池和规则模板等可选参数，后端会按阶段赛制读取相应字段。
+  */
 final case class CreateTournamentStageRequest(
     name: String,
     format: TournamentFormat,

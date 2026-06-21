@@ -4,8 +4,10 @@ import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.club.objects.membershipmanagement.ClubApplicationStatus
 import upickle.default.{ReadWriter, macroRW}
 
-/** ClubApplicationListQuery 表示俱乐部申请列表查询 的列表或详情查询条件。 */
-
+/** 查询入会申请列表的过滤和分页参数。
+  *
+  * `operatorId` 表示查看申请收件箱的人，后端据此判断其能看哪些俱乐部申请，再按状态、玩家和显示名缩小结果。
+  */
 final case class ClubApplicationListQuery(
     operatorId: String,
     status: Option[ClubApplicationStatus] = None,

@@ -1,7 +1,9 @@
 package riichinexus.microservices.player.objects
 
-/** RankPlatform 枚举等级Platform 可使用的公开取值。 */
-
+/** 玩家段位来源平台。
+  *
+  * 段位快照用它区分天凤、雀魂和自定义来源，方便之后按平台解析段位文本或标准化分数。
+  */
 enum RankPlatform:
   case Tenhou
   case MahjongSoul

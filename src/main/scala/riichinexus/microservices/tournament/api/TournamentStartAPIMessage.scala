@@ -51,8 +51,8 @@ final case class TournamentStartAPIMessage(tournamentId: String, operatorId: Opt
         s"Tournament ${tournamentId.value} cannot start without participants"
       )
 
+  /** 启动赛事前完成授权和参赛校验后的内部命令。 */
   private final case class StartTournamentCommand(
       tournamentId: TournamentId,
       actor: AccessPrincipalPrivateView
   )
-

@@ -118,6 +118,7 @@ final case class PlatformAdminBanPlayerAPIMessage(
       isSuperAdmin = player.roleGrants.exists(_.role == Role.SuperAdmin)
     )
 
+  /** 平台封禁玩家流程中已经解析并授权过的命令参数。 */
   private final case class BanPlayerCommand(
       playerId: PlayerId,
       actor: AccessPrincipalPrivateView,

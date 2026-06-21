@@ -12,8 +12,10 @@ import riichinexus.microservices.tournament.objects.identity.TournamentStageId
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.MahjongRuleset
 
-/** TournamentStageSummaryView 表示赛事阶段摘要视图 的前端展示视图，包含阶段 ID、名称、format、order、状态、currentRound等。 */
-
+/** 赛事列表和摘要页使用的阶段概览。
+  *
+  * 它保留阶段进度、排桌数量和当前规则概要，足够在不展开完整阶段详情时判断赛事配置与执行状态。
+  */
 final case class TournamentStageSummaryView(
     stageId: String,
     name: String,

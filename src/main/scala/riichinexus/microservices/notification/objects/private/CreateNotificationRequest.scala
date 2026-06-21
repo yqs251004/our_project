@@ -6,8 +6,10 @@ import riichinexus.microservices.notification.objects.NotificationType
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.ReadWriter
 
-/** CreateNotificationRequest 表示后端服务创建通知时传给 notification 私有 API 的请求内容。 */
-
+/** 其他后端服务调用通知私有 API 时提交的创建请求。
+  *
+  * 调用方提供接收人、通知类型、内容、来源定位、可选动作链接和对象映射，通知服务负责补默认严重级别并持久化。
+  */
 final case class CreateNotificationRequest(
     recipientPlayerId: String,
     notificationType: NotificationType,

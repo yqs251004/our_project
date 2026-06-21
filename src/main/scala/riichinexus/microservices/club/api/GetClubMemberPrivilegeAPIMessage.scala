@@ -37,6 +37,7 @@ final case class GetClubMemberPrivilegeAPIMessage(
       }
       .getOrElse(throw NoSuchElementException("Resource not found"))
 
+  /** 查询单个成员权限快照时使用的俱乐部与玩家键。 */
   private final case class GetClubMemberPrivilegeInput(
       clubId: ClubId,
       playerId: PlayerId

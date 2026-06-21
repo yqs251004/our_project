@@ -2,8 +2,10 @@ package riichinexus.microservices.tournament.mahjongcore.objects.gamestate.apiTy
 
 import upickle.default.{ReadWriter, macroRW}
 
-/** SetMahjongCoreShowcaseModeRequest 表示Set麻将核心演示模式请求 的前端请求参数。 */
-
+/** 切换麻将核心演示模式的请求体。
+  *
+  * 该开关面向开发和展示场景，生产玩法逻辑仍以真实牌桌状态为准。
+  */
 final case class SetMahjongCoreShowcaseModeRequest(enabled: Boolean)
 
 object SetMahjongCoreShowcaseModeRequest:

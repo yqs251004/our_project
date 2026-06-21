@@ -5,8 +5,10 @@ import java.time.Instant
 import riichinexus.microservices.tournament.objects.matchrecord.MatchRecordId
 import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
 
-/** AdvancedStatsRecomputeTask 表示前后端共享的高级统计重算任务 数据结构，包含 ID、owner、reason、calculatorVersion、requestedAt、状态等。 */
-
+/** 后台队列中一条高级统计重算任务。
+  *
+  * 任务记录目标看板、计算器版本、请求原因、尝试次数、最近处理到的对局和生命周期时间点，支持失败重试与死信排查。
+  */
 final case class AdvancedStatsRecomputeTask(
     id: AdvancedStatsRecomputeTaskId,
     owner: DashboardOwner,

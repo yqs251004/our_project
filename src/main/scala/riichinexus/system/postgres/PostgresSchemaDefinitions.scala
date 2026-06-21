@@ -1,6 +1,7 @@
 package riichinexus.system.postgres
 
 private[postgres] object PostgresSchemaDefinitions:
+  /** 单张核心表的建表语句、迁移语句和索引语句集合。 */
   private final case class TableSchema(
       createSql: String,
       migrations: Vector[String] = Vector.empty,

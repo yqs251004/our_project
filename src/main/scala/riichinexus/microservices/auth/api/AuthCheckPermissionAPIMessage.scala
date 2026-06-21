@@ -59,6 +59,7 @@ final case class AuthCheckPermissionAPIMessage(
       subjectPlayerId = input.subjectPlayerId
     )
 
+  /** 权限检查接口解析后的主体与资源上下文。 */
   private final case class ResolvedCheckPermissionInput(
       operatorId: Option[PlayerId],
       guestSessionId: Option[GuestSessionId],

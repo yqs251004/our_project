@@ -62,6 +62,7 @@ final case class TournamentRemoveClubParticipationAPIMessage(tournamentId: Strin
         s"Club ${command.clubId.value} is not participating in tournament ${command.tournamentId.value}"
       )
 
+  /** 移除俱乐部赛事参与关系时使用的内部命令。 */
   private final case class RemoveClubParticipationCommand(
       tournamentId: TournamentId,
       clubId: ClubId,

@@ -1,7 +1,9 @@
 package riichinexus.microservices.club.domain.rankprivilegemanagement.model
 
-/** ClubDefaultRank 枚举领域内俱乐部Default等级 的可选状态或类型。 */
-
+/** 系统内置的俱乐部默认等级模板。
+  *
+  * 每个等级给出稳定代码、展示名称和最低贡献门槛，用于新俱乐部初始化等级树。
+  */
 enum ClubDefaultRank(
     val code: String,
     val label: String,

@@ -14,8 +14,10 @@ import riichinexus.microservices.tournament.objects.stage.rules.knockout.Knockou
 import riichinexus.microservices.tournament.objects.stage.ranking.StageRankingSnapshot
 import upickle.default.{ReadWriter, macroRW}
 
-/** PublicTournamentStageView 表示公开赛事阶段视图 的前端展示视图，包含阶段 ID、名称、format、order、状态、currentRound等。 */
-
+/** 公开赛事详情页展示的阶段完整视图。
+  *
+  * 它包含阶段进度、牌桌统计、排名、淘汰赛对阵、晋级规则、赛制规则和阵容提交摘要，但不包含后台操作字段。
+  */
 final case class PublicTournamentStageView(
     stageId: String,
     name: String,

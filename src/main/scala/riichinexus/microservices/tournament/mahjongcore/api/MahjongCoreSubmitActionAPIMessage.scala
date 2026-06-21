@@ -82,11 +82,13 @@ final case class MahjongCoreSubmitActionAPIMessage(
       )
     )
 
+  /** 玩家提交行动进入麻将规则状态机前的内部命令。 */
   private final case class SubmitMahjongActionCommand(
       tableId: TableId,
       submitted: MahjongSubmittedAction
   )
 
+  /** 提交行动后返回给调用方并推送实时事件的结果组合。 */
   private final case class SubmitMahjongActionOutcome(
       response: MahjongActionResponse,
       acceptedEvent: Option[MahjongPublicEventView]

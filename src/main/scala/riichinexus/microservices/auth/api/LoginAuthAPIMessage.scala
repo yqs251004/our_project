@@ -101,6 +101,7 @@ final case class LoginAuthAPIMessage(
       roles = registeredRoleFlags(player)
     )
 
+  /** 用户名密码登录流程中使用的内部命令。 */
   private final case class LoginCommand(
       username: String,
       password: String,

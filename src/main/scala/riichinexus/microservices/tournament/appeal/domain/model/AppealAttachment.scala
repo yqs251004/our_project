@@ -4,7 +4,11 @@ import java.time.Instant
 
 import riichinexus.microservices.tournament.appeal.objects.{AppealAttachmentMediaKind, AppealAttachmentStorageKind}
 import riichinexus.system.json.JsonCodecs.given
-/** AppealAttachment 表示后端领域中的申诉附件 状态，包含名称、uri、contentType、storageKind、mediaKind、checksum等。 */
+
+/** 申诉工单随附的证据或补充材料。
+  *
+  * 附件记录面向领域层保留原始访问地址、存储方式、媒体类型、校验信息和留存时间，便于审核员复核证据且后续可以执行清理策略。
+  */
 final case class AppealAttachment(
     name: String,
     uri: String,

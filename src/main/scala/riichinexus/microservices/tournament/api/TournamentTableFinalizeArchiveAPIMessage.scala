@@ -101,6 +101,7 @@ final case class TournamentTableFinalizeArchiveAPIMessage(
       _ <- TournamentStageTableScheduler.progressAfterTableArchived(context.connection, archived.table, archivedAt)
     yield archived
 
+  /** 牌桌归档完成后返回的牌桌状态与对局记录组合。 */
   private final case class ArchivedTable(
       table: Table,
       matchRecord: riichinexus.microservices.tournament.domain.matchrecord.model.MatchRecord

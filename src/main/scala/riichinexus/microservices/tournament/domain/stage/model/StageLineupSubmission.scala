@@ -8,7 +8,11 @@ import riichinexus.microservices.club.objects.clubmanagement.ClubId
 import riichinexus.microservices.tournament.objects.stage.lineup.LineupSubmissionId
 
 import riichinexus.system.json.JsonCodecs.given
-/** StageLineupSubmission 表示后端领域中的阶段阵容提交状态或规则，包含 ID、俱乐部 ID、submittedBy、submittedAt、座位、note。 */
+
+/** 俱乐部为某个阶段提交的阵容单。
+  *
+  * 提交单记录提交人、提交时间、正式席位与替补席位，并允许附加说明，后续排桌和参赛资格校验会以它作为输入。
+  */
 final case class StageLineupSubmission(
     id: LineupSubmissionId,
     clubId: ClubId,

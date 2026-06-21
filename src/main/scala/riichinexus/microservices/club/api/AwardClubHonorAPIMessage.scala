@@ -80,6 +80,7 @@ final case class AwardClubHonorAPIMessage(
       )
     )
 
+  /** 给俱乐部追加荣誉时使用的内部命令。 */
   private final case class AwardClubHonorCommand(
       clubId: ClubId,
       actor: AccessPrincipalPrivateView,

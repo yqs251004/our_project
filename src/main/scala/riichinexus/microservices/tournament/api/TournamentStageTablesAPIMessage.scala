@@ -46,6 +46,7 @@ final case class TournamentStageTablesAPIMessage(
       .filter(table => resolved.query.playerId.forall(playerId => table.seats.exists(_.playerId == playerId)))
       .sortBy(table => (table.stageRoundNumber, table.tableNo, table.id.value))
 
+  /** 指定阶段牌桌列表接口解析后的查询条件。 */
   private final case class ResolvedStageTablesQuery(
       tournamentId: TournamentId,
       stageId: TournamentStageId,

@@ -10,8 +10,10 @@ import riichinexus.microservices.tournament.objects.stage.apiTypes.PublicTournam
 import riichinexus.system.json.TournamentJsonCodecs.given
 import upickle.default.{ReadWriter, macroRW}
 
-/** PublicTournamentDetailView 表示公开赛事详情视图 的前端展示视图，包含赛事 ID、名称、organizer、状态、startsAt、endsAt等。 */
-
+/** 公开赛事详情页使用的安全展示视图。
+  *
+  * 它展示赛事基本信息、公开参赛主体、白名单数量和公开阶段信息，不包含后台管理员列表或阶段操作字段。
+  */
 final case class PublicTournamentDetailView(
     tournamentId: String,
     name: String,

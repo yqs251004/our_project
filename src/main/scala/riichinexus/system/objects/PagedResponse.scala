@@ -1,5 +1,9 @@
 package riichinexus.system.objects
 
+/** 列表接口通用的分页响应包装。
+  *
+  * 响应同时返回当前页数据、总数、实际 limit/offset、是否还有更多数据，以及服务端实际应用的过滤条件。
+  */
 final case class PagedResponse[T](
     items: Vector[T],
     total: Int,

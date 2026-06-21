@@ -6,8 +6,10 @@ import riichinexus.microservices.tournament.objects.identity.{TournamentId, Tour
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.ReadWriter
 
-/** MatchRecordListQuery 表示对局记录列表查询 的列表或详情查询条件，包含玩家 ID、赛事 ID、阶段 ID、牌桌 ID、数量限制、分页偏移。 */
-
+/** 查询赛事对局记录列表的过滤和分页参数。
+  *
+  * 可以按玩家、赛事、阶段或牌桌定位战绩，用于玩家历史、赛事记录页、俱乐部近期比赛和申诉检索。
+  */
 final case class MatchRecordListQuery(
     playerId: Option[PlayerId] = None,
     tournamentId: Option[TournamentId] = None,

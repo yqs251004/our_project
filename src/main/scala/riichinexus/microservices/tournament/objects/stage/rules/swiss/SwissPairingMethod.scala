@@ -1,7 +1,9 @@
 package riichinexus.microservices.tournament.objects.stage.rules.swiss
 
-/** SwissPairingMethod 枚举SwissPairingMethod 可使用的公开取值。 */
-
+/** 瑞士轮阶段生成配桌时可使用的配对策略。
+  *
+  * BalancedElo 倾向按强弱均衡分组，Snake 按蛇形顺序分配选手，二者都会影响每轮座位计划。
+  */
 enum SwissPairingMethod:
   case BalancedElo
   case Snake

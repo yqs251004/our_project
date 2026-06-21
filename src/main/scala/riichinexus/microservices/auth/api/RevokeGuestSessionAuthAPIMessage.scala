@@ -76,11 +76,13 @@ final case class RevokeGuestSessionAuthAPIMessage(
       createdAt = session.createdAt.toString
     )
 
+  /** 撤销游客会话时使用的内部命令。 */
   private final case class RevokeGuestSessionCommand(
       input: ResolvedRevokeGuestSessionInput,
       revokedAt: Instant
   )
 
+  /** 游客会话撤销请求归一化后的会话 ID 与原因。 */
   private final case class ResolvedRevokeGuestSessionInput(
       sessionId: GuestSessionId,
       reason: String

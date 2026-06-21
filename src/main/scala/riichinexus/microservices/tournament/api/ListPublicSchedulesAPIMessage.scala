@@ -139,6 +139,7 @@ final case class ListPublicSchedulesAPIMessage(
       .filter(schedule => query.stageStatus.forall(_ == schedule.stageStatus))
       .sortBy(schedule => (schedule.startsAt, schedule.tournamentName, schedule.stageName))
 
+  /** 公共赛程接口解析后的状态过滤条件。 */
   private final case class ResolvedScheduleQuery(
       tournamentStatus: Option[TournamentStatus],
       stageStatus: Option[StageStatus],

@@ -1,7 +1,9 @@
 package riichinexus.microservices.tournament.objects.competition
 
-/** TournamentParticipantKind 枚举赛事参赛方类型 可使用的公开取值。 */
-
+/** 赛事白名单和参赛名单中允许出现的主体类型。
+  *
+  * 俱乐部参赛通常需要阵容提交，个人参赛则直接绑定玩家档案；二者在邀请和排桌时走不同逻辑。
+  */
 enum TournamentParticipantKind:
   case Club
   case Player

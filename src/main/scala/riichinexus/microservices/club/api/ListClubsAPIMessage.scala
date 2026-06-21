@@ -71,6 +71,7 @@ final case class ListClubsAPIMessage(
       appliedFilters = query.appliedFilters
     )
 
+  /** 管理侧俱乐部列表接口解析后的过滤与分页条件。 */
   private final case class ResolvedClubListQuery(
       activeOnly: Boolean,
       joinableOnly: Boolean,

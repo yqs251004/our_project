@@ -162,6 +162,7 @@ final case class AdjustClubMemberContributionAPIMessage(
     if player.status != PlayerStatus.Active then
       throw IllegalArgumentException(context)
 
+  /** 调整成员贡献值时使用的已授权内部命令。 */
   private final case class AdjustClubMemberContributionCommand(
       clubId: ClubId,
       playerId: PlayerId,

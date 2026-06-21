@@ -56,4 +56,5 @@ final case class MahjongCoreArchiveTableAPIMessage(
         archivedPaifuId = Some(archived.paifu.id)
       )
 
+  /** 将指定实时麻将桌归档为牌谱和对局记录的内部命令。 */
   private final case class ArchiveMahjongTableCommand(tableId: TableId)

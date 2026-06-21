@@ -205,6 +205,7 @@ final case class TournamentCreateAPIMessage(
     if player.status != PlayerStatus.Active then
       throw IllegalArgumentException(context)
 
+  /** 创建赛事请求经校验后形成的领域输入。 */
   private final case class CreateTournamentInput(
       name: String,
       organizer: String,

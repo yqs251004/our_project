@@ -9,8 +9,10 @@ import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
 import riichinexus.microservices.tournament.objects.stage.lineup.LineupSubmissionId
 
-/** TournamentLineupSubmissionView 表示赛事阵容提交视图 的前端展示视图，包含submissionId、俱乐部 ID、submittedBy、submittedAt、activePlayerIds、reservePlayerIds等。 */
-
+/** 前端展示的阶段阵容提交快照。
+  *
+  * 它把一次俱乐部阵容提交拆成正选与替补玩家列表，并保留提交人、提交时间和备注，供公开详情和运营后台查看。
+  */
 final case class TournamentLineupSubmissionView(
     submissionId: String,
     clubId: String,

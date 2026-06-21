@@ -7,8 +7,11 @@ import riichinexus.microservices.club.objects.clubmanagement.ClubId
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.tournament.objects.identity.TournamentId
 
-/** RoleGrant 表示后端内部 API 使用的角色Grant 数据载体，包含角色、grantedAt、grantedBy、俱乐部 ID、赛事 ID。 */
-
+/** 一次角色授予记录及其可选作用域。
+  *
+  * 俱乐部管理员和赛事管理员会绑定到对应资源，平台角色则保持全局；
+  * `grantedBy` 和 `grantedAt` 用于审计谁在何时赋予了这项访问能力。
+  */
 final case class RoleGrant(
     role: Role,
     grantedAt: Instant,

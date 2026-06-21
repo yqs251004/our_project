@@ -6,8 +6,10 @@ import riichinexus.microservices.tournament.objects.identity.{TournamentId, Tour
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.ReadWriter
 
-/** PaifuListQuery 表示牌谱列表查询 的列表或详情查询条件，包含玩家 ID、赛事 ID、阶段 ID、牌桌 ID、数量限制、分页偏移。 */
-
+/** 查询牌谱归档列表的过滤和分页参数。
+  *
+  * 可以按玩家、赛事、阶段或牌桌定位牌谱，供牌谱库、玩家历史和赛事记录页共用。
+  */
 final case class PaifuListQuery(
     playerId: Option[PlayerId] = None,
     tournamentId: Option[TournamentId] = None,

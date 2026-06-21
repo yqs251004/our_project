@@ -1,7 +1,9 @@
 package riichinexus.microservices.auth.objects
 
-/** Permission 枚举权限 可使用的公开取值。 */
-
+/** 授权策略识别的细粒度操作权限。
+  *
+  * 角色会被展开成这些权限，再由 API 或领域服务按具体场景校验，例如俱乐部管理、赛事编排、牌桌操作和平台审计。
+  */
 enum Permission:
   case ViewPublicSchedule
   case ViewClubDirectory

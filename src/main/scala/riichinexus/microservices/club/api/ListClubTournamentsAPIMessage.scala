@@ -151,6 +151,7 @@ final case class ListClubTournamentsAPIMessage(
     TournamentStatus.InProgress
   )
 
+  /** 查询俱乐部相关赛事时解析后的范围、访问者和分页条件。 */
   private final case class ClubTournamentQuery(
       clubId: ClubId,
       scope: ClubTournamentScope,

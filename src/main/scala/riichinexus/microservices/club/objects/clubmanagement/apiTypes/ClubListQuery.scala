@@ -3,8 +3,10 @@ package riichinexus.microservices.club.objects.clubmanagement.apiTypes
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.{ReadWriter, macroRW}
 
-/** ClubListQuery 表示俱乐部列表查询 的列表或详情查询条件。 */
-
+/** 管理侧查询俱乐部列表的过滤和分页参数。
+  *
+  * 该查询支持按活跃状态、可加入状态、成员、管理员和名称筛选，服务于后台或成员中心的俱乐部检索。
+  */
 final case class ClubListQuery(
     activeOnly: Option[Boolean] = None,
     joinableOnly: Option[Boolean] = None,

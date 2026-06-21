@@ -5,8 +5,10 @@ import riichinexus.microservices.tournament.objects.stage.table.TableStatus
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.ReadWriter
 
-/** StageTableQuery 表示阶段牌桌查询 的列表或详情查询条件，包含状态、roundNumber、玩家 ID、数量限制、分页偏移。 */
-
+/** 查询某个阶段下牌桌列表的过滤和分页参数。
+  *
+  * 可按牌桌状态、轮次或玩家定位阶段内牌桌，适合阶段详情页按当前轮或指定选手筛选。
+  */
 final case class StageTableQuery(
     status: Option[TableStatus] = None,
     roundNumber: Option[Int] = None,

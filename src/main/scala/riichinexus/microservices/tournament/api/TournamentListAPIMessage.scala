@@ -68,6 +68,7 @@ final case class TournamentListAPIMessage(
   private def filters(values: Option[(String, String)]*): Map[String, String] =
     values.flatten.toMap
 
+  /** 运营赛事列表接口解析后的分页查询条件。 */
   private final case class ResolvedTournamentListQuery(
       query: TournamentListQuery,
       limit: Int,

@@ -6,8 +6,10 @@ import riichinexus.microservices.tournament.objects.competition.TournamentPartic
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.ReadWriter
 
-/** TournamentWhitelistQuery 表示赛事白名单查询 的列表或详情查询条件，包含participantKind、玩家 ID、俱乐部 ID、数量限制、分页偏移。 */
-
+/** 查询赛事白名单条目时使用的过滤和分页参数。
+  *
+  * 可按主体类型、玩家或俱乐部筛选，便于运营后台检查某个参赛来源是否已被允许。
+  */
 final case class TournamentWhitelistQuery(
     participantKind: Option[TournamentParticipantKind] = None,
     playerId: Option[PlayerId] = None,

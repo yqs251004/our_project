@@ -3,8 +3,10 @@ package riichinexus.microservices.platformadmin.objects.apiTypes
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.{ReadWriter, macroRW}
 
-/** PlatformAdminClubView 表示Platform管理员俱乐部视图 的前端展示视图。 */
-
+/** 平台管理页查看俱乐部时使用的后台视图。
+  *
+  * 它比公开目录多出创建者、创建时间和解散信息，便于平台管理员判断俱乐部状态与处理异常。
+  */
 final case class PlatformAdminClubView(
     clubId: String,
     name: String,

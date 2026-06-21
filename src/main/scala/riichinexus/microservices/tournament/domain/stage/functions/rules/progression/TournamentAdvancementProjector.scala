@@ -9,9 +9,13 @@ import java.time.Instant
 import riichinexus.microservices.tournament.domain.stage.model.TournamentStage
 import riichinexus.microservices.tournament.domain.competition.model.Tournament
 
-/** TournamentAdvancementProjector 负责赛事Advancement投影器 相关的领域编排、构建或投影计算。 */
+/** 根据阶段成绩与晋级规则生成晋级快照的投影器。
+  *
+  * 投影器负责解释自定义晋级条件，并在淘汰赛阶段把排名结果转换为 bracket 种子。
+  */
 
 private[tournament] object TournamentAdvancementProjector:
+  /** 自定义晋级规则解析后的筛选与保留席位策略。 */
   private final case class CustomAdvancementPolicy(
       topCount: Option[Int] = None,
       topPercent: Option[Double] = None,

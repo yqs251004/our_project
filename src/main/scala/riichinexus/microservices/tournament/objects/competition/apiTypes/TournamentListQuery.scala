@@ -5,8 +5,10 @@ import riichinexus.microservices.tournament.objects.competition.TournamentStatus
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.ReadWriter
 
-/** TournamentListQuery 表示赛事列表查询 的列表或详情查询条件，包含状态、adminId、organizer、数量限制、分页偏移。 */
-
+/** 运营后台查询赛事列表的过滤和分页参数。
+  *
+  * 可以按赛事状态、管理员和主办方筛选，用于管理页只展示当前操作者需要处理的赛事集合。
+  */
 final case class TournamentListQuery(
     status: Option[TournamentStatus] = None,
     adminId: Option[PlayerId] = None,

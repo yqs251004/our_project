@@ -1,7 +1,9 @@
 package riichinexus.microservices.club.objects.membershipmanagement.apiTypes
 
-/** ClubApplicationReviewDecision 枚举俱乐部申请Review裁定 可使用的公开取值。 */
-
+/** 管理员审核入会申请时可提交的裁定。
+  *
+  * 当前只允许通过或拒绝；撤回由申请人走独立接口，避免把申请人动作和审核动作混在一起。
+  */
 enum ClubApplicationReviewDecision:
   case Approve
   case Reject

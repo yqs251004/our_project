@@ -75,6 +75,7 @@ final case class TournamentStageAdvanceAPIMessage(tournamentId: String, stageId:
         s"Stage ${stageId.value} is not configured as a knockout stage"
       )
 
+  /** 推进淘汰赛阶段时使用的已授权内部命令。 */
   private final case class AdvanceKnockoutStageCommand(
       tournamentId: TournamentId,
       stageId: TournamentStageId,

@@ -5,8 +5,10 @@ import riichinexus.microservices.club.objects.rankprivilegemanagement.ClubPrivil
 import riichinexus.microservices.player.objects.RankSnapshot
 import upickle.default.{ReadWriter, macroRW}
 
-/** PublicClubLineupMemberView 表示公开俱乐部阵容成员视图 的前端展示视图。 */
-
+/** 公开俱乐部阵容中单个成员的展示资料。
+  *
+  * 视图包含昵称、Elo、段位、成员状态、管理员标记、内部称号和权限标签，方便页面展示当前可派出的核心成员。
+  */
 final case class PublicClubLineupMemberView(
     playerId: String,
     nickname: String,

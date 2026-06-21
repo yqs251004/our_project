@@ -165,6 +165,7 @@ final case class GetClubApplicationAPIMessage(
           .map(ResolvePlayerByUserIdPrivateAPIMessage(_).plan(context))
           .getOrElse(IO.pure(None))
 
+  /** 查询入会申请详情时使用的申请键和访问者信息。 */
   private final case class GetClubApplicationInput(
       clubId: ClubId,
       membershipId: MembershipApplicationId,

@@ -69,6 +69,7 @@ final case class TournamentStageCreateAPIMessage(tournamentId: String, request: 
         s"Cannot add stages to tournament ${command.tournamentId.value} in status ${tournament.status}"
       )
 
+  /** 向既有赛事追加阶段时使用的内部命令。 */
   private final case class CreateStageCommand(
       tournamentId: TournamentId,
       actor: AccessPrincipalPrivateView,

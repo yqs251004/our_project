@@ -110,6 +110,7 @@ final case class AppealFileAPIMessage(
       )
     )
 
+  /** 玩家提交牌桌申诉时，服务层已补全上下文后的内部命令。 */
   private final case class FileAppealCommand(
       tableId: TableId,
       openedBy: PlayerId,

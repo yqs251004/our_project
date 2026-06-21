@@ -87,6 +87,7 @@ final case class AdjustClubTreasuryAPIMessage(
       )
     )
 
+  /** 调整俱乐部资金库余额时使用的已授权内部命令。 */
   private final case class AdjustClubTreasuryCommand(
       clubId: ClubId,
       actor: AccessPrincipalPrivateView,

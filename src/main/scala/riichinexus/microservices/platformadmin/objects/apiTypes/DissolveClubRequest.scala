@@ -4,8 +4,10 @@ import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.ReadWriter
 
-/** DissolveClubRequest 表示Dissolve俱乐部请求 的前端请求参数，包含operatorId。 */
-
+/** 平台管理员解散俱乐部时提交的请求体。
+  *
+  * 请求只携带操作者，目标俱乐部来自路径；后端会记录解散时间和解散人，避免俱乐部被物理删除。
+  */
 final case class DissolveClubRequest(
     operatorId: PlayerId
 ) derives ReadWriter

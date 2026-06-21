@@ -7,8 +7,10 @@ import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.tournament.objects.stage.StageStatus
 import riichinexus.microservices.tournament.objects.competition.TournamentFormat
 
-/** TournamentStageDirectoryEntry 表示前后端共享的赛事阶段目录条目 数据结构，包含阶段 ID、名称、format、order、状态、currentRound等。 */
-
+/** 阶段目录或下拉选择器使用的轻量条目。
+  *
+  * 它只保留阶段身份、排序、状态、轮次和排桌计数，适合快速导航而不拉取排名、对阵或阵容详情。
+  */
 final case class TournamentStageDirectoryEntry(
     stageId: String,
     name: String,

@@ -212,6 +212,7 @@ final case class SubmitClubApplicationAPIMessage(
       submitApplicationNotifications(result.club, result.application)
     ).plan(context).void
 
+  /** 提交入会申请时已经解析主体和申请人的内部命令。 */
   private final case class SubmitClubApplicationCommand(
       actor: AccessPrincipalPrivateView,
       clubId: ClubId,
@@ -220,11 +221,13 @@ final case class SubmitClubApplicationAPIMessage(
       message: Option[String]
   )
 
+  /** 入会申请创建后用于返回响应和通知管理员的结果。 */
   private final case class SubmitClubApplicationResult(
       club: Club,
       application: ClubMembershipApplication
   )
 
+  /** 入会申请提交者解析后的玩家 ID 与展示名。 */
   private final case class ResolvedClubApplicationInput(
       playerId: PlayerId,
       displayName: String

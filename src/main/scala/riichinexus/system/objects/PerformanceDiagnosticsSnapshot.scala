@@ -5,6 +5,7 @@ import java.time.Instant
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.{ReadWriter, macroRW}
 
+/** 性能诊断接口返回的聚合快照。 */
 final case class PerformanceDiagnosticsSnapshot(
     startedAt: Instant,
     generatedAt: Instant,

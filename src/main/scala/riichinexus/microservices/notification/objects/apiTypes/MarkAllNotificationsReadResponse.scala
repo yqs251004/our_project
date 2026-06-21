@@ -2,8 +2,10 @@ package riichinexus.microservices.notification.objects.apiTypes
 
 import upickle.default.ReadWriter
 
-/** MarkAllNotificationsReadResponse 表示标记全部Notifications已读响应 的 API 响应结果，包含更新数量。 */
-
+/** 批量标记通知已读后的操作结果。
+  *
+  * `updatedCount` 告诉前端本次实际更新了多少条通知，可用于刷新未读徽标或显示操作反馈。
+  */
 final case class MarkAllNotificationsReadResponse(
     updatedCount: Int
 ) derives ReadWriter

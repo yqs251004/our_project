@@ -80,6 +80,7 @@ final case class AssignClubAdminAPIMessage(
     if player.status != PlayerStatus.Active then
       throw IllegalArgumentException(context)
 
+  /** 授予俱乐部管理员身份时使用的已授权内部命令。 */
   private final case class AssignClubAdminCommand(
       clubId: ClubId,
       playerId: PlayerId,

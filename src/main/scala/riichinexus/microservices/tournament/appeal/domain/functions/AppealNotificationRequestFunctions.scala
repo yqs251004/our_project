@@ -103,6 +103,7 @@ private[appeal] object AppealNotificationRequestFunctions:
     val trimmed = value.trim
     if trimmed.length <= 120 then trimmed else s"${trimmed.take(120)}..."
 
+  /** 生成申诉通知文案时需要的赛事、牌桌和阶段上下文。 */
   private final case class AppealNotificationContext(
       tournament: Tournament,
       table: Table,

@@ -9,7 +9,11 @@ import riichinexus.microservices.tournament.objects.finalization.{TournamentSett
 import java.time.Instant
 
 import riichinexus.system.json.JsonCodecs.given
-/** TournamentSettlementSnapshot 表示后端领域中的赛事结算快照状态或规则，包含 ID、赛事 ID、阶段 ID、revision、状态、生成时间等。 */
+
+/** 某一赛事阶段结算结果的不可变快照。
+  *
+  * 快照记录奖金池、平台费用、俱乐部分成、人工调整、选手结算明细和版本关系，便于结算被确认、替换或追溯时保留完整历史。
+  */
 final case class TournamentSettlementSnapshot(
     id: SettlementSnapshotId,
     tournamentId: TournamentId,

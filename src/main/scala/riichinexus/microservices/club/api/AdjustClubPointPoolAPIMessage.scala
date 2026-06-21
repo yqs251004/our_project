@@ -87,6 +87,7 @@ final case class AdjustClubPointPoolAPIMessage(
       )
     )
 
+  /** 调整俱乐部点数池时使用的已授权内部命令。 */
   private final case class AdjustClubPointPoolCommand(
       clubId: ClubId,
       actor: AccessPrincipalPrivateView,

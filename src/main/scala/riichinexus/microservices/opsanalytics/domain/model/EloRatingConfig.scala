@@ -1,7 +1,11 @@
 package riichinexus.microservices.opsanalytics.domain.model
 
 import riichinexus.system.json.JsonCodecs.given
-/** EloRatingConfig 表示后端领域中的Elo评级配置 状态，包含kFactor、placementWeight、scoreWeight、umaWeight。 */
+
+/** Elo 变动计算使用的权重配置。
+  *
+  * `kFactor` 控制整体波动幅度，其余权重决定名次、原点差和 uma 在单场评分变化中的占比。
+  */
 final case class EloRatingConfig(
     kFactor: Int = 36,
     placementWeight: Double = 0.6,

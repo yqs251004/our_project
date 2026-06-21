@@ -6,8 +6,10 @@ import riichinexus.microservices.club.objects.tournamentparticipation.apiTypes.P
 import riichinexus.microservices.club.objects.auditreadmodel.apiTypes.PublicClubRecentMatchView
 import upickle.default.{ReadWriter, macroRW}
 
-/** PublicClubDetailView 表示公开俱乐部详情视图 的前端展示视图。 */
-
+/** 俱乐部公开详情页的一次性展示模型。
+  *
+  * 它整合公开统计、关系、荣誉、入会策略、当前赛事阵容和近期对局，让访客无需管理权限也能理解俱乐部状态。
+  */
 final case class PublicClubDetailView(
     clubId: String,
     name: String,

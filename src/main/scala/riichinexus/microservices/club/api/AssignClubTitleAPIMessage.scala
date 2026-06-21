@@ -141,6 +141,7 @@ final case class AssignClubTitleAPIMessage(
     if player.status != PlayerStatus.Active then
       throw IllegalArgumentException(context)
 
+  /** 给成员设置俱乐部展示称号时使用的内部命令。 */
   private final case class AssignClubTitleCommand(
       clubId: ClubId,
       playerId: PlayerId,

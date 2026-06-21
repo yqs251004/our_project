@@ -83,6 +83,7 @@ final case class PublicClubLeaderboardAPIMessage(
   private def round2(value: Double): Double =
     BigDecimal(value).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble
 
+  /** 公开俱乐部排行榜接口解析后的名称过滤条件。 */
   private final case class ResolvedClubLeaderboardQuery(
       name: Option[String],
       appliedFilters: Map[String, String]

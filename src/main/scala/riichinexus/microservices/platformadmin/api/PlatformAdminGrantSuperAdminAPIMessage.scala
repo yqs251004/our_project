@@ -79,6 +79,7 @@ final case class PlatformAdminGrantSuperAdminAPIMessage(
       isSuperAdmin = player.roleGrants.exists(_.role == Role.SuperAdmin)
     )
 
+  /** 授予超级管理员角色时传入玩家、操作者和时间戳的命令对象。 */
   private final case class GrantSuperAdminCommand(
       playerId: PlayerId,
       actor: AccessPrincipalPrivateView,

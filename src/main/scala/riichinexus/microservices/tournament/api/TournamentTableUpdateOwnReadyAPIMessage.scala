@@ -94,6 +94,7 @@ final case class TournamentTableUpdateOwnReadyAPIMessage(tableId: String, reques
   private def readyNote(actor: AccessPrincipalPrivateView, note: Option[String]): Option[String] =
     note.map(message => s"${actor.displayName} updated their ready state: $message")
 
+  /** 玩家更新自己牌桌准备状态时使用的内部命令。 */
   private final case class UpdateOwnReadyCommand(
       tableId: TableId,
       actor: AccessPrincipalPrivateView,

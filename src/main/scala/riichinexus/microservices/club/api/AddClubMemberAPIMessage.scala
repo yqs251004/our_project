@@ -83,10 +83,10 @@ final case class AddClubMemberAPIMessage(
     if player.status != PlayerStatus.Active then
       throw IllegalArgumentException(context)
 
+  /** 手动添加俱乐部成员时使用的已授权内部命令。 */
   private final case class AddClubMemberCommand(
       clubId: ClubId,
       playerId: PlayerId,
       actor: AccessPrincipalPrivateView,
       occurredAt: Instant
   )
-

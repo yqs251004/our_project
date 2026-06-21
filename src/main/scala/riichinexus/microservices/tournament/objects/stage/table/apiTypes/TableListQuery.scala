@@ -6,8 +6,10 @@ import riichinexus.microservices.tournament.objects.stage.table.TableStatus
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.ReadWriter
 
-/** TableListQuery 表示牌桌列表查询 的列表或详情查询条件，包含状态、赛事 ID、阶段 ID、roundNumber、玩家 ID、数量限制等。 */
-
+/** 跨赛事或跨阶段查询牌桌列表的过滤参数。
+  *
+  * 该查询适合运营后台、玩家当前牌桌和记录入口，能按赛事、阶段、轮次、状态或玩家收窄结果。
+  */
 final case class TableListQuery(
     status: Option[TableStatus] = None,
     tournamentId: Option[TournamentId] = None,

@@ -10,7 +10,11 @@ import riichinexus.microservices.tournament.objects.stage.table.TableId
 import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}
 
 import riichinexus.system.json.JsonCodecs.given
-/** MatchRecord 表示后端领域中的对局记录状态或规则，包含 ID、牌桌 ID、赛事 ID、阶段 ID、stageRoundNumber、生成时间等。 */
+
+/** 牌桌结束后生成的对局归档记录。
+  *
+  * 记录把赛事阶段、牌桌、轮次、座位成绩、可选牌谱和最终确认人关联起来，作为排行榜、结算和审计复盘的共同事实来源。
+  */
 final case class MatchRecord(
     id: MatchRecordId,
     tableId: TableId,

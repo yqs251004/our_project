@@ -5,8 +5,10 @@ import riichinexus.microservices.tournament.objects.finalization.{TournamentSett
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.{ReadWriter, macroRW}
 
-/** TournamentSettlementView 表示赛事结算视图 的前端展示视图。 */
-
+/** 前端展示和确认赛事结算时使用的完整结算快照。
+  *
+  * 视图包含版本、状态、生成/确认/替代时间、奖池拆分、人工调整、每位玩家的结算条目和摘要说明。
+  */
 final case class TournamentSettlementView(
     settlementId: String,
     tournamentId: String,

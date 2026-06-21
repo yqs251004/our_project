@@ -112,6 +112,7 @@ final case class CurrentSessionAuthAPIMessage(
       isSuperAdmin = false
     )
 
+  /** 查询当前会话时可解析出的正式玩家或游客主体。 */
   private final case class CurrentSessionInput(
       operatorId: Option[PlayerId],
       guestSessionId: Option[GuestSessionId]

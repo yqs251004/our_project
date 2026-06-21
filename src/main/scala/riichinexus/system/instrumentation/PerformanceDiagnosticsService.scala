@@ -7,9 +7,14 @@ import scala.annotation.tailrec
 
 import riichinexus.system.objects.{PerformanceDiagnosticsSnapshot, PerformanceMetricEntry, PerformanceStatusCount}
 
+/** 进程内性能诊断采集服务。
+  *
+  * 服务按请求路径和仓储操作累计耗时、次数与状态码分布，并可生成后台诊断页面使用的快照。
+  */
 final class PerformanceDiagnosticsService(
     val startedAt: Instant = Instant.now()
 ):
+  /** 原子指标映射中存放的累计计数状态。 */
   private final case class MetricAccumulator(
       count: Long = 0L,
       totalNanos: Long = 0L,

@@ -9,7 +9,11 @@ import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.Appe
 import riichinexus.microservices.tournament.appeal.objects.{AppealDecisionLog, AppealPriority, AppealStatus}
 
 import riichinexus.system.json.JsonCodecs.given
-/** AppealTicket 表示后端领域中的申诉工单 状态，包含 ID、牌桌 ID、赛事 ID、阶段 ID、openedBy、description等。 */
+
+/** 牌桌申诉的领域聚合。
+  *
+  * 工单把牌桌、赛事阶段、提交人、附件、优先级、分派信息和裁定日志放在同一个生命周期里，并通过方法约束进入复核、解决、驳回、升级和重开的状态流转。
+  */
 final case class AppealTicket(
     id: AppealTicketId,
     tableId: TableId,

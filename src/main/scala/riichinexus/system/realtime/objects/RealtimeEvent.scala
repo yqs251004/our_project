@@ -5,6 +5,10 @@ import java.time.Instant
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.{ReadWriter, Writer, writeJs}
 
+/** 发送到实时通道的标准事件载荷。
+  *
+  * 事件记录聚合类型与 ID、来源事件、可选操作者与接收人、展示文案和结构化数据，客户端据此选择刷新范围。
+  */
 final case class RealtimeEvent(
     id: String,
     eventType: RealtimeEventType,

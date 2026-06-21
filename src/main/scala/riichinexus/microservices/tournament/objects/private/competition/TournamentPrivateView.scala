@@ -8,8 +8,10 @@ import riichinexus.microservices.tournament.objects.identity.TournamentId
 import riichinexus.microservices.tournament.objects.competition.{TournamentStatus, TournamentWhitelistEntry}
 import riichinexus.microservices.tournament.objects.`private`.stage.TournamentStagePrivateView
 
-/** TournamentPrivateView 表示后端内部使用的赛事后端内部视图 read model，包含 ID、名称、startsAt、endsAt、participatingClubs、participatingPlayers等。 */
-
+/** 服务间使用的赛事完整内部快照。
+  *
+  * 它保留参赛主体、白名单、阶段内部视图和状态，供俱乐部邀请、阶段推进、排桌、结算和公开读模型刷新共同使用。
+  */
 final case class TournamentPrivateView(
     id: TournamentId,
     name: String,

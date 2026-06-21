@@ -174,6 +174,7 @@ final case class OpsAnalyticsRecomputeAdvancedStatsAPIMessage(
       case AdvancedStatsBackfillMode.Stale =>
         board.exists(_.calculatorVersion < AdvancedStatsBoardFunctions.currentCalculatorVersion)
 
+  /** 创建高级统计重算任务时使用的归一化命令。 */
   private final case class RecomputeAdvancedStatsCommand(
       operator: AccessPrincipalPrivateView,
       targetOwner: Option[DashboardOwner],

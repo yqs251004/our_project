@@ -9,8 +9,10 @@ import riichinexus.microservices.tournament.appeal.objects.{AppealPriority, Appe
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.ReadWriter
 
-/** AppealListQuery 表示申诉列表查询 的列表或详情查询条件，包含状态、priority、赛事 ID、阶段 ID、牌桌 ID、openedBy等。 */
-
+/** 后台查询申诉列表时使用的筛选条件。
+  *
+  * 查询支持按状态、优先级、赛事、阶段、牌桌、提交人、处理人和到期时间过滤，并提供分页参数给运营工作台使用。
+  */
 final case class AppealListQuery(
     status: Option[AppealStatus] = None,
     priority: Option[AppealPriority] = None,

@@ -2,6 +2,10 @@ package riichinexus.system
 
 import java.nio.file.Paths
 
+/** 应用层数据库连接配置。
+  *
+  * 该配置以主机、端口、库名、schema 和连接池参数为中心，适合从环境变量拼装本地或部署环境的 JDBC URL。
+  */
 final case class DatabaseConfig(
     host: String,
     port: Int,

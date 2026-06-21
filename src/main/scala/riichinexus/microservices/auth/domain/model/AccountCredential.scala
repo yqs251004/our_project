@@ -5,7 +5,11 @@ import java.time.Instant
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 
 import riichinexus.system.json.JsonCodecs.given
-/** AccountCredential 表示后端领域中的账号凭证 状态，包含用户名、玩家 ID、密码哈希、密码盐值、passwordIterations、创建时间等。 */
+
+/** 后端保存的账号密码凭证。
+  *
+  * 该类型绑定用户名和玩家档案，并保存哈希、盐值、迭代次数及版本号；明文密码只在请求层短暂存在，不会进入这个领域状态。
+  */
 final case class AccountCredential(
     username: String,
     playerId: PlayerId,

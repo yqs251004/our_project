@@ -71,9 +71,9 @@ final case class AcceptClubTournamentAPIMessage(
       delegatedPrivileges = Set(ClubPrivilegeCode.PriorityLineup)
     )
 
+  /** 俱乐部接受赛事邀请时使用的内部命令。 */
   private final case class AcceptClubTournamentCommand(
       clubId: ClubId,
       tournamentId: TournamentId,
       actor: AccessPrincipalPrivateView
   )
-

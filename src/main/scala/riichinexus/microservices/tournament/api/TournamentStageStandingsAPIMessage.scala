@@ -18,6 +18,7 @@ final case class TournamentStageStandingsAPIMessage(tournamentId: String, stageI
   private def resolveInput: StageQueryInput =
     StageQueryInput(TournamentId(tournamentId), TournamentStageId(stageId))
 
+  /** 阶段排名查询解析后的赛事与阶段标识。 */
   private final case class StageQueryInput(
       tournamentId: TournamentId,
       stageId: TournamentStageId

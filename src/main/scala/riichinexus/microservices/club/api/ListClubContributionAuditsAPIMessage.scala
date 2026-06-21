@@ -78,6 +78,7 @@ final case class ListClubContributionAuditsAPIMessage(
       note = entry.note
     )
 
+  /** 俱乐部贡献审计列表接口解析后的查询键和过滤摘要。 */
   private final case class ResolvedContributionAuditQuery(
       clubId: ClubId,
       appliedFilters: Map[String, String]

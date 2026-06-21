@@ -1,6 +1,9 @@
 package riichinexus.microservices.audit.objects.`private`
 
-/** AuditEventType 枚举审计事件类型的私有审计协议取值。 */
+/** 审计日志支持记录的业务事件类型。
+  *
+  * 枚举项覆盖账号、俱乐部、赛事、申诉和结算等会改变业务状态的动作，作为审计表里的稳定协议值使用。
+  */
 enum AuditEventType:
   case GuestSessionCreated
   case GuestSessionRevoked

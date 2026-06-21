@@ -63,6 +63,7 @@ final case class OpsAnalyticsListAdvancedStatsTasksAPIMessage(
     val page = items.slice(resolvedOffset, resolvedOffset + boundedLimit)
     PagedResponse(page, items.size, boundedLimit, resolvedOffset, resolvedOffset + page.size < items.size, query.appliedFilters)
 
+  /** 已解析的高级统计任务列表查询条件。 */
   private final case class AdvancedStatsTasksQuery(
       status: Option[AdvancedStatsRecomputeTaskStatus],
       appliedFilters: Map[String, String]

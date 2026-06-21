@@ -1,7 +1,9 @@
 package riichinexus.microservices.tournament.objects.paifu
 
-/** RoundSettlementNote 枚举小局结算Note 可使用的公开取值。 */
-
+/** 小局结算时附加给前端展示的结果标签。
+  *
+  * 标签覆盖流局类型、双/三家和牌和满贯到多倍役满等等级，供结果面板解释分数变化来源。
+  */
 enum RoundSettlementNote:
   case ExhaustiveDraw
   case AbortiveDrawRequested

@@ -3,8 +3,10 @@ package riichinexus.microservices.club.objects.membershipmanagement.apiTypes
 import upickle.default.ReadWriter
 import riichinexus.system.json.JsonCodecs.given
 
-/** ClubMembershipApplicationView 表示俱乐部成员资格申请视图 的前端展示视图，包含applicationId、俱乐部 ID、clubName、applicant、submittedAt、消息等。 */
-
+/** 入会申请列表和详情页使用的展示视图。
+  *
+  * 它把俱乐部、申请人、审核信息和当前用户可执行动作合并成一个模型，方便成员中心和俱乐部收件箱共用。
+  */
 final case class ClubMembershipApplicationView(
     applicationId: String,
     clubId: String,

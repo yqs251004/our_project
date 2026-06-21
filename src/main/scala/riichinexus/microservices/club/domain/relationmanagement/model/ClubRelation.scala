@@ -6,7 +6,11 @@ import riichinexus.microservices.club.objects.clubmanagement.ClubId
 import riichinexus.microservices.club.objects.relationmanagement.ClubRelationKind
 
 import riichinexus.system.json.JsonCodecs.given
-/** ClubRelation 表示后端领域中的俱乐部关系状态或规则，包含targetClubId、relation、更新时间、note。 */
+
+/** 当前俱乐部与另一个俱乐部之间的关系记录。
+  *
+  * 关系用于公开展示、联赛协作或黑名单场景，并保留更新时间与备注，方便后台解释关系来源。
+  */
 final case class ClubRelation(
     targetClubId: ClubId,
     relation: ClubRelationKind,

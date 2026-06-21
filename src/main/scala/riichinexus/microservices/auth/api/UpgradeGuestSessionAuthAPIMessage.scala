@@ -84,6 +84,7 @@ final case class UpgradeGuestSessionAuthAPIMessage(
       createdAt = session.createdAt.toString
     )
 
+  /** 将游客会话绑定到正式玩家时使用的内部命令。 */
   private final case class UpgradeGuestSessionCommand(
       sessionId: GuestSessionId,
       playerId: PlayerId,

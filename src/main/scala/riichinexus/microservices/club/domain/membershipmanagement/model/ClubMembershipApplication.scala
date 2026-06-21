@@ -6,8 +6,10 @@ import riichinexus.microservices.club.objects.membershipmanagement.ClubApplicati
 import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 
-/** ClubMembershipApplication 表示后端领域中的俱乐部成员资格申请状态或规则，包含 ID、玩家 ID、applicantUserId、显示名、submittedAt、消息等。 */
-
+/** 玩家或游客提交的俱乐部入会申请。
+  *
+  * 申请可以来自已绑定玩家或仅有访客账号的申请人，并记录展示名、申请留言、审核状态、审核人、审核备注和撤回主体。
+  */
 final case class ClubMembershipApplication(
     id: MembershipApplicationId,
     playerId: Option[PlayerId] = None,

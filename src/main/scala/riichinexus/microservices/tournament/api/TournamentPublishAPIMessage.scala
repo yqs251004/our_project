@@ -49,8 +49,8 @@ final case class TournamentPublishAPIMessage(tournamentId: String, operatorId: O
         s"Tournament ${tournamentId.value} cannot be published without stages"
       )
 
+  /** 发布赛事时使用的已授权内部命令。 */
   private final case class PublishTournamentCommand(
       tournamentId: TournamentId,
       actor: AccessPrincipalPrivateView
   )
-

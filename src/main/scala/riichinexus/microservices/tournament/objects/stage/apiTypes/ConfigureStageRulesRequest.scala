@@ -8,8 +8,10 @@ import riichinexus.microservices.tournament.objects.stage.rules.progression.Adva
 import riichinexus.microservices.tournament.objects.stage.rules.swiss.SwissPairingMethod
 import upickle.default.{ReadWriter, macroRW}
 
-/** ConfigureStageRulesRequest 表示Configure阶段Rules请求 的前端请求参数。 */
-
+/** 修改既有赛事阶段规则时提交的局部配置请求。
+  *
+  * 所有规则字段都是可选覆盖项，`operatorId` 和 `note` 用于记录谁调整了赛制、晋级、排桌或麻将规则。
+  */
 final case class ConfigureStageRulesRequest(
     operatorId: String,
     format: Option[TournamentFormat] = None,

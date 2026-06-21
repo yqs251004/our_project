@@ -8,7 +8,10 @@ import java.sql.SQLException
 
 import scala.util.Using
 
-
+/** JDBC 连接工厂与事务边界管理器。
+  *
+  * 工厂负责加载 PostgreSQL 驱动、创建带 schema 的连接，并通过线程本地连接支持同步和 cats-effect 两套事务执行路径。
+  */
 final class JdbcConnectionFactory(config: DatabaseConfig):
   private val driverClass = "org.postgresql.Driver"
   private val currentConnection = ThreadLocal[Connection]()
@@ -90,4 +93,3 @@ final class JdbcConnectionFactory(config: DatabaseConfig):
 object JdbcConnectionFactory:
   def apply(config: DatabaseConfig): JdbcConnectionFactory =
     new JdbcConnectionFactory(config)
-

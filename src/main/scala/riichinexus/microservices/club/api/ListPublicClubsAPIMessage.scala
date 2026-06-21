@@ -161,6 +161,7 @@ final case class ListPublicClubsAPIMessage(
   private def round2(value: Double): Double =
     BigDecimal(value).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble
 
+  /** 公共俱乐部目录接口解析后的过滤条件。 */
   private final case class ResolvedClubDirectoryQuery(
       name: Option[String],
       relation: Option[ClubRelationKind],

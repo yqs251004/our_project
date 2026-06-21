@@ -47,6 +47,7 @@ final case class TournamentTableListAPIMessage(
         (table.tournamentId.value, table.stageId.value, table.stageRoundNumber, table.tableNo, table.id.value)
       )
 
+  /** 跨赛事牌桌列表接口解析后的查询与过滤摘要。 */
   private final case class ResolvedTableListQuery(
       query: TableListQuery,
       appliedFilters: Map[String, String]

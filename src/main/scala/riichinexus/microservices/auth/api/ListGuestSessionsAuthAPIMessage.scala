@@ -51,6 +51,7 @@ final case class ListGuestSessionsAuthAPIMessage(
       createdAt = session.createdAt.toString
     )
 
+  /** 游客会话列表接口解析后的过滤条件和时间基准。 */
   private final case class ResolvedGuestSessionsQuery(
       activeOnly: Option[Boolean],
       asOf: Instant,

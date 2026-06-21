@@ -10,6 +10,7 @@ import MahjongYakuCheckSupport.{MahjongYakuCheckState, YakuCheck, runPlan}
 
 private[mahjongcore] object MahjongYakuCheckFunctions:
 
+  /** 一种普通手拆解路径下识别出的役种候选结果。 */
   final case class MahjongYakuCandidate(
       yaku: Vector[Yaku],
       decomposition: Option[MahjongHandDecomposition]
@@ -85,4 +86,3 @@ private[mahjongcore] object MahjongYakuCheckFunctions:
       closedHand: Boolean
   ): MahjongYakuCheckState =
     MahjongYakuCheckState(concealedCounts, allCounts, allTiles, context, fixedMelds, closedHand)
-

@@ -1,7 +1,9 @@
 package riichinexus.microservices.player.objects
 
-/** PlayerStatus 枚举玩家状态 可使用的公开取值。 */
-
+/** 玩家账号在业务系统中的可用状态。
+  *
+  * 状态会影响登录后的可操作范围、公共榜单展示和平台管理动作；封禁玩家还会保留封禁原因。
+  */
 enum PlayerStatus:
   case Active
   case Suspended

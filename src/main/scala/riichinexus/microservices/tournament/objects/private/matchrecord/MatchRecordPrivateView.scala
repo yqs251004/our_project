@@ -6,8 +6,10 @@ import riichinexus.microservices.tournament.objects.matchrecord.MatchRecordId
 import riichinexus.microservices.tournament.objects.stage.table.TableId
 import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}
 
-/** MatchRecordPrivateView 表示后端内部使用的对局记录后端内部视图 read model，包含 ID、牌桌 ID、赛事 ID、阶段 ID、生成时间、seatResults。 */
-
+/** 服务间读取对局记录时使用的内部视图。
+  *
+  * 与公开 API 视图不同，它保留强类型 ID 和座位结果内部模型，方便结算、排行榜和俱乐部审计读模型直接计算。
+  */
 final case class MatchRecordPrivateView(
     id: MatchRecordId,
     tableId: TableId,

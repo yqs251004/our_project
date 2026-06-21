@@ -10,7 +10,11 @@ import riichinexus.microservices.tournament.objects.identity.TournamentId
 import riichinexus.microservices.tournament.objects.competition.{TournamentStatus, TournamentWhitelistEntry}
 
 import riichinexus.system.json.JsonCodecs.given
-/** Tournament 表示后端领域中的赛事状态或规则，包含 ID、名称、organizer、startsAt、endsAt、participatingClubs等。 */
+
+/** 赛事领域聚合的根状态。
+  *
+  * 它保存赛事基础信息、报名主体、管理员、白名单、阶段配置和当前状态，是赛程配置、公开展示和运营变更共同依赖的持久化对象。
+  */
 final case class Tournament(
     id: TournamentId,
     name: String,

@@ -96,12 +96,14 @@ final case class TournamentInviteClubAPIMessage(
       )
     }
 
+  /** 邀请俱乐部参加赛事时使用的已授权内部命令。 */
   private final case class InviteClubCommand(
       tournamentId: TournamentId,
       clubId: ClubId,
       actor: riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
   )
 
+  /** 俱乐部邀请流程产出的赛事、俱乐部和是否新增邀请的结果。 */
   private final case class ClubInvitationResult(
       tournament: Tournament,
       club: ClubPrivateView,

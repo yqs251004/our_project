@@ -11,7 +11,11 @@ import riichinexus.microservices.club.domain.relationmanagement.model.ClubRelati
 import riichinexus.microservices.club.objects.rankprivilegemanagement.ClubRankNode
 
 import riichinexus.system.json.JsonCodecs.given
-/** Club 表示后端领域中的俱乐部状态或规则，包含 ID、名称、creator、创建时间、成员、管理员等。 */
+
+/** 俱乐部领域聚合的根状态。
+  *
+  * 俱乐部聚合保存成员、管理员、资金与点数池、等级树、贡献、称号、荣誉、关系、招募策略和入会申请，是俱乐部管理接口的主要持久化对象。
+  */
 final case class Club(
     id: ClubId,
     name: String,

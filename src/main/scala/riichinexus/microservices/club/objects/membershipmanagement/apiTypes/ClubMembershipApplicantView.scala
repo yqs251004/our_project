@@ -4,8 +4,10 @@ import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.player.objects.RankSnapshot
 import upickle.default.ReadWriter
 
-/** ClubMembershipApplicantView 表示俱乐部成员资格申请人视图 的前端展示视图，包含玩家 ID、显示名、playerStatus、currentRank、elo、clubIds。 */
-
+/** 入会申请中展示给审核人的申请人摘要。
+  *
+  * 该视图汇总可公开判断申请人的资料，例如昵称、段位、Elo、当前俱乐部归属；游客或未绑定玩家时 `playerId` 可以为空。
+  */
 final case class ClubMembershipApplicantView(
     playerId: Option[String],
     displayName: String,

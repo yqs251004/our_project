@@ -100,6 +100,7 @@ private[tournament] object SeatingPolicy:
       representedClubByPlayer: Map[PlayerId, ClubId],
       clubRelations: Map[(ClubId, ClubId), ClubRelationKind]
   ): Vector[Vector[PlayerPrivateView]] =
+    /** 穷举排桌搜索中的当前最优分数与分组方案。 */
     final case class SearchResult(score: Double, grouping: Vector[Vector[PlayerPrivateView]])
 
     val branchLimit =

@@ -93,12 +93,14 @@ final case class TournamentRegisterPlayerAPIMessage(tournamentId: String, player
     if player.status != PlayerStatus.Active then
       throw IllegalArgumentException(s"PlayerPrivateView ${command.playerId.value} cannot enter tournament ${command.tournamentId.value}")
 
+  /** 玩家报名或受邀进入赛事时使用的内部命令。 */
   private final case class RegisterTournamentPlayerCommand(
       tournamentId: TournamentId,
       playerId: PlayerId,
       actor: AccessPrincipalPrivateView
   )
 
+  /** 玩家报名流程产出的赛事、玩家和是否新增邀请的结果。 */
   private final case class PlayerInvitationResult(
       tournament: Tournament,
       player: PlayerPrivateView,

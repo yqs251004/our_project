@@ -1,7 +1,9 @@
 package riichinexus.microservices.tournament.objects.paifu
 
-/** PaifuRound 表示前后端共享的牌谱小局 数据结构，包含descriptor、玩家、timeline、result。 */
-
+/** 牌谱中的一小局完整记录。
+  *
+  * 小局由局定位、四位玩家、全局时间线和最终结算组成，是回放和统计分析的基本切片。
+  */
 final case class PaifuRound(
     descriptor: KyokuDescriptor,
     players: Vector[PaifuRoundPlayer],

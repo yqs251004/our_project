@@ -7,8 +7,10 @@ import riichinexus.microservices.tournament.objects.identity.{TournamentId, Tour
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.ReadWriter
 
-/** KnockoutBracketSnapshot 表示前后端共享的KnockoutBracket快照 数据结构，包含赛事 ID、阶段 ID、生成时间、bracketSize、qualifiedPlayerIds、rounds等。 */
-
+/** 某个淘汰赛阶段当前签表的完整快照。
+  *
+  * 快照记录参赛规模、入围玩家、各轮对局和摘要说明，供公开 bracket 展示、后台排桌和晋级推进复用。
+  */
 final case class KnockoutBracketSnapshot(
     tournamentId: TournamentId,
     stageId: TournamentStageId,

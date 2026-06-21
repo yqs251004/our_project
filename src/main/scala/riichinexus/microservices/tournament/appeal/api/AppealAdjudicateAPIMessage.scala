@@ -122,6 +122,7 @@ final case class AppealAdjudicateAPIMessage(
       )
     )
 
+  /** 裁定申诉工单并可同步处理牌桌状态的内部命令。 */
   private final case class AdjudicateAppealCommand(
       ticketId: AppealTicketId,
       decision: AppealDecisionType,

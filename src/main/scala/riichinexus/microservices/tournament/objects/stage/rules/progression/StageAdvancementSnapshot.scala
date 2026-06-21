@@ -9,8 +9,10 @@ import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.tournament.objects.stage.ranking.StageStandingEntry
 import upickle.default.ReadWriter
 
-/** StageAdvancementSnapshot 表示前后端共享的阶段Advancement快照 数据结构，包含赛事 ID、阶段 ID、生成时间、rule、standings、qualifiedPlayerIds等。 */
-
+/** 按当前排名和晋级规则生成的阶段晋级预览。
+  *
+  * 快照保留规则、排名、晋级玩家、候补玩家和摘要说明，供后台确认阶段完成前检查晋级结果。
+  */
 final case class StageAdvancementSnapshot(
     tournamentId: TournamentId,
     stageId: TournamentStageId,

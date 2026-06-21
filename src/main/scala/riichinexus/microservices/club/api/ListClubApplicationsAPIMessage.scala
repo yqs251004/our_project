@@ -174,6 +174,7 @@ final case class ListClubApplicationsAPIMessage(
       appliedFilters = query.appliedFilters
     )
 
+  /** 入会申请列表接口解析后的过滤与分页条件。 */
   private final case class ResolvedClubApplicationListQuery(
       clubId: ClubId,
       operatorId: Option[PlayerId],

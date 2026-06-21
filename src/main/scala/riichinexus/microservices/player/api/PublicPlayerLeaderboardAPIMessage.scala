@@ -77,6 +77,7 @@ final case class PublicPlayerLeaderboardAPIMessage(
       .filter(entry => query.clubId.forall(entry.clubIds.contains))
       .filter(entry => query.status.forall(_.toString == entry.status))
 
+  /** 公开玩家排行榜接口解析后的过滤条件。 */
   private final case class ResolvedPlayerLeaderboardQuery(
       clubId: Option[String],
       status: Option[PlayerStatus],

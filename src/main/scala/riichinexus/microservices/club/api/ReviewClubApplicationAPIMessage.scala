@@ -274,9 +274,11 @@ final case class ReviewClubApplicationAPIMessage(
       )
     )
 
+  /** 服务内部统一使用的入会申请审核动作。 */
   private enum ApplicationReviewDecision:
     case Approve, Reject
 
+  /** 审核入会申请时使用的已授权内部命令。 */
   private final case class ReviewClubApplicationCommand(
       clubId: ClubId,
       membershipId: MembershipApplicationId,
@@ -286,6 +288,7 @@ final case class ReviewClubApplicationAPIMessage(
       reviewedAt: Instant
   )
 
+  /** 入会申请审核后用于响应与通知的俱乐部和申请状态。 */
   private final case class ReviewClubApplicationResult(
       club: Club,
       application: ClubMembershipApplication

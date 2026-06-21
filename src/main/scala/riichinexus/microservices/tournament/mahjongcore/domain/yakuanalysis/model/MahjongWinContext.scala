@@ -6,7 +6,11 @@ import riichinexus.microservices.tournament.objects.paifu.PaifuTile
 import riichinexus.microservices.tournament.objects.stage.table.SeatWind
 
 import riichinexus.system.json.JsonCodecs.given
-/** MahjongWinContext 表示后端领域中的麻将和牌上下文状态或规则，包含winner、target、seatByPlayer、roundWind、handTiles、melds等。 */
+
+/** 役种与点数分析所需的和牌上下文。
+  *
+  * 它把赢家、放铳/自摸目标、座位风、场风、手牌、副露、和牌牌、宝牌、立直/一发/海底等状态和规则集集中传入分析函数。
+  */
 final case class MahjongWinContext(
     winner: PlayerId,
     target: Option[PlayerId],

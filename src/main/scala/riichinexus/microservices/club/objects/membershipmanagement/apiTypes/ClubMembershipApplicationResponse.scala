@@ -3,8 +3,10 @@ package riichinexus.microservices.club.objects.membershipmanagement.apiTypes
 import upickle.default.ReadWriter
 import riichinexus.system.json.JsonCodecs.given
 
-/** ClubMembershipApplicationResponse 表示俱乐部成员资格申请响应 的 API 响应结果，包含 ID、玩家 ID、显示名、submittedAt、消息、状态等。 */
-
+/** 提交、撤回或审核入会申请后返回的申请状态快照。
+  *
+  * 该响应保留申请人、提交时间、审核结果、审核备注和撤回主体，让调用端可以在动作完成后立即刷新申请卡片。
+  */
 final case class ClubMembershipApplicationResponse(
     id: String,
     playerId: Option[String],

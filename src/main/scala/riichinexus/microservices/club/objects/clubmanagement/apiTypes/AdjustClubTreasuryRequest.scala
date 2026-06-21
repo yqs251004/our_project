@@ -3,8 +3,10 @@ package riichinexus.microservices.club.objects.clubmanagement.apiTypes
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.{ReadWriter, macroRW}
 
-/** AdjustClubTreasuryRequest 表示Adjust俱乐部资金库请求 的前端请求参数。 */
-
+/** 调整俱乐部资金库余额的管理请求。
+  *
+  * `delta` 表示本次资金变动量，后端会结合操作者和备注生成审计记录，而不是让前端直接覆盖余额。
+  */
 final case class AdjustClubTreasuryRequest(
     operatorId: String,
     delta: Long,

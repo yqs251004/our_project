@@ -5,9 +5,13 @@ import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.player.objects.`private`.PlayerPrivateView
 import riichinexus.microservices.player.objects.PlayerStatus
 
-/** ClubPowerRatingService 编排俱乐部实力评级服务 相关的领域流程和规则判断。 */
+/** 俱乐部实力评分的领域计算服务。
+  *
+  * 服务根据活跃成员平均 ELO、俱乐部总积分和可配置权重计算展示用实力值，供排行榜与后台分析使用。
+  */
 
 private[club] object ClubPowerRatingService:
+  /** 实力评分公式中的权重配置。 */
   final case class Config(
       eloWeight: Double = 1.0,
       pointWeight: Double = 0.001,

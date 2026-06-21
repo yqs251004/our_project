@@ -128,6 +128,7 @@ final case class AppealUpdateWorkflowAPIMessage(
       )
     )
 
+  /** 更新申诉分派、优先级和截止时间时使用的内部命令。 */
   private final case class UpdateAppealWorkflowCommand(
       ticketId: AppealTicketId,
       actor: AccessPrincipalPrivateView,

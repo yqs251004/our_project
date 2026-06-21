@@ -4,8 +4,10 @@ import riichinexus.microservices.club.objects.relationmanagement.ClubRelationKin
 import riichinexus.system.json.ClubJsonCodecs.given
 import upickle.default.{ReadWriter, macroRW}
 
-/** SubmitClubRelationRequest 表示提交俱乐部关系请求 的前端请求参数。 */
-
+/** 发起俱乐部关系变更申请的请求体。
+  *
+  * 它记录操作者、目标俱乐部、期望关系和说明，适合需要对方或后台进一步确认的提交流程。
+  */
 final case class SubmitClubRelationRequest(
     operatorId: String,
     targetClubId: String,

@@ -102,6 +102,7 @@ final case class ListPublicTournamentsAPIMessage(
   private def relatedClubIds(tournament: Tournament): Vector[ClubId] =
     (tournament.participatingClubs ++ tournament.whitelist.flatMap(_.clubId)).distinct
 
+  /** 公共赛事列表接口解析后的过滤条件。 */
   private final case class ResolvedPublicTournamentsQuery(
       status: Option[TournamentStatus],
       organizer: Option[String],

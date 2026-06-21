@@ -124,6 +124,7 @@ final case class ClearClubTitleAPIMessage(
     if player.status != PlayerStatus.Active then
       throw IllegalArgumentException(context)
 
+  /** 清除成员俱乐部称号时使用的内部命令。 */
   private final case class ClearClubTitleCommand(
       clubId: ClubId,
       playerId: PlayerId,
@@ -132,6 +133,7 @@ final case class ClearClubTitleAPIMessage(
       clearedAt: Instant
   )
 
+  /** 清除称号后保留的俱乐部新状态和原称号记录。 */
   private final case class ClearedClubTitle(
       club: Club,
       existingAssignment: ClubTitleAssignment

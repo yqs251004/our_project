@@ -8,8 +8,10 @@ import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateVi
 import riichinexus.microservices.club.objects.rankprivilegemanagement.ClubPrivilegeCode
 import riichinexus.system.api.AuthorizationFailure
 
-/** ClubAuthorization 表示后端领域中的俱乐部授权状态或规则。 */
-
+/** 俱乐部相关操作的领域授权辅助方法。
+  *
+  * 它集中处理俱乐部是否解散、操作者是否为成员/管理员、是否拥有委派权限等判断，让管理成员、审核申请和提交阵容的权限语义保持一致。
+  */
 object ClubAuthorization:
   def ensureClubActive(club: Club): Unit =
     if club.dissolvedAt.nonEmpty then

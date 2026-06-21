@@ -4,8 +4,10 @@ import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.auth.objects.SessionPrincipalKind
 import upickle.default.{ReadWriter, macroRW}
 
-/** CurrentSessionView 表示当前会话视图 的前端展示视图。 */
-
+/** 前端进入应用时用于判定身份、导航和权限入口的当前会话视图。
+  *
+  * 视图同时表达主体类别、是否已认证、角色标记，以及可选的玩家或游客详情，避免页面再分别调用多个身份接口。
+  */
 final case class CurrentSessionView(
     principalKind: SessionPrincipalKind,
     principalId: String,

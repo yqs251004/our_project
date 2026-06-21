@@ -31,6 +31,7 @@ final case class TournamentSettlementGetAPIMessage(tournamentId: String, stageId
       .findByTournamentAndStage(context.connection, query.tournamentId, query.stageId)
       .getOrElse(throw NoSuchElementException("Resource not found"))
 
+  /** 读取指定赛事阶段结算快照时使用的查询键。 */
   private final case class SettlementGetQuery(
       tournamentId: TournamentId,
       stageId: TournamentStageId

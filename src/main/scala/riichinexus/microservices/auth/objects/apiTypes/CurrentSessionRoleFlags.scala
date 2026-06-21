@@ -1,10 +1,11 @@
 package riichinexus.microservices.auth.objects.apiTypes
 
-
 import upickle.default.{ReadWriter, macroRW}
 
-/** CurrentSessionRoleFlags 表示前后端共享的当前会话角色Flags 数据结构。 */
-
+/** 当前会话中前端最常用的角色布尔快照。
+  *
+  * 这些标记用于显示或隐藏页面入口；真正的写操作权限仍由后端根据角色授予记录和资源作用域校验。
+  */
 final case class CurrentSessionRoleFlags(
     isGuest: Boolean,
     isRegisteredPlayer: Boolean,

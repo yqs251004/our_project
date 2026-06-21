@@ -1,7 +1,9 @@
 package riichinexus.microservices.opsanalytics.objects
 
-/** AdvancedStatsBackfillMode 枚举高级统计补算模式 可使用的公开取值。 */
-
+/** 批量重算高级统计时可选择的补算范围。
+  *
+  * Full 会重建目标统计，Missing 只补缺失看板，Stale 只处理计算器版本或数据时间已过期的看板。
+  */
 enum AdvancedStatsBackfillMode:
   case Full
   case Missing

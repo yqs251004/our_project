@@ -66,6 +66,7 @@ final case class AppealListAPIMessage(
   private def filters(values: Option[(String, String)]*): Map[String, String] =
     values.flatten.toMap
 
+  /** 申诉列表接口解析后的查询条件、时间基准和过滤摘要。 */
   private final case class ResolvedAppealListQuery(
       query: AppealListQuery,
       asOf: java.time.Instant,

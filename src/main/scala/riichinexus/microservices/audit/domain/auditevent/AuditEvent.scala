@@ -5,8 +5,10 @@ import java.time.Instant
 import riichinexus.microservices.audit.objects.`private`.AuditEventType
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 
-/** AuditEvent 表示后端领域中的审计事件状态或规则，包含 ID、aggregateType、aggregateId、eventType、occurredAt、actorId等。 */
-
+/** 记录一次关键业务变更或后台操作的审计事件。
+  *
+  * 事件通过聚合类型与聚合 ID 指向被操作对象，并保存事件类型、发生时间、可选操作者、结构化详情和备注，供内部审计与故障复盘使用。
+  */
 final case class AuditEvent(
     id: AuditEventId,
     aggregateType: String,

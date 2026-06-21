@@ -2,7 +2,10 @@ package riichinexus.microservices.tournament.objects.paifu
 
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 
-/** AgariResult 表示前后端共享的一局结算结果，包含和牌/流局结果、分数变化、立直棒本场结算和多家和牌明细。 */
+/** 一小局结束后的完整结算结果。
+  *
+  * 该类型兼容旧的单赢家字段和新的 `wins` 多赢家明细，同时保存分数变化、听牌玩家、宝牌信息和立直棒/本场结算。
+  */
 final case class AgariResult(
     outcome: HandOutcome,
     winner: Option[PlayerId] = None,

@@ -5,7 +5,11 @@ import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.tournament.objects.stage.table.SeatWind
 
 import riichinexus.system.json.JsonCodecs.given
-/** StageLineupSeat 表示后端领域中的阶段阵容座位状态或规则，包含玩家 ID、preferredWind、reserve。 */
+
+/** 俱乐部在阶段阵容中提交的一名选手席位。
+  *
+  * `preferredWind` 表示期望座位风，`reserve` 标记该选手是否作为替补进入调度池。
+  */
 final case class StageLineupSeat(
     playerId: PlayerId,
     preferredWind: Option[SeatWind] = None,

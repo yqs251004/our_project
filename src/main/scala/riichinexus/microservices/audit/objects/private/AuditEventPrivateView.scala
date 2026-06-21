@@ -2,11 +2,13 @@ package riichinexus.microservices.audit.objects.`private`
 
 import java.time.Instant
 
-import riichinexus.microservices.audit.objects.`private`.AuditEventType
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 
-/** AuditEventPrivateView 表示后端内部使用的审计事件后端内部视图 read model，包含 ID、aggregateType、aggregateId、eventType、occurredAt、actorId等。 */
-
+/** 审计服务对内部调用方返回的完整事件视图。
+  *
+  * 该视图保留聚合定位、操作者、发生时间和明细字段，供管理后台或其他微服务追溯一次业务动作；
+  * 它不是公开页面的展示 DTO，因此可以包含内部聚合名称与记录注记。
+  */
 final case class AuditEventPrivateView(
     id: String,
     aggregateType: String,

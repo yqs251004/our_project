@@ -1,7 +1,9 @@
 package riichinexus.microservices.club.objects.tournamentparticipation
 
-/** ClubTournamentScope 枚举俱乐部赛事Scope 可使用的公开取值。 */
-
+/** 俱乐部赛事列表的时间范围筛选。
+  *
+  * 成员中心和俱乐部详情页用它在近期、进行中和全部赛事之间切换，后端据此决定查询窗口。
+  */
 enum ClubTournamentScope:
   case Recent
   case Active

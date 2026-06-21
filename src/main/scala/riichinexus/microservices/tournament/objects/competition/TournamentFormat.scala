@@ -1,7 +1,9 @@
 package riichinexus.microservices.tournament.objects.competition
 
-/** TournamentFormat 枚举赛事Format 可使用的公开取值。 */
-
+/** 赛事或阶段采用的竞赛组织方式。
+  *
+  * 赛制会影响阶段规划、排桌、晋级和前端规则展示，例如瑞士轮、淘汰赛、循环赛和决赛阶段。
+  */
 enum TournamentFormat:
   case Swiss
   case Knockout

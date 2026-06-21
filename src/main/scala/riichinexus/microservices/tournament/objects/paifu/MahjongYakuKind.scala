@@ -1,7 +1,9 @@
 package riichinexus.microservices.tournament.objects.paifu
 
-/** MahjongYakuKind 枚举麻将役种类型 可使用的公开取值。 */
-
+/** 牌谱和和牌分析支持识别的麻将役种。
+  *
+  * 枚举覆盖常规役、役满和宝牌类结果，作为后端计分、牌谱回放和前端结果动画的统一协议值。
+  */
 enum MahjongYakuKind:
   case KokushiMusouThirteenWait // 国士无双十三面
   case KokushiMusou // 国士无双

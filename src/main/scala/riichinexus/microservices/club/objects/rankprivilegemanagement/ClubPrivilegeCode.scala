@@ -1,7 +1,9 @@
 package riichinexus.microservices.club.objects.rankprivilegemanagement
 
-/** ClubPrivilegeCode 枚举俱乐部权限Code 可使用的公开取值。 */
-
+/** 俱乐部等级可以授予成员的权限编码。
+  *
+  * 这些编码用于等级树、成员权限快照和前端工作台展示，序列化值保持短横线格式以便作为稳定 API 协议。
+  */
 enum ClubPrivilegeCode(private val serialized: String):
   case PriorityLineup extends ClubPrivilegeCode("priority-lineup")
   case ApproveRoster extends ClubPrivilegeCode("approve-roster")

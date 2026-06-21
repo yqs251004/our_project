@@ -1,7 +1,9 @@
 package riichinexus.microservices.tournament.objects.finalization
 
-/** TournamentSettlementStatus 枚举赛事结算状态 可使用的公开取值。 */
-
+/** 赛事结算快照的生命周期状态。
+  *
+  * Draft 表示仍可调整，Finalized 表示已经确认发放，Superseded 表示该版本被新的结算修订取代。
+  */
 enum TournamentSettlementStatus:
   case Draft
   case Finalized

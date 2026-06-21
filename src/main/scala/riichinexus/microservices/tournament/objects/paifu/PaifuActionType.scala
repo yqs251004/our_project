@@ -1,7 +1,9 @@
 package riichinexus.microservices.tournament.objects.paifu
 
-/** PaifuActionType 枚举牌谱动作类型 可使用的公开取值。 */
-
+/** 牌谱时间线中可记录的动作类型。
+  *
+  * 类型覆盖摸切、副露、杠、立直、宝牌翻开、和牌和流局，供回放、统计和动画按事件类型分发。
+  */
 enum PaifuActionType:
   case Draw
   case Discard

@@ -149,6 +149,7 @@ final case class WithdrawClubApplicationAPIMessage(
       )
     )
 
+  /** 申请人撤回入会申请时使用的内部命令。 */
   private final case class WithdrawClubApplicationCommand(
       clubId: ClubId,
       membershipId: MembershipApplicationId,

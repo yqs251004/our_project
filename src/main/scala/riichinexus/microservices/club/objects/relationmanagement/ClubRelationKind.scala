@@ -1,7 +1,9 @@
 package riichinexus.microservices.club.objects.relationmanagement
 
-/** ClubRelationKind 枚举俱乐部关系类型 可使用的公开取值。 */
-
+/** 俱乐部之间可公开展示和筛选的关系类型。
+  *
+  * 同盟、宿敌和中立关系会影响公开目录的关系标签与筛选结果，但不直接等同于访问权限。
+  */
 enum ClubRelationKind:
   case Alliance
   case Rivalry

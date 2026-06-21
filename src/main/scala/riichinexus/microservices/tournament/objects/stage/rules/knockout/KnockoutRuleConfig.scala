@@ -1,7 +1,9 @@
 package riichinexus.microservices.tournament.objects.stage.rules.knockout
 
-/** KnockoutRuleConfig 表示前后端共享的KnockoutRule配置 数据结构，包含bracketSize、thirdPlaceMatch、seedingPolicy、repechageEnabled。 */
-
+/** 淘汰赛阶段的 bracket 生成规则。
+  *
+  * 配置决定签表规模、是否生成季军战、种子排序依据和是否启用复活线，是构建淘汰赛快照的主要输入。
+  */
 final case class KnockoutRuleConfig(
     bracketSize: Option[Int] = None,
     thirdPlaceMatch: Boolean = false,

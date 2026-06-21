@@ -2,8 +2,10 @@ package riichinexus.microservices.tournament.objects.paifu
 
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 
-/** PaifuAction 表示前后端共享的牌谱动作 数据结构，包含sequenceNo、actor、actionType、tile、shantenAfterAction、handTilesAfterAction等。 */
-
+/** 牌谱时间线中的单个可回放动作。
+  *
+  * 动作记录序号、操作者、动作类型、相关牌、动作后向听/手牌快照、可见牌和来源玩家，可支撑回放、统计和动画同步。
+  */
 final case class PaifuAction(
     sequenceNo: Int,
     actor: Option[PlayerId] = None,

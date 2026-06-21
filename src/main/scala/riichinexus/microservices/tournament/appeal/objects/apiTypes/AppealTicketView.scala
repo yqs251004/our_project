@@ -4,8 +4,10 @@ import riichinexus.microservices.tournament.appeal.objects.{AppealDecisionLog, A
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.{ReadWriter, macroRW}
 
-/** AppealTicketView 表示申诉工单视图 的前端展示视图。 */
-
+/** 申诉详情页和运营列表共用的工单视图。
+  *
+  * 它把领域工单转换成字符串 ID、附件视图、处理日志、分派信息、重开次数和最终结论，方便前端直接渲染完整处理历史。
+  */
 final case class AppealTicketView(
     appealId: String,
     tableId: String,

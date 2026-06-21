@@ -111,6 +111,7 @@ final case class SubmitClubRelationRequestAPIMessage(
       case ClubRelationKind.Rivalry  => "对抗"
       case ClubRelationKind.Neutral  => "中立"
 
+  /** 发起俱乐部关系申请时使用的内部命令。 */
   private final case class SubmitClubRelationRequestCommand(
       sourceClubId: ClubId,
       targetClubId: ClubId,

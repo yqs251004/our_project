@@ -52,11 +52,13 @@ final case class RestoreAuthSessionAPIMessage() extends APIWithTokenMessage[Auth
       }
     yield RestoreSessionResult(touched, player)
 
+  /** 根据 bearer token 恢复正式账号会话时使用的内部命令。 */
   private final case class RestoreSessionCommand(
       token: String,
       asOf: Instant
   )
 
+  /** 恢复会话成功后得到的刷新后会话和玩家视图。 */
   private final case class RestoreSessionResult(
       session: AuthenticatedSession,
       player: PlayerPrivateView

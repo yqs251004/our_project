@@ -120,6 +120,7 @@ final case class UpdateClubRelationAPIMessage(
       )
     )
 
+  /** 直接更新俱乐部关系记录时使用的内部命令。 */
   private final case class UpdateClubRelationCommand(
       clubId: ClubId,
       actor: AccessPrincipalPrivateView,

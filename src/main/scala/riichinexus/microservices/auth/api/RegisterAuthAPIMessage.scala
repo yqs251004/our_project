@@ -173,6 +173,7 @@ final case class RegisterAuthAPIMessage(
       roles = registeredRoleFlags(player)
     )
 
+  /** 注册账号并创建玩家身份时使用的内部命令。 */
   private final case class RegisterAuthCommand(
       username: String,
       password: String,

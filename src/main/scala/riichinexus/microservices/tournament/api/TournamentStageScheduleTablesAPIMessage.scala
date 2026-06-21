@@ -60,9 +60,9 @@ final case class TournamentStageScheduleTablesAPIMessage(
       )
     yield tables
 
+  /** 为指定阶段生成牌桌安排时使用的内部命令。 */
   private final case class ScheduleStageTablesCommand(
       tournamentId: TournamentId,
       stageId: TournamentStageId,
       actor: AccessPrincipalPrivateView
   )
-

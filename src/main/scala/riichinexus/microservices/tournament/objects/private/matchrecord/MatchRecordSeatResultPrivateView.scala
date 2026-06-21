@@ -4,8 +4,10 @@ import riichinexus.microservices.club.objects.clubmanagement.ClubId
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.tournament.objects.stage.table.SeatWind
 
-/** MatchRecordSeatResultPrivateView 表示后端内部使用的对局记录座位结果后端内部视图 read model，包含玩家 ID、座位、俱乐部 ID、最终点数、名次、分数变化等。 */
-
+/** 内部对局记录中单个座位的成绩结果。
+  *
+  * 使用强类型玩家、俱乐部和座位风，便于结算和统计计算直接关联玩家身份、俱乐部归属和名次分差。
+  */
 final case class MatchRecordSeatResultPrivateView(
     playerId: PlayerId,
     seat: SeatWind,

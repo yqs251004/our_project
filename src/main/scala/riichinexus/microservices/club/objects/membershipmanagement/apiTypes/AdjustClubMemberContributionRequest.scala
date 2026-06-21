@@ -3,8 +3,10 @@ package riichinexus.microservices.club.objects.membershipmanagement.apiTypes
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.{ReadWriter, macroRW}
 
-/** AdjustClubMemberContributionRequest 表示Adjust俱乐部成员贡献请求 的前端请求参数。 */
-
+/** 调整某位成员俱乐部贡献值的管理请求。
+  *
+  * `delta` 是本次贡献增减量，后端会结合目标成员、操作者和备注更新贡献并生成审计读模型。
+  */
 final case class AdjustClubMemberContributionRequest(
     operatorId: String,
     playerId: String,

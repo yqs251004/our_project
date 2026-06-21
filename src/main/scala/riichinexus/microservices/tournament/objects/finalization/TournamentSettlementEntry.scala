@@ -3,8 +3,10 @@ package riichinexus.microservices.tournament.objects.finalization
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.club.objects.clubmanagement.ClubId
 
-/** TournamentSettlementEntry 表示前后端共享的赛事结算条目 数据结构，包含玩家 ID、rank、awardAmount、baseAwardAmount、adjustmentAmount、deductionAmount等。 */
-
+/** 赛事结算快照中某位玩家的最终分配结果。
+  *
+  * 条目记录名次、总奖金、基础奖金、调整/扣款、俱乐部分成、玩家留存金额和最终分数，是发放与公示的最小单位。
+  */
 final case class TournamentSettlementEntry(
     playerId: PlayerId,
     rank: Int,

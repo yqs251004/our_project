@@ -4,8 +4,10 @@ import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.ReadWriter
 
-/** KnockoutBracketResult 表示前后端共享的KnockoutBracket结果 数据结构，包含玩家 ID、名次、最终点数、advanced。 */
-
+/** 淘汰赛单场对局中某位玩家的晋级结果。
+  *
+  * 它把牌桌成绩压缩成名次、最终点数和是否晋级，供 bracket 更新下一轮席位。
+  */
 final case class KnockoutBracketResult(
     playerId: PlayerId,
     placement: Int,

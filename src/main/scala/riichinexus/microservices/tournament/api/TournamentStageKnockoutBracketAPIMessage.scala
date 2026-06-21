@@ -18,6 +18,7 @@ final case class TournamentStageKnockoutBracketAPIMessage(tournamentId: String, 
   private def resolveInput: StageQueryInput =
     StageQueryInput(TournamentId(tournamentId), TournamentStageId(stageId))
 
+  /** 淘汰赛 bracket 查询解析后的赛事与阶段标识。 */
   private final case class StageQueryInput(
       tournamentId: TournamentId,
       stageId: TournamentStageId

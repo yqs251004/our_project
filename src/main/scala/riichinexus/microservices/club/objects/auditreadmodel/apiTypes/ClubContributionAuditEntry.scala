@@ -3,8 +3,10 @@ package riichinexus.microservices.club.objects.auditreadmodel.apiTypes
 import upickle.default.ReadWriter
 import riichinexus.system.json.JsonCodecs.given
 
-/** ClubContributionAuditEntry 表示前后端共享的俱乐部贡献审计条目 数据结构，包含 ID、俱乐部 ID、玩家 ID、delta、contribution、occurredAt等。 */
-
+/** 俱乐部贡献值变更历史中的一条审计读模型。
+  *
+  * 管理页用它展示谁在何时调整了哪位成员的贡献值、调整量和调整后结果；字段保持字符串化是为了直接承载审计明细。
+  */
 final case class ClubContributionAuditEntry(
     id: String,
     clubId: String,

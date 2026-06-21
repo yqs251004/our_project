@@ -2,8 +2,10 @@ package riichinexus.microservices.club.objects.clubmanagement.apiTypes
 
 import upickle.default.{ReadWriter, macroRW}
 
-/** ClubLeaderboardEntry 表示前后端共享的俱乐部Leaderboard条目 数据结构。 */
-
+/** 俱乐部排行榜中的排名候选摘要。
+  *
+  * 排行展示依赖战力、总点数和成员数这些公开指标，不包含成员列表或管理资产明细。
+  */
 final case class ClubLeaderboardEntry(
     clubId: String,
     name: String,

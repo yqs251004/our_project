@@ -263,6 +263,7 @@ final case class TournamentStageSubmitLineupAPIMessage(tournamentId: String, sta
           )
     yield ()
 
+  /** 俱乐部提交阶段阵容后进入领域层的内部命令。 */
   private final case class SubmitStageLineupCommand(
       tournamentId: TournamentId,
       stageId: TournamentStageId,

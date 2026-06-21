@@ -4,8 +4,10 @@ import riichinexus.microservices.club.objects.relationmanagement.ClubRelationVie
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.{ReadWriter, macroRW}
 
-/** PublicClubDirectoryEntry 表示前后端共享的公开俱乐部目录条目 数据结构。 */
-
+/** 公共大厅俱乐部目录中的单行摘要。
+  *
+  * 该条目只暴露可公开比较的规模、战力、资产概况、关系数量和荣誉标题，用于列表筛选和排行榜前的快速扫描。
+  */
 final case class PublicClubDirectoryEntry(
     clubId: String,
     name: String,

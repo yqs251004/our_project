@@ -1,7 +1,9 @@
 package riichinexus.microservices.tournament.objects.stage.rules.knockout
 
-/** KnockoutSeedingPolicy 枚举KnockoutSeeding策略 可使用的公开取值。 */
-
+/** 生成淘汰赛初始种子时使用的排序依据。
+  *
+  * 策略可以来自历史 rating、当前 Elo、排名序号或阶段 standings，决定选手进入 bracket 的初始位置。
+  */
 enum KnockoutSeedingPolicy:
   case Rating
   case Elo

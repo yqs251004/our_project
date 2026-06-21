@@ -124,6 +124,7 @@ final case class TournamentTableStartAPIMessage(tableId: String, operatorId: Opt
       )
     }
 
+  /** 启动牌桌状态机时使用的已授权内部命令。 */
   private final case class StartTableCommand(
       tableId: TableId,
       actor: AccessPrincipalPrivateView,

@@ -84,11 +84,13 @@ final case class CreateGuestSessionAuthAPIMessage(
       createdAt = session.createdAt.toString
     )
 
+  /** 创建游客会话时已解析并补齐创建时间的内部命令。 */
   private final case class CreateGuestSessionCommand(
       input: ResolvedGuestSessionInput,
       createdAt: Instant
   )
 
+  /** 游客会话创建请求归一化后的展示名、有效期和设备指纹。 */
   private final case class ResolvedGuestSessionInput(
       displayName: String,
       ttl: Duration,

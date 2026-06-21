@@ -86,6 +86,7 @@ final case class RemoveClubMemberAPIMessage(
         s"Club ${clubId.value} must retain at least one club admin before removing ${playerId.value}"
       )
 
+  /** 从俱乐部移除成员时使用的已授权内部命令。 */
   private final case class RemoveClubMemberCommand(
       clubId: ClubId,
       playerId: PlayerId,

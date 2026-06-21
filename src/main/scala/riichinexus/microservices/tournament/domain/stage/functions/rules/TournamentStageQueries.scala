@@ -73,6 +73,7 @@ private[tournament] object TournamentStageQueries:
       )
     }
 
+  /** 计算阶段晋级、排名或淘汰赛结构时需要的聚合上下文。 */
   private final case class StageComputationContext(
       tournament: Tournament,
       stage: TournamentStage,

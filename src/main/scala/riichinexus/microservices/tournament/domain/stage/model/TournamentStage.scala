@@ -11,7 +11,11 @@ import riichinexus.microservices.tournament.objects.competition.TournamentFormat
 import riichinexus.microservices.tournament.objects.stage.rules.swiss.SwissRuleConfig
 
 import riichinexus.system.json.JsonCodecs.given
-/** TournamentStage 表示后端领域中的赛事阶段状态或规则，包含 ID、名称、format、order、roundCount、currentRound等。 */
+
+/** 赛事中的一个赛制阶段。
+  *
+  * 阶段聚合保存赛制、轮次进度、晋级规则、瑞士轮或淘汰赛配置、麻将规则、阵容提交和排桌计划，是调度牌桌与推进赛事状态的核心对象。
+  */
 final case class TournamentStage(
     id: TournamentStageId,
     name: String,

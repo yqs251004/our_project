@@ -42,6 +42,7 @@ final case class ListClubMembersAPIMessage(
       ).flatten.toMap
     )
 
+  /** 俱乐部成员列表接口解析后的过滤与分页条件。 */
   private final case class ResolvedClubMembersQuery(
       clubId: ClubId,
       status: Option[PlayerStatus],

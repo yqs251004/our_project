@@ -1,7 +1,9 @@
 package riichinexus.microservices.auth.objects
 
-/** SessionPrincipalKind 枚举会话访问主体类型 可使用的公开取值。 */
-
+/** 当前请求在会话层解析出的主体类别。
+  *
+  * 该枚举区分匿名访问、游客会话和已注册玩家会话，让接口可以在返回当前会话视图时准确表达身份来源。
+  */
 enum SessionPrincipalKind:
   case Anonymous
   case Guest

@@ -1,7 +1,9 @@
 package riichinexus.microservices.club.objects.rankprivilegemanagement
 
-/** ClubRankNode 表示前后端共享的俱乐部等级节点 数据结构，包含code、label、minimumContribution、privileges。 */
-
+/** 俱乐部贡献等级树中的一个等级节点。
+  *
+  * 节点定义达到该等级所需的最低贡献和随等级授予的俱乐部权限，供成员权限快照与管理页共同使用。
+  */
 final case class ClubRankNode(
     code: String,
     label: String,

@@ -97,6 +97,7 @@ final case class TournamentTableUpdateSeatStateAPIMessage(tableId: String, seat:
   private def seatStateNote(actor: AccessPrincipalPrivateView, seat: SeatWind, note: Option[String]): Option[String] =
     note.map(message => s"${actor.displayName} updated ${seat.toString} seat state: $message")
 
+  /** 管理员更新牌桌指定座位状态时使用的内部命令。 */
   private final case class UpdateSeatStateCommand(
       tableId: TableId,
       seat: SeatWind,

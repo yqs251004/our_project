@@ -75,6 +75,7 @@ final case class TournamentWhitelistListAPIMessage(
   private def filters(values: Option[(String, String)]*): Map[String, String] =
     values.flatten.toMap
 
+  /** 赛事白名单列表接口解析后的过滤与分页条件。 */
   private final case class ResolvedWhitelistQuery(
       tournamentId: TournamentId,
       participantKind: Option[TournamentParticipantKind],

@@ -8,6 +8,10 @@ import cats.effect.std.Queue
 import fs2.Stream
 import riichinexus.system.realtime.objects.RealtimeEvent
 
+/** 进程内实时事件广播总线。
+  *
+  * 每个订阅者拥有独立队列，发布事件时会复制到当前所有订阅者，供 SSE 或前端实时刷新通道消费。
+  */
 final class RealtimeEventBus:
 
   private val subscribers = TrieMap.empty[String, Queue[IO, RealtimeEvent]]

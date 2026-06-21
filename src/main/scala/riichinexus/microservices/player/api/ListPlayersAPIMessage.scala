@@ -71,6 +71,7 @@ final case class ListPlayersAPIMessage(
       bannedReason = player.bannedReason
     )
 
+  /** 玩家列表接口解析后的查询与已应用过滤条件。 */
   private final case class ResolvedPlayersQuery(
       query: PlayerListQuery,
       appliedFilters: Map[String, String]

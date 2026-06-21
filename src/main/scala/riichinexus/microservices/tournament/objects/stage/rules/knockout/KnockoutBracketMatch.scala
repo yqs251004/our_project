@@ -4,8 +4,10 @@ import riichinexus.microservices.tournament.objects.stage.table.TableId
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.ReadWriter
 
-/** KnockoutBracketMatch 表示前后端共享的KnockoutBracket对局 数据结构，包含 ID、roundNumber、position、lane、slots、sourceMatchIds等。 */
-
+/** 淘汰赛 bracket 中的一场对局节点。
+  *
+  * 节点记录轮次、位置、线路、席位来源、晋级人数、下一场关联、绑定牌桌和结果状态，是 bracket 推进的核心单元。
+  */
 final case class KnockoutBracketMatch(
     id: String,
     roundNumber: Int,

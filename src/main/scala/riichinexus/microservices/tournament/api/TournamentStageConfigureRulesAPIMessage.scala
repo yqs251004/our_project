@@ -126,6 +126,7 @@ final case class TournamentStageConfigureRulesAPIMessage(tournamentId: String, s
     require(ruleset.akaDoraCount >= 0 && ruleset.akaDoraCount <= 3, "akaDoraCount must be between 0 and 3")
     require(ruleset.minHan >= 1, "minHan must be positive")
 
+  /** 修改阶段规则配置时使用的内部命令。 */
   private final case class ConfigureStageRulesCommand(
       tournamentId: TournamentId,
       stageId: TournamentStageId,

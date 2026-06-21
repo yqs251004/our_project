@@ -11,8 +11,10 @@ import riichinexus.microservices.tournament.objects.competition.TournamentStatus
 import riichinexus.microservices.tournament.objects.stage.apiTypes.TournamentStageSummaryView
 import riichinexus.system.json.TournamentJsonCodecs.given
 
-/** TournamentSummaryView 表示赛事摘要视图 的前端展示视图，包含赛事 ID、名称、organizer、startsAt、endsAt、状态等。 */
-
+/** 运营后台赛事列表使用的摘要视图。
+  *
+  * 它保留参赛俱乐部、参赛玩家、管理员、白名单数量和阶段摘要，让后台列表可以直接展示赛事规模与管理入口。
+  */
 final case class TournamentSummaryView(
     tournamentId: String,
     name: String,

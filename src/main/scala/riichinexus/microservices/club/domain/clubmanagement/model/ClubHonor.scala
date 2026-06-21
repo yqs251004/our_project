@@ -3,7 +3,11 @@ package riichinexus.microservices.club.domain.clubmanagement.model
 import java.time.Instant
 
 import riichinexus.system.json.JsonCodecs.given
-/** ClubHonor 表示后端领域中的俱乐部荣誉状态或规则，包含标题、achievedAt、note。 */
+
+/** 俱乐部公开展示的一项荣誉。
+  *
+  * 荣誉记录标题、获得时间和可选说明，用于俱乐部主页、排行榜和运营后台呈现历史成绩。
+  */
 final case class ClubHonor(
     title: String,
     achievedAt: Instant,

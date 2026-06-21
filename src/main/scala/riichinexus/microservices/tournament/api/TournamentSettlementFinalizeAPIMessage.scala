@@ -98,6 +98,7 @@ final case class TournamentSettlementFinalizeAPIMessage(tournamentId: String, se
       )
     )
 
+  /** 确认赛事结算快照为最终版本时使用的内部命令。 */
   private final case class FinalizeSettlementCommand(
       tournamentId: TournamentId,
       settlementId: SettlementSnapshotId,
@@ -106,6 +107,7 @@ final case class TournamentSettlementFinalizeAPIMessage(tournamentId: String, se
       finalizedAt: Instant
   )
 
+  /** 结算确认后的快照与是否发生状态变更的结果。 */
   private final case class FinalizeSettlementResult(
       snapshot: TournamentSettlementSnapshot,
       didFinalize: Boolean

@@ -4,8 +4,10 @@ import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.player.objects.RankSnapshot
 import upickle.default.{ReadWriter, macroRW}
 
-/** PlayerProfileView 表示玩家Profile视图 的前端展示视图。 */
-
+/** 玩家个人页和会话恢复使用的完整资料视图。
+  *
+  * 它聚合账号身份、昵称、注册时间、段位、Elo、俱乐部归属、角色标记和封禁原因，前端可据此渲染个人入口和状态提示。
+  */
 final case class PlayerProfileView(
     playerId: String,
     userId: String,

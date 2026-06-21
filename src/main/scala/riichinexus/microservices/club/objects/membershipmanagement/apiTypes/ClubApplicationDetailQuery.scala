@@ -3,8 +3,10 @@ package riichinexus.microservices.club.objects.membershipmanagement.apiTypes
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.{ReadWriter, macroRW}
 
-/** ClubApplicationDetailQuery 表示俱乐部申请详情查询 的列表或详情查询条件。 */
-
+/** 读取单个入会申请详情时附带的访问主体参数。
+  *
+  * 申请 ID 通常来自路径，`operatorId` 用于后端计算当前用户是否可以审核或撤回这条申请。
+  */
 final case class ClubApplicationDetailQuery(
     operatorId: Option[String] = None
 )

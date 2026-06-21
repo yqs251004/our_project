@@ -113,6 +113,7 @@ final case class CreateClubAPIMessage(
     if player.status != PlayerStatus.Active then
       throw IllegalArgumentException(context)
 
+  /** 创建俱乐部时使用的已授权内部命令。 */
   private final case class CreateClubCommand(
       name: String,
       creatorId: PlayerId,

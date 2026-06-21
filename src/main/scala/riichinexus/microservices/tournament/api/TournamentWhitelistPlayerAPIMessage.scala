@@ -55,9 +55,9 @@ final case class TournamentWhitelistPlayerAPIMessage(tournamentId: String, playe
     if player.status != PlayerStatus.Active then
       throw IllegalArgumentException(s"PlayerPrivateView ${playerId.value} cannot be whitelisted")
 
+  /** 将玩家加入赛事白名单时使用的内部命令。 */
   private final case class WhitelistPlayerCommand(
       tournamentId: TournamentId,
       playerId: PlayerId,
       actor: AccessPrincipalPrivateView
   )
-

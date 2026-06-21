@@ -7,8 +7,10 @@ import riichinexus.microservices.tournament.objects.identity.TournamentStageId
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.ReadWriter
 
-/** TournamentSettlementQuery 表示赛事结算查询 的列表或详情查询条件，包含阶段 ID、状态、championId、数量限制、分页偏移。 */
-
+/** 查询赛事结算快照列表时使用的过滤和分页参数。
+  *
+  * 可以按阶段、状态或冠军筛选，便于后台查看结算草稿、最终稿以及被新修订替代的历史版本。
+  */
 final case class TournamentSettlementQuery(
     stageId: Option[TournamentStageId] = None,
     status: Option[TournamentSettlementStatus] = None,

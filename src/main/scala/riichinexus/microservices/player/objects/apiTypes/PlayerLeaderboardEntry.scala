@@ -4,8 +4,10 @@ import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.player.objects.RankSnapshot
 import upickle.default.{ReadWriter, macroRW}
 
-/** PlayerLeaderboardEntry 表示前后端共享的玩家Leaderboard条目 数据结构。 */
-
+/** 玩家排行榜中的单行公开摘要。
+  *
+  * 排行展示使用 Elo、段位、标准化段位分、所属俱乐部和玩家状态，不暴露封禁原因或角色授予明细。
+  */
 final case class PlayerLeaderboardEntry(
     playerId: String,
     nickname: String,

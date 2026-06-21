@@ -2,8 +2,10 @@ package riichinexus.microservices.auth.objects.apiTypes
 
 import upickle.default.{ReadWriter, macroRW}
 
-/** BootstrapSuperAdminRequest 表示初始化超级管理员请求 的前端请求参数。 */
-
+/** 首次部署时创建超级管理员账号的请求体。
+  *
+  * `bootstrapKey` 用来限制初始化入口，防止普通注册流程绕过权限体系直接产生平台管理员。
+  */
 final case class BootstrapSuperAdminRequest(
     bootstrapKey: String,
     username: String,

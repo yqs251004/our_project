@@ -5,7 +5,11 @@ import java.time.Instant
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 
 import riichinexus.system.json.JsonCodecs.given
-/** ClubMemberContribution 表示后端领域中的俱乐部成员贡献状态或规则，包含玩家 ID、amount、更新时间、updatedBy、note。 */
+
+/** 俱乐部成员当前贡献值的领域记录。
+  *
+  * 贡献值会影响等级树匹配和权限快照，记录更新人、更新时间和备注可以追溯人工调整或赛事结算带来的变动。
+  */
 final case class ClubMemberContribution(
     playerId: PlayerId,
     amount: Int,

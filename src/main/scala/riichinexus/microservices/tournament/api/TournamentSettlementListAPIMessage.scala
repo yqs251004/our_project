@@ -59,6 +59,7 @@ final case class TournamentSettlementListAPIMessage(
   private def filters(values: Option[(String, String)]*): Map[String, String] =
     values.flatten.toMap
 
+  /** 赛事结算列表接口解析后的查询和过滤摘要。 */
   private final case class ResolvedSettlementListQuery(
       tournamentId: TournamentId,
       query: TournamentSettlementQuery,

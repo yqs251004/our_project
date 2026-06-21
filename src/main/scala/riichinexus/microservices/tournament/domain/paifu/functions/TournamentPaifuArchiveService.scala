@@ -168,6 +168,7 @@ private[tournament] object TournamentPaifuArchiveService:
       "Paifu final standings must match the cumulative round score changes"
     )
 
+  /** 牌谱归档时需要同步写回牌桌、对局记录和牌谱的变更组合。 */
   private final case class ArchivedPaifuChange(
       table: Table,
       matchRecord: MatchRecord,

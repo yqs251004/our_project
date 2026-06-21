@@ -87,6 +87,7 @@ final case class AppealReopenAPIMessage(
       )
     )
 
+  /** 重开已结束申诉工单时使用的内部命令。 */
   private final case class ReopenAppealCommand(
       ticketId: AppealTicketId,
       input: ReopenAppealRequest,

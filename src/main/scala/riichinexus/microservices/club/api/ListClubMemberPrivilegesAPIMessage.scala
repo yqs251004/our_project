@@ -73,6 +73,7 @@ final case class ListClubMemberPrivilegesAPIMessage(
       appliedFilters = query.appliedFilters
     )
 
+  /** 成员权限快照列表接口解析后的过滤与分页条件。 */
   private final case class ResolvedClubMemberPrivilegeQuery(
       clubId: ClubId,
       playerId: Option[PlayerId],

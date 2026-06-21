@@ -4,8 +4,10 @@ import riichinexus.microservices.club.objects.tournamentparticipation.ClubTourna
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.{ReadWriter, macroRW}
 
-/** ClubTournamentQuery 表示俱乐部赛事查询 的列表或详情查询条件。 */
-
+/** 查询俱乐部相关赛事时使用的范围、访问者和分页参数。
+  *
+  * `viewer` 用于计算每条赛事的可操作能力，`scope` 决定返回近期、进行中还是全部赛事。
+  */
 final case class ClubTournamentQuery(
     scope: Option[ClubTournamentScope] = None,
     viewer: Option[String] = None,

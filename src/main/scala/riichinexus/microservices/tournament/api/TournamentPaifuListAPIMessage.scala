@@ -79,6 +79,7 @@ final case class TournamentPaifuListAPIMessage(
       )
     )
 
+  /** 牌谱列表接口解析后的分页查询条件。 */
   private final case class ResolvedPaifuListQuery(
       query: PaifuListQuery,
       limit: Int,

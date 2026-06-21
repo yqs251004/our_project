@@ -1,7 +1,9 @@
 package riichinexus.microservices.tournament.objects.paifu
 
-/** HandOutcome 枚举手牌Outcome 可使用的公开取值。 */
-
+/** 一小局最终结算的结果类型。
+  *
+  * 结果区分自摸、荣和、荒牌流局和途中流局，决定分数变化、听牌信息和结算提示如何解释。
+  */
 enum HandOutcome:
   case Tsumo
   case Ron

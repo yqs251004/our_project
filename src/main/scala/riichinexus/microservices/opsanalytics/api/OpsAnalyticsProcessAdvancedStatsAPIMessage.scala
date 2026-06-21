@@ -235,6 +235,7 @@ final case class OpsAnalyticsProcessAdvancedStatsAPIMessage(
   private def loadBoardVersion(context: ApiPlanContext, owner: DashboardOwner): IO[Int] =
     IO.blocking(AdvancedStatsBoardTable.findByOwner(context.connection, owner).map(_.version).getOrElse(0))
 
+  /** 处理高级统计重算队列时使用的批处理命令。 */
   private final case class ProcessAdvancedStatsCommand(
       operator: AccessPrincipalPrivateView,
       limit: Int,

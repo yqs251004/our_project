@@ -84,6 +84,7 @@ final case class UpdateClubRankTreeAPIMessage(
       )
     )
 
+  /** 覆盖俱乐部等级树时使用的已授权内部命令。 */
   private final case class UpdateClubRankTreeCommand(
       clubId: ClubId,
       actor: AccessPrincipalPrivateView,

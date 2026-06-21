@@ -5,8 +5,10 @@ import riichinexus.microservices.tournament.objects.stage.table.TableSeat
 import riichinexus.microservices.tournament.objects.stage.table.TableStatus
 import upickle.default.{ReadWriter, macroRW}
 
-/** TournamentTableView 表示赛事牌桌视图 的前端展示视图。 */
-
+/** 前端展示赛事牌桌详情和列表时使用的牌桌视图。
+  *
+  * 视图包含座位、轮次、淘汰赛节点、状态时间线、牌谱/记录关联、申诉单和重置次数，是牌桌页面的主数据源。
+  */
 final case class TournamentTableView(
     tableId: String,
     tableNo: Int,

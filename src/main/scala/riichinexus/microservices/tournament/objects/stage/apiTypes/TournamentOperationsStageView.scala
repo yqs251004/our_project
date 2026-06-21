@@ -13,8 +13,10 @@ import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.MahjongRuleset
 import riichinexus.microservices.tournament.objects.stage.lineup.apiTypes.TournamentLineupSubmissionView
 
-/** TournamentOperationsStageView 表示赛事运营阶段视图 的前端展示视图，包含阶段 ID、名称、format、order、状态、currentRound等。 */
-
+/** 赛事运营后台使用的阶段视图。
+  *
+  * 视图聚焦排桌计划、已排牌桌、阶段规则和阵容提交，供管理员配置阶段、生成牌桌和推进轮次。
+  */
 final case class TournamentOperationsStageView(
     stageId: String,
     name: String,

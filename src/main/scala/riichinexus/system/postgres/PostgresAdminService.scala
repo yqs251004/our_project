@@ -4,6 +4,10 @@ import java.sql.Connection
 
 import scala.util.Using
 
+/** PostgreSQL 管理端辅助服务。
+  *
+  * 服务提供连通性检查、schema 版本读取、托管表计数和测试环境清库能力，主要供本地诊断与运维工具调用。
+  */
 final class PostgresAdminService(connectionFactory: JdbcConnectionFactory):
   private val managedTables =
     Vector(

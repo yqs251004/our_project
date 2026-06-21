@@ -1,7 +1,9 @@
 package riichinexus.microservices.tournament.objects.stage.rules.progression
 
-/** AdvancementRuleType 枚举AdvancementRule类型 可使用的公开取值。 */
-
+/** 阶段完成后选择晋级名单的规则类型。
+  *
+  * 不同类型分别表示按瑞士轮排名截断、淘汰赛胜者、分数阈值或自定义模板生成后续阶段参与者。
+  */
 enum AdvancementRuleType:
   case SwissCut
   case KnockoutElimination

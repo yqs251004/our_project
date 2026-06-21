@@ -156,6 +156,7 @@ final case class GetCurrentClubApplicationAPIMessage(
           .map(ResolvePlayerByUserIdPrivateAPIMessage(_).plan(context))
           .getOrElse(IO.pure(None))
 
+  /** 查询当前访问者入会申请时使用的俱乐部和操作者键。 */
   private final case class CurrentClubApplicationInput(
       clubId: ClubId,
       operatorId: Option[PlayerId]

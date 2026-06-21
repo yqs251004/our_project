@@ -19,6 +19,7 @@ import riichinexus.microservices.tournament.objects.identity.{TournamentId, Tour
 
 private[mahjongcore] object MahjongTableArchiveFunctions:
 
+  /** 实时牌桌归档后同时产出的新桌面状态、牌谱和对局记录。 */
   final case class ArchivedMahjongTable(
       tableState: MahjongTableState,
       paifu: Paifu,

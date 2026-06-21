@@ -6,7 +6,11 @@ import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
 
 import riichinexus.system.json.JsonCodecs.given
-/** GuestAccessSession 表示后端领域中的游客Access会话 状态，包含 ID、创建时间、显示名、过期时间、lastSeenAt、revokedAt等。 */
+
+/** 游客身份在注册或过期前使用的临时访问会话。
+  *
+  * 它记录显示名、设备指纹、有效期、撤销信息和升级后的玩家 ID，使大厅体验可以先以游客身份进入，之后再平滑绑定正式玩家。
+  */
 final case class GuestAccessSession(
     id: GuestSessionId,
     createdAt: Instant,

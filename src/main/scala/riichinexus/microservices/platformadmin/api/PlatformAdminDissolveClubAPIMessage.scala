@@ -137,6 +137,7 @@ final case class PlatformAdminDissolveClubAPIMessage(
       dissolvedBy = club.dissolvedBy.map(_.value)
     )
 
+  /** 平台解散俱乐部流程中使用的已授权命令参数。 */
   private final case class DissolveClubCommand(
       clubId: ClubId,
       actor: AccessPrincipalPrivateView,

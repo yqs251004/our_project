@@ -85,6 +85,7 @@ final case class UpdateClubRecruitmentPolicyAPIMessage(
       )
     )
 
+  /** 更新俱乐部招募策略时使用的已授权内部命令。 */
   private final case class UpdateClubRecruitmentPolicyCommand(
       clubId: ClubId,
       actor: AccessPrincipalPrivateView,

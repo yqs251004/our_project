@@ -7,8 +7,10 @@ import riichinexus.microservices.tournament.objects.stage.table.TableId
 import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}
 import riichinexus.microservices.tournament.objects.stage.table.TableSeat
 
-/** PaifuMetadata 表示前后端共享的牌谱Metadata 数据结构，包含recordedAt、source、牌桌 ID、赛事 ID、阶段 ID、座位等。 */
-
+/** 牌谱归档时附带的来源和归属信息。
+  *
+  * 元数据把牌谱绑定到牌桌、赛事、阶段、座位分配和可选对局记录，`source` 说明它来自上传、实时归档或其他导入渠道。
+  */
 final case class PaifuMetadata(
     recordedAt: Instant,
     source: String,

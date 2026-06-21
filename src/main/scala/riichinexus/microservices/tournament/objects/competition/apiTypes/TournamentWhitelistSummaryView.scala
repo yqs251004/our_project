@@ -2,8 +2,10 @@ package riichinexus.microservices.tournament.objects.competition.apiTypes
 
 import upickle.default.{ReadWriter, macroRW}
 
-/** TournamentWhitelistSummaryView 表示赛事白名单摘要视图 的前端展示视图。 */
-
+/** 赛事详情页展示的白名单汇总。
+  *
+  * 它同时给出总条目数、俱乐部/玩家数量和对应 ID 列表，让后台无需展开完整白名单也能判断邀请范围。
+  */
 final case class TournamentWhitelistSummaryView(
     totalEntries: Int,
     clubCount: Int,

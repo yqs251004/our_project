@@ -3,8 +3,10 @@ package riichinexus.microservices.club.objects.membershipmanagement.apiTypes
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.{ReadWriter, macroRW}
 
-/** ClubMembershipApplicationRequest 表示俱乐部成员资格申请请求 的前端请求参数。 */
-
+/** 玩家向俱乐部提交入会申请时填写的请求体。
+  *
+  * `displayName` 固化申请时的展示名，`message` 是给俱乐部管理员看的申请说明，`operatorId` 可承载代提交场景。
+  */
 final case class ClubMembershipApplicationRequest(
     displayName: String,
     message: Option[String] = None,

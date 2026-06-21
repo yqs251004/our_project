@@ -85,6 +85,7 @@ final case class RevokeClubHonorAPIMessage(
       )
     )
 
+  /** 撤销俱乐部荣誉时使用的内部命令。 */
   private final case class RevokeClubHonorCommand(
       clubId: ClubId,
       actor: AccessPrincipalPrivateView,

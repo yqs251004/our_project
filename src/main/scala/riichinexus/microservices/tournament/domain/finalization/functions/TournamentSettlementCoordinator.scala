@@ -320,6 +320,7 @@ private[tournament] object TournamentSettlementCoordinator:
 
       adjustedAwards ++ Vector.fill(participantCount - paidSlots)(0L)
 
+  /** 赛事结算请求解析并完成授权后的内部输入。 */
   private final case class SettlementInput(
       tournamentId: TournamentId,
       finalStageId: TournamentStageId,

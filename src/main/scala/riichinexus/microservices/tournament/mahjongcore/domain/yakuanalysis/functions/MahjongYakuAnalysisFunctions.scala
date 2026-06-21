@@ -79,6 +79,7 @@ private[mahjongcore] object MahjongYakuAnalysisFunctions:
   def isWinning(context: MahjongWinContext): Boolean =
     analyzeWin(context).nonEmpty
 
+  /** 已完成番符与点数计算的役种候选。 */
   private final case class ScoredYakuCandidate(
       yaku: Vector[Yaku],
       han: Int,
@@ -86,6 +87,7 @@ private[mahjongcore] object MahjongYakuAnalysisFunctions:
       pointResult: PointResult
   )
 
+  /** 单次和牌在当前规则下产生的总点数与分数变动。 */
   private final case class PointResult(points: Int, scoreChanges: Vector[ScoreChange])
 
   private def scoreCandidate(

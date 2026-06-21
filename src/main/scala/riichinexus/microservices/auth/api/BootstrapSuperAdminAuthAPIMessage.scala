@@ -227,6 +227,7 @@ final case class BootstrapSuperAdminAuthAPIMessage(
       roles = registeredRoleFlags(player)
     )
 
+  /** 首次初始化超级管理员账号时使用的受控命令。 */
   private final case class BootstrapSuperAdminAuthCommand(
       bootstrapKey: String,
       username: String,

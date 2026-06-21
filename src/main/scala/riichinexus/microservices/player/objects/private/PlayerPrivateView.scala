@@ -5,8 +5,10 @@ import riichinexus.microservices.club.objects.clubmanagement.ClubId
 import riichinexus.microservices.player.objects.{PlayerStatus, RankSnapshot}
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 
-/** PlayerPrivateView 表示后端内部使用的玩家后端内部视图 read model，包含 ID、用户 ID、昵称、currentRank、elo、俱乐部 ID等。 */
-
+/** 后端服务间共享的玩家完整读模型。
+  *
+  * 它包含玩家档案、账号 ID、段位、Elo、俱乐部归属、角色授予和封禁状态，供赛事、俱乐部、认证和平台管理共同解析玩家身份。
+  */
 final case class PlayerPrivateView(
     id: PlayerId,
     userId: String,

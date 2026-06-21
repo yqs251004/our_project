@@ -8,8 +8,10 @@ import riichinexus.microservices.tournament.objects.competition.TournamentStatus
 import riichinexus.system.json.TournamentJsonCodecs.given
 import upickle.default.{ReadWriter, macroRW}
 
-/** PublicScheduleView 表示公开赛程视图 的前端展示视图，包含赛事 ID、tournamentName、tournamentStatus、阶段 ID、stageName、stageStatus等。 */
-
+/** 公共赛程列表中的赛事阶段摘要。
+  *
+  * 该视图把赛事状态、阶段轮次、牌桌数量、待排计划和参赛规模放在一起，供大厅展示近期可关注的阶段进度。
+  */
 final case class PublicScheduleView(
     tournamentId: String,
     tournamentName: String,

@@ -84,6 +84,7 @@ final case class RevokeClubAdminAPIMessage(
         s"Club ${command.clubId.value} must retain at least one club admin"
       )
 
+  /** 撤销俱乐部管理员身份时使用的已授权内部命令。 */
   private final case class RevokeClubAdminCommand(
       clubId: ClubId,
       playerId: PlayerId,

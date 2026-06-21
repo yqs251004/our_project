@@ -6,7 +6,11 @@ import riichinexus.microservices.tournament.objects.paifu.PaifuTile
 import riichinexus.microservices.tournament.objects.stage.table.SeatWind
 
 import riichinexus.system.json.JsonCodecs.given
-/** 后端内部的座位状态，包含玩家真实手牌、摸牌、副露和河牌等不可直接全量公开的信息。 */
+
+/** 实时麻将桌中单个座位的后端内部状态。
+  *
+  * 状态保存玩家真实手牌、摸牌、副露、河牌、立直/一发/振听标记和当前点数，转换公开视图时需要按观看者身份隐藏暗牌。
+  */
 final case class MahjongSeatState(
     seat: SeatWind,
     playerId: PlayerId,

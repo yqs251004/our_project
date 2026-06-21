@@ -6,13 +6,16 @@ import riichinexus.microservices.club.objects.clubmanagement.ClubId
 import riichinexus.microservices.tournament.objects.identity.TournamentId
 import riichinexus.microservices.auth.domain.model.AccessPrincipal
 
-/** AuthorizationPolicy 表示后端领域中的授权策略状态或规则，包含canEvaluate、principal、权限、俱乐部 ID、赛事 ID、subjectPlayerId。 */
-
+/** 可组合的授权判断策略。
+  *
+  * 策略接收一个完整的决策输入并返回是否允许访问，用于把主体、权限和资源上下文统一交给领域层判断。
+  */
 final case class AuthorizationPolicy(
     canEvaluate: AuthorizationPolicy.DecisionInput => Boolean
 )
 
 object AuthorizationPolicy:
+  /** 单次授权判断所需的主体与资源上下文。 */
   final case class DecisionInput(
       principal: AccessPrincipal,
       permission: Permission,

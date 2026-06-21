@@ -11,6 +11,7 @@ import riichinexus.microservices.tournament.objects.stage.table.SeatWind
 
 private[mahjongcore] object MahjongYakuCheckSupport:
 
+  /** 执行一组役种检查时共享的牌姿与上下文缓存。 */
   final case class MahjongYakuCheckState(
       concealedCounts: Array[Int],
       allCounts: Array[Int],
@@ -76,4 +77,3 @@ private[mahjongcore] object MahjongYakuCheckSupport:
       case SeatWind.South => Nan
       case SeatWind.West => Sha
       case SeatWind.North => Pei
-

@@ -6,8 +6,10 @@ import riichinexus.microservices.club.objects.clubmanagement.ClubId
 import riichinexus.microservices.player.objects.playerprofile.PlayerId
 import riichinexus.microservices.tournament.objects.stage.lineup.LineupSubmissionId
 
-/** StageLineupSubmissionPrivateView 表示后端内部使用的阶段阵容提交后端内部视图 read model，包含 ID、俱乐部 ID、submittedBy、submittedAt、座位、note。 */
-
+/** 俱乐部为某个赛事阶段提交的内部阵容快照。
+  *
+  * 它保留提交俱乐部、提交人、提交时间、正选/替补席位和备注，供阶段排桌与赛事运营后台读取。
+  */
 final case class StageLineupSubmissionPrivateView(
     id: LineupSubmissionId,
     clubId: ClubId,
