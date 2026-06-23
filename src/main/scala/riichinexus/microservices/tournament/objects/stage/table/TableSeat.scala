@@ -1,7 +1,7 @@
 package riichinexus.microservices.tournament.objects.stage.table
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.player.objects.PlayerId
+import riichinexus.microservices.club.objects.profile.ClubId
 
 /** 牌桌上一名玩家的座位分配和准备状态。
   *

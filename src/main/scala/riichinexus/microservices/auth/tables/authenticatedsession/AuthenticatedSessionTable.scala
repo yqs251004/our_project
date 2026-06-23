@@ -1,5 +1,7 @@
 package riichinexus.microservices.auth.tables.authenticatedsession
 
+import riichinexus.system.objects.`private`.AggregateType
+
 import java.sql.{Connection, ResultSet, Timestamp}
 
 import scala.annotation.tailrec
@@ -7,8 +9,8 @@ import scala.util.Using
 
 import riichinexus.system.errors.OptimisticConcurrencyException
 import riichinexus.system.json.JsonCodecs.given
-import riichinexus.microservices.auth.domain.functions.AuthenticatedSessionFunctions
-import riichinexus.microservices.auth.domain.model.AuthenticatedSession
+import riichinexus.microservices.auth.domain.session.functions.AuthenticatedSessionFunctions
+import riichinexus.microservices.auth.domain.session.model.AuthenticatedSession
 import upickle.default.{read, write}
 
 
@@ -42,7 +44,7 @@ object AuthenticatedSessionTable:
     }
     if rowsUpdated == 0 then
       throw OptimisticConcurrencyException(
-        aggregateType = "authenticated-session",
+        aggregateType = AggregateType.AuthenticatedSession,
         aggregateId = persisted.token,
         expectedVersion = session.version,
         actualVersion = findByToken(connection, persisted.token).map(_.version)

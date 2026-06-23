@@ -3,8 +3,10 @@ package riichinexus.microservices.notification.objects.`private`
 import java.time.Instant
 
 import riichinexus.microservices.notification.objects.NotificationType
+import riichinexus.system.objects.`private`.{NotificationSeverity, NotificationSourceService, NotificationSourceType}
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.ReadWriter
+import riichinexus.system.json.NotificationJsonCodecs.given
+import upickle.default.{ReadWriter, macroRW}
 
 /** 其他后端服务调用通知私有 API 时提交的创建请求。
   *
@@ -15,11 +17,14 @@ final case class CreateNotificationRequest(
     notificationType: NotificationType,
     title: String,
     body: String,
-    severity: Option[String] = None,
-    sourceService: String,
-    sourceType: String,
+    severity: Option[NotificationSeverity] = None,
+    sourceService: NotificationSourceService,
+    sourceType: NotificationSourceType,
     sourceId: String,
     actionUrl: Option[String] = None,
     expiresAt: Option[Instant] = None,
     objects: Map[String, String] = Map.empty
-) derives ReadWriter
+)
+
+object CreateNotificationRequest:
+  given ReadWriter[CreateNotificationRequest] = macroRW

@@ -6,7 +6,7 @@ import riichinexus.microservices.tournament.objects.identity.TournamentStageId
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.MahjongRuleset
 import riichinexus.microservices.tournament.objects.stage.rules.progression.{AdvancementRule, AdvancementRuleType}
 import riichinexus.microservices.tournament.objects.stage.rules.knockout.KnockoutRuleConfig
-import riichinexus.microservices.tournament.objects.stage.StageStatus
+import riichinexus.microservices.tournament.objects.stage.lifecycle.StageStatus
 import riichinexus.microservices.tournament.objects.competition.TournamentFormat
 import riichinexus.microservices.tournament.objects.stage.rules.swiss.SwissRuleConfig
 

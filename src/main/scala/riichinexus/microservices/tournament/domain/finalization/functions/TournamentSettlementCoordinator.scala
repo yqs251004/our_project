@@ -9,7 +9,7 @@ import riichinexus.microservices.tournament.objects.finalization.{TournamentSett
 import riichinexus.microservices.tournament.objects.stage.rules.progression.AdvancementRuleType
 import riichinexus.microservices.tournament.objects.stage.rules.knockout.KnockoutLane
 import riichinexus.microservices.tournament.objects.stage.ranking.{StageRankingSnapshot, StageStandingEntry}
-import riichinexus.microservices.tournament.objects.stage.StageStatus
+import riichinexus.microservices.tournament.objects.stage.lifecycle.StageStatus
 import riichinexus.microservices.tournament.objects.competition.{TournamentFormat, TournamentStatus}
 
 import java.sql.Connection
@@ -18,16 +18,16 @@ import java.util.NoSuchElementException
 
 import cats.effect.IO
 import riichinexus.system.api.ApiPlanContext
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.player.objects.PlayerId
+import riichinexus.microservices.club.objects.profile.ClubId
 import riichinexus.microservices.tournament.domain.identity.functions.TournamentIdGenerator
 import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}
-import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
+import riichinexus.microservices.auth.objects.authorization.`private`.AccessPrincipalPrivateView
 
 import riichinexus.microservices.tournament.domain.competition.functions.TournamentFunctions
 
 import riichinexus.microservices.tournament.domain.stage.model.TournamentStage
-import riichinexus.microservices.tournament.domain.finalization.model.TournamentSettlementSnapshot
+import riichinexus.microservices.tournament.domain.finalization.model.{TournamentSettlementInput, TournamentSettlementSnapshot}
 import riichinexus.microservices.tournament.domain.competition.model.Tournament
 
 /** TournamentSettlementCoordinator 负责赛事结算协调器 相关的领域编排、构建或投影计算。 */
@@ -47,7 +47,7 @@ private[tournament] object TournamentSettlementCoordinator:
       finalizeSettlement: Boolean,
       note: Option[String]
   ): IO[TournamentSettlementSnapshot] =
-    val settlement = SettlementInput(
+    val settlement = TournamentSettlementInput(
       tournamentId = tournamentId,
       finalStageId = finalStageId,
       actor = actor,
@@ -92,7 +92,7 @@ private[tournament] object TournamentSettlementCoordinator:
       savedSnapshot <- IO.blocking(commitSettlement(connection, settlement, snapshot))
     yield savedSnapshot
 
-  private def validateSettlementInput(settlement: SettlementInput): Unit =
+  private def validateSettlementInput(settlement: TournamentSettlementInput): Unit =
     require(settlement.prizePool >= 0L, "Prize pool must be non-negative")
     require(settlement.houseFeeAmount >= 0L, "House fee amount must be non-negative")
     require(settlement.houseFeeAmount <= settlement.prizePool, "House fee amount cannot exceed prize pool")
@@ -116,7 +116,7 @@ private[tournament] object TournamentSettlementCoordinator:
 
   private def resolveSettlementPlayers(
       connection: Connection,
-      settlement: SettlementInput,
+      settlement: TournamentSettlementInput,
       finalStage: TournamentStage,
       ranking: StageRankingSnapshot
   ): IO[Vector[PlayerId]] =
@@ -126,7 +126,7 @@ private[tournament] object TournamentSettlementCoordinator:
 
   private def resolveKnockoutSettlementPlayers(
       connection: Connection,
-      settlement: SettlementInput,
+      settlement: TournamentSettlementInput,
       finalStage: TournamentStage,
       ranking: StageRankingSnapshot
   ): IO[Vector[PlayerId]] =
@@ -188,7 +188,7 @@ private[tournament] object TournamentSettlementCoordinator:
 
   private def buildSettlementSnapshot(
       connection: Connection,
-      settlement: SettlementInput,
+      settlement: TournamentSettlementInput,
       ranking: StageRankingSnapshot,
       resolvedPlayers: Vector[PlayerId],
       previousSnapshot: Option[TournamentSettlementSnapshot]
@@ -240,7 +240,7 @@ private[tournament] object TournamentSettlementCoordinator:
 
   private def buildSettlementEntries(
       connection: Connection,
-      settlement: SettlementInput,
+      settlement: TournamentSettlementInput,
       resolvedPlayers: Vector[PlayerId],
       baseAwards: Vector[Long],
       rankingByPlayer: Map[PlayerId, StageStandingEntry],
@@ -285,7 +285,7 @@ private[tournament] object TournamentSettlementCoordinator:
 
   private def commitSettlement(
       connection: Connection,
-      settlement: SettlementInput,
+      settlement: TournamentSettlementInput,
       snapshot: TournamentSettlementSnapshot
   ): TournamentSettlementSnapshot =
     riichinexus.microservices.tournament.tables.settlement.TournamentSettlementTable.save(connection, snapshot)
@@ -319,18 +319,3 @@ private[tournament] object TournamentSettlementCoordinator:
         else baseAwards.updated(0, baseAwards.head + remainder)
 
       adjustedAwards ++ Vector.fill(participantCount - paidSlots)(0L)
-
-  /** 赛事结算请求解析并完成授权后的内部输入。 */
-  private final case class SettlementInput(
-      tournamentId: TournamentId,
-      finalStageId: TournamentStageId,
-      actor: AccessPrincipalPrivateView,
-      settledAt: Instant,
-      prizePool: Long,
-      payoutRatios: Vector[Double],
-      houseFeeAmount: Long,
-      clubShareRatio: Double,
-      adjustments: Vector[TournamentSettlementAdjustment],
-      finalizeSettlement: Boolean,
-      note: Option[String]
-  )

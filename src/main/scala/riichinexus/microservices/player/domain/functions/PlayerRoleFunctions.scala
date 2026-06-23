@@ -1,9 +1,9 @@
 package riichinexus.microservices.player.domain.functions
 
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.club.objects.profile.ClubId
 import riichinexus.microservices.tournament.objects.identity.TournamentId
-import riichinexus.microservices.auth.objects.`private`.RoleGrant
-import riichinexus.microservices.auth.objects.Role
+import riichinexus.microservices.auth.objects.authorization.`private`.RoleGrant
+import riichinexus.microservices.auth.objects.authorization.Role
 import riichinexus.microservices.player.domain.Player
 
 /** PlayerRoleFunctions 提供玩家角色相关的领域计算、校验和转换函数。 */

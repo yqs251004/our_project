@@ -1,5 +1,7 @@
 package riichinexus.microservices.opsanalytics.tables.advancedstatsrecomputetask
 
+import riichinexus.system.objects.`private`.AggregateType
+
 import java.sql.{Connection, ResultSet, Timestamp}
 import java.time.Instant
 
@@ -7,7 +9,7 @@ import scala.annotation.tailrec
 import scala.util.Using
 
 import riichinexus.system.errors.OptimisticConcurrencyException
-import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
+import riichinexus.microservices.opsanalytics.objects.AdvancedStatsRecomputeTaskId
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.opsanalytics.domain.functions.{AdvancedStatsRecomputeTaskFunctions, DashboardFunctions}
 import riichinexus.microservices.opsanalytics.objects.{AdvancedStatsRecomputeTask, AdvancedStatsRecomputeTaskStatus, DashboardOwner}
@@ -47,7 +49,7 @@ object AdvancedStatsRecomputeTaskTable:
     }
     if rowsUpdated == 0 then
       throw OptimisticConcurrencyException(
-        aggregateType = "advanced-stats-task",
+        aggregateType = AggregateType.AdvancedStatsTask,
         aggregateId = persisted.id.value,
         expectedVersion = task.version,
         actualVersion = findById(connection, persisted.id).map(_.version)

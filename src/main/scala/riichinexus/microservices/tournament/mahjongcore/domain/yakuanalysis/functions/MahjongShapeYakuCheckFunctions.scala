@@ -2,16 +2,17 @@ package riichinexus.microservices.tournament.mahjongcore.domain.yakuanalysis.fun
 
 import riichinexus.microservices.tournament.mahjongcore.domain.handanalysis.model.MahjongHandMeldType
 import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.MahjongTileFunctions.{Chun, Haku, Man1, Pin1, Sou1}
+import riichinexus.microservices.tournament.mahjongcore.domain.yakuanalysis.model.MahjongYakuCheckState
 import riichinexus.microservices.tournament.objects.paifu.MahjongYakuKind
 import riichinexus.microservices.tournament.objects.paifu.Yaku
 
-import MahjongYakuCheckSupport.{MahjongYakuCheckState, YakuCheck, isDragonMeld, isYakuhaiPair, tripletLike, yakuIf}
+import MahjongYakuCheckSupport.{isDragonMeld, isYakuhaiPair, tripletLike, yakuIf}
 
 /** MahjongShapeYakuCheckFunctions 提供麻将牌型役种检查函数 相关的领域校验和权限判断。 */
 
 private[mahjongcore] object MahjongShapeYakuCheckFunctions:
 
-  val plan: Vector[YakuCheck] =
+  val plan: Vector[MahjongYakuCheckState => Vector[Yaku]] =
     Vector(
       checkPinfu,
       checkRyanpeikou,
@@ -110,4 +111,3 @@ private[mahjongcore] object MahjongShapeYakuCheckFunctions:
       val tripletStarts = tripletLike(decomposition).map(_.tileIndex).toSet
       (0 to 8).exists(rank => tripletStarts.contains(Man1 + rank) && tripletStarts.contains(Pin1 + rank) && tripletStarts.contains(Sou1 + rank))
     }
-

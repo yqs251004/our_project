@@ -5,9 +5,9 @@ import cats.effect.IO
 import java.time.Instant
 
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.microservices.club.api.`private`.ResolveClubReadModelsPrivateAPIMessage
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.club.api.audit.`private`.ResolveClubReadModelsPrivateAPIMessage
+import riichinexus.microservices.club.objects.profile.ClubId
+import riichinexus.microservices.player.objects.PlayerId
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.opsanalytics.domain.functions.DashboardFunctions
 import riichinexus.microservices.opsanalytics.objects.{Dashboard, DashboardOwner}

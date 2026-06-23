@@ -1,12 +1,14 @@
 package riichinexus.microservices.tournament.appeal.tables.appealticket
 
+import riichinexus.system.objects.`private`.AggregateType
+
 import java.sql.{Connection, ResultSet}
 
 import scala.annotation.tailrec
 import scala.util.Using
 
 import riichinexus.system.errors.OptimisticConcurrencyException
-import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
+import riichinexus.microservices.tournament.appeal.objects.AppealTicketId
 import riichinexus.microservices.tournament.appeal.domain.model.AppealTicket
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.{read, write}
@@ -42,7 +44,7 @@ object AppealTicketTable:
     }
     if rowsUpdated == 0 then
       throw OptimisticConcurrencyException(
-        aggregateType = "appeal-ticket",
+        aggregateType = AggregateType.AppealTicket,
         aggregateId = persisted.id.value,
         expectedVersion = ticket.version,
         actualVersion = findById(connection, persisted.id).map(_.version)

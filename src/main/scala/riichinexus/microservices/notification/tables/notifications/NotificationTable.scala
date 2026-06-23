@@ -7,7 +7,7 @@ import scala.annotation.tailrec
 import scala.util.Using
 
 import riichinexus.microservices.notification.objects.Notification
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 
 import upickle.default.{read, write}
 

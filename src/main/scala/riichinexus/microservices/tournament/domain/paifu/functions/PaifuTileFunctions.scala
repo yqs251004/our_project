@@ -1,6 +1,7 @@
 package riichinexus.microservices.tournament.domain.paifu.functions
 
 
+import riichinexus.microservices.tournament.domain.paifu.model.PaifuHonorTileAlias
 import riichinexus.microservices.tournament.objects.paifu.{PaifuTile, PaifuTileSuit}
 
 /** PaifuTileFunctions 提供牌谱牌相关的领域计算、校验和转换函数。 */
@@ -22,12 +23,26 @@ private[tournament] object PaifuTileFunctions:
     isValid(tile.rank, tile.suit)
 
   def fromString(value: String): PaifuTile =
-    val normalized = value.trim.toLowerCase
-    require(isValid(normalized), s"Invalid paifu tile: $value")
-    PaifuTile(
-      rank = normalized.head.asDigit,
-      suit = PaifuTileSuit.fromString(normalized.last.toString)
-    )
+    val normalized = value.trim.toLowerCase.replace("-", "")
+    PaifuHonorTileAlias.fromString(normalized) match
+      case Some(alias) =>
+        PaifuTile(rank = honorRank(alias), suit = PaifuTileSuit.Honor)
+      case None =>
+        require(isValid(normalized), s"Invalid paifu tile: $value")
+        PaifuTile(
+          rank = normalized.head.asDigit,
+          suit = PaifuTileSuit.fromString(normalized.last.toString)
+        )
+
+  private def honorRank(alias: PaifuHonorTileAlias): Int =
+    alias match
+      case PaifuHonorTileAlias.East        => 1
+      case PaifuHonorTileAlias.South       => 2
+      case PaifuHonorTileAlias.West        => 3
+      case PaifuHonorTileAlias.North       => 4
+      case PaifuHonorTileAlias.WhiteDragon => 5
+      case PaifuHonorTileAlias.GreenDragon => 6
+      case PaifuHonorTileAlias.RedDragon   => 7
 
   def toString(tile: PaifuTile): String =
     s"${tile.rank}${PaifuTileSuit.toString(tile.suit)}"

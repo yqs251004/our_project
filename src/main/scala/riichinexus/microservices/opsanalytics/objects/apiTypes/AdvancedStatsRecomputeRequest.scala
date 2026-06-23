@@ -1,6 +1,6 @@
 package riichinexus.microservices.opsanalytics.objects.apiTypes
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.opsanalytics.objects.AdvancedStatsBackfillMode
 import upickle.default.{ReadWriter, macroRW}

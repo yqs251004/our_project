@@ -2,12 +2,12 @@ package riichinexus.microservices.tournament.objects.stage.rules.progression
 
 import java.time.Instant
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}
 import riichinexus.system.json.JsonCodecs.given
 
 import riichinexus.microservices.tournament.objects.stage.ranking.StageStandingEntry
-import upickle.default.ReadWriter
+import upickle.default.{ReadWriter, macroRW}
 
 /** 按当前排名和晋级规则生成的阶段晋级预览。
   *
@@ -22,4 +22,7 @@ final case class StageAdvancementSnapshot(
     qualifiedPlayerIds: Vector[PlayerId],
     reservePlayerIds: Vector[PlayerId] = Vector.empty,
     summary: String
-) derives ReadWriter
+)
+
+object StageAdvancementSnapshot:
+  given ReadWriter[StageAdvancementSnapshot] = macroRW

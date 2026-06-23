@@ -1,6 +1,7 @@
 package riichinexus.microservices.opsanalytics.api
-import riichinexus.microservices.auth.objects.Permission
-import riichinexus.microservices.auth.api.`private`.{RequirePermissionPrivateAPIMessage, ResolveAccessPrincipalPrivateAPIMessage}
+import riichinexus.microservices.auth.objects.authorization.Permission
+import riichinexus.microservices.auth.api.authorization.`private`.RequirePermissionPrivateAPIMessage
+import riichinexus.microservices.auth.api.authorization.`private`.ResolveAccessPrincipalPrivateAPIMessage
 import riichinexus.microservices.player.api.`private`.ResolvePlayerPrivateAPIMessage
 
 import java.time.{Duration, Instant}
@@ -9,11 +10,11 @@ import java.util.NoSuchElementException
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.system.errors.OptimisticConcurrencyException
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
-import riichinexus.microservices.club.api.`private`.ResolveClubReadModelsPrivateAPIMessage
-import riichinexus.microservices.club.objects.`private`.ClubPrivateView
+import riichinexus.microservices.player.objects.PlayerId
+import riichinexus.microservices.club.objects.profile.ClubId
+import riichinexus.microservices.auth.objects.authorization.`private`.AccessPrincipalPrivateView
+import riichinexus.microservices.club.api.audit.`private`.ResolveClubReadModelsPrivateAPIMessage
+import riichinexus.microservices.club.objects.profile.`private`.ClubPrivateView
 import riichinexus.microservices.player.objects.PlayerStatus
 import riichinexus.microservices.opsanalytics.domain.functions.AdvancedStatsBoardFunctions
 import riichinexus.microservices.opsanalytics.domain.functions.AdvancedStatsRecomputeTaskFunctions
@@ -21,7 +22,8 @@ import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.opsanalytics.objects.{AdvancedStatsBoard, AdvancedStatsRecomputeTask, DashboardOwner}
 import riichinexus.microservices.opsanalytics.tables.advancedstatsboard.AdvancedStatsBoardTable
 import riichinexus.microservices.opsanalytics.tables.advancedstatsrecomputetask.AdvancedStatsRecomputeTaskTable
-import riichinexus.microservices.tournament.api.`private`.{LoadPlayerMatchRecordsForOpsAnalyticsPrivateAPIMessage, LoadPlayerPaifusForOpsAnalyticsPrivateAPIMessage}
+import riichinexus.microservices.tournament.api.matchrecord.`private`.LoadPlayerMatchRecordsForOpsAnalyticsPrivateAPIMessage
+import riichinexus.microservices.tournament.api.paifu.`private`.LoadPlayerPaifusForOpsAnalyticsPrivateAPIMessage
 /** 处理高级统计重算任务队列。 */
 final case class OpsAnalyticsProcessAdvancedStatsAPIMessage(
     operatorId: PlayerId,
@@ -30,18 +32,13 @@ final case class OpsAnalyticsProcessAdvancedStatsAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[Vector[AdvancedStatsRecomputeTask]] =
     for
-      command <- buildCommand(context)
-      _ <- RequirePermissionPrivateAPIMessage(command.operator, Permission.ManagePlatformOperations).plan(context)
-      pendingTasks <- loadPendingTasks(context, command)
-      processedTasks <- processTasks(context, pendingTasks, command)
-    yield processedTasks
-
-  private def buildCommand(context: ApiPlanContext): IO[ProcessAdvancedStatsCommand] =
-    for
       _ <- IO.delay(validateLimit())
       operator <- ResolveAccessPrincipalPrivateAPIMessage(operatorId).plan(context)
       processedAt <- IO.realTimeInstant
-    yield ProcessAdvancedStatsCommand(operator, limit, processedAt)
+      _ <- RequirePermissionPrivateAPIMessage(operator, Permission.ManagePlatformOperations).plan(context)
+      pendingTasks <- loadPendingTasks(context, limit, processedAt)
+      processedTasks <- processTasks(context, pendingTasks, processedAt)
+    yield processedTasks
 
   private def validateLimit(): Unit =
     if limit <= 0 then throw IllegalArgumentException("Advanced stats task processing limit must be positive")
@@ -51,55 +48,56 @@ final case class OpsAnalyticsProcessAdvancedStatsAPIMessage(
 
   private def loadPendingTasks(
       context: ApiPlanContext,
-      command: ProcessAdvancedStatsCommand
+      limit: Int,
+      processedAt: Instant
   ): IO[Vector[AdvancedStatsRecomputeTask]] =
-    IO.blocking(AdvancedStatsRecomputeTaskTable.findPending(context.connection, command.limit, command.processedAt))
+    IO.blocking(AdvancedStatsRecomputeTaskTable.findPending(context.connection, limit, processedAt))
 
   private def processTasks(
       context: ApiPlanContext,
       pendingTasks: Vector[AdvancedStatsRecomputeTask],
-      command: ProcessAdvancedStatsCommand
+      processedAt: Instant
   ): IO[Vector[AdvancedStatsRecomputeTask]] =
     pendingTasks.foldLeft(IO.pure(Vector.empty[AdvancedStatsRecomputeTask])) { (previous, task) =>
-      previous.flatMap(tasks => processTask(context, task, command).map(_.fold(tasks)(tasks :+ _)))
+      previous.flatMap(tasks => processTask(context, task, processedAt).map(_.fold(tasks)(tasks :+ _)))
     }
 
   private def processTask(
       context: ApiPlanContext,
       task: AdvancedStatsRecomputeTask,
-      command: ProcessAdvancedStatsCommand
+      processedAt: Instant
   ): IO[Option[AdvancedStatsRecomputeTask]] =
     for
-      claimedTask <- claimTask(context, task, command)
+      claimedTask <- claimTask(context, task, processedAt)
       processedTask <- claimedTask match
-        case Some(processing) => processClaimedTask(context, processing, command).map(Some(_))
+        case Some(processing) => processClaimedTask(context, processing, processedAt).map(Some(_))
         case None             => IO.pure(None)
     yield processedTask
 
   private def processClaimedTask(
       context: ApiPlanContext,
       processing: AdvancedStatsRecomputeTask,
-      command: ProcessAdvancedStatsCommand
+      processedAt: Instant
   ): IO[AdvancedStatsRecomputeTask] =
-    processMarkedTask(context, processing, command).attempt.flatMap {
+    processMarkedTask(context, processing, processedAt).attempt.flatMap {
       case Right(completed) => IO.pure(completed)
       case Left(_: OptimisticConcurrencyException) =>
         loadLatestTask(context, processing)
       case Left(error) =>
-        markTaskFailed(context, processing, command, error)
+        markTaskFailed(context, processing, processedAt, error)
     }
 
   private def claimTask(
       context: ApiPlanContext,
       task: AdvancedStatsRecomputeTask,
-      command: ProcessAdvancedStatsCommand
+      processedAt: Instant
   ): IO[Option[AdvancedStatsRecomputeTask]] =
     IO.blocking {
       try
         Some(
           AdvancedStatsRecomputeTaskTable.save(
             context.connection,
-            AdvancedStatsRecomputeTaskFunctions.markProcessing(task, command.processedAt)
+            AdvancedStatsRecomputeTaskFunctions.markProcessing(task, processedAt)
           )
         )
       catch
@@ -115,24 +113,24 @@ final case class OpsAnalyticsProcessAdvancedStatsAPIMessage(
   private def markTaskFailed(
       context: ApiPlanContext,
       processing: AdvancedStatsRecomputeTask,
-      command: ProcessAdvancedStatsCommand,
+      processedAt: Instant,
       error: Throwable
   ): IO[AdvancedStatsRecomputeTask] =
     val errorMessage = Option(error.getMessage).getOrElse(error.getClass.getSimpleName)
     IO.blocking {
       if processing.attempts >= maxAttempts then
-        AdvancedStatsRecomputeTaskTable.save(
-          context.connection,
-          AdvancedStatsRecomputeTaskFunctions.markDeadLetter(processing, errorMessage, command.processedAt)
-        )
+          AdvancedStatsRecomputeTaskTable.save(
+            context.connection,
+            AdvancedStatsRecomputeTaskFunctions.markDeadLetter(processing, errorMessage, processedAt)
+          )
       else
-        val retryAt = command.processedAt.plus(retryDelay)
+        val retryAt = processedAt.plus(retryDelay)
         AdvancedStatsRecomputeTaskTable.save(
           context.connection,
           AdvancedStatsRecomputeTaskFunctions.markRetryScheduled(
             processing,
             errorMessage,
-            command.processedAt,
+            processedAt,
             retryAt
           )
         )
@@ -141,12 +139,12 @@ final case class OpsAnalyticsProcessAdvancedStatsAPIMessage(
   private def processMarkedTask(
       context: ApiPlanContext,
       processing: AdvancedStatsRecomputeTask,
-      command: ProcessAdvancedStatsCommand
+      processedAt: Instant
   ): IO[AdvancedStatsRecomputeTask] =
     for
-      board <- rebuildBoardForOwner(context, processing.owner, command.processedAt)
+      board <- rebuildBoardForOwner(context, processing.owner, processedAt)
       _ <- saveBoard(context, board)
-      completed <- markTaskCompleted(context, processing, command)
+      completed <- markTaskCompleted(context, processing, processedAt)
     yield completed
 
   private def rebuildBoardForOwner(
@@ -174,13 +172,13 @@ final case class OpsAnalyticsProcessAdvancedStatsAPIMessage(
   private def markTaskCompleted(
       context: ApiPlanContext,
       processing: AdvancedStatsRecomputeTask,
-      command: ProcessAdvancedStatsCommand
+      processedAt: Instant
   ): IO[AdvancedStatsRecomputeTask] =
     IO.blocking {
       try
-        AdvancedStatsRecomputeTaskTable.save(
-          context.connection,
-          AdvancedStatsRecomputeTaskFunctions.markCompleted(processing, command.processedAt)
+          AdvancedStatsRecomputeTaskTable.save(
+            context.connection,
+          AdvancedStatsRecomputeTaskFunctions.markCompleted(processing, processedAt)
         )
       catch
         case _: OptimisticConcurrencyException =>
@@ -234,10 +232,3 @@ final case class OpsAnalyticsProcessAdvancedStatsAPIMessage(
 
   private def loadBoardVersion(context: ApiPlanContext, owner: DashboardOwner): IO[Int] =
     IO.blocking(AdvancedStatsBoardTable.findByOwner(context.connection, owner).map(_.version).getOrElse(0))
-
-  /** 处理高级统计重算队列时使用的批处理命令。 */
-  private final case class ProcessAdvancedStatsCommand(
-      operator: AccessPrincipalPrivateView,
-      limit: Int,
-      processedAt: Instant
-  )

@@ -4,11 +4,11 @@ import riichinexus.microservices.tournament.domain.stage.model.TournamentStage
 import riichinexus.microservices.tournament.domain.competition.model.Tournament
 import riichinexus.microservices.tournament.domain.stage.functions.TournamentStageFunctions
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.player.objects.PlayerId
+import riichinexus.microservices.club.objects.profile.ClubId
 import riichinexus.microservices.tournament.objects.identity.TournamentStageId
 import riichinexus.microservices.tournament.objects.competition.TournamentWhitelistEntry
-import riichinexus.microservices.tournament.objects.stage.StageStatus
+import riichinexus.microservices.tournament.objects.stage.lifecycle.StageStatus
 import riichinexus.microservices.tournament.objects.competition.{TournamentParticipantKind, TournamentStatus}
 
 /** TournamentFunctions 提供赛事相关的领域计算、校验和转换函数。 */

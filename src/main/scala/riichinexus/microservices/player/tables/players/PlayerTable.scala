@@ -1,5 +1,7 @@
 package riichinexus.microservices.player.tables.players
 
+import riichinexus.system.objects.`private`.AggregateType
+
 import java.sql.{Connection, ResultSet, SQLException, Types}
 
 import scala.annotation.tailrec
@@ -7,12 +9,12 @@ import scala.util.Using
 
 import org.postgresql.util.PSQLException
 import riichinexus.system.errors.OptimisticConcurrencyException
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.player.objects.PlayerId
+import riichinexus.microservices.player.objects.PlayerStatus
+import riichinexus.microservices.club.objects.profile.ClubId
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.domain.functions.PlayerClubBindingFunctions
-import riichinexus.microservices.player.objects.apiTypes.PlayerListQuery
 import upickle.default.{read, write}
 
 object PlayerTable:
@@ -51,7 +53,7 @@ object PlayerTable:
       }
       if rowsUpdated == 0 then
         throw OptimisticConcurrencyException(
-          aggregateType = "player",
+          aggregateType = AggregateType.Player,
           aggregateId = persisted.id.value,
           expectedVersion = candidate.version,
           actualVersion = findById(connection, persisted.id).map(_.version)
@@ -112,19 +114,23 @@ object PlayerTable:
       |order by nickname
       |""".stripMargin
 
-  private[player] def list(connection: Connection, query: PlayerListQuery): Vector[Player] =
+  private[player] def list(
+      connection: Connection,
+      clubId: Option[ClubId],
+      status: Option[PlayerStatus]
+  ): Vector[Player] =
     Using.resource(connection.prepareStatement(listSql)) { statement =>
-      query.clubId match
-        case Some(clubId) =>
-          statement.setString(1, clubId.value)
-          statement.setString(2, clubId.value)
+      clubId match
+        case Some(actualClubId) =>
+          statement.setString(1, actualClubId.value)
+          statement.setString(2, actualClubId.value)
         case None =>
           statement.setNull(1, Types.VARCHAR)
           statement.setNull(2, Types.VARCHAR)
       Using.resource(statement.executeQuery())(readPlayers)
     }
-      .filter(player => query.clubId.forall(PlayerClubBindingFunctions.boundClubIds(player).contains))
-      .filter(player => query.status.forall(_ == player.status))
+      .filter(player => clubId.forall(PlayerClubBindingFunctions.boundClubIds(player).contains))
+      .filter(player => status.forall(_ == player.status))
       .sortBy(player => (player.nickname, player.id.value))
 
   private val findByIdsSql: String =

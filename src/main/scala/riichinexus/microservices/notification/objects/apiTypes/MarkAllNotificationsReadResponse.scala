@@ -1,6 +1,6 @@
 package riichinexus.microservices.notification.objects.apiTypes
 
-import upickle.default.ReadWriter
+import upickle.default.{ReadWriter, macroRW}
 
 /** 批量标记通知已读后的操作结果。
   *
@@ -8,4 +8,7 @@ import upickle.default.ReadWriter
   */
 final case class MarkAllNotificationsReadResponse(
     updatedCount: Int
-) derives ReadWriter
+)
+
+object MarkAllNotificationsReadResponse:
+  given ReadWriter[MarkAllNotificationsReadResponse] = macroRW

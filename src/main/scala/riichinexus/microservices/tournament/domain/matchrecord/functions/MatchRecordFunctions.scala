@@ -3,7 +3,7 @@ package riichinexus.microservices.tournament.domain.matchrecord.functions
 
 import java.time.Instant
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 import riichinexus.microservices.tournament.domain.identity.functions.TournamentIdGenerator
 import riichinexus.microservices.tournament.domain.stage.model.Table
 import riichinexus.microservices.tournament.domain.matchrecord.model.{MatchRecord, MatchRecordSeatResult}

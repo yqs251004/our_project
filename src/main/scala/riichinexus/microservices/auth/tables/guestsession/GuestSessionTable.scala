@@ -1,14 +1,16 @@
 package riichinexus.microservices.auth.tables.guestsession
 
+import riichinexus.system.objects.`private`.AggregateType
+
 import java.sql.{Connection, ResultSet, Timestamp}
 
 import scala.annotation.tailrec
 import scala.util.Using
 
 import riichinexus.system.errors.OptimisticConcurrencyException
-import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
-import riichinexus.microservices.auth.domain.functions.GuestAccessSessionFunctions
-import riichinexus.microservices.auth.domain.model.GuestAccessSession
+import riichinexus.microservices.auth.objects.session.GuestSessionId
+import riichinexus.microservices.auth.domain.session.functions.GuestAccessSessionFunctions
+import riichinexus.microservices.auth.domain.session.model.GuestAccessSession
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.{read, write}
 
@@ -39,7 +41,7 @@ object GuestSessionTable:
     }
     if rowsUpdated == 0 then
       throw OptimisticConcurrencyException(
-        aggregateType = "guest-session",
+        aggregateType = AggregateType.GuestSession,
         aggregateId = persisted.id.value,
         expectedVersion = session.version,
         actualVersion = findById(connection, persisted.id).map(_.version)

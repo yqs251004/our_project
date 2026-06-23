@@ -1,7 +1,7 @@
 package riichinexus.microservices.opsanalytics.objects
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.player.objects.PlayerId
+import riichinexus.microservices.club.objects.profile.ClubId
 
 /** 运营分析看板所属的业务主体。
   *

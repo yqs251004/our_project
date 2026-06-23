@@ -6,10 +6,10 @@ import cats.effect.IO
 
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.tournament.appeal.domain.functions.AppealViewFunctions
-import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
+import riichinexus.microservices.tournament.appeal.objects.AppealTicketId
 import riichinexus.microservices.tournament.appeal.domain.model.AppealTicket
 
-import riichinexus.microservices.tournament.appeal.objects.apiTypes.AppealTicketView
+import riichinexus.microservices.tournament.appeal.objects.AppealTicketView
 import riichinexus.microservices.tournament.appeal.tables.appealticket.AppealTicketTable
 /** 读取单个申诉工单详情。 */
 final case class AppealGetAPIMessage(appealId: String) extends APIMessage[AppealTicketView]:

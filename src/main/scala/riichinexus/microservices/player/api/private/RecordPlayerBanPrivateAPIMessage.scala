@@ -1,9 +1,10 @@
 package riichinexus.microservices.player.api.`private`
 
 import cats.effect.IO
+import riichinexus.microservices.player.tables.players.PlayerTable
 import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.domain.functions.PlayerStatusFunctions
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.system.json.JsonCodecs.given
 /** 供平台管理流程校验后记录玩家封禁。 */
@@ -15,9 +16,9 @@ final case class RecordPlayerBanPrivateAPIMessage(
   override def plan(context: ApiPlanContext): IO[Option[Player]] =
     require(reason.trim.nonEmpty, "Ban reason cannot be empty")
 
-    PlayerDomainRecord.find(context, playerId).flatMap {
+    IO.blocking(PlayerTable.findById(context.connection, playerId)).flatMap {
       case Some(player) =>
-        PlayerDomainRecord.save(context, PlayerStatusFunctions.ban(player, reason)).map(Some(_))
+        IO.blocking(PlayerTable.save(context.connection, PlayerStatusFunctions.ban(player, reason))).map(Some(_))
       case None =>
         IO.pure(None)
     }

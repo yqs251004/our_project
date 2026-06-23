@@ -6,9 +6,10 @@ import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.tournament.appeal.domain.functions.AppealViewFunctions
 import riichinexus.microservices.tournament.appeal.domain.model.AppealTicket
 
-import riichinexus.microservices.tournament.appeal.objects.apiTypes.{AppealListQuery, AppealTicketView}
+import riichinexus.microservices.tournament.appeal.objects.apiTypes.{AppealListQuery}
+import riichinexus.microservices.tournament.appeal.objects.{AppealTicketView}
 import riichinexus.microservices.tournament.appeal.tables.appealticket.AppealTicketTable
-import riichinexus.system.objects.PagedResponse
+import riichinexus.system.objects.{PagedResponse, QueryFilterField}
 /** 按筛选条件分页列出申诉工单。 */
 final case class AppealListAPIMessage(
     query: AppealListQuery = AppealListQuery()
@@ -17,58 +18,37 @@ final case class AppealListAPIMessage(
   override def plan(context: ApiPlanContext): IO[PagedResponse[AppealTicketView]] =
     for
       now <- IO.realTimeInstant
-      resolved <- IO.delay(resolveQuery(now))
-      appeals <- IO.blocking(listAppeals(context, resolved))
-    yield page(appeals.map(AppealViewFunctions.ticketView), resolved)
-
-  private def resolveQuery(now: java.time.Instant): ResolvedAppealListQuery =
-    ResolvedAppealListQuery(
-      query = query,
-      asOf = query.asOf.getOrElse(now),
       appliedFilters = filters(
-        query.status.map(value => "status" -> value.toString),
-        query.priority.map(value => "priority" -> value.toString),
-        query.tournamentId.map(value => "tournamentId" -> value.value),
-        query.stageId.map(value => "stageId" -> value.value),
-        query.tableId.map(value => "tableId" -> value.value),
-        query.openedBy.map(value => "openedBy" -> value.value),
-        query.assigneeId.map(value => "assigneeId" -> value.value),
-        Option.when(query.overdueOnly)("overdueOnly" -> query.overdueOnly.toString),
-        query.dueBefore.map(value => "dueBefore" -> value.toString),
-        query.dueAfter.map(value => "dueAfter" -> value.toString),
-        query.asOf.map(value => "asOf" -> value.toString)
+        query.status.map(value => QueryFilterField.toString(QueryFilterField.Status) -> value.toString),
+        query.priority.map(value => QueryFilterField.toString(QueryFilterField.Priority) -> value.toString),
+        query.tournamentId.map(value => QueryFilterField.toString(QueryFilterField.TournamentId) -> value.value),
+        query.stageId.map(value => QueryFilterField.toString(QueryFilterField.StageId) -> value.value),
+        query.tableId.map(value => QueryFilterField.toString(QueryFilterField.TableId) -> value.value),
+        query.openedBy.map(value => QueryFilterField.toString(QueryFilterField.OpenedBy) -> value.value),
+        query.assigneeId.map(value => QueryFilterField.toString(QueryFilterField.AssigneeId) -> value.value),
+        Option.when(query.overdueOnly)(QueryFilterField.toString(QueryFilterField.OverdueOnly) -> query.overdueOnly.toString),
+        query.dueBefore.map(value => QueryFilterField.toString(QueryFilterField.DueBefore) -> value.toString),
+        query.dueAfter.map(value => QueryFilterField.toString(QueryFilterField.DueAfter) -> value.toString),
+        query.asOf.map(value => QueryFilterField.toString(QueryFilterField.AsOf) -> value.toString)
       )
-    )
+      asOf = query.asOf.getOrElse(now)
+      appeals <- IO.blocking(listAppeals(context, asOf))
+      appealViews = appeals.map(AppealViewFunctions.ticketView)
+    yield PagedResponse.fromItems(appealViews, query.limit, query.offset, appliedFilters)(identity)
 
-  private def listAppeals(context: ApiPlanContext, resolved: ResolvedAppealListQuery): Vector[AppealTicket] =
+  private def listAppeals(context: ApiPlanContext, asOf: java.time.Instant): Vector[AppealTicket] =
     AppealTicketTable.findAll(context.connection)
-      .filter(ticket => resolved.query.status.forall(_ == ticket.status))
-      .filter(ticket => resolved.query.priority.forall(_ == ticket.priority))
-      .filter(ticket => resolved.query.tournamentId.forall(_ == ticket.tournamentId))
-      .filter(ticket => resolved.query.stageId.forall(_ == ticket.stageId))
-      .filter(ticket => resolved.query.tableId.forall(_ == ticket.tableId))
-      .filter(ticket => resolved.query.openedBy.forall(_ == ticket.openedBy))
-      .filter(ticket => resolved.query.assigneeId.forall(ticket.assigneeId.contains))
-      .filter(ticket => !resolved.query.overdueOnly || ticket.dueAt.exists(_.isBefore(resolved.asOf)))
-      .filter(ticket => resolved.query.dueBefore.forall(limit => ticket.dueAt.exists(dueAt => !dueAt.isAfter(limit))))
-      .filter(ticket => resolved.query.dueAfter.forall(limit => ticket.dueAt.exists(dueAt => !dueAt.isBefore(limit))))
+      .filter(ticket => query.status.forall(_ == ticket.status))
+      .filter(ticket => query.priority.forall(_ == ticket.priority))
+      .filter(ticket => query.tournamentId.forall(_ == ticket.tournamentId))
+      .filter(ticket => query.stageId.forall(_ == ticket.stageId))
+      .filter(ticket => query.tableId.forall(_ == ticket.tableId))
+      .filter(ticket => query.openedBy.forall(_ == ticket.openedBy))
+      .filter(ticket => query.assigneeId.forall(ticket.assigneeId.contains))
+      .filter(ticket => !query.overdueOnly || ticket.dueAt.exists(_.isBefore(asOf)))
+      .filter(ticket => query.dueBefore.forall(limit => ticket.dueAt.exists(dueAt => !dueAt.isAfter(limit))))
+      .filter(ticket => query.dueAfter.forall(limit => ticket.dueAt.exists(dueAt => !dueAt.isBefore(limit))))
       .sortBy(ticket => (ticket.updatedAt, ticket.id.value))
-
-  private def page(items: Vector[AppealTicketView], resolved: ResolvedAppealListQuery): PagedResponse[AppealTicketView] =
-    val resolvedLimit = resolved.query.limit.getOrElse(20)
-    val resolvedOffset = resolved.query.offset.getOrElse(0)
-    require(resolvedLimit > 0, "Input field limit must be positive")
-    require(resolvedOffset >= 0, "Input field offset must be non-negative")
-    val boundedLimit = math.min(resolvedLimit, 100)
-    val pageItems = items.slice(resolvedOffset, resolvedOffset + boundedLimit)
-    PagedResponse(pageItems, items.size, boundedLimit, resolvedOffset, resolvedOffset + pageItems.size < items.size, resolved.appliedFilters)
 
   private def filters(values: Option[(String, String)]*): Map[String, String] =
     values.flatten.toMap
-
-  /** 申诉列表接口解析后的查询条件、时间基准和过滤摘要。 */
-  private final case class ResolvedAppealListQuery(
-      query: AppealListQuery,
-      asOf: java.time.Instant,
-      appliedFilters: Map[String, String]
-  )

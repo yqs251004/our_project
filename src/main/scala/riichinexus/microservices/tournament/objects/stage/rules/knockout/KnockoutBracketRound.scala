@@ -1,6 +1,6 @@
 package riichinexus.microservices.tournament.objects.stage.rules.knockout
 
-import upickle.default.ReadWriter
+import upickle.default.{ReadWriter, macroRW}
 
 /** 淘汰赛 bracket 中同一轮次的对局集合。
   *
@@ -10,4 +10,7 @@ final case class KnockoutBracketRound(
     roundNumber: Int,
     label: String,
     matches: Vector[KnockoutBracketMatch]
-) derives ReadWriter
+)
+
+object KnockoutBracketRound:
+  given ReadWriter[KnockoutBracketRound] = macroRW

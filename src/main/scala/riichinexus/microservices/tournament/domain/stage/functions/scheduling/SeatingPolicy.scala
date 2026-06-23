@@ -1,12 +1,12 @@
 package riichinexus.microservices.tournament.domain.stage.functions.scheduling
 
 import riichinexus.microservices.tournament.domain.matchrecord.functions.MatchRecordFunctions
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.tournament.domain.stage.model.{StageTablePlan, TournamentStage}
+import riichinexus.microservices.player.objects.PlayerId
+import riichinexus.microservices.club.objects.profile.ClubId
+import riichinexus.microservices.tournament.domain.stage.model.{SeatingGroupKey, SeatingSearchResult, StageTablePlan, TournamentStage}
 import riichinexus.microservices.tournament.domain.matchrecord.model.MatchRecord
 import riichinexus.microservices.tournament.objects.stage.table.TableSeat
-import riichinexus.microservices.club.objects.relationmanagement.ClubRelationKind
+import riichinexus.microservices.club.objects.relation.ClubRelationKind
 import riichinexus.microservices.player.objects.`private`.PlayerPrivateView
 import riichinexus.microservices.tournament.objects.stage.table.SeatWind
 import riichinexus.microservices.tournament.objects.stage.rules.swiss.SwissPairingMethod
@@ -45,8 +45,6 @@ private[tournament] object SeatingPolicy:
       case SwissPairingMethod.BalancedElo =>
         buildOptimalGroups(sortedPlayers, opponentCounts, representedClubByPlayer, clubRelations)
       case SwissPairingMethod.Snake       => buildSnakeGroups(sortedPlayers)
-      case method =>
-        throw IllegalArgumentException(s"Unsupported swiss pairing method: $method")
 
     groupedPlayers.zipWithIndex
       .map { case (group, index) =>
@@ -100,9 +98,6 @@ private[tournament] object SeatingPolicy:
       representedClubByPlayer: Map[PlayerId, ClubId],
       clubRelations: Map[(ClubId, ClubId), ClubRelationKind]
   ): Vector[Vector[PlayerPrivateView]] =
-    /** 穷举排桌搜索中的当前最优分数与分组方案。 */
-    final case class SearchResult(score: Double, grouping: Vector[Vector[PlayerPrivateView]])
-
     val branchLimit =
       if players.size <= 8 then 12
       else if players.size <= 16 then 10
@@ -112,10 +107,10 @@ private[tournament] object SeatingPolicy:
         remaining: Vector[PlayerPrivateView],
         current: Vector[Vector[PlayerPrivateView]],
         currentScore: Double,
-        best: SearchResult
-    ): SearchResult =
+        best: SeatingSearchResult
+    ): SeatingSearchResult =
       if remaining.isEmpty then
-        if currentScore < best.score then SearchResult(currentScore, current) else best
+        if currentScore < best.score then SeatingSearchResult(currentScore, current) else best
       else
         val anchor = selectAnchor(remaining, opponentCounts, representedClubByPlayer, clubRelations)
         val rest = remaining.filterNot(_.id == anchor.id)
@@ -137,7 +132,7 @@ private[tournament] object SeatingPolicy:
       remaining = players,
       current = Vector.empty,
       currentScore = 0.0,
-      best = SearchResult(Double.MaxValue, Vector.empty)
+      best = SeatingSearchResult(Double.MaxValue, Vector.empty)
     )
 
     if best.grouping.nonEmpty then best.grouping
@@ -154,7 +149,7 @@ private[tournament] object SeatingPolicy:
     val buckets = players
       .groupBy(player => primaryClubKey(player, representedClubByPlayer))
       .toVector
-      .sortBy { case (clubKey, members) => (-members.size, clubKey) }
+      .sortBy { case (clubKey, members) => (-members.size, SeatingGroupKey.sortKey(clubKey)) }
 
     buckets.foreach { case (_, members) =>
       members.sortBy(player => (-player.elo, player.nickname)).foreach { player =>
@@ -183,10 +178,10 @@ private[tournament] object SeatingPolicy:
   private def primaryClubKey(
       player: PlayerPrivateView,
       representedClubByPlayer: Map[PlayerId, ClubId]
-  ): String =
+  ): SeatingGroupKey =
     representedClubs(player, representedClubByPlayer).headOption
-      .map(clubId => s"club:${clubId.value}")
-      .getOrElse(s"player:${player.id.value}")
+      .map(SeatingGroupKey.Club.apply)
+      .getOrElse(SeatingGroupKey.Player(player.id))
 
   private def selectAnchor(
       players: Vector[PlayerPrivateView],

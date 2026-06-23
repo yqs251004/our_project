@@ -6,7 +6,7 @@ import scala.annotation.tailrec
 import scala.util.Using
 import scala.util.control.NonFatal
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 import riichinexus.microservices.tournament.objects.paifu.PaifuId
 import riichinexus.microservices.tournament.objects.stage.table.TableId
 import riichinexus.microservices.tournament.domain.paifu.functions.PaifuFunctions

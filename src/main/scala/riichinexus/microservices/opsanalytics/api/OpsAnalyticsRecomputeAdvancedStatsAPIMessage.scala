@@ -1,18 +1,19 @@
 package riichinexus.microservices.opsanalytics.api
-import riichinexus.microservices.auth.objects.Permission
-import riichinexus.microservices.auth.api.`private`.{RequirePermissionPrivateAPIMessage, ResolveAccessPrincipalPrivateAPIMessage}
+import riichinexus.microservices.auth.objects.authorization.Permission
+import riichinexus.microservices.auth.api.authorization.`private`.RequirePermissionPrivateAPIMessage
+import riichinexus.microservices.auth.api.authorization.`private`.ResolveAccessPrincipalPrivateAPIMessage
 import riichinexus.microservices.player.api.`private`.ListAllPlayersPrivateAPIMessage
 
 import java.time.Instant
 
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.player.objects.PlayerId
+import riichinexus.microservices.club.objects.profile.ClubId
 import riichinexus.microservices.tournament.objects.matchrecord.MatchRecordId
-import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
+import riichinexus.microservices.auth.objects.authorization.`private`.AccessPrincipalPrivateView
 
-import riichinexus.microservices.club.api.`private`.ListClubsPrivateAPIMessage
+import riichinexus.microservices.club.api.profile.`private`.ListClubsPrivateAPIMessage
 
 
 import riichinexus.microservices.opsanalytics.domain.functions.{AdvancedStatsBoardFunctions, AdvancedStatsRecomputeTaskFunctions}
@@ -27,35 +28,18 @@ final case class OpsAnalyticsRecomputeAdvancedStatsAPIMessage(
 
   override def plan(context: ApiPlanContext): IO[Vector[AdvancedStatsRecomputeTask]] =
     for
-      command <- buildCommand(context)
-      _ <- RequirePermissionPrivateAPIMessage(command.operator, Permission.ManagePlatformOperations).plan(context)
-      tasks <- enqueueRecompute(context, command)
-    yield tasks
-
-  private def buildCommand(context: ApiPlanContext): IO[RecomputeAdvancedStatsCommand] =
-    for
       operator <- ResolveAccessPrincipalPrivateAPIMessage(request.operatorId).plan(context)
       requestedAt <- IO.realTimeInstant
-      command <- IO.delay(resolveCommand(operator, requestedAt))
-    yield command
-
-  private def resolveCommand(
-      operator: AccessPrincipalPrivateView,
-      requestedAt: Instant
-  ): RecomputeAdvancedStatsCommand =
-    validateRequest()
-    RecomputeAdvancedStatsCommand(
-      operator = operator,
-      targetOwner = targetOwner,
-      mode = request.mode,
-      targetedReason = request.reason.getOrElse("manual-targeted-recompute"),
-      fullReason = request.reason.getOrElse("manual-full-recompute"),
+      _ <- IO.delay(validateRequest())
+      targetOwner = resolveTargetOwner
+      targetedReason = request.reason.getOrElse("manual-targeted-recompute")
+      fullReason = request.reason.getOrElse("manual-full-recompute")
       backfillReason = request.reason.getOrElse(
         s"manual-${AdvancedStatsBackfillMode.toString(request.mode).toLowerCase}-backfill"
-      ),
-      limit = request.limit,
-      requestedAt = requestedAt
-    )
+      )
+      _ <- RequirePermissionPrivateAPIMessage(operator, Permission.ManagePlatformOperations).plan(context)
+      tasks <- enqueueRecompute(context, targetOwner, request.mode, targetedReason, fullReason, backfillReason, request.limit, requestedAt)
+    yield tasks
 
   private def validateRequest(): Unit =
     if request.ownerType.isDefined != request.ownerId.isDefined then
@@ -63,7 +47,7 @@ final case class OpsAnalyticsRecomputeAdvancedStatsAPIMessage(
     if request.limit <= 0 then
       throw IllegalArgumentException("Advanced stats recompute limit must be positive")
 
-  private def targetOwner: Option[DashboardOwner] =
+  private def resolveTargetOwner: Option[DashboardOwner] =
     (request.ownerType, request.ownerId) match
       case (Some("player"), Some(id)) => Some(DashboardOwner.Player(PlayerId(id)))
       case (Some("club"), Some(id))   => Some(DashboardOwner.Club(ClubId(id)))
@@ -72,26 +56,32 @@ final case class OpsAnalyticsRecomputeAdvancedStatsAPIMessage(
 
   private def enqueueRecompute(
       context: ApiPlanContext,
-      command: RecomputeAdvancedStatsCommand
+      targetOwner: Option[DashboardOwner],
+      mode: AdvancedStatsBackfillMode,
+      targetedReason: String,
+      fullReason: String,
+      backfillReason: String,
+      limit: Int,
+      requestedAt: Instant
   ): IO[Vector[AdvancedStatsRecomputeTask]] =
-    command.targetOwner match
+    targetOwner match
       case Some(owner) =>
-        enqueueOwners(context, Vector(owner), command.targetedReason, command.requestedAt)
+        enqueueOwners(context, Vector(owner), targetedReason, requestedAt)
       case None =>
-        command.mode match
+        mode match
           case AdvancedStatsBackfillMode.Full =>
             enqueueFullRecompute(
               context,
-              requestedAt = command.requestedAt,
-              reason = command.fullReason
+              requestedAt = requestedAt,
+              reason = fullReason
             )
           case selectedMode =>
             enqueueBackfill(
               context,
               mode = selectedMode,
-              requestedAt = command.requestedAt,
-              reason = command.backfillReason,
-              limit = command.limit
+              requestedAt = requestedAt,
+              reason = backfillReason,
+              limit = limit
             )
 
   private def enqueueFullRecompute(
@@ -173,15 +163,3 @@ final case class OpsAnalyticsRecomputeAdvancedStatsAPIMessage(
       case AdvancedStatsBackfillMode.Missing => board.isEmpty
       case AdvancedStatsBackfillMode.Stale =>
         board.exists(_.calculatorVersion < AdvancedStatsBoardFunctions.currentCalculatorVersion)
-
-  /** 创建高级统计重算任务时使用的归一化命令。 */
-  private final case class RecomputeAdvancedStatsCommand(
-      operator: AccessPrincipalPrivateView,
-      targetOwner: Option[DashboardOwner],
-      mode: AdvancedStatsBackfillMode,
-      targetedReason: String,
-      fullReason: String,
-      backfillReason: String,
-      limit: Int,
-      requestedAt: Instant
-  )

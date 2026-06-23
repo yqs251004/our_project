@@ -2,7 +2,8 @@ package riichinexus.microservices.audit.api.`private`
 
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.microservices.audit.objects.`private`.{AuditEventDraft, AuditEventPrivateView}
+import riichinexus.microservices.audit.objects.`private`.AuditEventDraft
+import riichinexus.microservices.audit.objects.`private`.AuditEventPrivateView
 
 import riichinexus.system.json.JsonCodecs.given
 /** 供后端服务批量记录审计事件。 */

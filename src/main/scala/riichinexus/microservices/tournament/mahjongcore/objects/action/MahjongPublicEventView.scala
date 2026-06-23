@@ -1,6 +1,6 @@
 package riichinexus.microservices.tournament.mahjongcore.objects.action
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 import riichinexus.microservices.tournament.objects.paifu.{PaifuActionType, PaifuTile}
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.{ReadWriter, macroRW}

@@ -2,15 +2,16 @@ package riichinexus.microservices.audit.api.`private`
 
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.microservices.audit.domain.auditevent.AuditEvent
+import riichinexus.microservices.audit.domain.model.AuditEvent
 import riichinexus.microservices.audit.objects.`private`.AuditEventType
 import riichinexus.microservices.audit.domain.functions.AuditEventPrivateViewFunctions
 import riichinexus.microservices.audit.objects.`private`.AuditEventPrivateView
 import riichinexus.microservices.audit.tables.auditevent.AuditEventTable
+import riichinexus.system.objects.`private`.AggregateType
 import riichinexus.system.json.JsonCodecs.given
 /** 供后端服务读取审计事件列表。 */
 final case class ListAuditEventsPrivateAPIMessage(
-    aggregateType: Option[String] = None,
+    aggregateType: Option[AggregateType] = None,
     aggregateId: Option[String] = None,
     eventType: Option[AuditEventType] = None,
     oldestFirst: Boolean = false

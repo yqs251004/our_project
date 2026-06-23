@@ -6,8 +6,8 @@ import scala.annotation.tailrec
 import scala.util.Using
 import scala.util.control.NonFatal
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.player.objects.PlayerId
+import riichinexus.microservices.club.objects.profile.ClubId
 import riichinexus.microservices.tournament.objects.matchrecord.MatchRecordId
 import riichinexus.microservices.tournament.objects.stage.table.TableId
 import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}

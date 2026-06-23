@@ -5,7 +5,7 @@ import riichinexus.microservices.tournament.domain.stage.model.{StageLineupSubmi
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.MahjongRuleset
 import riichinexus.microservices.tournament.objects.stage.rules.progression.AdvancementRule
 import riichinexus.microservices.tournament.objects.stage.rules.knockout.KnockoutRuleConfig
-import riichinexus.microservices.tournament.objects.stage.StageStatus
+import riichinexus.microservices.tournament.objects.stage.lifecycle.StageStatus
 import riichinexus.microservices.tournament.objects.stage.rules.swiss.SwissRuleConfig
 
 /** TournamentStageFunctions 提供赛事阶段相关的领域计算、校验和转换函数。 */

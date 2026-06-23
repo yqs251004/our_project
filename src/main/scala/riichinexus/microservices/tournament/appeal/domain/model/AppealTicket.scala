@@ -2,11 +2,11 @@ package riichinexus.microservices.tournament.appeal.domain.model
 
 import java.time.Instant
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 import riichinexus.microservices.tournament.objects.stage.table.TableId
 import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}
-import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
-import riichinexus.microservices.tournament.appeal.objects.{AppealDecisionLog, AppealPriority, AppealStatus}
+import riichinexus.microservices.tournament.appeal.objects.AppealTicketId
+import riichinexus.microservices.tournament.appeal.objects.{AppealDecisionLog, AppealDecisionLogAction, AppealPriority, AppealStatus}
 
 import riichinexus.system.json.JsonCodecs.given
 
@@ -45,10 +45,11 @@ final case class AppealTicket(
       assigneeId = assigneeId,
       logs =
         logs :+ AppealDecisionLog(
-          operatorId,
-          assigneeId.map(assignee => s"assigned:${assignee.value}").getOrElse("unassigned"),
-          at,
-          note
+          operatorId = operatorId,
+          action = assigneeId.fold(AppealDecisionLogAction.Unassigned)(_ => AppealDecisionLogAction.Assigned),
+          decidedAt = at,
+          targetPlayerId = assigneeId,
+          note = note
         ),
       updatedAt = at
     )
@@ -65,10 +66,12 @@ final case class AppealTicket(
       dueAt = dueAt,
       logs =
         logs :+ AppealDecisionLog(
-          operatorId,
-          s"triaged:${priority.toString.toLowerCase}",
-          at,
-          note.orElse(dueAt.map(value => s"dueAt=${value.toString}"))
+          operatorId = operatorId,
+          action = AppealDecisionLogAction.Triaged,
+          decidedAt = at,
+          priority = Some(priority),
+          dueAt = dueAt,
+          note = note
         ),
       updatedAt = at
     )
@@ -80,7 +83,12 @@ final case class AppealTicket(
     )
     copy(
       status = AppealStatus.UnderReview,
-      logs = logs :+ AppealDecisionLog(operatorId, "under-review", at, note),
+      logs = logs :+ AppealDecisionLog(
+        operatorId = operatorId,
+        action = AppealDecisionLogAction.UnderReview,
+        decidedAt = at,
+        note = note
+      ),
       updatedAt = at
     )
 
@@ -97,7 +105,13 @@ final case class AppealTicket(
     )
     copy(
       status = AppealStatus.Resolved,
-      logs = logs :+ AppealDecisionLog(operatorId, verdict, at, note),
+      logs = logs :+ AppealDecisionLog(
+        operatorId = operatorId,
+        action = AppealDecisionLogAction.Resolved,
+        decidedAt = at,
+        detail = Some(verdict),
+        note = note
+      ),
       updatedAt = at,
       resolution = Some(verdict)
     )
@@ -115,7 +129,13 @@ final case class AppealTicket(
     )
     copy(
       status = AppealStatus.Rejected,
-      logs = logs :+ AppealDecisionLog(operatorId, s"rejected:$verdict", at, note),
+      logs = logs :+ AppealDecisionLog(
+        operatorId = operatorId,
+        action = AppealDecisionLogAction.Rejected,
+        decidedAt = at,
+        detail = Some(verdict),
+        note = note
+      ),
       updatedAt = at,
       resolution = Some(verdict)
     )
@@ -133,7 +153,13 @@ final case class AppealTicket(
     )
     copy(
       status = AppealStatus.Escalated,
-      logs = logs :+ AppealDecisionLog(operatorId, s"escalated:$reason", at, note),
+      logs = logs :+ AppealDecisionLog(
+        operatorId = operatorId,
+        action = AppealDecisionLogAction.Escalated,
+        decidedAt = at,
+        detail = Some(reason),
+        note = note
+      ),
       updatedAt = at,
       resolution = Some(reason)
     )
@@ -151,7 +177,13 @@ final case class AppealTicket(
     )
     copy(
       status = AppealStatus.Open,
-      logs = logs :+ AppealDecisionLog(operatorId, s"reopened:$reason", at, note),
+      logs = logs :+ AppealDecisionLog(
+        operatorId = operatorId,
+        action = AppealDecisionLogAction.Reopened,
+        decidedAt = at,
+        detail = Some(reason),
+        note = note
+      ),
       reopenCount = reopenCount + 1,
       updatedAt = at,
       resolution = None

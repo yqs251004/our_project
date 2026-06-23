@@ -1,9 +1,9 @@
 package riichinexus.microservices.player.objects.`private`
 
-import riichinexus.microservices.auth.objects.`private`.RoleGrant
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.auth.objects.authorization.`private`.RoleGrant
+import riichinexus.microservices.club.objects.profile.ClubId
 import riichinexus.microservices.player.objects.{PlayerStatus, RankSnapshot}
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 
 /** 后端服务间共享的玩家完整读模型。
   *

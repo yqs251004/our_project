@@ -2,7 +2,8 @@ package riichinexus.microservices.notification.router
 
 import riichinexus.microservices.notification.api.{GetUnreadNotificationCountAPIMessage, ListNotificationsAPIMessage, MarkAllNotificationsReadAPIMessage, MarkNotificationReadAPIMessage}
 import riichinexus.microservices.notification.objects.Notification
-import riichinexus.microservices.notification.objects.apiTypes.{MarkAllNotificationsReadResponse, NotificationUnreadCountView}
+import riichinexus.microservices.notification.objects.apiTypes.{MarkAllNotificationsReadResponse}
+import riichinexus.microservices.notification.objects.{NotificationUnreadCountView}
 import riichinexus.system.api.RegisteredAPIMessage
 import riichinexus.system.json.JsonCodecs.given
 object NotificationAPIMessageRegistry:

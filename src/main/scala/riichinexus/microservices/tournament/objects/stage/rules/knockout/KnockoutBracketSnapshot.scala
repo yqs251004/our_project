@@ -2,10 +2,10 @@ package riichinexus.microservices.tournament.objects.stage.rules.knockout
 
 import java.time.Instant
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.ReadWriter
+import upickle.default.{ReadWriter, macroRW}
 
 /** 某个淘汰赛阶段当前签表的完整快照。
   *
@@ -19,4 +19,7 @@ final case class KnockoutBracketSnapshot(
     qualifiedPlayerIds: Vector[PlayerId],
     rounds: Vector[KnockoutBracketRound],
     summary: String
-) derives ReadWriter
+)
+
+object KnockoutBracketSnapshot:
+  given ReadWriter[KnockoutBracketSnapshot] = macroRW

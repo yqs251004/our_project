@@ -1,7 +1,8 @@
 package riichinexus.system.realtime.domain
 
-import riichinexus.microservices.audit.domain.auditevent.AuditEvent
-import riichinexus.system.realtime.objects.{RealtimeEvent, RealtimeEventType}
+import riichinexus.microservices.audit.domain.model.AuditEvent
+import riichinexus.system.objects.`private`.AggregateType
+import riichinexus.system.realtime.objects.{RealtimeEvent, RealtimeEventType, RealtimeSourceEventType}
 
 object AuditRealtimeMapper:
 
@@ -9,30 +10,29 @@ object AuditRealtimeMapper:
     RealtimeEvent(
       id = event.id.value,
       eventType = realtimeEventType(event),
-      aggregateType = event.aggregateType,
+      aggregateType = AggregateType.toString(event.aggregateType),
       aggregateId = event.aggregateId,
       occurredAt = event.occurredAt,
-      sourceEventType = event.eventType.toString,
+      sourceEventType = RealtimeSourceEventType.fromString(event.eventType.toString),
       actorId = event.actorId.map(_.value)
     )
 
   private def realtimeEventType(event: AuditEvent): RealtimeEventType =
-    val normalizedAggregateType = event.aggregateType.trim.toLowerCase
     val normalizedEventType = event.eventType.toString.toLowerCase
 
-    if normalizedAggregateType.contains("application") || normalizedEventType.contains("application") then
+    if event.aggregateType == AggregateType.ClubApplication || normalizedEventType.contains("application") then
       RealtimeEventType.ClubApplicationChanged
-    else if normalizedAggregateType.contains("member") || normalizedEventType.contains("member") then
+    else if normalizedEventType.contains("member") then
       RealtimeEventType.ClubMemberChanged
-    else if normalizedAggregateType.contains("club") then
+    else if event.aggregateType == AggregateType.Club then
       RealtimeEventType.ClubChanged
-    else if normalizedAggregateType.contains("appeal") then
+    else if event.aggregateType == AggregateType.Appeal || event.aggregateType == AggregateType.AppealTicket then
       RealtimeEventType.AppealChanged
-    else if normalizedAggregateType.contains("table") then
+    else if event.aggregateType == AggregateType.TournamentTable || event.aggregateType == AggregateType.MahjongTable then
       RealtimeEventType.TournamentTableChanged
-    else if normalizedAggregateType.contains("tournament") then
+    else if event.aggregateType == AggregateType.Tournament || event.aggregateType == AggregateType.TournamentSettlement then
       RealtimeEventType.TournamentChanged
-    else if normalizedAggregateType.contains("player") then
+    else if event.aggregateType == AggregateType.Player then
       RealtimeEventType.PlayerChanged
     else
       RealtimeEventType.DomainChanged

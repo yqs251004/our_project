@@ -2,16 +2,17 @@ package riichinexus.microservices.tournament.mahjongcore.domain.yakuanalysis.fun
 
 import riichinexus.microservices.tournament.mahjongcore.domain.handanalysis.model.MahjongHandMeldType
 import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.MahjongTileFunctions.{isHonor, isYaochu}
+import riichinexus.microservices.tournament.mahjongcore.domain.yakuanalysis.model.MahjongYakuCheckState
 import riichinexus.microservices.tournament.objects.paifu.MahjongYakuKind
 import riichinexus.microservices.tournament.objects.paifu.Yaku
 
-import MahjongYakuCheckSupport.{MahjongYakuCheckState, YakuCheck, everyMeldHasTerminal, suitCount, yakuIf}
+import MahjongYakuCheckSupport.{everyMeldHasTerminal, suitCount, yakuIf}
 
 /** MahjongSuitYakuCheckFunctions 提供麻将花色役种检查函数 相关的领域校验和权限判断。 */
 
 private[mahjongcore] object MahjongSuitYakuCheckFunctions:
 
-  val plan: Vector[YakuCheck] =
+  val plan: Vector[MahjongYakuCheckState => Vector[Yaku]] =
     Vector(
       checkChinitsu,
       checkHonitsu,
@@ -50,4 +51,3 @@ private[mahjongcore] object MahjongSuitYakuCheckFunctions:
       MahjongYakuKind.Chanta,
       if state.closedHand then 2 else 1
     )
-

@@ -4,7 +4,7 @@ import java.time.Instant
 
 import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.ReadWriter
+import upickle.default.{ReadWriter, macroRW}
 
 /** 某个赛事阶段当前排名的计算快照。
   *
@@ -17,4 +17,7 @@ final case class StageRankingSnapshot(
     entries: Vector[StageStandingEntry],
     archivedTableCount: Int,
     scheduledTableCount: Int
-) derives ReadWriter
+)
+
+object StageRankingSnapshot:
+  given ReadWriter[StageRankingSnapshot] = macroRW

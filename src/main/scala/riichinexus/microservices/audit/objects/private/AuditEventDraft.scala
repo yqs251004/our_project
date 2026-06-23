@@ -2,7 +2,8 @@ package riichinexus.microservices.audit.objects.`private`
 
 import java.time.Instant
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
+import riichinexus.system.objects.`private`.AggregateType
 
 /** 私有审计 API 接收的事件草稿。
   *
@@ -10,7 +11,7 @@ import riichinexus.microservices.player.objects.playerprofile.PlayerId
   * 持久化时再由审计服务分配事件 ID，因此这里刻意不携带数据库主键。
   */
 final case class AuditEventDraft(
-    aggregateType: String,
+    aggregateType: AggregateType,
     aggregateId: String,
     eventType: AuditEventType,
     occurredAt: Instant,

@@ -1,8 +1,8 @@
 package riichinexus.microservices.tournament.objects.stage.ranking
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.ReadWriter
+import upickle.default.{ReadWriter, macroRW}
 
 /** 阶段排名快照中的单个玩家成绩行。
   *
@@ -17,4 +17,7 @@ final case class StageStandingEntry(
     averagePlacement: Double,
     qualified: Boolean = false,
     seed: Option[Int] = None
-) derives ReadWriter
+)
+
+object StageStandingEntry:
+  given ReadWriter[StageStandingEntry] = macroRW

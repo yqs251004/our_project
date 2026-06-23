@@ -5,12 +5,11 @@ import java.util.NoSuchElementException
 
 import riichinexus.microservices.notification.objects.NotificationType
 import riichinexus.microservices.notification.objects.`private`.CreateNotificationRequest
-import riichinexus.microservices.tournament.appeal.domain.model.AppealTicket
+import riichinexus.microservices.tournament.appeal.domain.model.{AppealNotificationContext, AppealTicket}
 import riichinexus.microservices.tournament.appeal.objects.{AppealDecisionType, AppealTableResolution}
-import riichinexus.microservices.tournament.domain.stage.model.Table
-import riichinexus.microservices.tournament.domain.competition.model.Tournament
 import riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable
 import riichinexus.microservices.tournament.tables.tournaments.TournamentTable
+import riichinexus.system.objects.`private`.{NotificationSeverity, NotificationSourceService, NotificationSourceType}
 
 /** AppealNotificationRequestFunctions 提供申诉通知请求相关的领域计算、校验和转换函数。 */
 
@@ -23,9 +22,9 @@ private[appeal] object AppealNotificationRequestFunctions:
         notificationType = NotificationType.TournamentAppealFiled,
         title = "赛事申诉待处理",
         body = s"${context.tournament.name} / ${context.stageName} 的第 ${context.table.tableNo} 桌收到新的申诉，请及时处理。",
-        severity = Some("warning"),
-        sourceService = "tournament",
-        sourceType = "appeal",
+        severity = Some(NotificationSeverity.Warning),
+        sourceService = NotificationSourceService.Tournament,
+        sourceType = NotificationSourceType.Appeal,
         sourceId = ticket.id.value,
         actionUrl = Some(s"/public/tournaments/${ticket.tournamentId.value}?tab=appeals"),
         objects = baseObjects(ticket, context) ++ Map(
@@ -51,8 +50,8 @@ private[appeal] object AppealNotificationRequestFunctions:
         body =
           s"${context.tournament.name} / ${context.stageName} 的第 ${context.table.tableNo} 桌申诉$decisionText。处理意见：${brief(verdict)}",
         severity = Some(decisionSeverity(decision)),
-        sourceService = "tournament",
-        sourceType = "appeal",
+        sourceService = NotificationSourceService.Tournament,
+        sourceType = NotificationSourceType.Appeal,
         sourceId = ticket.id.value,
         actionUrl = Some("/me?tab=appeals"),
         objects = baseObjects(ticket, context) ++ Map(
@@ -93,19 +92,12 @@ private[appeal] object AppealNotificationRequestFunctions:
       case AppealDecisionType.Reject   => "已驳回"
       case AppealDecisionType.Escalate => "已升级"
 
-  private def decisionSeverity(decision: AppealDecisionType): String =
+  private def decisionSeverity(decision: AppealDecisionType): NotificationSeverity =
     decision match
-      case AppealDecisionType.Resolve  => "success"
-      case AppealDecisionType.Reject   => "info"
-      case AppealDecisionType.Escalate => "warning"
+      case AppealDecisionType.Resolve  => NotificationSeverity.Success
+      case AppealDecisionType.Reject   => NotificationSeverity.Info
+      case AppealDecisionType.Escalate => NotificationSeverity.Warning
 
   private def brief(value: String): String =
     val trimmed = value.trim
     if trimmed.length <= 120 then trimmed else s"${trimmed.take(120)}..."
-
-  /** 生成申诉通知文案时需要的赛事、牌桌和阶段上下文。 */
-  private final case class AppealNotificationContext(
-      tournament: Tournament,
-      table: Table,
-      stageName: String
-  )

@@ -1,19 +1,23 @@
 package riichinexus.microservices.opsanalytics.api.`private`
-import riichinexus.microservices.player.api.`private`.{ApplyPlayerEloDeltaPrivateAPIMessage, ResolvePlayerBoundClubIdsPrivateAPIMessage, ResolvePlayerPrivateAPIMessage}
+import riichinexus.system.objects.`private`.{NotificationSeverity, NotificationSourceService, NotificationSourceType}
+import riichinexus.microservices.player.api.`private`.ApplyPlayerEloDeltaPrivateAPIMessage
+import riichinexus.microservices.player.api.`private`.ResolvePlayerBoundClubIdsPrivateAPIMessage
+import riichinexus.microservices.player.api.`private`.ResolvePlayerPrivateAPIMessage
 
 import cats.effect.IO
 
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.club.objects.profile.ClubId
 import riichinexus.system.json.JsonCodecs.given
-import riichinexus.microservices.club.api.`private`.{ApplyClubPointDeltaPrivateAPIMessage, RefreshClubPowerRatingPrivateAPIMessage}
+import riichinexus.microservices.club.api.profile.`private`.ApplyClubPointDeltaPrivateAPIMessage
+import riichinexus.microservices.club.api.profile.`private`.RefreshClubPowerRatingPrivateAPIMessage
 import riichinexus.microservices.opsanalytics.domain.functions.RatingService
 import riichinexus.microservices.opsanalytics.domain.model.RatingChange
 import riichinexus.microservices.player.objects.`private`.PlayerPrivateView
 import riichinexus.microservices.notification.api.`private`.RecordBulkNotificationsPrivateAPIMessage
 import riichinexus.microservices.notification.objects.NotificationType
 import riichinexus.microservices.notification.objects.`private`.CreateNotificationRequest
-import riichinexus.microservices.tournament.objects.`private`.matchrecord.MatchRecordPrivateView
+import riichinexus.microservices.tournament.objects.matchrecord.`private`.MatchRecordPrivateView
 /** 供赛事归档流程刷新赛后运营分析读模型。 */
 final case class RefreshOpsAnalyticsAfterMatchArchivedPrivateAPIMessage(
     matchRecord: MatchRecordPrivateView,
@@ -95,7 +99,7 @@ final case class RefreshOpsAnalyticsAfterMatchArchivedPrivateAPIMessage(
 
   private def rebuildPlayerReadModels(
       context: ApiPlanContext,
-      playerIds: Vector[riichinexus.microservices.player.objects.playerprofile.PlayerId]
+      playerIds: Vector[riichinexus.microservices.player.objects.PlayerId]
   ): IO[Unit] =
     playerIds.foldLeft(IO.unit) { (previous, playerId) =>
       previous.flatMap { _ =>
@@ -136,9 +140,9 @@ final case class RefreshOpsAnalyticsAfterMatchArchivedPrivateAPIMessage(
           notificationType = NotificationType.PlayerEloChanged,
           title = "ELO 已更新",
           body = s"本场对局结算后，你的 ELO $deltaText，当前 ELO $nextElo。",
-          severity = Some("info"),
-          sourceService = "opsanalytics",
-          sourceType = "player-rating",
+          severity = Some(NotificationSeverity.Info),
+          sourceService = NotificationSourceService.OpsAnalytics,
+          sourceType = NotificationSourceType.PlayerRating,
           sourceId = matchRecord.id.value,
           actionUrl = Some(s"/public/tournaments/${matchRecord.tournamentId.value}"),
           objects = Map(

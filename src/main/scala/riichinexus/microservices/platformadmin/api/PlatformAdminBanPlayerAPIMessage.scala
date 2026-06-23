@@ -1,11 +1,17 @@
 package riichinexus.microservices.platformadmin.api
+
+import riichinexus.system.objects.`private`.StructuredEventField
+
+import riichinexus.system.objects.`private`.AggregateType
 import riichinexus.microservices.audit.objects.`private`.AuditEventType
 import riichinexus.microservices.audit.objects.`private`.AuditEventDraft
-import riichinexus.microservices.auth.objects.Permission
-import riichinexus.microservices.auth.api.`private`.ResolveAccessPrincipalPrivateAPIMessage
+import riichinexus.microservices.auth.objects.authorization.Permission
+import riichinexus.microservices.auth.api.authorization.`private`.ResolveAccessPrincipalPrivateAPIMessage
 import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPIMessage
-import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
-import riichinexus.microservices.player.api.`private`.{RecordPlayerBanPrivateAPIMessage, ResolvePlayerBoundClubIdsPrivateAPIMessage, ResolvePlayerPrivateAPIMessage}
+import riichinexus.microservices.auth.api.authorization.AuthCheckPermissionAPIMessage
+import riichinexus.microservices.player.api.`private`.RecordPlayerBanPrivateAPIMessage
+import riichinexus.microservices.player.api.`private`.ResolvePlayerBoundClubIdsPrivateAPIMessage
+import riichinexus.microservices.player.api.`private`.ResolvePlayerPrivateAPIMessage
 
 import cats.effect.IO
 
@@ -13,17 +19,20 @@ import java.time.Instant
 import java.util.NoSuchElementException
 
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.player.objects.PlayerId
+import riichinexus.microservices.club.objects.profile.ClubId
 import riichinexus.system.api.AuthorizationFailure
-import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
-import riichinexus.microservices.auth.objects.Role
-import riichinexus.microservices.club.api.`private`.RefreshClubPowerRatingPrivateAPIMessage
-import riichinexus.microservices.opsanalytics.api.`private`.{RecordClubAdvancedStatsBoardPrivateAPIMessage, RecordClubDashboardPrivateAPIMessage, ResetAdvancedStatsBoardPrivateAPIMessage, ResetDashboardPrivateAPIMessage}
+import riichinexus.microservices.auth.objects.authorization.`private`.AccessPrincipalPrivateView
+import riichinexus.microservices.auth.objects.authorization.Role
+import riichinexus.microservices.club.api.profile.`private`.RefreshClubPowerRatingPrivateAPIMessage
+import riichinexus.microservices.opsanalytics.api.`private`.RecordClubAdvancedStatsBoardPrivateAPIMessage
+import riichinexus.microservices.opsanalytics.api.`private`.RecordClubDashboardPrivateAPIMessage
+import riichinexus.microservices.opsanalytics.api.`private`.ResetAdvancedStatsBoardPrivateAPIMessage
+import riichinexus.microservices.opsanalytics.api.`private`.ResetDashboardPrivateAPIMessage
 import riichinexus.microservices.opsanalytics.objects.DashboardOwner
 import riichinexus.microservices.player.objects.`private`.PlayerPrivateView
 import riichinexus.system.json.JsonCodecs.given
-import riichinexus.microservices.platformadmin.objects.apiTypes.PlatformAdminPlayerView
+import riichinexus.microservices.platformadmin.objects.PlatformAdminPlayerView
 /** 平台管理员封禁玩家并刷新相关投影。 */
 final case class PlatformAdminBanPlayerAPIMessage(
     playerId: PlayerId,
@@ -36,18 +45,12 @@ final case class PlatformAdminBanPlayerAPIMessage(
       actor <- ResolveAccessPrincipalPrivateAPIMessage(operatorId).plan(context)
       _ <- requireBanPlayerPermission(context, actor)
       bannedAt <- IO.realTimeInstant
-      command = BanPlayerCommand(
-        playerId = playerId,
-        actor = actor,
-        reason = reason,
-        bannedAt = bannedAt
-      )
-      savedPlayer <- banPlayer(context, command)
-        .map(_.getOrElse(throw NoSuchElementException(s"Player ${command.playerId.value} was not found")))
-      _ <- RecordAuditEventsPrivateAPIMessage(banPlayerAudit(command)).plan(context)
-      _ <- resetPlayerAnalytics(context, command)
+      savedPlayer <- banPlayer(context, playerId, reason)
+        .map(_.getOrElse(throw NoSuchElementException(s"Player ${playerId.value} was not found")))
+      _ <- RecordAuditEventsPrivateAPIMessage(banPlayerAudit(playerId, actor, reason, bannedAt)).plan(context)
+      _ <- resetPlayerAnalytics(context, playerId, bannedAt)
       clubIds <- ResolvePlayerBoundClubIdsPrivateAPIMessage(savedPlayer.id).plan(context)
-      _ <- refreshAffectedClubAnalytics(context, clubIds.distinct, command.bannedAt)
+      _ <- refreshAffectedClubAnalytics(context, clubIds.distinct, bannedAt)
     yield platformAdminPlayerView(savedPlayer, clubIds)
 
   private def requireBanPlayerPermission(context: ApiPlanContext, actor: AccessPrincipalPrivateView): IO[Unit] =
@@ -61,19 +64,21 @@ final case class PlatformAdminBanPlayerAPIMessage(
 
   private def banPlayer(
       context: ApiPlanContext,
-      command: BanPlayerCommand
+      playerId: PlayerId,
+      reason: String
   ): IO[Option[PlayerPrivateView]] =
-    RecordPlayerBanPrivateAPIMessage(command.playerId, command.reason).plan(context).flatMap(_ =>
-      ResolvePlayerPrivateAPIMessage(command.playerId).plan(context)
+    RecordPlayerBanPrivateAPIMessage(playerId, reason).plan(context).flatMap(_ =>
+      ResolvePlayerPrivateAPIMessage(playerId).plan(context)
     )
 
   private def resetPlayerAnalytics(
       context: ApiPlanContext,
-      command: BanPlayerCommand
+      playerId: PlayerId,
+      bannedAt: Instant
   ): IO[Unit] =
-    val playerOwner = DashboardOwner.Player(command.playerId)
-    ResetDashboardPrivateAPIMessage(playerOwner, command.bannedAt).plan(context).flatMap(_ =>
-      ResetAdvancedStatsBoardPrivateAPIMessage(playerOwner, command.bannedAt).plan(context).map(_ => ())
+    val playerOwner = DashboardOwner.Player(playerId)
+    ResetDashboardPrivateAPIMessage(playerOwner, bannedAt).plan(context).flatMap(_ =>
+      ResetAdvancedStatsBoardPrivateAPIMessage(playerOwner, bannedAt).plan(context).map(_ => ())
     )
 
   private def refreshAffectedClubAnalytics(
@@ -94,16 +99,21 @@ final case class PlatformAdminBanPlayerAPIMessage(
       )
     }
 
-  private def banPlayerAudit(command: BanPlayerCommand): Vector[AuditEventDraft] =
+  private def banPlayerAudit(
+      playerId: PlayerId,
+      actor: AccessPrincipalPrivateView,
+      reason: String,
+      bannedAt: Instant
+  ): Vector[AuditEventDraft] =
     Vector(
       AuditEventDraft(
-        aggregateType = "player",
-        aggregateId = command.playerId.value,
+        aggregateType = AggregateType.Player,
+        aggregateId = playerId.value,
         eventType = AuditEventType.PlayerBanned,
-        occurredAt = command.bannedAt,
-        actorId = command.actor.playerId,
-        details = Map("reason" -> command.reason),
-        note = Some(command.reason)
+        occurredAt = bannedAt,
+        actorId = actor.playerId,
+        details = Map(StructuredEventField.toString(StructuredEventField.Reason) -> reason),
+        note = Some(reason)
       )
     )
 
@@ -117,11 +127,3 @@ final case class PlatformAdminBanPlayerAPIMessage(
       bannedReason = player.bannedReason,
       isSuperAdmin = player.roleGrants.exists(_.role == Role.SuperAdmin)
     )
-
-  /** 平台封禁玩家流程中已经解析并授权过的命令参数。 */
-  private final case class BanPlayerCommand(
-      playerId: PlayerId,
-      actor: AccessPrincipalPrivateView,
-      reason: String,
-      bannedAt: Instant
-  )

@@ -2,7 +2,8 @@ package riichinexus.microservices.audit.objects.`private`
 
 import java.time.Instant
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
+import riichinexus.system.objects.`private`.AggregateType
 
 /** 审计服务对内部调用方返回的完整事件视图。
   *
@@ -11,7 +12,7 @@ import riichinexus.microservices.player.objects.playerprofile.PlayerId
   */
 final case class AuditEventPrivateView(
     id: String,
-    aggregateType: String,
+    aggregateType: AggregateType,
     aggregateId: String,
     eventType: AuditEventType,
     occurredAt: Instant,

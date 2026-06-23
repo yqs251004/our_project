@@ -4,7 +4,7 @@ import riichinexus.microservices.tournament.mahjongcore.domain.gamestate.functio
 import riichinexus.microservices.tournament.mahjongcore.domain.handanalysis.functions.MahjongHandAnalysisFunctions
 import riichinexus.microservices.tournament.mahjongcore.domain.handanalysis.model.{MahjongHandDecomposition, MahjongHandMeld, MahjongHandMeldType}
 import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.MahjongTileFunctions.{Chun, Haku, Nan, Pei, Sha, Ton, countsOf, indexOf, isYaochu}
-import riichinexus.microservices.tournament.mahjongcore.domain.yakuanalysis.model.MahjongWinContext
+import riichinexus.microservices.tournament.mahjongcore.domain.yakuanalysis.model.{MahjongWinContext, PointResult, ScoredYakuCandidate}
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.{MahjongMeld, MahjongMeldType}
 import riichinexus.microservices.tournament.objects.paifu.{AgariResult, AgariWinResult, HandOutcome, MahjongYakuKind, PaifuTile, RoundSettlement, RoundSettlementNote, ScoreChange, Yaku}
 import riichinexus.microservices.tournament.objects.stage.table.SeatWind
@@ -78,17 +78,6 @@ private[mahjongcore] object MahjongYakuAnalysisFunctions:
 
   def isWinning(context: MahjongWinContext): Boolean =
     analyzeWin(context).nonEmpty
-
-  /** 已完成番符与点数计算的役种候选。 */
-  private final case class ScoredYakuCandidate(
-      yaku: Vector[Yaku],
-      han: Int,
-      fu: Int,
-      pointResult: PointResult
-  )
-
-  /** 单次和牌在当前规则下产生的总点数与分数变动。 */
-  private final case class PointResult(points: Int, scoreChanges: Vector[ScoreChange])
 
   private def scoreCandidate(
       yaku: Vector[Yaku],

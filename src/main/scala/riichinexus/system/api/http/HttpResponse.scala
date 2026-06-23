@@ -5,10 +5,11 @@ import java.util.NoSuchElementException
 import cats.effect.IO
 import org.http4s.{Header, Headers, Response, Status}
 import org.typelevel.ci.CIString
-import riichinexus.microservices.auth.domain.AuthenticationFailure
+import riichinexus.microservices.auth.domain.account.model.AuthenticationFailure
 import riichinexus.system.api.AuthorizationFailure
 import riichinexus.system.errors.OptimisticConcurrencyException
 import riichinexus.system.objects.ErrorResponse
+import riichinexus.system.objects.`private`.AggregateType
 import upickle.default.{Writer, write}
 
 object HttpResponse:
@@ -26,14 +27,14 @@ object HttpResponse:
             message = handled.getMessage,
             code = "optimistic_concurrency_conflict",
             details = Map(
-              "aggregateType" -> handled.aggregateType,
+              "aggregateType" -> AggregateType.toString(handled.aggregateType),
               "aggregateId" -> handled.aggregateId,
               "expectedVersion" -> handled.expectedVersion.toString
             ) ++ handled.actualVersion.map(version => "actualVersion" -> version.toString)
           )
         )
       case handled: AuthorizationFailure =>
-        jsonResponse(routeContext, Status.Forbidden, ErrorResponse(handled.getMessage, code = "authorization_failed"))
+        jsonResponse(routeContext, Status.Forbidden, ErrorResponse(handled.getMessage, code = handled.code))
       case handled: AuthenticationFailure =>
         jsonResponse(routeContext, Status.Unauthorized, ErrorResponse(handled.getMessage, code = handled.code))
       case handled: IllegalArgumentException =>

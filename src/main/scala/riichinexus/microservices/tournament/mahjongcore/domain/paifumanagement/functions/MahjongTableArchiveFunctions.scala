@@ -9,6 +9,7 @@ import riichinexus.microservices.tournament.domain.stage.functions.scheduling.Ta
 import riichinexus.microservices.tournament.domain.stage.model.Table
 import riichinexus.microservices.tournament.mahjongcore.domain.action.model.MahjongEvent
 import riichinexus.microservices.tournament.mahjongcore.domain.gamestate.model.{MahjongRoundState, MahjongTableState}
+import riichinexus.microservices.tournament.mahjongcore.domain.paifumanagement.model.ArchivedMahjongTable
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.MahjongMeldType
 import riichinexus.microservices.tournament.objects.paifu.{FinalStanding, Paifu, PaifuAction, PaifuActionType, PaifuHand, PaifuId, PaifuMetadata, PaifuPlayerTrack, PaifuRound, PaifuRoundPlayer, PaifuTimeline}
 import riichinexus.microservices.tournament.objects.matchrecord.MatchRecordId
@@ -18,13 +19,6 @@ import riichinexus.microservices.tournament.objects.identity.{TournamentId, Tour
 /** MahjongTableArchiveFunctions 提供麻将牌桌Archive相关的领域计算、校验和转换函数。 */
 
 private[mahjongcore] object MahjongTableArchiveFunctions:
-
-  /** 实时牌桌归档后同时产出的新桌面状态、牌谱和对局记录。 */
-  final case class ArchivedMahjongTable(
-      tableState: MahjongTableState,
-      paifu: Paifu,
-      matchRecord: MatchRecord
-  )
 
   def archive(
       connection: Connection,

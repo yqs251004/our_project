@@ -1,6 +1,6 @@
 package riichinexus.microservices.tournament.mahjongcore.domain.action.model
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.MahjongMeld
 import riichinexus.microservices.tournament.objects.paifu.{AgariResult, FinalStanding, KyokuDescriptor, PaifuTile}
 

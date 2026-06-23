@@ -4,8 +4,9 @@ import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.audit.domain.functions.AuditIdGenerator
 import riichinexus.microservices.audit.domain.functions.AuditEventPrivateViewFunctions
-import riichinexus.microservices.audit.domain.auditevent.AuditEvent
-import riichinexus.microservices.audit.objects.`private`.{AuditEventDraft, AuditEventPrivateView}
+import riichinexus.microservices.audit.domain.model.AuditEvent
+import riichinexus.microservices.audit.objects.`private`.AuditEventDraft
+import riichinexus.microservices.audit.objects.`private`.AuditEventPrivateView
 
 import riichinexus.microservices.audit.tables.auditevent.AuditEventTable
 import riichinexus.system.json.JsonCodecs.given

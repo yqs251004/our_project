@@ -9,10 +9,7 @@ import java.util.NoSuchElementException
 import cats.effect.IO
 import riichinexus.system.api.ApiPlanContext
 import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}
-import riichinexus.microservices.tournament.domain.stage.model.{Table, TournamentStage}
-import riichinexus.microservices.tournament.domain.matchrecord.model.MatchRecord
-import riichinexus.microservices.tournament.domain.competition.model.Tournament
-import riichinexus.microservices.player.objects.`private`.PlayerPrivateView
+import riichinexus.microservices.tournament.domain.stage.model.{StageComputationContext, Table}
 import riichinexus.microservices.tournament.objects.stage.rules.knockout.KnockoutBracketSnapshot
 import riichinexus.microservices.tournament.objects.stage.rules.progression.StageAdvancementSnapshot
 import riichinexus.microservices.tournament.objects.stage.ranking.StageRankingSnapshot
@@ -72,14 +69,6 @@ private[tournament] object TournamentStageQueries:
         at = at
       )
     }
-
-  /** 计算阶段晋级、排名或淘汰赛结构时需要的聚合上下文。 */
-  private final case class StageComputationContext(
-      tournament: Tournament,
-      stage: TournamentStage,
-      participants: Vector[PlayerPrivateView],
-      records: Vector[MatchRecord]
-  )
 
   private def stageComputationContext(
       connection: Connection,

@@ -1,6 +1,6 @@
 package riichinexus.microservices.player.objects.apiTypes
 
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.club.objects.profile.ClubId
 import riichinexus.microservices.player.objects.PlayerStatus
 
 /** 后台和选择器查询玩家列表时使用的过滤参数。

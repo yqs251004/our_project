@@ -1,6 +1,6 @@
 package riichinexus.microservices.player.domain.functions
 
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.club.objects.profile.ClubId
 import riichinexus.microservices.player.domain.Player
 
 /** PlayerClubBindingFunctions 提供玩家俱乐部Binding相关的领域计算、校验和转换函数。 */

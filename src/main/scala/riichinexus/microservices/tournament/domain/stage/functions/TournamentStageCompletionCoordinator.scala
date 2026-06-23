@@ -14,7 +14,7 @@ import java.util.NoSuchElementException
 import cats.effect.IO
 import riichinexus.system.api.ApiPlanContext
 import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}
-import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
+import riichinexus.microservices.auth.objects.authorization.`private`.AccessPrincipalPrivateView
 import riichinexus.microservices.player.objects.`private`.PlayerPrivateView
 
 import riichinexus.microservices.tournament.domain.stage.model.{Table, TournamentStage}

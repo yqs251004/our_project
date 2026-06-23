@@ -1,7 +1,7 @@
 package riichinexus.microservices.tournament.objects.finalization
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.player.objects.PlayerId
+import riichinexus.microservices.club.objects.profile.ClubId
 
 /** 赛事结算快照中某位玩家的最终分配结果。
   *

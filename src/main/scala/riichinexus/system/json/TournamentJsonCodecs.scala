@@ -1,23 +1,26 @@
 package riichinexus.system.json
 
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.club.objects.profile.ClubId
+import riichinexus.microservices.player.objects.PlayerId
 import riichinexus.microservices.tournament.appeal.domain.model.{AppealAttachment, AppealTicket}
-import riichinexus.microservices.tournament.appeal.objects.{AppealAttachmentMediaKind, AppealAttachmentStorageKind, AppealDecisionLog, AppealDecisionType, AppealPriority, AppealStatus, AppealTableResolution}
+import riichinexus.microservices.tournament.appeal.objects.{AppealAttachmentMediaKind, AppealAttachmentStorageKind, AppealDecisionLog, AppealDecisionLogAction, AppealDecisionType, AppealPriority, AppealStatus, AppealTableResolution}
 import riichinexus.microservices.tournament.domain.stage.model.{StageLineupSeat, StageLineupSubmission, StageTablePlan, Table, TournamentStage}
 import riichinexus.microservices.tournament.domain.matchrecord.model.{MatchRecord, MatchRecordSeatResult}
 import riichinexus.microservices.tournament.domain.finalization.model.TournamentSettlementSnapshot
 import riichinexus.microservices.tournament.domain.competition.model.Tournament
 import riichinexus.microservices.tournament.objects.paifu.{AgariResult, AgariWinResult, FinalStanding, HandOutcome, KyokuDescriptor, MahjongYakuKind, Paifu, PaifuAction, PaifuActionType, PaifuHand, PaifuMetadata, PaifuPlayerTrack, PaifuRound, PaifuRoundPlayer, PaifuTile, PaifuTileSuit, PaifuTimeline, RoundSettlement, RoundSettlementNote, ScoreChange, Yaku}
-import riichinexus.microservices.tournament.objects.`private`.matchrecord.{MatchRecordPrivateView, MatchRecordSeatResultPrivateView}
-import riichinexus.microservices.tournament.objects.`private`.stage.{StageLineupSeatPrivateView, StageLineupSubmissionPrivateView, TournamentStagePrivateView}
-import riichinexus.microservices.tournament.objects.`private`.competition.TournamentPrivateView
+import riichinexus.microservices.tournament.objects.matchrecord.`private`.MatchRecordPrivateView
+import riichinexus.microservices.tournament.objects.matchrecord.`private`.MatchRecordSeatResultPrivateView
+import riichinexus.microservices.tournament.objects.stage.`private`.StageLineupSeatPrivateView
+import riichinexus.microservices.tournament.objects.stage.`private`.StageLineupSubmissionPrivateView
+import riichinexus.microservices.tournament.objects.stage.`private`.TournamentStagePrivateView
+import riichinexus.microservices.tournament.objects.competition.`private`.TournamentPrivateView
 import riichinexus.microservices.tournament.objects.stage.rules.knockout.{KnockoutLane, KnockoutRuleConfig, KnockoutSeedingPolicy}
 import riichinexus.microservices.tournament.objects.stage.rules.progression.{AdvancementRule, AdvancementRuleType}
 import riichinexus.microservices.tournament.objects.stage.rules.swiss.{SwissPairingMethod, SwissRuleConfig}
 import riichinexus.microservices.tournament.objects.finalization.{TournamentSettlementAdjustment, TournamentSettlementEntry, TournamentSettlementStatus}
 import riichinexus.microservices.tournament.objects.stage.table.{SeatWind, TableSeat, TableStatus}
-import riichinexus.microservices.tournament.objects.stage.StageStatus
+import riichinexus.microservices.tournament.objects.stage.lifecycle.StageStatus
 import riichinexus.microservices.tournament.objects.competition.{TournamentFormat, TournamentParticipantKind, TournamentStatus, TournamentWhitelistEntry}
 import riichinexus.microservices.tournament.mahjongcore.objects.action.MahjongCommandType
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.{MahjongGameLength, MahjongMeldType, MahjongRoundPhase, MahjongRuleset, MahjongTableStatus}
@@ -150,6 +153,8 @@ object TournamentJsonCodecs:
   given ReadWriter[AppealAttachmentMediaKind] =
     stringEnumReadWriter(AppealAttachmentMediaKind.fromString, AppealAttachmentMediaKind.toString)
   given ReadWriter[AppealAttachment] = macroRW
+  given ReadWriter[AppealDecisionLogAction] =
+    stringEnumReadWriter(AppealDecisionLogAction.fromString, AppealDecisionLogAction.toString)
   given ReadWriter[AppealDecisionLog] = macroRW
   given ReadWriter[AppealPriority] =
     stringEnumReadWriter(AppealPriority.fromString, AppealPriority.toString)

@@ -1,5 +1,7 @@
 package riichinexus.microservices.opsanalytics.tables.dashboard
 
+import riichinexus.system.objects.`private`.AggregateType
+
 import java.sql.{Connection, ResultSet}
 
 import scala.annotation.tailrec
@@ -34,7 +36,7 @@ object DashboardTable:
     }
     if rowsUpdated == 0 then
       throw OptimisticConcurrencyException(
-        aggregateType = "dashboard",
+        aggregateType = AggregateType.Dashboard,
         aggregateId = DashboardFunctions.ownerKey(persisted.owner),
         expectedVersion = dashboard.version,
         actualVersion = findByOwner(connection, persisted.owner).map(_.version)

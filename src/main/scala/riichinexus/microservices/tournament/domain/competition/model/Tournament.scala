@@ -4,8 +4,8 @@ import riichinexus.microservices.tournament.domain.stage.model.TournamentStage
 
 import java.time.Instant
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.player.objects.PlayerId
+import riichinexus.microservices.club.objects.profile.ClubId
 import riichinexus.microservices.tournament.objects.identity.TournamentId
 import riichinexus.microservices.tournament.objects.competition.{TournamentStatus, TournamentWhitelistEntry}
 

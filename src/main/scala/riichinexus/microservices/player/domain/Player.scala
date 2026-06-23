@@ -2,9 +2,9 @@ package riichinexus.microservices.player.domain
 
 import java.time.Instant
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.auth.objects.`private`.RoleGrant
+import riichinexus.microservices.player.objects.PlayerId
+import riichinexus.microservices.club.objects.profile.ClubId
+import riichinexus.microservices.auth.objects.authorization.`private`.RoleGrant
 import riichinexus.microservices.player.objects.{PlayerStatus, RankSnapshot}
 
 import riichinexus.system.json.JsonCodecs.given

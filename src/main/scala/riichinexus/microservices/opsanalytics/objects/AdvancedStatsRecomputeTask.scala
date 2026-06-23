@@ -3,7 +3,7 @@ package riichinexus.microservices.opsanalytics.objects
 import java.time.Instant
 
 import riichinexus.microservices.tournament.objects.matchrecord.MatchRecordId
-import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
+import riichinexus.microservices.opsanalytics.objects.AdvancedStatsRecomputeTaskId
 
 /** 后台队列中一条高级统计重算任务。
   *

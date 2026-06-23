@@ -11,17 +11,17 @@ import java.sql.Connection
 import java.util.NoSuchElementException
 import java.time.Instant
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.player.objects.PlayerId
+import riichinexus.microservices.club.objects.profile.ClubId
 import riichinexus.microservices.tournament.domain.identity.functions.TournamentIdGenerator
 import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}
 import riichinexus.microservices.tournament.domain.stage.functions.TournamentStageFunctions
 import riichinexus.microservices.tournament.domain.stage.model.{StageTablePlan, Table, TournamentStage}
 import riichinexus.microservices.tournament.domain.matchrecord.model.MatchRecord
 import riichinexus.microservices.tournament.domain.competition.model.Tournament
-import riichinexus.microservices.club.objects.`private`.ClubPrivateView
+import riichinexus.microservices.club.objects.profile.`private`.ClubPrivateView
 import riichinexus.microservices.tournament.objects.stage.table.TableSeat
-import riichinexus.microservices.club.objects.relationmanagement.ClubRelationKind
+import riichinexus.microservices.club.objects.relation.ClubRelationKind
 import riichinexus.microservices.player.objects.`private`.PlayerPrivateView
 import riichinexus.microservices.tournament.objects.stage.rules.progression.AdvancementRuleType
 import riichinexus.microservices.tournament.objects.stage.table.{SeatWind, TableStatus}

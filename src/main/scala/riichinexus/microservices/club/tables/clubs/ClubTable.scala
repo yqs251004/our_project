@@ -1,14 +1,16 @@
 package riichinexus.microservices.club.tables.clubs
 
+import riichinexus.system.objects.`private`.AggregateType
+
 import java.sql.{Connection, PreparedStatement, ResultSet, Types}
 
 import scala.annotation.tailrec
 import scala.util.Using
 
 import riichinexus.system.errors.OptimisticConcurrencyException
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.club.domain.Club
+import riichinexus.microservices.player.objects.PlayerId
+import riichinexus.microservices.club.objects.profile.ClubId
+import riichinexus.microservices.club.domain.profile.model.Club
 import riichinexus.system.json.JsonCodecs.given
 import upickle.default.{read, write}
 
@@ -39,7 +41,7 @@ object ClubTable:
     }
     if rowsUpdated == 0 then
       throw OptimisticConcurrencyException(
-        aggregateType = "club",
+        aggregateType = AggregateType.Club,
         aggregateId = persisted.id.value,
         expectedVersion = club.version,
         actualVersion = findById(connection, persisted.id).map(_.version)

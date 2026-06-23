@@ -1,6 +1,6 @@
 package riichinexus.microservices.opsanalytics.domain.model
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 
 import riichinexus.system.json.JsonCodecs.given
 

@@ -1,6 +1,6 @@
 package riichinexus.microservices.tournament.objects.finalization
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 
 /** 赛事结算中针对单个玩家的人工奖惩调整。
   *

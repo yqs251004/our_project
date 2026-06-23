@@ -8,8 +8,8 @@ import riichinexus.microservices.tournament.objects.competition.TournamentFormat
 
 import java.time.Instant
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.tournament.domain.stage.model.{Table, TournamentStage}
+import riichinexus.microservices.player.objects.PlayerId
+import riichinexus.microservices.tournament.domain.stage.model.{KnockoutMatchId, Table, TournamentStage}
 import riichinexus.microservices.tournament.domain.matchrecord.model.MatchRecord
 import riichinexus.microservices.tournament.domain.competition.model.Tournament
 import riichinexus.microservices.player.objects.`private`.PlayerPrivateView
@@ -158,7 +158,7 @@ private[tournament] object TournamentKnockoutBracketBuilder:
     (math.log(value.toDouble) / math.log(2.0)).toInt
 
   private def matchIdFor(roundNumber: Int, position: Int): String =
-    s"r$roundNumber-m$position"
+    KnockoutMatchId.championship(roundNumber, position).value
 
   private def nextMatchId(
       roundNumber: Int,
@@ -286,7 +286,7 @@ private[tournament] object TournamentKnockoutBracketBuilder:
           val semifinalRound = championshipRounds(championshipRounds.size - 2)
           if semifinalRound.matches.size != 2 then Vector.empty
           else
-            val matchId = "bronze-r1-m1"
+            val matchId = KnockoutMatchId.bronzeFinal.value
             val unlocked = semifinalRound.matches.forall(_.completed)
             val slots =
               if unlocked then
@@ -348,7 +348,7 @@ private[tournament] object TournamentKnockoutBracketBuilder:
         .grouped(2)
         .zipWithIndex
         .map { case (feederPair, index) =>
-          val matchId = s"repechage-r1-m${index + 1}"
+          val matchId = KnockoutMatchId.repechage(1, index + 1).value
           val unlocked = feederPair.forall(_.completed)
           val slots =
             if unlocked then
@@ -383,7 +383,7 @@ private[tournament] object TournamentKnockoutBracketBuilder:
               slots = slots.toVector,
               sourceMatchIds = feederPair.map(_.id).toVector,
               advancementCount = if feederPair.size > 1 || firstRound.size > 2 then 2 else 0,
-              nextMatchId = if firstRound.size > 2 then Some(s"repechage-r2-m${(index + 2) / 2}") else None,
+              nextMatchId = if firstRound.size > 2 then Some(KnockoutMatchId.repechage(2, (index + 2) / 2).value) else None,
               unlocked = unlocked
             ),
             table = tableByMatchId.get(matchId),

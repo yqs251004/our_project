@@ -2,10 +2,10 @@ package riichinexus.microservices.tournament.objects.finalization.apiTypes
 
 import riichinexus.microservices.tournament.objects.finalization.TournamentSettlementStatus
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 import riichinexus.microservices.tournament.objects.identity.TournamentStageId
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.ReadWriter
+import upickle.default.{ReadWriter, macroRW}
 
 /** 查询赛事结算快照列表时使用的过滤和分页参数。
   *
@@ -17,4 +17,7 @@ final case class TournamentSettlementQuery(
     championId: Option[PlayerId] = None,
     limit: Option[Int] = None,
     offset: Option[Int] = None
-) derives ReadWriter
+)
+
+object TournamentSettlementQuery:
+  given ReadWriter[TournamentSettlementQuery] = macroRW

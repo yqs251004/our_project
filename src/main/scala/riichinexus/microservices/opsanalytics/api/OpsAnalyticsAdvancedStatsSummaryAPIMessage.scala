@@ -1,15 +1,15 @@
 package riichinexus.microservices.opsanalytics.api
-import riichinexus.microservices.auth.objects.Permission
-import riichinexus.microservices.auth.api.`private`.ResolveAccessPrincipalPrivateAPIMessage
-import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
+import riichinexus.microservices.auth.objects.authorization.Permission
+import riichinexus.microservices.auth.api.authorization.`private`.ResolveAccessPrincipalPrivateAPIMessage
+import riichinexus.microservices.auth.api.authorization.AuthCheckPermissionAPIMessage
 
 import java.time.Instant
 
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 import riichinexus.system.api.AuthorizationFailure
-import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
+import riichinexus.microservices.auth.objects.authorization.`private`.AccessPrincipalPrivateView
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.opsanalytics.domain.functions.AdvancedStatsRecomputeTaskFunctions
 import riichinexus.microservices.opsanalytics.objects.{AdvancedStatsRecomputeTask, AdvancedStatsRecomputeTaskStatus, AdvancedStatsTaskQueueSummary}

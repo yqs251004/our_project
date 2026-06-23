@@ -3,7 +3,7 @@ package riichinexus.microservices.notification.api
 import cats.effect.IO
 import riichinexus.microservices.notification.objects.Notification
 import riichinexus.microservices.notification.tables.notifications.NotificationTable
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 
 /** 将单条玩家通知标记为已读。 */

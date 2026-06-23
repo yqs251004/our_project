@@ -1,13 +1,14 @@
 package riichinexus.microservices.tournament.domain.stage.functions.rules
 
 import cats.effect.IO
-import riichinexus.microservices.club.api.`private`.{ListClubReadModelsPrivateAPIMessage, ResolveClubReadModelsPrivateAPIMessage}
-import riichinexus.microservices.club.objects.`private`.ClubPrivateView
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.club.objects.relationmanagement.ClubRelationKind
+import riichinexus.microservices.club.api.audit.`private`.ListClubReadModelsPrivateAPIMessage
+import riichinexus.microservices.club.api.audit.`private`.ResolveClubReadModelsPrivateAPIMessage
+import riichinexus.microservices.club.objects.profile.`private`.ClubPrivateView
+import riichinexus.microservices.club.objects.profile.ClubId
+import riichinexus.microservices.club.objects.relation.ClubRelationKind
 import riichinexus.microservices.player.api.`private`.ResolvePlayerReadModelsPrivateAPIMessage
 import riichinexus.microservices.player.objects.`private`.PlayerPrivateView
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 import riichinexus.microservices.tournament.domain.stage.functions.lineup.StageLineupResolver
 import riichinexus.microservices.tournament.domain.competition.model.Tournament
 import riichinexus.microservices.tournament.domain.stage.model.TournamentStage

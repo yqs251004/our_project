@@ -1,7 +1,7 @@
 package riichinexus.microservices.opsanalytics.domain.functions
 
 import riichinexus.microservices.opsanalytics.domain.model.{EloRatingConfig, RatingChange}
-import riichinexus.microservices.tournament.objects.`private`.matchrecord.MatchRecordSeatResultPrivateView
+import riichinexus.microservices.tournament.objects.matchrecord.`private`.MatchRecordSeatResultPrivateView
 import riichinexus.microservices.player.objects.`private`.PlayerPrivateView
 
 /** RatingService 提供评级服务 相关的领域计算、校验和转换函数。 */

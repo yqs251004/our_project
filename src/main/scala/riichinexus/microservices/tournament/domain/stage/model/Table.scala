@@ -7,7 +7,7 @@ import riichinexus.microservices.tournament.objects.paifu.PaifuId
 import riichinexus.microservices.tournament.objects.matchrecord.MatchRecordId
 import riichinexus.microservices.tournament.objects.stage.table.TableId
 import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}
-import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
+import riichinexus.microservices.tournament.appeal.objects.AppealTicketId
 import riichinexus.microservices.tournament.objects.stage.table.{TableSeat, TableStatus}
 
 import riichinexus.system.json.JsonCodecs.given

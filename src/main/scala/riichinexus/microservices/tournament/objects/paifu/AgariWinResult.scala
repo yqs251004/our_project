@@ -1,6 +1,6 @@
 package riichinexus.microservices.tournament.objects.paifu
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 
 /** 一次和牌中的单个赢家结果。
   *

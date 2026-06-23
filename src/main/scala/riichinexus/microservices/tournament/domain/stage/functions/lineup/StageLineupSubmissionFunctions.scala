@@ -1,6 +1,6 @@
 package riichinexus.microservices.tournament.domain.stage.functions.lineup
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 import riichinexus.microservices.tournament.domain.stage.model.StageLineupSubmission
 
 

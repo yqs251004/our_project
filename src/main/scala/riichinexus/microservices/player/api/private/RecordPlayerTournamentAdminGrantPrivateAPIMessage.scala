@@ -3,11 +3,12 @@ package riichinexus.microservices.player.api.`private`
 import java.time.Instant
 
 import cats.effect.IO
-import riichinexus.microservices.auth.objects.`private`.RoleGrant
-import riichinexus.microservices.auth.objects.Role
+import riichinexus.microservices.player.tables.players.PlayerTable
+import riichinexus.microservices.auth.objects.authorization.`private`.RoleGrant
+import riichinexus.microservices.auth.objects.authorization.Role
 import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.domain.functions.PlayerRoleFunctions
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 import riichinexus.microservices.tournament.objects.identity.TournamentId
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.system.json.JsonCodecs.given
@@ -20,7 +21,7 @@ final case class RecordPlayerTournamentAdminGrantPrivateAPIMessage(
 ) extends APIMessage[Option[Player]]:
 
   override def plan(context: ApiPlanContext): IO[Option[Player]] =
-    PlayerDomainRecord.find(context, playerId).flatMap {
+    IO.blocking(PlayerTable.findById(context.connection, playerId)).flatMap {
       case Some(player) =>
         SavePlayerPrivateAPIMessage(
           PlayerRoleFunctions.grantRole(

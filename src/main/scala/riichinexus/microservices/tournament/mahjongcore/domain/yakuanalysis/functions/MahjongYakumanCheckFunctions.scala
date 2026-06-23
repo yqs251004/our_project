@@ -2,16 +2,17 @@ package riichinexus.microservices.tournament.mahjongcore.domain.yakuanalysis.fun
 
 import riichinexus.microservices.tournament.mahjongcore.domain.handanalysis.model.MahjongHandMeldType
 import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.MahjongTileFunctions.{Chun, Haku, Hatsu, Man1, Man9, Nan, Pei, Pin1, Pin9, Sha, Sou1, Sou9, Ton, isHonor, isTerminal}
+import riichinexus.microservices.tournament.mahjongcore.domain.yakuanalysis.model.MahjongYakuCheckState
 import riichinexus.microservices.tournament.objects.paifu.MahjongYakuKind
 import riichinexus.microservices.tournament.objects.paifu.Yaku
 
-import MahjongYakuCheckSupport.{MahjongYakuCheckState, YakuCheck, isDragonMeld, isWindMeld, nonEmptyAllMatch, tripletLike, yakuIf}
+import MahjongYakuCheckSupport.{isDragonMeld, isWindMeld, nonEmptyAllMatch, tripletLike, yakuIf}
 
 /** MahjongYakumanCheckFunctions 提供麻将役满检查函数 相关的领域校验和权限判断。 */
 
 private[mahjongcore] object MahjongYakumanCheckFunctions:
 
-  val plan: Vector[YakuCheck] =
+  val plan: Vector[MahjongYakuCheckState => Vector[Yaku]] =
     Vector(
       checkKokushiMusou,
       checkChuurenPoutou,
@@ -123,4 +124,3 @@ private[mahjongcore] object MahjongYakumanCheckFunctions:
   private def isGreen(index: Int): Boolean =
     index == Hatsu ||
       (index >= Sou1 && index <= Sou9 && Set(2, 3, 4, 6, 8).contains(index - Sou1 + 1))
-

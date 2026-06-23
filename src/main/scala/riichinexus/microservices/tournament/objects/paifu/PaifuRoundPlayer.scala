@@ -1,6 +1,6 @@
 package riichinexus.microservices.tournament.objects.paifu
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 import riichinexus.microservices.tournament.objects.stage.table.SeatWind
 
 /** 牌谱小局中某位玩家的起手和个人事件轨迹。

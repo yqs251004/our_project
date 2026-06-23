@@ -1,8 +1,8 @@
 package riichinexus.microservices.platformadmin.objects.apiTypes
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.ReadWriter
+import upickle.default.{ReadWriter, macroRW}
 
 /** 平台管理员解散俱乐部时提交的请求体。
   *
@@ -10,4 +10,7 @@ import upickle.default.ReadWriter
   */
 final case class DissolveClubRequest(
     operatorId: PlayerId
-) derives ReadWriter
+)
+
+object DissolveClubRequest:
+  given ReadWriter[DissolveClubRequest] = macroRW

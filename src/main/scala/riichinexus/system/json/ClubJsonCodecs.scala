@@ -2,18 +2,18 @@ package riichinexus.system.json
 
 import java.time.Instant
 
-import riichinexus.microservices.club.domain.Club
-import riichinexus.microservices.club.domain.clubmanagement.model.ClubHonor
-import riichinexus.microservices.club.domain.membershipmanagement.model.{ClubMemberContribution, ClubMembershipApplication, ClubRecruitmentPolicy, ClubTitleAssignment}
-import riichinexus.microservices.club.domain.rankprivilegemanagement.model.ClubMemberPrivilegeSnapshot
-import riichinexus.microservices.club.domain.relationmanagement.model.ClubRelation
-import riichinexus.microservices.club.objects.membershipmanagement.{ClubApplicationStatus, MembershipApplicationId}
-import riichinexus.microservices.club.objects.membershipmanagement.apiTypes.ClubApplicationReviewDecision
-import riichinexus.microservices.club.objects.rankprivilegemanagement.ClubPrivilegeCode
-import riichinexus.microservices.club.objects.rankprivilegemanagement.ClubRankNode
-import riichinexus.microservices.club.objects.relationmanagement.ClubRelationKind
-import riichinexus.microservices.club.objects.tournamentparticipation.{ClubTournamentParticipationStatus, ClubTournamentScope}
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.club.domain.profile.model.Club
+import riichinexus.microservices.club.domain.profile.model.ClubHonor
+import riichinexus.microservices.club.domain.membership.model.{ClubMemberContribution, ClubMembershipApplication, ClubRecruitmentPolicy, ClubTitleAssignment}
+import riichinexus.microservices.club.domain.rankprivilege.model.ClubMemberPrivilegeSnapshot
+import riichinexus.microservices.club.domain.relation.model.ClubRelation
+import riichinexus.microservices.club.objects.membership.{ClubApplicationStatus, MembershipApplicationId}
+import riichinexus.microservices.club.objects.membership.ClubApplicationReviewDecision
+import riichinexus.microservices.club.objects.rankprivilege.ClubPrivilegeCode
+import riichinexus.microservices.club.objects.rankprivilege.ClubRankNode
+import riichinexus.microservices.club.objects.relation.ClubRelationKind
+import riichinexus.microservices.club.objects.participation.{ClubTournamentParticipationStatus, ClubTournamentScope}
+import riichinexus.microservices.player.objects.PlayerId
 import riichinexus.system.json.JsonCodecSupport.stringEnumReadWriter
 import riichinexus.system.json.SharedJsonCodecs.given
 import upickle.default.{ReadWriter, macroRW, read, readwriter, writeJs}

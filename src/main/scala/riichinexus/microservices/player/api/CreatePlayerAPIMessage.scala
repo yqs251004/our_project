@@ -5,14 +5,14 @@ import java.time.Instant
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.microservices.player.domain.functions.PlayerIdGenerator
-import riichinexus.microservices.auth.objects.`private`.RoleGrant
-import riichinexus.microservices.auth.objects.Role
+import riichinexus.microservices.auth.objects.authorization.`private`.RoleGrant
+import riichinexus.microservices.auth.objects.authorization.Role
 import riichinexus.microservices.opsanalytics.api.`private`.EnsurePlayerDashboardPrivateAPIMessage
 import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.domain.functions.PlayerRoleFunctions
 import riichinexus.microservices.player.objects.{RankPlatform, RankSnapshot}
 import riichinexus.microservices.player.objects.apiTypes.CreatePlayerRequest
-import riichinexus.microservices.player.objects.apiTypes.{PlayerProfileView, PlayerRoleFlagsView}
+import riichinexus.microservices.player.objects.{PlayerProfileView, PlayerRoleFlagsView}
 import riichinexus.microservices.player.tables.players.PlayerTable
 /** 创建玩家档案。 */
 final case class CreatePlayerAPIMessage(

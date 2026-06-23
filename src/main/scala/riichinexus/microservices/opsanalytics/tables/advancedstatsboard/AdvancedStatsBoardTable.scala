@@ -1,5 +1,7 @@
 package riichinexus.microservices.opsanalytics.tables.advancedstatsboard
 
+import riichinexus.system.objects.`private`.AggregateType
+
 import java.sql.{Connection, ResultSet}
 
 import scala.annotation.tailrec
@@ -34,7 +36,7 @@ object AdvancedStatsBoardTable:
     }
     if rowsUpdated == 0 then
       throw OptimisticConcurrencyException(
-        aggregateType = "advanced-stats-board",
+        aggregateType = AggregateType.AdvancedStatsBoard,
         aggregateId = DashboardFunctions.ownerKey(persisted.owner),
         expectedVersion = board.version,
         actualVersion = findByOwner(connection, persisted.owner).map(_.version)

@@ -6,7 +6,7 @@ import riichinexus.microservices.tournament.objects.competition.TournamentFormat
 
 import java.time.Instant
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 import riichinexus.microservices.tournament.domain.stage.model.TournamentStage
 import riichinexus.microservices.tournament.domain.matchrecord.model.MatchRecord
 import riichinexus.microservices.tournament.domain.competition.model.Tournament

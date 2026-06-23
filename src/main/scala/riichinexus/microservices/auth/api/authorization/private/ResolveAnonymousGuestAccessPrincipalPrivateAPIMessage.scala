@@ -1,0 +1,14 @@
+package riichinexus.microservices.auth.api.authorization.`private`
+
+import cats.effect.IO
+import riichinexus.microservices.auth.domain.authorization.functions.AccessPrincipalFunctions
+import riichinexus.microservices.auth.domain.authorization.functions.AccessPrincipalPrivateViewFunctions
+import riichinexus.microservices.auth.objects.authorization.`private`.AccessPrincipalPrivateView
+import riichinexus.system.api.{APIMessage, ApiPlanContext}
+
+/** 供后端服务解析匿名游客访问主体。 */
+final case class ResolveAnonymousGuestAccessPrincipalPrivateAPIMessage()
+    extends APIMessage[AccessPrincipalPrivateView]:
+
+  override def plan(context: ApiPlanContext): IO[AccessPrincipalPrivateView] =
+    IO.blocking(AccessPrincipalPrivateViewFunctions.toPrivateView(AccessPrincipalFunctions.guest()))

@@ -1,7 +1,7 @@
 package riichinexus.microservices.tournament.objects.competition
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.player.objects.PlayerId
+import riichinexus.microservices.club.objects.profile.ClubId
 
 /** 赛事报名或邀请白名单中的一个允许主体。
   *

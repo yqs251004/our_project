@@ -1,5 +1,7 @@
 package riichinexus.microservices.auth.tables.accountcredential
 
+import riichinexus.system.objects.`private`.AggregateType
+
 import java.sql.{Connection, ResultSet, SQLException}
 
 import scala.annotation.tailrec
@@ -7,10 +9,10 @@ import scala.util.Using
 
 import org.postgresql.util.PSQLException
 import riichinexus.system.errors.OptimisticConcurrencyException
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 import riichinexus.system.json.JsonCodecs.given
-import riichinexus.microservices.auth.domain.functions.AccountCredentialFunctions
-import riichinexus.microservices.auth.domain.model.AccountCredential
+import riichinexus.microservices.auth.domain.account.functions.AccountCredentialFunctions
+import riichinexus.microservices.auth.domain.account.model.AccountCredential
 import upickle.default.{read, write}
 
 
@@ -40,7 +42,7 @@ object AccountCredentialTable:
       }
       if rowsUpdated == 0 then
         throw OptimisticConcurrencyException(
-          aggregateType = "account-credential",
+          aggregateType = AggregateType.AccountCredential,
           aggregateId = persisted.username,
           expectedVersion = candidate.version,
           actualVersion = findByUsername(connection, persisted.username).map(_.version)

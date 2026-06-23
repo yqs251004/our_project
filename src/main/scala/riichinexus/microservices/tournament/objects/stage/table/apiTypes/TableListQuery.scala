@@ -1,10 +1,10 @@
 package riichinexus.microservices.tournament.objects.stage.table.apiTypes
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}
 import riichinexus.microservices.tournament.objects.stage.table.TableStatus
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.ReadWriter
+import upickle.default.{ReadWriter, macroRW}
 
 /** 跨赛事或跨阶段查询牌桌列表的过滤参数。
   *
@@ -18,4 +18,7 @@ final case class TableListQuery(
     playerId: Option[PlayerId] = None,
     limit: Option[Int] = None,
     offset: Option[Int] = None
-) derives ReadWriter
+)
+
+object TableListQuery:
+  given ReadWriter[TableListQuery] = macroRW

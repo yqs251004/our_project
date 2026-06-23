@@ -1,18 +1,18 @@
 package riichinexus.microservices.player.api
 
-import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
+import riichinexus.microservices.auth.api.authorization.AuthCheckPermissionAPIMessage
 
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.auth.objects.Permission
+import riichinexus.microservices.club.objects.profile.ClubId
+import riichinexus.microservices.auth.objects.authorization.Permission
 import riichinexus.system.api.AuthorizationFailure
 import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.domain.functions.PlayerClubBindingFunctions
 import riichinexus.microservices.player.objects.PlayerStatus
 import riichinexus.microservices.player.tables.players.PlayerTable
-import riichinexus.microservices.player.objects.apiTypes.PlayerLeaderboardEntry
-import riichinexus.system.objects.PagedResponse
+import riichinexus.microservices.player.objects.PlayerLeaderboardEntry
+import riichinexus.system.objects.{PagedResponse, QueryFilterField}
 import riichinexus.system.json.JsonCodecs.given
 /** 获取前端公开玩家排行榜。 */
 final case class PublicPlayerLeaderboardAPIMessage(
@@ -25,11 +25,17 @@ final case class PublicPlayerLeaderboardAPIMessage(
   override def plan(context: ApiPlanContext): IO[PagedResponse[PlayerLeaderboardEntry]] =
     for
       _ <- requirePublicLeaderboardPermission(context)
-      query <- IO.blocking(resolveQuery(context))
+      requestedClubId <- IO.blocking(clubId.filter(_.nonEmpty).map(ClubId(_).value))
+      statusFilter <- IO.blocking(
+        status.filter(_.nonEmpty).map(
+          riichinexus.system.EnumParsing.parse(QueryFilterField.toString(QueryFilterField.Status), _)(PlayerStatus.valueOf)
+        )
+      )
+      appliedFilters = leaderboardFilters
       players <- loadPublicPlayers(context)
       entries = publicPlayerLeaderboardEntries(players)
-      filteredEntries = filterPublicPlayerLeaderboardEntries(entries, query)
-    yield PagedResponse.fromItems(filteredEntries, limit, offset, query.appliedFilters)(identity)
+      filteredEntries = filterPublicPlayerLeaderboardEntries(entries, requestedClubId, statusFilter)
+    yield PagedResponse.fromItems(filteredEntries, limit, offset, appliedFilters)(identity)
 
   private def requirePublicLeaderboardPermission(context: ApiPlanContext): IO[Unit] =
     AuthCheckPermissionAPIMessage(
@@ -39,17 +45,11 @@ final case class PublicPlayerLeaderboardAPIMessage(
       else IO.raiseError(AuthorizationFailure("guest is not allowed to view public leaderboard"))
     }
 
-  private def resolveQuery(context: ApiPlanContext): ResolvedPlayerLeaderboardQuery =
-    ResolvedPlayerLeaderboardQuery(
-      clubId = clubId.filter(_.nonEmpty).map(ClubId(_).value),
-      status = status.filter(_.nonEmpty).map(
-        riichinexus.system.EnumParsing.parse("status", _)(PlayerStatus.valueOf)
-      ),
-      appliedFilters = Vector(
-        clubId.filter(_.nonEmpty).map("clubId" -> _),
-        status.filter(_.nonEmpty).map("status" -> _)
-      ).flatten.toMap
-    )
+  private def leaderboardFilters: Map[String, String] =
+    Vector(
+      clubId.filter(_.nonEmpty).map(QueryFilterField.toString(QueryFilterField.ClubId) -> _),
+      status.filter(_.nonEmpty).map(QueryFilterField.toString(QueryFilterField.Status) -> _)
+    ).flatten.toMap
 
   private def loadPublicPlayers(context: ApiPlanContext): IO[Vector[Player]] =
     IO.blocking(PlayerTable.findAll(context.connection))
@@ -71,15 +71,9 @@ final case class PublicPlayerLeaderboardAPIMessage(
 
   private def filterPublicPlayerLeaderboardEntries(
       entries: Vector[PlayerLeaderboardEntry],
-      query: ResolvedPlayerLeaderboardQuery
+      clubId: Option[String],
+      status: Option[PlayerStatus]
   ): Vector[PlayerLeaderboardEntry] =
     entries
-      .filter(entry => query.clubId.forall(entry.clubIds.contains))
-      .filter(entry => query.status.forall(_.toString == entry.status))
-
-  /** 公开玩家排行榜接口解析后的过滤条件。 */
-  private final case class ResolvedPlayerLeaderboardQuery(
-      clubId: Option[String],
-      status: Option[PlayerStatus],
-      appliedFilters: Map[String, String]
-  )
+      .filter(entry => clubId.forall(entry.clubIds.contains))
+      .filter(entry => status.forall(_.toString == entry.status))

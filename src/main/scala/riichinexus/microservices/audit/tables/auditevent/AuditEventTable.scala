@@ -1,6 +1,7 @@
 package riichinexus.microservices.audit.tables.auditevent
-import riichinexus.microservices.audit.domain.auditevent.AuditEvent
+import riichinexus.microservices.audit.domain.model.AuditEvent
 import riichinexus.microservices.audit.objects.`private`.AuditEventType
+import riichinexus.system.objects.`private`.AggregateType
 
 import java.sql.{Connection, PreparedStatement, ResultSet, Timestamp, Types}
 
@@ -28,7 +29,7 @@ object AuditEventTable:
   private[audit] def save(connection: Connection, event: AuditEvent): AuditEvent =
     Using.resource(connection.prepareStatement(upsertSql)) { statement =>
       statement.setString(1, event.id.value)
-      statement.setString(2, event.aggregateType)
+      statement.setString(2, AggregateType.toString(event.aggregateType))
       statement.setString(3, event.aggregateId)
       statement.setString(4, event.eventType.toString)
       statement.setTimestamp(5, Timestamp.from(event.occurredAt))
@@ -48,11 +49,11 @@ object AuditEventTable:
 
   private[audit] def findByAggregate(
       connection: Connection,
-      aggregateType: String,
+      aggregateType: AggregateType,
       aggregateId: String
   ): Vector[AuditEvent] =
     Using.resource(connection.prepareStatement(findByAggregateSql)) { statement =>
-      statement.setString(1, aggregateType)
+      statement.setString(1, AggregateType.toString(aggregateType))
       statement.setString(2, aggregateId)
       Using.resource(statement.executeQuery())(readEvents)
     }
@@ -67,11 +68,11 @@ object AuditEventTable:
 
   private[audit] def findByAggregateOldestFirst(
       connection: Connection,
-      aggregateType: String,
+      aggregateType: AggregateType,
       aggregateId: String
   ): Vector[AuditEvent] =
     Using.resource(connection.prepareStatement(findByAggregateOldestFirstSql)) { statement =>
-      statement.setString(1, aggregateType)
+      statement.setString(1, AggregateType.toString(aggregateType))
       statement.setString(2, aggregateId)
       Using.resource(statement.executeQuery())(readEvents)
     }
@@ -86,12 +87,12 @@ object AuditEventTable:
 
   private[audit] def findByAggregateAndEventType(
       connection: Connection,
-      aggregateType: String,
+      aggregateType: AggregateType,
       aggregateId: String,
       eventType: AuditEventType
   ): Vector[AuditEvent] =
     Using.resource(connection.prepareStatement(findByAggregateAndEventTypeSql)) { statement =>
-      statement.setString(1, aggregateType)
+      statement.setString(1, AggregateType.toString(aggregateType))
       statement.setString(2, aggregateId)
       statement.setString(3, eventType.toString)
       Using.resource(statement.executeQuery())(readEvents)
@@ -107,12 +108,12 @@ object AuditEventTable:
 
   private[audit] def findByAggregateAndEventTypeOldestFirst(
       connection: Connection,
-      aggregateType: String,
+      aggregateType: AggregateType,
       aggregateId: String,
       eventType: AuditEventType
   ): Vector[AuditEvent] =
     Using.resource(connection.prepareStatement(findByAggregateAndEventTypeOldestFirstSql)) { statement =>
-      statement.setString(1, aggregateType)
+      statement.setString(1, AggregateType.toString(aggregateType))
       statement.setString(2, aggregateId)
       statement.setString(3, eventType.toString)
       Using.resource(statement.executeQuery())(readEvents)

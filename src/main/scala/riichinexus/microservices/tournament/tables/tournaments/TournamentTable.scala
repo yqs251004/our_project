@@ -1,5 +1,7 @@
 package riichinexus.microservices.tournament.tables.tournaments
 
+import riichinexus.system.objects.`private`.AggregateType
+
 import java.sql.{Connection, PreparedStatement, ResultSet, SQLException, Types}
 
 import scala.annotation.tailrec
@@ -7,8 +9,8 @@ import scala.util.Using
 
 import org.postgresql.util.PSQLException
 import riichinexus.system.errors.OptimisticConcurrencyException
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.player.objects.PlayerId
+import riichinexus.microservices.club.objects.profile.ClubId
 import riichinexus.microservices.tournament.objects.identity.TournamentId
 import riichinexus.microservices.tournament.domain.competition.functions.TournamentDefaultsFunctions
 import riichinexus.microservices.tournament.domain.competition.model.Tournament
@@ -44,7 +46,7 @@ object TournamentTable:
       }
       if rowsUpdated == 0 then
         throw OptimisticConcurrencyException(
-          aggregateType = "tournament",
+          aggregateType = AggregateType.Tournament,
           aggregateId = persisted.id.value,
           expectedVersion = candidate.version,
           actualVersion = findById(connection, persisted.id).map(_.version)

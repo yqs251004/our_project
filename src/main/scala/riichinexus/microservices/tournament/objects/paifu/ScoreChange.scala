@@ -1,6 +1,6 @@
 package riichinexus.microservices.tournament.objects.paifu
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 
 /** 一小局结算后某位玩家的点数变化。
   *

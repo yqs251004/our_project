@@ -2,10 +2,10 @@ package riichinexus.microservices.opsanalytics.domain.functions
 
 import java.time.Instant
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.player.objects.PlayerId
+import riichinexus.microservices.club.objects.profile.ClubId
 import riichinexus.microservices.opsanalytics.objects.{Dashboard, DashboardOwner}
-import riichinexus.microservices.tournament.objects.`private`.matchrecord.MatchRecordPrivateView
+import riichinexus.microservices.tournament.objects.matchrecord.`private`.MatchRecordPrivateView
 import riichinexus.microservices.tournament.objects.paifu.PaifuRound
 
 /** DashboardFunctions 提供仪表盘相关的领域计算、校验和转换函数。 */

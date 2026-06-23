@@ -1,5 +1,6 @@
 package riichinexus.microservices.tournament.domain.finalization.functions
 
+import riichinexus.system.objects.`private`.{NotificationSeverity, NotificationSourceService, NotificationSourceType}
 import java.sql.Connection
 
 import riichinexus.microservices.notification.objects.NotificationType
@@ -27,9 +28,9 @@ private[tournament] object TournamentSettlementNotificationRequestFunctions:
         notificationType = NotificationType.TournamentSettlementFinalized,
         title = "赛事结算已完成",
         body = s"$tournamentName 已完成结算：你的排名第 ${entry.rank}，结算分 ${entry.finalPoints}。",
-        severity = Some("info"),
-        sourceService = "tournament",
-        sourceType = "tournament-settlement",
+        severity = Some(NotificationSeverity.Info),
+        sourceService = NotificationSourceService.Tournament,
+        sourceType = NotificationSourceType.TournamentSettlement,
         sourceId = snapshot.id.value,
         actionUrl = Some(s"/public/tournaments/${snapshot.tournamentId.value}"),
         objects = Map(

@@ -3,8 +3,23 @@ import riichinexus.system.api.RegisteredAPIMessage
 
 
 import riichinexus.system.json.JsonCodecs.given
-import riichinexus.microservices.auth.api.{AuthCheckPermissionAPIMessage, BootstrapSuperAdminAuthAPIMessage, CreateGuestSessionAuthAPIMessage, CurrentSessionAuthAPIMessage, GetGuestSessionAuthAPIMessage, ListGuestSessionsAuthAPIMessage, LoginAuthAPIMessage, LogoutAuthAPIMessage, RegisterAuthAPIMessage, RestoreAuthSessionAPIMessage, RevokeGuestSessionAuthAPIMessage, UpgradeGuestSessionAuthAPIMessage}
-import riichinexus.microservices.auth.objects.apiTypes.{AuthSessionView, AuthSuccessView, CurrentSessionView, GuestSessionResponse, LogoutResponse}
+import riichinexus.microservices.auth.api.authorization.AuthCheckPermissionAPIMessage
+import riichinexus.microservices.auth.api.account.BootstrapSuperAdminAuthAPIMessage
+import riichinexus.microservices.auth.api.session.CreateGuestSessionAuthAPIMessage
+import riichinexus.microservices.auth.api.session.CurrentSessionAuthAPIMessage
+import riichinexus.microservices.auth.api.session.GetGuestSessionAuthAPIMessage
+import riichinexus.microservices.auth.api.session.ListGuestSessionsAuthAPIMessage
+import riichinexus.microservices.auth.api.account.LoginAuthAPIMessage
+import riichinexus.microservices.auth.api.session.LogoutAuthAPIMessage
+import riichinexus.microservices.auth.api.account.RegisterAuthAPIMessage
+import riichinexus.microservices.auth.api.session.RestoreAuthSessionAPIMessage
+import riichinexus.microservices.auth.api.session.RevokeGuestSessionAuthAPIMessage
+import riichinexus.microservices.auth.api.session.UpgradeGuestSessionAuthAPIMessage
+import riichinexus.microservices.auth.objects.session.apiTypes.GuestSessionResponse
+import riichinexus.microservices.auth.objects.session.apiTypes.LogoutResponse
+import riichinexus.microservices.auth.objects.session.AuthSessionView
+import riichinexus.microservices.auth.objects.session.AuthSuccessView
+import riichinexus.microservices.auth.objects.session.CurrentSessionView
 import riichinexus.system.objects.PagedResponse
 
 

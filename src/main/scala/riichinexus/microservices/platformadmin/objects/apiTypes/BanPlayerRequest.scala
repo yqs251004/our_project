@@ -1,8 +1,8 @@
 package riichinexus.microservices.platformadmin.objects.apiTypes
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.ReadWriter
+import upickle.default.{ReadWriter, macroRW}
 
 /** 平台管理员封禁玩家时提交的请求体。
   *
@@ -11,4 +11,7 @@ import upickle.default.ReadWriter
 final case class BanPlayerRequest(
     operatorId: PlayerId,
     reason: String
-) derives ReadWriter
+)
+
+object BanPlayerRequest:
+  given ReadWriter[BanPlayerRequest] = macroRW

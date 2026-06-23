@@ -1,10 +1,10 @@
 package riichinexus.microservices.tournament.objects.matchrecord.apiTypes
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 import riichinexus.microservices.tournament.objects.stage.table.TableId
 import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.ReadWriter
+import upickle.default.{ReadWriter, macroRW}
 
 /** 查询赛事对局记录列表的过滤和分页参数。
   *
@@ -17,4 +17,7 @@ final case class MatchRecordListQuery(
     tableId: Option[TableId] = None,
     limit: Option[Int] = None,
     offset: Option[Int] = None
-) derives ReadWriter
+)
+
+object MatchRecordListQuery:
+  given ReadWriter[MatchRecordListQuery] = macroRW

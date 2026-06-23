@@ -1,17 +1,17 @@
 package riichinexus.microservices.opsanalytics.api
-import riichinexus.microservices.auth.objects.Permission
-import riichinexus.microservices.auth.api.`private`.ResolveAccessPrincipalPrivateAPIMessage
-import riichinexus.microservices.auth.api.AuthCheckPermissionAPIMessage
+import riichinexus.microservices.auth.objects.authorization.Permission
+import riichinexus.microservices.auth.api.authorization.`private`.ResolveAccessPrincipalPrivateAPIMessage
+import riichinexus.microservices.auth.api.authorization.AuthCheckPermissionAPIMessage
 
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 import riichinexus.system.api.AuthorizationFailure
-import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
+import riichinexus.microservices.auth.objects.authorization.`private`.AccessPrincipalPrivateView
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.opsanalytics.objects.{AdvancedStatsRecomputeTask, AdvancedStatsRecomputeTaskStatus}
 import riichinexus.microservices.opsanalytics.tables.advancedstatsrecomputetask.AdvancedStatsRecomputeTaskTable
-import riichinexus.system.objects.PagedResponse
+import riichinexus.system.objects.{PagedResponse, QueryFilterField}
 /** 列出高级统计重算任务。 */
 final case class OpsAnalyticsListAdvancedStatsTasksAPIMessage(
     operatorId: PlayerId,
@@ -24,23 +24,19 @@ final case class OpsAnalyticsListAdvancedStatsTasksAPIMessage(
     for
       operator <- ResolveAccessPrincipalPrivateAPIMessage(operatorId).plan(context)
       _ <- requireOpsAdmin(context, operator)
-      query = resolveQuery
-      tasks <- IO.blocking(listTasks(context, query))
-    yield paged(tasks, query)
-
-  private def resolveQuery: AdvancedStatsTasksQuery =
-    AdvancedStatsTasksQuery(
-      status = status,
-      appliedFilters = Map.from(status.map(value => "status" -> AdvancedStatsRecomputeTaskStatus.toString(value)))
-    )
+      appliedFilters = Map.from(status.map(value =>
+        QueryFilterField.toString(QueryFilterField.Status) -> AdvancedStatsRecomputeTaskStatus.toString(value)
+      ))
+      tasks <- IO.blocking(listTasks(context, status))
+    yield paged(tasks, appliedFilters)
 
   private def listTasks(
       context: ApiPlanContext,
-      query: AdvancedStatsTasksQuery
+      status: Option[AdvancedStatsRecomputeTaskStatus]
   ): Vector[AdvancedStatsRecomputeTask] =
     AdvancedStatsRecomputeTaskTable
       .findAll(context.connection)
-      .filter(task => query.status.forall(_ == task.status))
+      .filter(task => status.forall(_ == task.status))
 
   private def requireOpsAdmin(context: ApiPlanContext, operator: AccessPrincipalPrivateView): IO[Unit] =
     AuthCheckPermissionAPIMessage(
@@ -53,7 +49,7 @@ final case class OpsAnalyticsListAdvancedStatsTasksAPIMessage(
 
   private def paged(
       items: Vector[AdvancedStatsRecomputeTask],
-      query: AdvancedStatsTasksQuery
+      appliedFilters: Map[String, String]
   ): PagedResponse[AdvancedStatsRecomputeTask] =
     val resolvedLimit = limit.getOrElse(20)
     val resolvedOffset = offset.getOrElse(0)
@@ -61,10 +57,4 @@ final case class OpsAnalyticsListAdvancedStatsTasksAPIMessage(
     if resolvedOffset < 0 then throw IllegalArgumentException("Input field offset must be non-negative")
     val boundedLimit = math.min(resolvedLimit, 100)
     val page = items.slice(resolvedOffset, resolvedOffset + boundedLimit)
-    PagedResponse(page, items.size, boundedLimit, resolvedOffset, resolvedOffset + page.size < items.size, query.appliedFilters)
-
-  /** 已解析的高级统计任务列表查询条件。 */
-  private final case class AdvancedStatsTasksQuery(
-      status: Option[AdvancedStatsRecomputeTaskStatus],
-      appliedFilters: Map[String, String]
-  )
+    PagedResponse(page, items.size, boundedLimit, resolvedOffset, resolvedOffset + page.size < items.size, appliedFilters)

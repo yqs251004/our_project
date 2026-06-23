@@ -3,7 +3,7 @@ package riichinexus.microservices.tournament.objects.competition.apiTypes
 import java.time.Instant
 
 import riichinexus.system.json.JsonCodecs.given
-import riichinexus.microservices.tournament.objects.stage.apiTypes.CreateTournamentStageRequest
+import riichinexus.microservices.tournament.objects.stage.lifecycle.apiTypes.CreateTournamentStageRequest
 import upickle.default.{ReadWriter, macroRW}
 
 /** 创建赛事时提交的基础信息和阶段规划。

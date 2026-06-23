@@ -1,6 +1,6 @@
 package riichinexus.microservices.tournament.mahjongcore.domain.gamestate.functions
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 import riichinexus.microservices.tournament.mahjongcore.domain.gamestate.model.{MahjongRoundState, MahjongSeatState, MahjongSubmittedAction, MahjongTableState}
 import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.MahjongTileFunctions
 import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.MahjongTileFunctions.{indexOf, isRed}

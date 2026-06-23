@@ -3,7 +3,7 @@ package riichinexus.microservices.player.api.`private`
 import cats.effect.IO
 import riichinexus.microservices.player.domain.functions.PlayerPrivateViewFunctions
 import riichinexus.microservices.player.objects.`private`.PlayerPrivateView
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 import riichinexus.microservices.player.tables.players.PlayerTable
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.system.json.JsonCodecs.given

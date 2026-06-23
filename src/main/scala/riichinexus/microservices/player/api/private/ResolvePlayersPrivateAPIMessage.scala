@@ -5,7 +5,7 @@ import riichinexus.system.api.{APIMessage, ApiPlanContext}
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.player.domain.functions.PlayerPrivateViewFunctions
 import riichinexus.microservices.player.objects.`private`.PlayerPrivateView
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 import riichinexus.microservices.player.tables.players.PlayerTable
 /** 供后端服务按 id 批量解析玩家 private read model。 */
 final case class ResolvePlayersPrivateAPIMessage(

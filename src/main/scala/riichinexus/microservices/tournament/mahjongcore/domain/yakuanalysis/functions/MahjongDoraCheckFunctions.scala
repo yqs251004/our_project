@@ -1,16 +1,17 @@
 package riichinexus.microservices.tournament.mahjongcore.domain.yakuanalysis.functions
 
 import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.MahjongTileFunctions.{countDora, redDoraCount}
+import riichinexus.microservices.tournament.mahjongcore.domain.yakuanalysis.model.MahjongYakuCheckState
 import riichinexus.microservices.tournament.objects.paifu.MahjongYakuKind
 import riichinexus.microservices.tournament.objects.paifu.Yaku
 
-import MahjongYakuCheckSupport.{MahjongYakuCheckState, YakuCheck, yakuIf}
+import MahjongYakuCheckSupport.yakuIf
 
 /** MahjongDoraCheckFunctions 提供麻将宝牌检查函数 相关的领域校验和权限判断。 */
 
 private[mahjongcore] object MahjongDoraCheckFunctions:
 
-  val plan: Vector[YakuCheck] =
+  val plan: Vector[MahjongYakuCheckState => Vector[Yaku]] =
     Vector(checkDora, checkAkaDora, checkUraDora)
 
   private def checkDora(state: MahjongYakuCheckState): Vector[Yaku] =
@@ -26,4 +27,3 @@ private[mahjongcore] object MahjongDoraCheckFunctions:
       if state.context.riichi || state.context.doubleRiichi then countDora(state.allTiles, state.context.uraDoraIndicators)
       else 0
     yakuIf(ura > 0, MahjongYakuKind.UraDora, ura)
-

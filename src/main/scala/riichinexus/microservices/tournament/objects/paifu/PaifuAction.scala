@@ -1,6 +1,6 @@
 package riichinexus.microservices.tournament.objects.paifu
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 
 /** 牌谱时间线中的单个可回放动作。
   *

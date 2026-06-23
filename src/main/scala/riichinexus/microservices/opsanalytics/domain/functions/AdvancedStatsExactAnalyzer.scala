@@ -2,7 +2,7 @@ package riichinexus.microservices.opsanalytics.domain.functions
 
 import riichinexus.microservices.tournament.objects.paifu.{PaifuAction, PaifuActionType, PaifuRound, PaifuTile, PaifuTileSuit}
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 import riichinexus.microservices.opsanalytics.domain.model.{ExactDefenseState, ExactRoundStats, ExactUkeireState}
 
 /** AdvancedStatsExactAnalyzer 提供高级统计ExactAnalyzer 相关的领域计算、校验和转换函数。 */

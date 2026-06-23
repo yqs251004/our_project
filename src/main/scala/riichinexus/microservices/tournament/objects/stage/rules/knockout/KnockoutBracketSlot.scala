@@ -1,8 +1,8 @@
 package riichinexus.microservices.tournament.objects.stage.rules.knockout
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.ReadWriter
+import upickle.default.{ReadWriter, macroRW}
 
 /** 淘汰赛对阵中一个参赛席位的来源。
   *
@@ -14,4 +14,7 @@ final case class KnockoutBracketSlot(
     bye: Boolean = false,
     sourceMatchId: Option[String] = None,
     sourcePlacement: Option[Int] = None
-) derives ReadWriter
+)
+
+object KnockoutBracketSlot:
+  given ReadWriter[KnockoutBracketSlot] = macroRW

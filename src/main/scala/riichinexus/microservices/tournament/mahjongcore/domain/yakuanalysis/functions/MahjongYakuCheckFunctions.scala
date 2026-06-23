@@ -1,22 +1,16 @@
 package riichinexus.microservices.tournament.mahjongcore.domain.yakuanalysis.functions
 
 import riichinexus.microservices.tournament.mahjongcore.domain.handanalysis.model.{MahjongHandDecomposition, MahjongHandMeld}
-import riichinexus.microservices.tournament.mahjongcore.domain.yakuanalysis.model.MahjongWinContext
+import riichinexus.microservices.tournament.mahjongcore.domain.yakuanalysis.model.{MahjongWinContext, MahjongYakuCandidate, MahjongYakuCheckState}
 import riichinexus.microservices.tournament.objects.paifu.{PaifuTile, Yaku}
 
-import MahjongYakuCheckSupport.{MahjongYakuCheckState, YakuCheck, runPlan}
+import MahjongYakuCheckSupport.runPlan
 
 /** MahjongYakuCheckFunctions 提供麻将役种检查函数 相关的领域校验和权限判断。 */
 
 private[mahjongcore] object MahjongYakuCheckFunctions:
 
-  /** 一种普通手拆解路径下识别出的役种候选结果。 */
-  final case class MahjongYakuCandidate(
-      yaku: Vector[Yaku],
-      decomposition: Option[MahjongHandDecomposition]
-  )
-
-  private val ordinaryPlan: Vector[YakuCheck] =
+  private val ordinaryPlan: Vector[MahjongYakuCheckState => Vector[Yaku]] =
     MahjongBasicYakuCheckFunctions.plan ++
       MahjongShapeYakuCheckFunctions.plan ++
       MahjongSuitYakuCheckFunctions.plan

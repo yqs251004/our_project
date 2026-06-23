@@ -1,7 +1,7 @@
 package riichinexus.microservices.tournament.domain.stage.model
 
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 import riichinexus.microservices.tournament.objects.stage.table.SeatWind
 
 import riichinexus.system.json.JsonCodecs.given

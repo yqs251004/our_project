@@ -2,7 +2,7 @@ package riichinexus.microservices.tournament.objects.stage.rules.knockout
 
 import riichinexus.microservices.tournament.objects.stage.table.TableId
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.ReadWriter
+import upickle.default.{ReadWriter, macroRW}
 
 /** 淘汰赛 bracket 中的一场对局节点。
   *
@@ -21,4 +21,7 @@ final case class KnockoutBracketMatch(
     unlocked: Boolean = false,
     completed: Boolean = false,
     results: Vector[KnockoutBracketResult] = Vector.empty
-) derives ReadWriter
+)
+
+object KnockoutBracketMatch:
+  given ReadWriter[KnockoutBracketMatch] = macroRW

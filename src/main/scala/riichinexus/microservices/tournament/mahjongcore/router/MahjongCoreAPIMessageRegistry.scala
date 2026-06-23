@@ -1,9 +1,11 @@
 package riichinexus.microservices.tournament.mahjongcore.router
 
-import riichinexus.microservices.tournament.mahjongcore.api.{MahjongCoreAdvanceRoundAPIMessage, MahjongCoreArchiveTableAPIMessage, MahjongCoreGetShowcaseModeAPIMessage, MahjongCoreGetTableAPIMessage, MahjongCoreSetShowcaseModeAPIMessage, MahjongCoreSubmitActionAPIMessage}
+import riichinexus.microservices.tournament.mahjongcore.api.gamestate.{MahjongCoreAdvanceRoundAPIMessage, MahjongCoreGetShowcaseModeAPIMessage, MahjongCoreGetTableAPIMessage, MahjongCoreSetShowcaseModeAPIMessage}
+import riichinexus.microservices.tournament.mahjongcore.api.paifu.{MahjongCoreArchiveTableAPIMessage}
+import riichinexus.microservices.tournament.mahjongcore.api.action.{MahjongCoreSubmitActionAPIMessage}
 import riichinexus.microservices.tournament.mahjongcore.objects.action.apiTypes.MahjongActionResponse
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.MahjongTableView
-import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.apiTypes.MahjongCoreShowcaseModeView
+import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.MahjongCoreShowcaseModeView
 import riichinexus.system.api.RegisteredAPIMessage
 
 

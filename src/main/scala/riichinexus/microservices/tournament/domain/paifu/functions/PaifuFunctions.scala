@@ -1,6 +1,6 @@
 package riichinexus.microservices.tournament.domain.paifu.functions
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 
 import riichinexus.microservices.tournament.objects.paifu.{HandOutcome, Paifu, PaifuAction, PaifuActionType, PaifuRound}
 

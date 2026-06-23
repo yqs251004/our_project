@@ -2,12 +2,12 @@ package riichinexus.microservices.tournament.appeal.objects.apiTypes
 
 import java.time.Instant
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 import riichinexus.microservices.tournament.objects.stage.table.TableId
 import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}
 import riichinexus.microservices.tournament.appeal.objects.{AppealPriority, AppealStatus}
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.ReadWriter
+import upickle.default.{ReadWriter, macroRW}
 
 /** 后台查询申诉列表时使用的筛选条件。
   *
@@ -27,4 +27,7 @@ final case class AppealListQuery(
     asOf: Option[Instant] = None,
     limit: Option[Int] = None,
     offset: Option[Int] = None
-) derives ReadWriter
+)
+
+object AppealListQuery:
+  given ReadWriter[AppealListQuery] = macroRW

@@ -1,6 +1,6 @@
 package riichinexus.microservices.player.objects.apiTypes
 
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.club.objects.profile.ClubId
 import riichinexus.system.json.JsonCodecs.given
 import riichinexus.microservices.player.objects.PlayerStatus
 import upickle.default.{ReadWriter, macroRW}

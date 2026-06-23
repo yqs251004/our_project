@@ -1,8 +1,14 @@
 package riichinexus.system.json
 
-import riichinexus.microservices.auth.domain.model.{AccessPrincipal, AccountCredential, AuthenticatedSession, GuestAccessSession}
-import riichinexus.microservices.auth.objects.`private`.{AccessPrincipalPrivateView, RoleGrant}
-import riichinexus.microservices.auth.objects.{Permission, Role, SessionPrincipalKind}
+import riichinexus.microservices.auth.domain.authorization.model.AccessPrincipal
+import riichinexus.microservices.auth.domain.account.model.AccountCredential
+import riichinexus.microservices.auth.domain.session.model.AuthenticatedSession
+import riichinexus.microservices.auth.domain.session.model.GuestAccessSession
+import riichinexus.microservices.auth.objects.authorization.`private`.AccessPrincipalPrivateView
+import riichinexus.microservices.auth.objects.authorization.`private`.RoleGrant
+import riichinexus.microservices.auth.objects.authorization.Permission
+import riichinexus.microservices.auth.objects.authorization.Role
+import riichinexus.microservices.auth.objects.session.SessionPrincipalKind
 import riichinexus.system.json.JsonCodecSupport.{eitherStringEnumReadWriter, stringEnumReadWriter}
 import riichinexus.system.json.SharedJsonCodecs.given
 import upickle.default.{ReadWriter, macroRW, read, readwriter, writeJs}
@@ -27,7 +33,7 @@ object AuthJsonCodecs:
           AccessPrincipalPrivateView(
             principalId = read[String](obj("principalId")),
             displayName = read[String](obj("displayName")),
-            playerId = read[Option[riichinexus.microservices.player.objects.playerprofile.PlayerId]](obj("playerId")),
+            playerId = read[Option[riichinexus.microservices.player.objects.PlayerId]](obj("playerId")),
             roleGrants = obj.value.get("roleGrants").fold(Vector.empty[RoleGrant])(read[Vector[RoleGrant]](_))
           )
         case json =>

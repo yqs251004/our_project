@@ -1,6 +1,6 @@
 package riichinexus.microservices.tournament.domain.finalization.model
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 import riichinexus.microservices.tournament.objects.finalization.SettlementSnapshotId
 import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}
 

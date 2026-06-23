@@ -2,9 +2,9 @@ package riichinexus.microservices.notification.objects
 
 import java.time.Instant
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.ReadWriter
+import upickle.default.{ReadWriter, macroRW}
 
 /** 发给玩家的一条持久化系统通知。
   *
@@ -25,4 +25,7 @@ final case class Notification(
     createdAt: Instant,
     expiresAt: Option[Instant] = None,
     objects: Map[String, String] = Map.empty
-) derives ReadWriter
+)
+
+object Notification:
+  given ReadWriter[Notification] = macroRW

@@ -1,16 +1,17 @@
 package riichinexus.microservices.tournament.mahjongcore.domain.yakuanalysis.functions
 
 import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.MahjongTileFunctions.{Chun, Haku, Hatsu, isSimple}
+import riichinexus.microservices.tournament.mahjongcore.domain.yakuanalysis.model.MahjongYakuCheckState
 import riichinexus.microservices.tournament.objects.paifu.MahjongYakuKind
 import riichinexus.microservices.tournament.objects.paifu.Yaku
 
-import MahjongYakuCheckSupport.{MahjongYakuCheckState, YakuCheck, tripletLike, windToIndex, yakuIf}
+import MahjongYakuCheckSupport.{tripletLike, windToIndex, yakuIf}
 
 /** MahjongBasicYakuCheckFunctions 提供麻将基础役种检查函数 相关的领域校验和权限判断。 */
 
 private[mahjongcore] object MahjongBasicYakuCheckFunctions:
 
-  val plan: Vector[YakuCheck] =
+  val plan: Vector[MahjongYakuCheckState => Vector[Yaku]] =
     Vector(
       checkChiitoitsu,
       checkMenzenTsumo,
@@ -93,4 +94,3 @@ private[mahjongcore] object MahjongBasicYakuCheckFunctions:
       MahjongYakuKind.SeatWind,
       1
     )
-

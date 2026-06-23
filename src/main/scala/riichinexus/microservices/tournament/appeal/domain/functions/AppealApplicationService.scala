@@ -6,12 +6,12 @@ import java.sql.Connection
 import java.time.Instant
 
 import cats.effect.IO
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 import riichinexus.microservices.tournament.objects.stage.table.TableId
 import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}
 
-import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
-import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
+import riichinexus.microservices.tournament.appeal.objects.AppealTicketId
+import riichinexus.microservices.auth.objects.authorization.`private`.AccessPrincipalPrivateView
 import riichinexus.microservices.tournament.appeal.domain.model.{AppealAttachment, AppealTicket}
 import riichinexus.microservices.tournament.appeal.objects.{AppealDecisionType, AppealPriority, AppealStatus, AppealTableResolution}
 

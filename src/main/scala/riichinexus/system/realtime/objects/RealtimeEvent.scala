@@ -3,7 +3,8 @@ package riichinexus.system.realtime.objects
 import java.time.Instant
 
 import riichinexus.system.json.JsonCodecs.given
-import upickle.default.{ReadWriter, Writer, writeJs}
+import riichinexus.system.json.RealtimeJsonCodecs.given
+import upickle.default.{ReadWriter, macroRW}
 
 /** 发送到实时通道的标准事件载荷。
   *
@@ -15,7 +16,7 @@ final case class RealtimeEvent(
     aggregateType: String,
     aggregateId: String,
     occurredAt: Instant,
-    sourceEventType: String,
+    sourceEventType: RealtimeSourceEventType,
     actorId: Option[String] = None,
     recipientPlayerId: Option[String] = None,
     title: Option[String] = None,
@@ -23,8 +24,7 @@ final case class RealtimeEvent(
     severity: Option[String] = None,
     actionUrl: Option[String] = None,
     data: Option[ujson.Value] = None
-) derives ReadWriter
+) 
 
 object RealtimeEvent:
-  def data[A: Writer](value: A): ujson.Value =
-    writeJs(value)
+  given ReadWriter[RealtimeEvent] = macroRW

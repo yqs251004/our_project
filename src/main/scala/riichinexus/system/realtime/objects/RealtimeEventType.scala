@@ -14,6 +14,7 @@ enum RealtimeEventType:
   case TournamentChanged
   case PlayerChanged
   case DomainChanged
+  case MahjongTableChanged
   case MahjongActionAccepted
 
 object RealtimeEventType:

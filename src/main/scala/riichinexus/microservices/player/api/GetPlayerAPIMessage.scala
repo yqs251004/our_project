@@ -4,11 +4,11 @@ import java.util.NoSuchElementException
 
 import cats.effect.IO
 import riichinexus.system.api.{APIMessage, ApiPlanContext}
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.auth.objects.Role
+import riichinexus.microservices.player.objects.PlayerId
+import riichinexus.microservices.auth.objects.authorization.Role
 import riichinexus.microservices.player.domain.Player
 import riichinexus.microservices.player.domain.functions.PlayerRoleFunctions
-import riichinexus.microservices.player.objects.apiTypes.{PlayerProfileView, PlayerRoleFlagsView}
+import riichinexus.microservices.player.objects.{PlayerProfileView, PlayerRoleFlagsView}
 import riichinexus.microservices.player.tables.players.PlayerTable
 /** 获取玩家档案。 */
 final case class GetPlayerAPIMessage(

@@ -3,13 +3,13 @@ package riichinexus.system.json
 import java.time.Instant
 import scala.annotation.targetName
 
-import riichinexus.microservices.audit.domain.auditevent.AuditEventId
-import riichinexus.microservices.auth.objects.sessionmanagement.GuestSessionId
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
-import riichinexus.microservices.club.objects.membershipmanagement.MembershipApplicationId
-import riichinexus.microservices.opsanalytics.objects.advancedstats.AdvancedStatsRecomputeTaskId
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
+import riichinexus.microservices.audit.domain.model.AuditEventId
+import riichinexus.microservices.auth.objects.session.GuestSessionId
+import riichinexus.microservices.club.objects.profile.ClubId
+import riichinexus.microservices.club.objects.membership.MembershipApplicationId
+import riichinexus.microservices.opsanalytics.objects.AdvancedStatsRecomputeTaskId
+import riichinexus.microservices.player.objects.PlayerId
+import riichinexus.microservices.tournament.appeal.objects.AppealTicketId
 import riichinexus.microservices.tournament.objects.stage.lineup.LineupSubmissionId
 import riichinexus.microservices.tournament.objects.paifu.PaifuId
 import riichinexus.microservices.tournament.objects.matchrecord.MatchRecordId

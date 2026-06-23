@@ -4,7 +4,7 @@ import java.sql.Connection
 
 import cats.effect.IO
 import riichinexus.system.realtime.domain.RealtimeEventBus
-import riichinexus.microservices.auth.domain.AuthenticationFailure
+import riichinexus.microservices.auth.domain.account.model.AuthenticationFailure
 import upickle.default.{Reader, Writer, macroRW, read, writeJs}
 
 import scala.collection.mutable.ArrayBuffer

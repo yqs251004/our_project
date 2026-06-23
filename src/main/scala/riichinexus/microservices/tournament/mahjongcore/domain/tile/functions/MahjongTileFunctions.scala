@@ -28,35 +28,6 @@ private[mahjongcore] object MahjongTileFunctions:
   val Hatsu = 32
   val Chun = 33
 
-  private val honorAliases: Map[String, Int] =
-    Map(
-      "1z" -> Ton,
-      "2z" -> Nan,
-      "3z" -> Sha,
-      "4z" -> Pei,
-      "5z" -> Haku,
-      "6z" -> Hatsu,
-      "7z" -> Chun,
-      "east" -> Ton,
-      "south" -> Nan,
-      "west" -> Sha,
-      "north" -> Pei,
-      "ton" -> Ton,
-      "nan" -> Nan,
-      "shaa" -> Sha,
-      "pei" -> Pei,
-      "haku" -> Haku,
-      "hatsu" -> Hatsu,
-      "chun" -> Chun,
-      "e" -> Ton,
-      "s" -> Nan,
-      "w" -> Sha,
-      "n" -> Pei,
-      "p" -> Haku,
-      "f" -> Hatsu,
-      "c" -> Chun
-    )
-
   def indexOf(tile: PaifuTile): Int =
     val normalizedRank =
       if tile.rank == 0 then 5
@@ -75,22 +46,7 @@ private[mahjongcore] object MahjongTileFunctions:
         throw IllegalArgumentException(s"Unsupported mahjong tile value: ${PaifuTileFunctions.toString(tile)}")
 
   def indexOf(value: String): Int =
-    val normalized = value.trim.toLowerCase.replace("-", "")
-    if honorAliases.contains(normalized) then honorAliases(normalized)
-    else if normalized.length >= 2 then
-      val rankChar = normalized.head
-      val suit = normalized.last
-      val rank =
-        if rankChar == '0' then 5
-        else if rankChar.isDigit then rankChar.asDigit
-        else throw IllegalArgumentException(s"Unsupported mahjong tile rank: $value")
-      suit match
-        case 'm' if rank >= 1 && rank <= 9 => rank - 1
-        case 'p' if rank >= 1 && rank <= 9 => Pin1 + rank - 1
-        case 's' if rank >= 1 && rank <= 9 => Sou1 + rank - 1
-        case 'z' if rank >= 1 && rank <= 7 => Ton + rank - 1
-        case _ => throw IllegalArgumentException(s"Unsupported mahjong tile value: $value")
-    else throw IllegalArgumentException(s"Unsupported mahjong tile value: $value")
+    indexOf(PaifuTileFunctions.fromString(value))
 
   def tileOf(index: Int, red: Boolean = false): PaifuTile =
     if index >= Man1 && index <= Man9 then

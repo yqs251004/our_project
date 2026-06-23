@@ -1,8 +1,13 @@
 package riichinexus.microservices.tournament.appeal.api
+
+import riichinexus.system.objects.`private`.StructuredEventField
+
+import riichinexus.system.objects.`private`.AggregateType
 import riichinexus.microservices.audit.objects.`private`.AuditEventType
 import riichinexus.microservices.audit.objects.`private`.AuditEventDraft
-import riichinexus.microservices.auth.api.`private`.{RequirePermissionPrivateAPIMessage, ResolveAccessPrincipalPrivateAPIMessage}
-import riichinexus.microservices.auth.objects.Permission
+import riichinexus.microservices.auth.api.authorization.`private`.RequirePermissionPrivateAPIMessage
+import riichinexus.microservices.auth.api.authorization.`private`.ResolveAccessPrincipalPrivateAPIMessage
+import riichinexus.microservices.auth.objects.authorization.Permission
 import riichinexus.microservices.audit.api.`private`.RecordAuditEventsPrivateAPIMessage
 
 import java.time.Instant
@@ -15,14 +20,14 @@ import riichinexus.microservices.tournament.appeal.domain.functions.AppealApplic
 import riichinexus.microservices.tournament.appeal.domain.functions.AppealViewFunctions
 import riichinexus.microservices.tournament.appeal.tables.appealticket.AppealTicketTable
 import riichinexus.microservices.player.api.`private`.ResolvePlayerReadModelsPrivateAPIMessage
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.tournament.appeal.objects.ticketmanagement.AppealTicketId
-import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
-import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
+import riichinexus.microservices.player.objects.PlayerId
+import riichinexus.microservices.tournament.appeal.objects.AppealTicketId
+import riichinexus.microservices.auth.objects.authorization.`private`.AccessPrincipalPrivateView
 import riichinexus.microservices.tournament.appeal.domain.model.AppealTicket
 import riichinexus.microservices.tournament.appeal.objects.AppealPriority
 
-import riichinexus.microservices.tournament.appeal.objects.apiTypes.{AppealTicketView, UpdateAppealWorkflowRequest}
+import riichinexus.microservices.tournament.appeal.objects.apiTypes.{UpdateAppealWorkflowRequest}
+import riichinexus.microservices.tournament.appeal.objects.{AppealTicketView}
 /** 更新申诉工单的分派、优先级或截止时间。 */
 final case class AppealUpdateWorkflowAPIMessage(
     appealId: String,
@@ -33,34 +38,26 @@ final case class AppealUpdateWorkflowAPIMessage(
     for
       actor <- ResolveAccessPrincipalPrivateAPIMessage(PlayerId(request.operatorId)).plan(context)
       updatedAt <- IO.realTimeInstant
-      command <- IO.delay(resolveCommand(actor, updatedAt))
+      requestedAppealId <- IO.delay(resolveInput())
+      assigneeId = request.assigneeId.map(PlayerId(_))
+      dueAt = request.dueAt.map(Instant.parse)
       existingTicket <- IO.blocking(
-        AppealTicketTable.findById(context.connection, command.ticketId)
+        AppealTicketTable.findById(context.connection, requestedAppealId)
           .getOrElse(throw NoSuchElementException("Resource not found"))
       )
       _ <- RequirePermissionPrivateAPIMessage(
-        command.actor,
+        actor,
         Permission.ResolveAppeal,
         tournamentId = Some(existingTicket.tournamentId)
       ).plan(context)
-      _ <- requireActiveAssignee(context, command.assigneeId)
-      ticket <- updateWorkflow(context.connection, command)
-      _ <- RecordAuditEventsPrivateAPIMessage(updateWorkflowAudit(ticket, command)).plan(context)
+      _ <- requireActiveAssignee(context, assigneeId)
+      ticket <- updateWorkflow(context.connection, requestedAppealId, actor, assigneeId, dueAt, updatedAt)
+      _ <- RecordAuditEventsPrivateAPIMessage(updateWorkflowAudit(ticket, requestedAppealId, actor, updatedAt)).plan(context)
     yield AppealViewFunctions.ticketView(ticket)
 
-  private def resolveCommand(actor: AccessPrincipalPrivateView, updatedAt: Instant): UpdateAppealWorkflowCommand =
+  private def resolveInput(): AppealTicketId =
     validateRequest()
-    UpdateAppealWorkflowCommand(
-      ticketId = AppealTicketId(appealId),
-      actor = actor,
-      assigneeId = request.assigneeId.map(PlayerId(_)),
-      clearAssignee = request.clearAssignee,
-      priority = request.priority,
-      dueAt = request.dueAt.map(Instant.parse),
-      clearDueAt = request.clearDueAt,
-      note = request.note,
-      updatedAt = updatedAt
-    )
+    AppealTicketId(appealId)
 
   private def validateRequest(): Unit =
     require(
@@ -74,19 +71,23 @@ final case class AppealUpdateWorkflowAPIMessage(
 
   private def updateWorkflow(
       connection: java.sql.Connection,
-      command: UpdateAppealWorkflowCommand
+      ticketId: AppealTicketId,
+      actor: AccessPrincipalPrivateView,
+      assigneeId: Option[PlayerId],
+      dueAt: Option[Instant],
+      updatedAt: Instant
   ): IO[AppealTicket] =
     AppealApplicationService.updateAppealWorkflow(
       connection = connection,
-      ticketId = command.ticketId,
-      actor = privateActor(command.actor),
-      assigneeId = command.assigneeId,
-      clearAssignee = command.clearAssignee,
-      priority = command.priority,
-      dueAt = command.dueAt,
-      clearDueAt = command.clearDueAt,
-      updatedAt = command.updatedAt,
-      note = command.note
+      ticketId = ticketId,
+      actor = actor,
+      assigneeId = assigneeId,
+      clearAssignee = request.clearAssignee,
+      priority = request.priority,
+      dueAt = dueAt,
+      clearDueAt = request.clearDueAt,
+      updatedAt = updatedAt,
+      note = request.note
     ).map(_.getOrElse(throw NoSuchElementException("Resource not found")))
 
   private def requireActiveAssignee(context: ApiPlanContext, assigneeId: Option[PlayerId]): IO[Unit] =
@@ -103,40 +104,26 @@ final case class AppealUpdateWorkflowAPIMessage(
       }
       .getOrElse(IO.unit)
 
-  private def privateActor(actor: AccessPrincipalPrivateView): AccessPrincipalPrivateView =
-    actor
-
   private def updateWorkflowAudit(
       ticket: AppealTicket,
-      command: UpdateAppealWorkflowCommand
+      ticketId: AppealTicketId,
+      actor: AccessPrincipalPrivateView,
+      updatedAt: Instant
   ): Vector[AuditEventDraft] =
     Vector(
       AuditEventDraft(
-        aggregateType = "appeal",
-        aggregateId = command.ticketId.value,
+        aggregateType = AggregateType.Appeal,
+        aggregateId = ticketId.value,
         eventType = AuditEventType.AppealTicketWorkflowUpdated,
-        occurredAt = command.updatedAt,
-        actorId = command.actor.playerId,
+        occurredAt = updatedAt,
+        actorId = actor.playerId,
         details = Map(
-          "tournamentId" -> ticket.tournamentId.value,
-          "tableId" -> ticket.tableId.value,
-          "assigneeId" -> ticket.assigneeId.map(_.value).getOrElse("none"),
-          "priority" -> ticket.priority.toString,
-          "dueAt" -> ticket.dueAt.map(_.toString).getOrElse("none")
+          StructuredEventField.toString(StructuredEventField.TournamentId) -> ticket.tournamentId.value,
+          StructuredEventField.toString(StructuredEventField.TableId) -> ticket.tableId.value,
+          StructuredEventField.toString(StructuredEventField.AssigneeId) -> ticket.assigneeId.map(_.value).getOrElse("none"),
+          StructuredEventField.toString(StructuredEventField.Priority) -> ticket.priority.toString,
+          StructuredEventField.toString(StructuredEventField.DueAt) -> ticket.dueAt.map(_.toString).getOrElse("none")
         ),
-        note = command.note
+        note = request.note
       )
     )
-
-  /** 更新申诉分派、优先级和截止时间时使用的内部命令。 */
-  private final case class UpdateAppealWorkflowCommand(
-      ticketId: AppealTicketId,
-      actor: AccessPrincipalPrivateView,
-      assigneeId: Option[PlayerId],
-      clearAssignee: Boolean,
-      priority: Option[AppealPriority],
-      dueAt: Option[Instant],
-      clearDueAt: Boolean,
-      note: Option[String],
-      updatedAt: Instant
-  )

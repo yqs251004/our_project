@@ -8,9 +8,9 @@ import java.sql.Connection
 
 import riichinexus.microservices.tournament.objects.stage.table.TableId
 
-import riichinexus.microservices.auth.objects.`private`.AccessPrincipalPrivateView
+import riichinexus.microservices.auth.objects.authorization.`private`.AccessPrincipalPrivateView
 import riichinexus.microservices.tournament.domain.stage.model.Table
-import riichinexus.microservices.tournament.domain.matchrecord.model.MatchRecord
+import riichinexus.microservices.tournament.domain.paifu.model.ArchivedPaifuChange
 
 /** TournamentPaifuArchiveService 提供赛事牌谱Archive服务 相关的领域计算、校验和转换函数。 */
 
@@ -167,10 +167,3 @@ private[tournament] object TournamentPaifuArchiveService:
       ),
       "Paifu final standings must match the cumulative round score changes"
     )
-
-  /** 牌谱归档时需要同步写回牌桌、对局记录和牌谱的变更组合。 */
-  private final case class ArchivedPaifuChange(
-      table: Table,
-      matchRecord: MatchRecord,
-      paifu: Paifu
-  )

@@ -1,6 +1,6 @@
 package riichinexus.microservices.tournament.objects.paifu
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 import riichinexus.microservices.tournament.objects.stage.table.SeatWind
 
 /** 整场对局结束后的玩家最终名次。

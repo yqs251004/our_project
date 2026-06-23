@@ -27,6 +27,7 @@ enum AuditEventType:
   case SuperAdminGranted
   case TournamentAdminAssigned
   case TournamentAdminRevoked
+  case TournamentLineupSubmitted
   case TournamentSettlementRecorded
   case TournamentSettlementFinalized
   case AppealTicketFiled

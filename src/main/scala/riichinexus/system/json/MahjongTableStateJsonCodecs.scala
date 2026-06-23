@@ -1,6 +1,6 @@
 package riichinexus.system.json
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
+import riichinexus.microservices.player.objects.PlayerId
 import riichinexus.microservices.tournament.mahjongcore.domain.action.model.MahjongEvent
 import riichinexus.microservices.tournament.mahjongcore.domain.gamestate.model.{MahjongCallCandidate, MahjongCallResponse, MahjongPendingCallState, MahjongRoundState, MahjongSeatState, MahjongTableState}
 import riichinexus.microservices.tournament.mahjongcore.objects.gamestate.MahjongMeld

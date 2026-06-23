@@ -1,5 +1,7 @@
 package riichinexus.microservices.tournament.tables.settlement
 
+import riichinexus.system.objects.`private`.AggregateType
+
 import java.sql.{Connection, ResultSet, Timestamp}
 
 import scala.annotation.tailrec
@@ -42,7 +44,7 @@ object TournamentSettlementTable:
     }
     if rowsUpdated == 0 then
       throw OptimisticConcurrencyException(
-        aggregateType = "tournament-settlement",
+        aggregateType = AggregateType.TournamentSettlement,
         aggregateId = persisted.id.value,
         expectedVersion = snapshot.version,
         actualVersion = findById(connection, persisted.id).map(_.version)

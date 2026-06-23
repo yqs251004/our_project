@@ -1,6 +1,6 @@
 package riichinexus.microservices.audit.domain.functions
 
-import riichinexus.microservices.audit.domain.auditevent.AuditEvent
+import riichinexus.microservices.audit.domain.model.AuditEvent
 import riichinexus.microservices.audit.objects.`private`.AuditEventPrivateView
 
 /** AuditEventPrivateViewFunctions 将审计事件领域模型转换为后端内部 private view。 */

@@ -1,40 +1,19 @@
 package riichinexus.microservices.tournament.mahjongcore.domain.yakuanalysis.functions
 
-import riichinexus.microservices.tournament.mahjongcore.domain.handanalysis.functions.MahjongHandAnalysisFunctions
 import riichinexus.microservices.tournament.mahjongcore.domain.handanalysis.model.{MahjongHandDecomposition, MahjongHandMeld, MahjongHandMeldType}
-import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.MahjongTileFunctions.{Chun, Haku, Man1, Man9, Nan, Pei, Pin1, Pin9, Sha, Sou1, Sou9, Ton, indexOf, isYaochu}
-import riichinexus.microservices.tournament.mahjongcore.domain.yakuanalysis.model.MahjongWinContext
-import riichinexus.microservices.tournament.objects.paifu.{MahjongYakuKind, PaifuTile, Yaku}
+import riichinexus.microservices.tournament.mahjongcore.domain.tile.functions.MahjongTileFunctions.{Chun, Haku, Man1, Man9, Nan, Pei, Pin1, Pin9, Sha, Sou1, Sou9, Ton, isYaochu}
+import riichinexus.microservices.tournament.mahjongcore.domain.yakuanalysis.model.MahjongYakuCheckState
+import riichinexus.microservices.tournament.objects.paifu.{MahjongYakuKind, Yaku}
 import riichinexus.microservices.tournament.objects.stage.table.SeatWind
 
 /** MahjongYakuCheckSupport 提供麻将役种检查支撑 相关的领域校验和权限判断。 */
 
 private[mahjongcore] object MahjongYakuCheckSupport:
 
-  /** 执行一组役种检查时共享的牌姿与上下文缓存。 */
-  final case class MahjongYakuCheckState(
-      concealedCounts: Array[Int],
-      allCounts: Array[Int],
-      allTiles: Vector[PaifuTile],
-      context: MahjongWinContext,
-      fixedMelds: Vector[MahjongHandMeld],
-      closedHand: Boolean,
-      selectedDecomposition: Option[MahjongHandDecomposition] = None
-  ):
-    val allTileIndices: Vector[Int] =
-      allCounts.indices.filter(allCounts(_) > 0).toVector
-    val standardDecompositions: Vector[MahjongHandDecomposition] =
-      MahjongHandAnalysisFunctions.standardDecompositions(concealedCounts, fixedMelds)
-    val hasOpenMeld: Boolean =
-      context.melds.exists(meld => !meld.closed)
-    val lastIndex: Int =
-      indexOf(context.winningTile)
-    val seatWind: SeatWind =
-      context.seatByPlayer.getOrElse(context.winner, SeatWind.East)
-
-  type YakuCheck = MahjongYakuCheckState => Vector[Yaku]
-
-  def runPlan(plan: Vector[YakuCheck], state: MahjongYakuCheckState): Vector[Yaku] =
+  def runPlan(
+      plan: Vector[MahjongYakuCheckState => Vector[Yaku]],
+      state: MahjongYakuCheckState
+  ): Vector[Yaku] =
     plan.flatMap(check => check(state)).distinct
 
   def yakuIf(condition: Boolean, kind: MahjongYakuKind, han: Int): Vector[Yaku] =

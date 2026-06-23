@@ -1,7 +1,7 @@
 package riichinexus.microservices.tournament.appeal.domain.functions
 
 import riichinexus.microservices.tournament.appeal.domain.model.{AppealAttachment, AppealTicket}
-import riichinexus.microservices.tournament.appeal.objects.apiTypes.{AppealAttachmentView, AppealTicketView}
+import riichinexus.microservices.tournament.appeal.objects.{AppealAttachmentView, AppealTicketView}
 
 private[appeal] object AppealViewFunctions:
   def attachmentView(attachment: AppealAttachment): AppealAttachmentView =

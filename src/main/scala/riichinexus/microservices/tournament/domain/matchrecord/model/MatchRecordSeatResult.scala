@@ -1,8 +1,8 @@
 package riichinexus.microservices.tournament.domain.matchrecord.model
 
 
-import riichinexus.microservices.player.objects.playerprofile.PlayerId
-import riichinexus.microservices.club.objects.clubmanagement.ClubId
+import riichinexus.microservices.player.objects.PlayerId
+import riichinexus.microservices.club.objects.profile.ClubId
 import riichinexus.microservices.tournament.objects.stage.table.SeatWind
 
 import riichinexus.system.json.JsonCodecs.given
