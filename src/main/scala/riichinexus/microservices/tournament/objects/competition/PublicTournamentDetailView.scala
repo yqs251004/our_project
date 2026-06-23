@@ -1,10 +1,5 @@
 package riichinexus.microservices.tournament.objects.competition
 
-import java.time.Instant
-
-import riichinexus.microservices.player.objects.PlayerId
-import riichinexus.microservices.club.objects.profile.ClubId
-import riichinexus.microservices.tournament.objects.identity.TournamentId
 import riichinexus.microservices.tournament.objects.competition.TournamentStatus
 import riichinexus.microservices.tournament.objects.stage.PublicTournamentStageView
 import riichinexus.system.json.TournamentJsonCodecs.given
@@ -29,28 +24,3 @@ final case class PublicTournamentDetailView(
 
 object PublicTournamentDetailView:
   given ReadWriter[PublicTournamentDetailView] = macroRW
-
-  def apply(
-      tournamentId: TournamentId,
-      name: String,
-      organizer: String,
-      status: TournamentStatus,
-      startsAt: Instant,
-      endsAt: Instant,
-      clubIds: Vector[ClubId],
-      playerIds: Vector[PlayerId],
-      whitelistCount: Int,
-      stages: Vector[PublicTournamentStageView]
-  ): PublicTournamentDetailView =
-    PublicTournamentDetailView(
-      tournamentId = tournamentId.value,
-      name = name,
-      organizer = organizer,
-      status = status,
-      startsAt = startsAt.toString,
-      endsAt = endsAt.toString,
-      clubIds = clubIds.map(_.value),
-      playerIds = playerIds.map(_.value),
-      whitelistCount = whitelistCount,
-      stages = stages
-    )

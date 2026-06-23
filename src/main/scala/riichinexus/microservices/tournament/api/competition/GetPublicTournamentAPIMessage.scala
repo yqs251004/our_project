@@ -14,6 +14,7 @@ import riichinexus.microservices.tournament.domain.stage.model.StageLineupSubmis
 import riichinexus.microservices.tournament.domain.stage.functions.rules.TournamentStageQueries
 import riichinexus.microservices.tournament.domain.stage.model.Table
 import riichinexus.microservices.tournament.domain.competition.model.Tournament
+import riichinexus.microservices.tournament.domain.competition.functions.TournamentViewFunctions
 import riichinexus.microservices.tournament.domain.stage.model.TournamentStage
 import riichinexus.microservices.tournament.objects.stage.lineup.TournamentLineupSubmissionView
 import riichinexus.microservices.tournament.objects.stage.rules.knockout.KnockoutBracketSnapshot
@@ -55,7 +56,7 @@ final case class GetPublicTournamentAPIMessage(
       stages <- sequenceVector(tournament.stages.sortBy(_.order).map { stage =>
         publicStageView(context, tournament, stage, tablesByStage(stage.id))
       })
-    yield PublicTournamentDetailView(
+    yield TournamentViewFunctions.publicTournamentDetailView(
       tournamentId = tournament.id,
       name = tournament.name,
       organizer = tournament.organizer,

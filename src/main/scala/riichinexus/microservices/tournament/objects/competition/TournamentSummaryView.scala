@@ -2,11 +2,6 @@ package riichinexus.microservices.tournament.objects.competition
 
 import upickle.default.{ReadWriter, macroRW}
 
-import java.time.Instant
-
-import riichinexus.microservices.player.objects.PlayerId
-import riichinexus.microservices.club.objects.profile.ClubId
-import riichinexus.microservices.tournament.objects.identity.TournamentId
 import riichinexus.microservices.tournament.objects.competition.TournamentStatus
 import riichinexus.microservices.tournament.objects.stage.TournamentStageSummaryView
 import riichinexus.system.json.TournamentJsonCodecs.given
@@ -31,30 +26,3 @@ final case class TournamentSummaryView(
 
 object TournamentSummaryView:
   given ReadWriter[TournamentSummaryView] = macroRW
-
-  def apply(
-      tournamentId: TournamentId,
-      name: String,
-      organizer: String,
-      startsAt: Instant,
-      endsAt: Instant,
-      status: TournamentStatus,
-      participatingClubIds: Vector[ClubId],
-      participatingPlayerIds: Vector[PlayerId],
-      adminIds: Vector[PlayerId],
-      whitelistCount: Int,
-      stages: Vector[TournamentStageSummaryView]
-  ): TournamentSummaryView =
-    TournamentSummaryView(
-      tournamentId = tournamentId.value,
-      name = name,
-      organizer = organizer,
-      startsAt = startsAt.toString,
-      endsAt = endsAt.toString,
-      status = status,
-      participatingClubIds = participatingClubIds.map(_.value),
-      participatingPlayerIds = participatingPlayerIds.map(_.value),
-      adminIds = adminIds.map(_.value),
-      whitelistCount = whitelistCount,
-      stages = stages
-    )

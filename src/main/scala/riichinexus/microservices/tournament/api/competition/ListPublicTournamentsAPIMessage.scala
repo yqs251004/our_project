@@ -10,6 +10,7 @@ import riichinexus.microservices.club.api.audit.`private`.ResolveClubReadModelsP
 import riichinexus.microservices.club.objects.profile.`private`.ClubPrivateView
 import riichinexus.microservices.tournament.objects.competition.PublicTournamentSummaryView
 import riichinexus.microservices.tournament.domain.competition.model.Tournament
+import riichinexus.microservices.tournament.domain.competition.functions.TournamentViewFunctions
 import riichinexus.microservices.tournament.tables.tournaments.TournamentTable
 import riichinexus.system.objects.{PagedResponse, QueryFilterField}
 import riichinexus.system.json.JsonCodecs.given
@@ -65,7 +66,7 @@ final case class ListPublicTournamentsAPIMessage(
       clubsById: Map[ClubId, ClubPrivateView]
   ): Vector[PublicTournamentSummaryView] =
     tournaments.map { tournament =>
-      PublicTournamentSummaryView(
+      TournamentViewFunctions.publicTournamentSummaryView(
         tournamentId = tournament.id,
         name = tournament.name,
         organizer = tournament.organizer,

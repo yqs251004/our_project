@@ -13,6 +13,7 @@ import riichinexus.microservices.club.objects.profile.ClubId
 import riichinexus.microservices.tournament.objects.identity.TournamentId
 import riichinexus.microservices.tournament.domain.stage.model.{StageLineupSubmission, TournamentStage}
 import riichinexus.microservices.tournament.domain.competition.model.Tournament
+import riichinexus.microservices.tournament.domain.competition.functions.TournamentViewFunctions
 
 import riichinexus.microservices.tournament.objects.stage.lineup.TournamentLineupSubmissionView
 import riichinexus.microservices.tournament.objects.competition.{TournamentDetailView, TournamentParticipantClubView, TournamentParticipantPlayerView, TournamentWhitelistSummaryView}
@@ -56,7 +57,7 @@ final case class TournamentGetAPIMessage(tournamentId: String) extends APIMessag
     yield
       val participatingClubs = tournament.participatingClubs.distinct.flatMap { clubId =>
         clubsById.get(clubId).map { club =>
-          TournamentParticipantClubView(
+          TournamentViewFunctions.tournamentParticipantClubView(
             clubId = club.id,
             memberCount = club.members.size
           )
@@ -65,7 +66,7 @@ final case class TournamentGetAPIMessage(tournamentId: String) extends APIMessag
 
       val participatingPlayers = participantIds.flatMap { playerId =>
         playersById.get(playerId).map { player =>
-          TournamentParticipantPlayerView(
+          TournamentViewFunctions.tournamentParticipantPlayerView(
             playerId = player.id,
             nickname = player.nickname,
             status = player.status,
@@ -79,7 +80,7 @@ final case class TournamentGetAPIMessage(tournamentId: String) extends APIMessag
       val whitelistedClubIds = tournament.whitelist.flatMap(_.clubId).distinct.sortBy(_.value)
       val whitelistedPlayerIds = tournament.whitelist.flatMap(_.playerId).distinct.sortBy(_.value)
 
-      TournamentDetailView(
+      TournamentViewFunctions.tournamentDetailView(
         tournamentId = tournament.id,
         name = tournament.name,
         organizer = tournament.organizer,

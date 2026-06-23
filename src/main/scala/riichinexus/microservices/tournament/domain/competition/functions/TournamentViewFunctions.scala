@@ -1,16 +1,80 @@
 package riichinexus.microservices.tournament.domain.competition.functions
 
+import java.time.Instant
+
+import riichinexus.microservices.club.objects.profile.ClubId
+import riichinexus.microservices.player.objects.{PlayerId, PlayerStatus, RankSnapshot}
 import riichinexus.microservices.tournament.domain.competition.model.Tournament
 import riichinexus.microservices.tournament.domain.finalization.model.TournamentSettlementSnapshot
 import riichinexus.microservices.tournament.domain.matchrecord.model.{MatchRecord, MatchRecordSeatResult}
 import riichinexus.microservices.tournament.domain.stage.model.{Table, TournamentStage}
-import riichinexus.microservices.tournament.objects.competition.TournamentSummaryView
+import riichinexus.microservices.tournament.objects.competition.{
+  PublicScheduleView,
+  PublicTournamentDetailView,
+  PublicTournamentSummaryView,
+  TournamentDetailView,
+  TournamentParticipantClubView,
+  TournamentParticipantPlayerView,
+  TournamentStatus,
+  TournamentSummaryView,
+  TournamentWhitelistSummaryView
+}
 import riichinexus.microservices.tournament.objects.finalization.TournamentSettlementView
+import riichinexus.microservices.tournament.objects.identity.{TournamentId, TournamentStageId}
 import riichinexus.microservices.tournament.objects.matchrecord.{TournamentMatchRecordSeatResultView, TournamentMatchRecordView}
-import riichinexus.microservices.tournament.objects.stage.TournamentStageSummaryView
+import riichinexus.microservices.tournament.objects.stage.{PublicTournamentStageView, TournamentOperationsStageView, TournamentStageSummaryView}
+import riichinexus.microservices.tournament.objects.stage.lifecycle.StageStatus
 import riichinexus.microservices.tournament.objects.stage.table.TournamentTableView
 
 private[tournament] object TournamentViewFunctions:
+  def tournamentParticipantClubView(clubId: ClubId, memberCount: Int): TournamentParticipantClubView =
+    TournamentParticipantClubView(
+      clubId = clubId.value,
+      memberCount = memberCount
+    )
+
+  def tournamentParticipantPlayerView(
+      playerId: PlayerId,
+      nickname: String,
+      status: PlayerStatus,
+      elo: Int,
+      currentRank: RankSnapshot,
+      clubIds: Vector[ClubId]
+  ): TournamentParticipantPlayerView =
+    TournamentParticipantPlayerView(
+      playerId = playerId.value,
+      nickname = nickname,
+      status = status.toString,
+      elo = elo,
+      currentRank = currentRank,
+      clubIds = clubIds.map(_.value)
+    )
+
+  def tournamentDetailView(
+      tournamentId: TournamentId,
+      name: String,
+      organizer: String,
+      status: TournamentStatus,
+      startsAt: Instant,
+      endsAt: Instant,
+      participatingClubs: Vector[TournamentParticipantClubView],
+      participatingPlayers: Vector[TournamentParticipantPlayerView],
+      whitelistSummary: TournamentWhitelistSummaryView,
+      stages: Vector[TournamentOperationsStageView]
+  ): TournamentDetailView =
+    TournamentDetailView(
+      tournamentId = tournamentId.value,
+      name = name,
+      organizer = organizer,
+      status = status,
+      startsAt = startsAt.toString,
+      endsAt = endsAt.toString,
+      participatingClubs = participatingClubs,
+      participatingPlayers = participatingPlayers,
+      whitelistSummary = whitelistSummary,
+      stages = stages
+    )
+
   def tournamentSummaryView(tournament: Tournament): TournamentSummaryView =
     TournamentSummaryView(
       tournamentId = tournament.id.value,
@@ -24,6 +88,93 @@ private[tournament] object TournamentViewFunctions:
       adminIds = tournament.admins.map(_.value),
       whitelistCount = tournament.whitelist.size,
       stages = tournament.stages.sortBy(_.order).map(stageSummaryView)
+    )
+
+  def publicTournamentSummaryView(
+      tournamentId: TournamentId,
+      name: String,
+      organizer: String,
+      status: TournamentStatus,
+      startsAt: Instant,
+      endsAt: Instant,
+      stageCount: Int,
+      activeStageCount: Int,
+      participantCount: Int,
+      clubCount: Int,
+      playerCount: Int
+  ): PublicTournamentSummaryView =
+    PublicTournamentSummaryView(
+      tournamentId = tournamentId.value,
+      name = name,
+      organizer = organizer,
+      status = status,
+      startsAt = startsAt.toString,
+      endsAt = endsAt.toString,
+      stageCount = stageCount,
+      activeStageCount = activeStageCount,
+      participantCount = participantCount,
+      clubCount = clubCount,
+      playerCount = playerCount
+    )
+
+  def publicTournamentDetailView(
+      tournamentId: TournamentId,
+      name: String,
+      organizer: String,
+      status: TournamentStatus,
+      startsAt: Instant,
+      endsAt: Instant,
+      clubIds: Vector[ClubId],
+      playerIds: Vector[PlayerId],
+      whitelistCount: Int,
+      stages: Vector[PublicTournamentStageView]
+  ): PublicTournamentDetailView =
+    PublicTournamentDetailView(
+      tournamentId = tournamentId.value,
+      name = name,
+      organizer = organizer,
+      status = status,
+      startsAt = startsAt.toString,
+      endsAt = endsAt.toString,
+      clubIds = clubIds.map(_.value),
+      playerIds = playerIds.map(_.value),
+      whitelistCount = whitelistCount,
+      stages = stages
+    )
+
+  def publicScheduleView(
+      tournamentId: TournamentId,
+      tournamentName: String,
+      tournamentStatus: TournamentStatus,
+      stageId: TournamentStageId,
+      stageName: String,
+      stageStatus: StageStatus,
+      currentRound: Int,
+      roundCount: Int,
+      startsAt: Instant,
+      endsAt: Instant,
+      tableCount: Int,
+      activeTableCount: Int,
+      pendingTablePlanCount: Int,
+      participantCount: Int,
+      whitelistCount: Int
+  ): PublicScheduleView =
+    PublicScheduleView(
+      tournamentId = tournamentId.value,
+      tournamentName = tournamentName,
+      tournamentStatus = tournamentStatus,
+      stageId = stageId.value,
+      stageName = stageName,
+      stageStatus = stageStatus,
+      currentRound = currentRound,
+      roundCount = roundCount,
+      startsAt = startsAt.toString,
+      endsAt = endsAt.toString,
+      tableCount = tableCount,
+      activeTableCount = activeTableCount,
+      pendingTablePlanCount = pendingTablePlanCount,
+      participantCount = participantCount,
+      whitelistCount = whitelistCount
     )
 
   def stageSummaryView(stage: TournamentStage): TournamentStageSummaryView =

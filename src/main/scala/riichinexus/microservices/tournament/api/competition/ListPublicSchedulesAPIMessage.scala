@@ -19,6 +19,7 @@ import riichinexus.microservices.tournament.objects.stage.lifecycle.StageStatus
 import riichinexus.microservices.tournament.objects.competition.TournamentStatus
 import riichinexus.microservices.tournament.objects.stage.table.TableStatus
 import riichinexus.microservices.tournament.objects.competition.PublicScheduleView
+import riichinexus.microservices.tournament.domain.competition.functions.TournamentViewFunctions
 import riichinexus.microservices.tournament.domain.stage.functions.lineup.StageLineupResolver
 import riichinexus.microservices.tournament.tables.tournaments.TournamentTable
 import riichinexus.microservices.tournament.tables.tournamentgame.TournamentGameTable
@@ -109,7 +110,7 @@ final case class ListPublicSchedulesAPIMessage(
         val fallbackClubMembers = tournament.participatingClubs.flatMap { clubId =>
           clubsById.get(clubId).toVector.flatMap(_.members)
         }
-        PublicScheduleView(
+        TournamentViewFunctions.publicScheduleView(
           tournamentId = tournament.id,
           tournamentName = tournament.name,
           tournamentStatus = tournament.status,
